@@ -131,8 +131,11 @@ const screens: { name: string; url: string; go: (page: Page, narrow: boolean) =>
     await page.getByTitle('B안 시안').waitFor();
     await page.getByRole('button', { name: '요소 고르기' }).click();
     await page.getByRole('textbox', { name: 'B안 전체에 대한 수정 메모' }).fill('합계 줄을 맨 위로 올리고 색을 더 차분하게');
-    await page.getByRole('button', { name: '메모 추가' }).click();
+    // Writing one thing is enough to send; "one more" keeps it and clears the field for the next.
     await page.getByRole('button', { name: '수정 요청 1건 보내기' }).waitFor();
+    await page.getByRole('button', { name: '하나 더 적기' }).click();
+    await page.getByRole('textbox', { name: 'B안 전체에 대한 수정 메모' }).fill('금액을 더 크게');
+    await page.getByRole('button', { name: '수정 요청 2건 보내기' }).waitFor();
   } },
   { name: 'proposals', url: '/?demo', go: workspaceTab('Ledger', '제안') },
   { name: 'learning', url: '/?demo', go: workspaceTab('Ledger', '학습') },

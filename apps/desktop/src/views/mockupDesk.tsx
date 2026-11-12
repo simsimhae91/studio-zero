@@ -24,21 +24,24 @@ export interface MockupDesk {
   pick: (file: string) => void;
   /** Chooses a page and brings the browser pane forward on it. */
   view: (file: string) => void;
+  /** The same, and puts the cursor in the field where a change is written. `asked` counts the times. */
+  ask: (file: string) => void;
+  asked: number;
   /** What the browser pane shows: the running app, or the chosen mock-up. */
   source: 'app' | 'mockup';
   showApp: () => void;
   notes: readonly MockupNote[];
   addNote: (note: MockupNote) => void;
   removeNote: (index: number) => void;
-  /** Sends the notes back as a revision of the design. */
-  revise: () => void;
+  /** Sends the notes back as a revision of the design, with one more that is still in the field if there is one. */
+  revise: (also?: MockupNote) => void;
   revising: boolean;
   reviseError: string | null;
   /** False while a task holds the workspace, or when there is no finished design to revise. */
   canRevise: boolean;
 }
 
-const noDesk: MockupDesk = { pages: [], reload: () => undefined, designTaskId: null, picked: null, pick: () => undefined, view: () => undefined, source: 'app', showApp: () => undefined, notes: [], addNote: () => undefined, removeNote: () => undefined, revise: () => undefined, revising: false, reviseError: null, canRevise: false };
+const noDesk: MockupDesk = { pages: [], reload: () => undefined, designTaskId: null, picked: null, pick: () => undefined, view: () => undefined, ask: () => undefined, asked: 0, source: 'app', showApp: () => undefined, notes: [], addNote: () => undefined, removeNote: () => undefined, revise: () => undefined, revising: false, reviseError: null, canRevise: false };
 export const MockupDeskContext = createContext<MockupDesk>(noDesk);
 export const useMockupDesk = (): MockupDesk => useContext(MockupDeskContext);
 

@@ -1,5 +1,5 @@
 import { X } from 'lucide-react';
-import { useMemo, useRef, useState, type FormEvent, type MouseEvent, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent, type MouseEvent, type ReactNode } from 'react';
 import { sealMockup, structuralSelector, type MockupNote, type PathStep } from '../../lib/mockups.ts';
 import { mockupName } from '../../lib/steps.ts';
 import { Button, IconButton, Problem, inputClass } from '../../ui.tsx';
@@ -127,15 +127,33 @@ function Outline({ box, tone, children }: { box: Box; tone: 'hover' | 'chosen' |
 export function MockupNotes({ file, target, onClear }: { file: string; target: Target | null; onClear: () => void }) {
   const desk = useMockupDesk();
   const [text, setText] = useState('');
+  const field = useRef<HTMLInputElement>(null);
+  // "Ask for a change" on the card lands here: the cursor goes where the change is written.
+  useEffect(() => {
+    if (desk.asked > 0) field.current?.focus();
+  }, [desk.asked]);
+  const typed = (): MockupNote | null => (text.trim() === '' ? null : { file, selector: target?.selector ?? null, text: text.trim() });
   const add = (e: FormEvent): void => {
     e.preventDefault();
-    if (text.trim() === '') return;
-    desk.addNote({ file, selector: target?.selector ?? null, text: text.trim() } satisfies MockupNote);
+    const note = typed();
+    if (!note) return;
+    desk.addNote(note);
     setText('');
     onClear();
   };
+  // Sending takes what is still in the field with it: writing one thing and pressing send is the whole of it.
+  const send = (): void => {
+    desk.revise(typed() ?? undefined);
+    setText('');
+    onClear();
+  };
+  const count = desk.notes.length + (typed() ? 1 : 0);
   return (
     <div className="flex flex-col gap-2 border-t border-border px-3 py-3">
+      <p className="text-base">
+        <span className="font-semibold">시안 수정 요청</span>
+        <span className="text-fg-muted"> 바꿀 것을 적어 보내면 시안을 고쳐 다시 보여 줍니다. 한 부분만 가리키려면 위의 요소 고르기를 켜고 그 부분을 누르세요.</span>
+      </p>
       {desk.notes.length > 0 ? (
         <ol className="flex flex-col gap-1">
           {desk.notes.map((note, i) => (
@@ -166,6 +184,7 @@ export function MockupNotes({ file, target, onClear }: { file: string; target: T
       ) : null}
       <form onSubmit={add} className="flex flex-wrap gap-2">
         <input
+          ref={field}
           aria-label={target ? '고른 요소에 대한 수정 메모' : `${mockupName(file)} 전체에 대한 수정 메모`}
           className={`${inputClass} min-w-40 flex-1`}
           value={text}
@@ -174,14 +193,14 @@ export function MockupNotes({ file, target, onClear }: { file: string; target: T
           onChange={(e) => setText(e.target.value)}
         />
         <Button type="submit" disabled={text.trim() === ''}>
-          메모 추가
+          하나 더 적기
         </Button>
-        <Button variant="primary" busy={desk.revising} disabled={desk.notes.length === 0 || !desk.canRevise} onClick={desk.revise}>
-          {desk.notes.length > 0 ? `수정 요청 ${desk.notes.length}건 보내기` : '수정 요청 보내기'}
+        <Button variant="primary" busy={desk.revising} disabled={count === 0 || !desk.canRevise} onClick={send}>
+          {count > 0 ? `수정 요청 ${count}건 보내기` : '수정 요청 보내기'}
         </Button>
       </form>
       {desk.reviseError ? <Problem>{desk.reviseError}</Problem> : null}
-      {!desk.canRevise && desk.notes.length > 0 ? <p className="text-sm text-fg-muted">진행 중인 작업이 끝나면 보낼 수 있습니다.</p> : null}
+      {!desk.canRevise ? <p className="text-base text-fg-muted">진행 중인 작업이 끝나면 보낼 수 있습니다.</p> : null}
     </div>
   );
 }

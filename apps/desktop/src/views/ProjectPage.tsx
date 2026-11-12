@@ -168,8 +168,9 @@ function Workbench({ project, onOpen, onChanged }: { project: Project; onOpen: (
   const [mockupPick, setMockupPick] = useState<string | null>(null);
   const [previewSource, setPreviewSource] = useState<'app' | 'mockup' | null>(null);
   const [mockupNotes, setMockupNotes] = useState<readonly MockupNote[]>([]);
-  const revise = useAction(async () => {
-    const prompt = revisionRequest(mockupNotes);
+  const [asked, setAsked] = useState(0);
+  const revise = useAction(async (also?: MockupNote) => {
+    const prompt = revisionRequest(also ? [...mockupNotes, also] : mockupNotes);
     if (prompt === '' || !design?.branch) return;
     // A revision is design work on top of the design: it starts from that task's branch, where the pages are.
     const task = await backend.call('tasks.submit', { projectId: project.id, kind: 'ideate', prompt, track: 'full', baseBranch: design.branch, ...(session ? { sessionId: session } : {}) });
@@ -185,13 +186,15 @@ function Workbench({ project, onOpen, onChanged }: { project: Project; onOpen: (
     picked: mockupPick,
     pick: (file) => (setMockupPick(file), setPreviewSource('mockup')),
     view: (file) => (setMockupPick(file), setPreviewSource('mockup'), show('preview')),
+    ask: (file) => (setMockupPick(file), setPreviewSource('mockup'), show('preview'), setAsked((n) => n + 1)),
+    asked,
     // Until something has been built there is no app to show: the mock-ups are what the pane opens on.
     source: mockupPages.pages.length === 0 ? 'app' : (previewSource ?? (ready ? 'app' : 'mockup')),
     showApp: () => setPreviewSource('app'),
     notes: mockupNotes,
     addNote: (note) => setMockupNotes((prev) => [...prev, note]),
     removeNote: (index) => setMockupNotes((prev) => prev.filter((_, i) => i !== index)),
-    revise: () => void revise.run(),
+    revise: (also) => void revise.run(also),
     revising: revise.busy,
     reviseError: revise.error,
     canRevise: design?.branch != null && !busy,
@@ -932,7 +935,7 @@ function DesignDecision({ task, mockups, onFile, onBuild }: { task: Task; mockup
           {pick ? `${mockupName(pick.file)}으로 승인하고 구현 시작` : '승인하고 구현 시작'}
         </Button>
         <Button onClick={() => onBuild('fast', pick?.file ?? null)}>초안만 먼저 만들기</Button>
-        {pick && current ? <Button onClick={() => desk.view(pick.file)}>시안 수정 요청</Button> : null}
+        {pick && current ? <Button onClick={() => desk.ask(pick.file)}>시안 수정 요청</Button> : null}
       </div>
     </div>
   );
