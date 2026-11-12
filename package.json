@@ -1,0 +1,26 @@
+{
+  "name": "studio-zero",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Studio Zero — self-improving, anti-slop AI-native application builder (core daemon + clients)",
+  "type": "module",
+  "engines": {
+    "node": ">=24.3"
+  },
+  "packageManager": "pnpm@11.0.9",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --test --test-reporter=spec \"packages/*/test/**/*.test.ts\"",
+    "daemon": "node packages/daemon/src/main.ts",
+    "sz": "node packages/daemon/src/cli.ts",
+    "design:build": "node packages/design/src/build.ts",
+    "build": "node scripts/build.mjs",
+    "start": "node packages/daemon/dist/daemon.mjs",
+    "daemon:restart": "launchctl kickstart -k gui/$(id -u)/zero.studio.daemon"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.2",
+    "esbuild": "^0.28.2",
+    "typescript": "^7.0.2"
+  }
+}

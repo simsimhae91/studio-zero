@@ -1,0 +1,21 @@
+{
+  "name": "@studio-zero/ax",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "The AX kit Studio Zero uses itself and puts into every app it builds: typed agent-to-UI blocks, an event-stream hook, a block renderer and client telemetry.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./react": "./src/react/index.ts"
+  },
+  "dependencies": {
+    "zod": "^4.6.7"
+  },
+  "peerDependencies": {
+    "react": ">=18"
+  },
+  "devDependencies": {
+    "@types/react": "^19.3.0",
+    "react": "^19.3.1"
+  }
+}

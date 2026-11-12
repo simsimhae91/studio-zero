@@ -1,0 +1,31 @@
+[package]
+name = "studio-zero"
+version = "0.1.0"
+description = "Studio Zero desktop and mobile client"
+edition = "2021"
+rust-version = "1.77"
+
+[lib]
+# staticlib and cdylib are what the iOS and Android targets link; rlib is what the desktop binary uses.
+name = "studio_zero_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+base64 = "0.22"
+
+# The OS keychain. Apple targets only for now: the daemon itself is macOS-only, and the phone client is iOS first.
+[target.'cfg(any(target_os = "macos", target_os = "ios"))'.dependencies]
+keyring = { version = "3", features = ["apple-native"] }
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = true

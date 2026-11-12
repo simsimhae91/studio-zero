@@ -1,0 +1,35 @@
+{
+  "listen": {
+    "host": "127.0.0.1",
+    "port": 49200,
+    "allowedHosts": ["macmini.your-tailnet.ts.net"]
+  },
+  "runtime": {
+    "dockerContext": "orbstack",
+    "image": "node:24-bookworm",
+    "cpus": 2,
+    "memoryMb": 2048,
+    "previewPorts": [3000, 5173, 8081]
+  },
+  "budgets": {
+    "taskTokens": 2000000,
+    "projectDailyTokens": 20000000,
+    "verifyRounds": 3
+  },
+  "approvals": {
+    "ttlSec": 3600,
+    "protectedBranches": ["main"]
+  },
+  "telegram": {
+    "enabled": true,
+    "allowedUserIds": [123456789]
+  },
+  "audit": {
+    "threshold": 85,
+    "viewports": ["iphone-15-pro", "ipad-pro-11", "desktop-1440"]
+  },
+  "engines": {
+    "claudeCode": { "enabled": true },
+    "codex": { "enabled": false }
+  }
+}

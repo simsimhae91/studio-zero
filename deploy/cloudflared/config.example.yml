@@ -1,0 +1,24 @@
+# Cloudflare Tunnel for the Studio Zero control socket. Use this only if a client cannot join your tailnet;
+# Tailscale Serve (see docs/ARCHITECTURE.md §10) keeps the socket off the public internet entirely.
+#
+# A tunnel hostname is reachable from anywhere, so put Cloudflare Access in front of it (Zero Trust →
+# Access → Applications) and treat the daemon's client token as the second factor, not the only one.
+#
+#   cloudflared tunnel login
+#   cloudflared tunnel create studio-zero
+#   cloudflared tunnel route dns studio-zero studio.example.com
+#   cloudflared tunnel --config ~/.cloudflared/config.yml run studio-zero
+#
+# Then add the hostname to the daemon config:  "listen": { "allowedHosts": ["studio.example.com"] }
+
+tunnel: <TUNNEL-UUID>
+credentials-file: /Users/<you>/.cloudflared/<TUNNEL-UUID>.json
+
+ingress:
+  - hostname: studio.example.com
+    service: http://127.0.0.1:49200
+    originRequest:
+      # The daemon checks the Host header against its allow-list; pass the public hostname through.
+      httpHostHeader: studio.example.com
+  # The LLM gateway (49201) is for sandboxes on this machine only and is deliberately not exposed.
+  - service: http_status:404

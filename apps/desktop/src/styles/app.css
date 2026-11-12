@@ -1,0 +1,156 @@
+@import "tailwindcss";
+@import "./theme.css";
+/* The block renderer lives in the AX kit, outside this app: tell Tailwind to read its class names too. */
+@source "../../../../packages/ax/src";
+@import "pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css";
+@import "@xterm/xterm/css/xterm.css";
+
+/* Geist, self-hosted under the family name the design contract uses. */
+@font-face {
+  font-family: "Geist";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("@fontsource-variable/geist/files/geist-latin-wght-normal.woff2") format("woff2-variations");
+}
+@font-face {
+  font-family: "Geist Mono";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("@fontsource-variable/geist-mono/files/geist-mono-latin-wght-normal.woff2") format("woff2-variations");
+}
+
+html,
+body,
+#root {
+  block-size: 100%;
+}
+
+body {
+  margin: 0;
+  overflow: hidden;
+  /* A tool, not a document: the window itself never rubber-bands. Panes scroll. */
+  overscroll-behavior: none;
+}
+
+/* The studio: an ink rail of worksheets beside a desk with one page on it. On a narrow window the rail folds
+   into a bar and the page fills the screen. */
+.shell {
+  display: grid;
+  block-size: 100%;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
+}
+@media (min-width: 64rem) {
+  .shell {
+    grid-template-columns: 17rem minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+  }
+}
+
+.desk {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-block-size: 0;
+  background: var(--color-sunken);
+}
+
+/* The page: a column set for reading, with room on the left for who wrote each entry and when. */
+.page {
+  inline-size: 100%;
+  max-inline-size: 56rem;
+  margin-inline: auto;
+  background: var(--color-surface);
+  border-inline: 1px solid var(--color-border);
+  min-block-size: 100%;
+}
+
+.entry {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.5rem;
+  /* An entry is a row of the page, not a line of prose: the reading-width cap applies to what is inside it. */
+  max-inline-size: none;
+}
+@media (min-width: 48rem) {
+  .entry {
+    grid-template-columns: 6rem minmax(0, 1fr);
+    gap: 1.5rem;
+  }
+}
+
+/* The time rail: the task's checkpoints as points on a line, beside the page on a wide window. */
+.time-rail {
+  display: none;
+}
+@media (min-width: 80rem) {
+  .time-rail {
+    display: flex;
+    position: absolute;
+    inset-block: 0;
+    inset-inline-end: 0;
+    inline-size: 4rem;
+  }
+  .has-time-rail .page {
+    margin-inline-end: max(4rem, calc((100% - 56rem) / 2));
+  }
+}
+
+/* Inputs that grow with what is typed into them, up to a limit. */
+.grows {
+  field-sizing: content;
+  max-block-size: 12rem;
+}
+.sheet-of-paper {
+  field-sizing: content;
+  min-block-size: 9rem;
+  max-block-size: 60vh;
+}
+
+@keyframes thinking {
+  50% {
+    opacity: 0.35;
+  }
+}
+.thinking-mark {
+  animation: thinking 1.4s ease-in-out infinite;
+}
+
+/* The strip under an overlaid title bar (desktop) or the status bar (phone). Its own element, so it adds to
+   a pane's padding instead of competing with it; in the native shell it is also what the window is dragged by. */
+.titlebar-space {
+  flex: none;
+  block-size: max(env(safe-area-inset-top, 0px), var(--titlebar-height, 0px));
+}
+
+.pane-scroll {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+/* Live preview frames at the three audited widths. */
+.preview-frame {
+  display: block;
+  block-size: 100%;
+  inline-size: 100%;
+  border: 0;
+  background: var(--color-surface);
+}
+.preview-phone {
+  inline-size: 393px;
+}
+.preview-tablet {
+  inline-size: 834px;
+}
+
+/* The proof view: findings are marked on the screenshot the way a reviewer would mark a print. */
+.proof-mark {
+  position: absolute;
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+  background: color-mix(in oklch, var(--color-accent) 14%, transparent);
+  pointer-events: none;
+}

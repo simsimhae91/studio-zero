@@ -1,0 +1,102 @@
+import { useId, useState, type FormEvent } from 'react';
+import type { Project, Scratchpad, Template } from '@studio-zero/protocol';
+import { ago, nameFrom, slugify, templateLabel } from '../lib/format.ts';
+import { useAction, useStudio } from '../lib/studio.tsx';
+import { Button, Problem, Segmented, TitlebarSpace } from '../ui.tsx';
+import { scratchState, type Route } from './Shell.tsx';
+
+type Mode = 'think' | 'research' | 'document' | 'build';
+const MODES: readonly { id: Mode; label: string; does: string; start: string }[] = [
+  { id: 'think', label: '생각 정리', does: '질문을 주고받으며 기획 명세와 결정 기록을 만듭니다. 컨테이너는 켜지 않습니다.', start: '정리 시작' },
+  { id: 'research', label: '조사', does: '웹에서 근거를 모으고, 실제로 확인된 출처가 달린 브리핑으로 돌려드립니다.', start: '조사 시작' },
+  { id: 'document', label: '문서', does: '적어 주신 내용으로 보고서를 쓰고, 문장 검사를 통과할 때까지 고칩니다.', start: '문서 쓰기' },
+  { id: 'build', label: '바로 만들기', does: '프로젝트와 샌드박스를 만들고 곧바로 구현을 시작합니다.', start: '만들기 시작' },
+];
+const TEMPLATES = (Object.keys(templateLabel) as Template[]).map((id) => ({ id, label: templateLabel[id] }));
+
+/** A blank sheet. Whatever is written on it becomes a worksheet; the mode decides what the studio does with it first. */
+export function Home({ scratchpads, projects, onOpen, onCreated }: { scratchpads: Scratchpad[]; projects: Project[]; onOpen: (route: Route) => void; onCreated: () => void }) {
+  const { backend } = useStudio();
+  const id = useId();
+  const [text, setText] = useState('');
+  const [mode, setMode] = useState<Mode>('think');
+  const [template, setTemplate] = useState<Template>('web-vite-react');
+  const current = MODES.find((m) => m.id === mode)!;
+
+  const start = useAction(async () => {
+    const opening = text.trim();
+    if (mode === 'build') {
+      const name = nameFrom(opening);
+      const project = await backend.call('projects.create', { name, slug: slugify(name), template });
+      await backend.call('tasks.submit', { projectId: project.id, kind: 'build', prompt: opening });
+      onCreated();
+      return onOpen({ kind: 'project', id: project.id });
+    }
+    const pad = await backend.call('scratch.create', { opening, mode });
+    onCreated();
+    onOpen({ kind: 'scratch', id: pad.id });
+  });
+  const submit = (e: FormEvent): void => {
+    e.preventDefault();
+    if (text.trim() !== '') void start.run();
+  };
+  const recent = [
+    ...scratchpads.map((p) => ({ key: p.id, title: p.title, meta: scratchState[p.state], at: p.updatedAt, route: { kind: 'scratch', id: p.id } as Route })),
+    ...projects.map((p) => ({ key: p.id, title: p.name, meta: templateLabel[p.template], at: p.createdAt, route: { kind: 'project', id: p.id } as Route })),
+  ]
+    .sort((a, b) => b.at - a.at)
+    .slice(0, 6);
+
+  return (
+    <div className="pane-scroll min-h-0 flex-1">
+      <div className="page flex flex-col">
+        <TitlebarSpace />
+        <form onSubmit={submit} className="flex flex-col gap-10 px-4 pb-12 pt-10 md:px-10 md:pt-16">
+          <div className="flex flex-col gap-6">
+            <h1 className="text-4xl font-semibold md:text-5xl">
+              <label htmlFor={id}>무엇을 시작할까요</label>
+            </h1>
+            <textarea
+              id={id}
+              autoFocus
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              placeholder="생각나는 대로 적어 주세요. 한 줄이어도, 한 쪽이어도 됩니다."
+              className="sheet-of-paper w-full resize-none border-l-4 border-control-border bg-transparent py-1 pl-5 text-2xl text-fg caret-accent placeholder:text-fg-muted focus:border-accent focus-visible:outline-hidden"
+            />
+          </div>
+
+          <div role="radiogroup" aria-label="스튜디오가 먼저 할 일" className="flex flex-col border-b border-border">
+            {MODES.map((m) => (
+              <button key={m.id} type="button" role="radio" aria-checked={mode === m.id} onClick={() => setMode(m.id)} className={`grid min-h-11 items-baseline gap-x-6 gap-y-1 border-l-4 border-t border-t-border px-4 py-3 text-left md:grid-cols-[8rem_minmax(0,1fr)] md:py-4 ${mode === m.id ? 'border-l-accent bg-sunken' : 'border-l-transparent'}`}>
+                <span className="text-lg font-semibold">{m.label}</span>
+                {/* On a phone only the chosen mode spells out what it does, so the start button stays in reach. */}
+                <span className={`text-base text-fg-muted ${mode === m.id ? '' : 'hidden md:block'}`}>{m.does}</span>
+              </button>
+            ))}
+          </div>
+
+          {mode === 'build' ? <Segmented label="무엇으로 만들지" value={template} options={TEMPLATES} onChange={setTemplate} /> : null}
+          {start.error ? <Problem>{start.error}</Problem> : null}
+          <Button type="submit" variant="primary" busy={start.busy} disabled={text.trim() === ''} className="self-start">
+            {current.start}
+          </Button>
+        </form>
+
+        {recent.length > 0 ? (
+          <section className="flex flex-col px-4 pb-16 md:px-10">
+            <h2 className="pb-3 text-sm font-medium text-fg-muted">이어서 하기</h2>
+            {recent.map((r) => (
+              <button key={r.key} type="button" onClick={() => onOpen(r.route)} className="flex min-h-11 flex-wrap items-baseline justify-between gap-x-6 gap-y-1 border-t border-border py-4 text-left hover:bg-sunken">
+                <span className="text-lg font-medium">{r.title}</span>
+                <span className="text-sm text-fg-muted">
+                  {r.meta}, {ago(r.at)}
+                </span>
+              </button>
+            ))}
+          </section>
+        ) : null}
+      </div>
+    </div>
+  );
+}

@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Studio Zero core daemon as a per-user LaunchAgent.
+
+  A LaunchAgent (gui/<uid> domain), not a system LaunchDaemon, on purpose: the daemon reads provider keys from
+  the user's login Keychain and drives OrbStack, and both exist only inside a logged-in user session.
+  Install with deploy/install-launch-agent.sh, which fills in the __PLACEHOLDERS__.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>zero.studio.daemon</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>__NODE__</string>
+    <string>__REPO__/packages/daemon/dist/daemon.mjs</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>__REPO__</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <!-- docker (OrbStack) and the vendor CLIs used by the session bridge must be on this PATH. -->
+    <key>PATH</key>
+    <string>__NODE_DIR__:__HOME__/.orbstack/bin:/Applications/OrbStack.app/Contents/MacOS/xbin:__HOME__/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+    <key>HOME</key>
+    <string>__HOME__</string>
+    <key>SZ_LOG_LEVEL</key>
+    <string>info</string>
+  </dict>
+
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <!-- After a crash, wait before restarting so a boot-time failure cannot spin. -->
+  <key>ThrottleInterval</key>
+  <integer>10</integer>
+  <!-- SIGTERM, then this many seconds for running tasks to park their branches before SIGKILL. -->
+  <key>ExitTimeOut</key>
+  <integer>30</integer>
+
+  <key>StandardOutPath</key>
+  <string>__HOME__/Library/Logs/studio-zero/daemon.log</string>
+  <key>StandardErrorPath</key>
+  <string>__HOME__/Library/Logs/studio-zero/daemon.log</string>
+</dict>
+</plist>

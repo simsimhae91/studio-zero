@@ -1,0 +1,26 @@
+{
+  "name": "@studio-zero/daemon",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "sz": "./src/cli.ts",
+    "studio-zero-daemon": "./src/main.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.8.0",
+    "@fastify/websocket": "^11.3.7",
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "@studio-zero/design": "workspace:*",
+    "@studio-zero/protocol": "workspace:*",
+    "fastify": "^5.12.8",
+    "marked": "^18.2.0",
+    "pino": "^10.4.0",
+    "playwright-core": "^1.65.0",
+    "typescript-classic": "npm:typescript@^5.9.3",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.18.2"
+  }
+}
