@@ -1,11 +1,13 @@
 import { createTheme, renderThemeCss, seedFromName } from '@studio-zero/design';
 import type { Project, SandboxInfo } from '@studio-zero/protocol';
+import { EXTERNAL_ENV_FILE, type ExternalApis } from '../app/ExternalApis.ts';
 import type { OrbStackManager } from '../sandbox/OrbStackManager.ts';
 import { KeyedMutex } from '../util/core.ts';
 import { AX_DIR, AX_ENTRY, kitFiles } from './axKit.ts';
 import { MOBILE_KIT_DIR, MOBILE_KIT_ENTRY, mobileKitFiles } from './mobileKit.ts';
 import { PROJECT_FILE, defaultProjectFile } from './projectFile.ts';
 import { THEME_FILE } from './prompts.ts';
+import type { SelfHosting } from './SelfHosting.ts';
 
 /**
  * Brings a project to the state every task assumes: sandbox running, /workspace a git repository, and the
@@ -18,20 +20,32 @@ import { THEME_FILE } from './prompts.ts';
  * Each file set is checked on the branch that is checked out. The harness calls this again once a task's branch
  * exists, so a kit introduced after a project was created reaches the branch the engine is about to work on.
  *
+ * The studio's own repository (the Core project) is the exception: its workspace is a clone of that repository,
+ * filled by `SelfHosting`, and none of these files are written into it.
+ *
  * Project creation provisions in the background and a task submitted right away provisions too, so calls for
  * one project are serialised here; the second caller waits and finds the work done.
  */
 export class WorkspaceProvisioner {
   readonly #sandboxes: OrbStackManager;
   readonly #locks = new KeyedMutex();
+  readonly #core: Pick<SelfHosting, 'sync'> | null;
+  readonly #external: Pick<ExternalApis, 'envFile'> | null;
 
-  constructor(sandboxes: OrbStackManager) {
+  constructor(sandboxes: OrbStackManager, core: Pick<SelfHosting, 'sync'> | null = null, external: Pick<ExternalApis, 'envFile'> | null = null) {
     this.#sandboxes = sandboxes;
+    this.#core = core;
+    this.#external = external;
   }
 
   ensure(project: Project): Promise<SandboxInfo> {
     return this.#locks.run(project.id, async () => {
       const info = await this.#sandboxes.ensure(project);
+      if (project.template === 'studio-core') {
+        // Filled once, here; a task brings it up to date itself before it branches.
+        await this.#core?.sync(project, { onlyIfEmpty: true });
+        return info;
+      }
       // One round trip answers both questions; each file set is written only when it is missing.
       const present = await this.#sandboxes.exec(project, `test -f ${THEME_FILE} && echo theme; test -f ${AX_ENTRY} && echo kit; test -f ${MOBILE_KIT_ENTRY} && echo mobile; true`, { timeoutSec: 15 });
       const has = new Set(present.stdout.split('\n').map((line) => line.trim()));
@@ -50,6 +64,20 @@ export class WorkspaceProvisioner {
       if (project.template === 'mobile-expo' && !has.has('mobile')) {
         for (const file of await mobileKitFiles()) await this.#sandboxes.writeFile(project, `${MOBILE_KIT_DIR}/${file.path}`, file.content);
         added.push('mobile kit');
+      }
+      // Unlike the kits, this file is the daemon's to keep right: it is rewritten whenever what the owner has
+      // connected differs from what the branch holds, so a new connection reaches a branch made before it.
+      if (this.#external) {
+        const wanted = this.#external.envFile(project.id);
+        const held = (await this.#sandboxes.exec(project, `cat ${EXTERNAL_ENV_FILE} 2>/dev/null`, { timeoutSec: 15 })).stdout;
+        if (wanted !== null && held !== wanted) {
+          await this.#sandboxes.writeFile(project, EXTERNAL_ENV_FILE, wanted);
+          added.push('outside API stand-ins');
+        } else if (wanted === null && held !== '') {
+          // Nothing is connected any more: a list of stand-ins that no longer work would send an engine down a dead end.
+          await this.#sandboxes.exec(project, `rm -f ${EXTERNAL_ENV_FILE}`, { timeoutSec: 15 });
+          added.push('outside API stand-ins (now none)');
+        }
       }
       if (added.length > 0) {
         const list = added.length === 1 ? added[0] : `${added.slice(0, -1).join(', ')} and ${added.at(-1)}`;

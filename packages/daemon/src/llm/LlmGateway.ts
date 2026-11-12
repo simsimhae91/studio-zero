@@ -1,5 +1,6 @@
 import { Readable, Transform } from 'node:stream';
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
+import { PLACEHOLDER, type ExternalApis } from '../app/ExternalApis.ts';
 import type { Config } from '../config.ts';
 import type { Store } from '../db/Store.ts';
 import type { EventLog } from '../events/EventLog.ts';
@@ -22,6 +23,30 @@ const FORWARDED_RESPONSE_HEADERS = ['content-type', 'retry-after', 'request-id',
 export interface GatewayUpstreams {
   anthropic: string;
   openai: string;
+  /** Where a connected outside API is really reached, given its stored origin. Identity outside tests. */
+  external?: (origin: string) => string;
+}
+
+/** Headers that belong to one hop, or that this proxy sets itself. Everything else a caller sends is forwarded. */
+const NOT_FORWARDED = new Set(['host', 'connection', 'keep-alive', 'content-length', 'transfer-encoding', 'accept-encoding', 'upgrade', 'te', 'trailer', 'expect', 'proxy-authorization', 'proxy-connection', 'x-forwarded-for', 'x-forwarded-host', 'x-forwarded-proto']);
+const EXTERNAL_RESPONSE_HEADERS = ['content-type', 'retry-after', 'location', 'www-authenticate', 'request-id', 'x-request-id'];
+/** Bodies a stand-in can be found and replaced in, and answers an echoed key can be blacked out of. */
+const TEXTUAL = /^(?:text\/|application\/(?:[\w.+-]*json|x-www-form-urlencoded|[\w.+-]*xml))/i;
+const MAX_EXTERNAL_ANSWER = 10 * 1024 * 1024;
+const EXTERNAL_TIMEOUT_MS = 60_000;
+const jsonEscaped = (value: string): string => JSON.stringify(value).slice(1, -1);
+const htmlEscaped = (value: string): string => value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#39;');
+
+/**
+ * The spellings a value can come back in when a provider echoes a request: as it was, inside a JSON string,
+ * inside a JSON string that is itself inside one (a body quoted in an error object), with slashes escaped the
+ * way some encoders do, percent-encoded, and HTML-escaped. Longest first, so a longer spelling is not left
+ * half-replaced by a shorter one. An echo in an encoding not listed here (base64, say) is not caught.
+ */
+export function echoForms(value: string): string[] {
+  const once = jsonEscaped(value);
+  const forms = [value, once, jsonEscaped(once), once.replaceAll('/', '\\/'), jsonEscaped(once).replaceAll('/', '\\\\/'), encodeURIComponent(value), encodeURIComponent(value).replaceAll('%20', '+'), htmlEscaped(value)];
+  return [...new Set(forms)].sort((a, b) => b.length - a.length);
 }
 
 /**
@@ -37,6 +62,10 @@ export interface GatewayUpstreams {
  *
  * The real key exists only in this process and on the TLS connection to the provider.
  * This is a byte-level reverse proxy for code running in sandboxes; the daemon's own Claude calls use the SDK.
+ *
+ * `/ext/<name>/…` does the same for outside APIs the owner connected to a project (see `ExternalApis`): the
+ * request carries stand-ins where the keys go, the gateway puts the real values in and forwards to the origin
+ * stored for that API, and an answer that echoes a key comes back with it blacked out.
  */
 export class LlmGateway {
   readonly app: FastifyInstance;
@@ -48,9 +77,13 @@ export class LlmGateway {
   readonly #clock: Clock;
   readonly #log: Logger;
   readonly #providers: Record<string, Provider>;
+  readonly #external: ExternalApis | null;
+  readonly #externalOrigin: (origin: string) => string;
   readonly #destroySockets: () => void;
 
-  constructor(deps: { config: Config; store: Store; events: EventLog; policy: PolicyEngine; vault: KeychainVault; clock: Clock; log: Logger; upstreams?: GatewayUpstreams }) {
+  constructor(deps: { config: Config; store: Store; events: EventLog; policy: PolicyEngine; vault: KeychainVault; clock: Clock; log: Logger; upstreams?: Partial<GatewayUpstreams>; external?: ExternalApis }) {
+    this.#external = deps.external ?? null;
+    this.#externalOrigin = deps.upstreams?.external ?? ((origin) => origin);
     this.#config = deps.config;
     this.#store = deps.store;
     this.#events = deps.events;
@@ -58,7 +91,7 @@ export class LlmGateway {
     this.#vault = deps.vault;
     this.#clock = deps.clock;
     this.#log = deps.log;
-    const upstreams = deps.upstreams ?? { anthropic: 'https://api.anthropic.com', openai: 'https://api.openai.com' };
+    const upstreams = { anthropic: 'https://api.anthropic.com', openai: 'https://api.openai.com', ...deps.upstreams };
     this.#providers = {
       anthropic: {
         origin: upstreams.anthropic,
@@ -79,6 +112,8 @@ export class LlmGateway {
     // Bodies are forwarded byte-for-byte, so nothing is parsed on the way in.
     this.app.removeAllContentTypeParsers();
     this.app.addContentTypeParser('*', { parseAs: 'buffer' }, (_req, body, done) => done(null, body));
+    this.app.all('/ext/:name', (req, reply) => this.#handleExternal(req, reply));
+    this.app.all('/ext/:name/*', (req, reply) => this.#handleExternal(req, reply));
     this.app.all('/:provider/*', (req, reply) => this.#handle(req, reply));
   }
 
@@ -160,6 +195,75 @@ export class LlmGateway {
     });
     return reply.send(Readable.fromWeb(upstream.body as import('node:stream/web').ReadableStream<Uint8Array>).pipe(tap));
   }
+
+  /**
+   * A call from a project's own code to an outside API it was connected to.
+   *
+   * The caller is known by what it carries: a stand-in only that project's sandbox was given. Every stand-in in
+   * the path, the query, the headers and a textual body is replaced with the real value (escaped for where it
+   * sits), and the request goes to the origin stored for that API. The caller picks the path, never the host;
+   * a redirect is handed back, not followed, so the key cannot be walked to another server.
+   */
+  async #handleExternal(req: FastifyRequest, reply: FastifyReply): Promise<FastifyReply> {
+    const name = (req.params as { name: string }).name;
+    const raw = req.raw.url ?? '';
+    const prefix = `/ext/${name}`;
+    if (!this.#external || !raw.startsWith(prefix)) return reply.code(404).send(gatewayError('not_found', 'no outside API is connected under this name'));
+    const tail = raw.slice(prefix.length); // "/path?query" as the caller wrote it
+    const sent = Buffer.isBuffer(req.body) && req.method !== 'GET' && req.method !== 'HEAD' ? req.body : undefined;
+    const contentType = headerValue(req.headers['content-type']);
+    const bodyText = sent && TEXTUAL.test(contentType) ? sent.toString('utf8') : null;
+    const forwarded = Object.entries(req.headers).filter(([key]) => !NOT_FORWARDED.has(key));
+
+    const carried = [...new Set([tail, ...forwarded.map(([, value]) => headerValue(value)), bodyText ?? ''].join('\n').match(PLACEHOLDER) ?? [])];
+    const call = await this.#external.resolve(name, carried);
+    if ('refused' in call) return reply.code(401).send(gatewayError('authentication_error', call.refused));
+
+    const task = this.#store.listTasks(call.projectId, 5).find((t) => t.state === 'running') ?? null;
+    try {
+      await this.#policy.authorize(task ? { type: 'agent', taskId: task.id } : { type: 'system' }, { kind: 'external.call', projectId: call.projectId, name, host: call.host }, { taskId: task?.id ?? null });
+    } catch (err) {
+      if (err instanceof PolicyDeniedError) return reply.code(403).send(gatewayError('permission_error', err.message));
+      throw err;
+    }
+
+    const swap = (text: string, escape: (value: string) => string): string => text.replace(PLACEHOLDER, (standIn) => { const real = call.values.get(standIn); return real ? escape(real.expose()) : standIn; });
+    const headers: Record<string, string> = {};
+    for (const [key, value] of forwarded) headers[key] = swap(headerValue(value), (v) => v);
+    const body = bodyText === null ? sent : Buffer.from(swap(bodyText, /json/i.test(contentType) ? jsonEscaped : /x-www-form-urlencoded/i.test(contentType) ? encodeURIComponent : (v) => v), 'utf8');
+
+    let upstream: Response;
+    let answer: Buffer;
+    try {
+      upstream = await fetch(`${this.#externalOrigin(call.origin)}${swap(tail, encodeURIComponent)}`, { method: req.method, headers, body: body as BodyInit | undefined, redirect: 'manual', signal: AbortSignal.timeout(EXTERNAL_TIMEOUT_MS) });
+      const declared = Number(upstream.headers.get('content-length') ?? 0);
+      if (declared > MAX_EXTERNAL_ANSWER) return reply.code(502).send(gatewayError('upstream_error', 'the answer is larger than this gateway passes on'));
+      answer = Buffer.from(await upstream.arrayBuffer());
+      if (answer.length > MAX_EXTERNAL_ANSWER) return reply.code(502).send(gatewayError('upstream_error', 'the answer is larger than this gateway passes on'));
+    } catch (err) {
+      this.#log.warn({ api: name, err: errorMessage(err) }, 'outside API request failed');
+      return reply.code(502).send(gatewayError('upstream_error', 'the outside API could not be reached'));
+    }
+
+    // A provider that echoes what it was sent (an error quoting the key, a debug field) must not hand the key
+    // to the sandbox that way: every form the value was sent in is blacked out of what goes back.
+    const blackOut = (text: string): string => {
+      let out = text;
+      for (const real of call.values.values()) for (const form of echoForms(real.expose())) out = out.replaceAll(form, '[redacted]');
+      return out;
+    };
+    reply.code(upstream.status);
+    for (const header of EXTERNAL_RESPONSE_HEADERS) {
+      const value = upstream.headers.get(header);
+      if (value !== null) reply.header(header, blackOut(value));
+    }
+    return reply.send(TEXTUAL.test(upstream.headers.get('content-type') ?? '') ? blackOut(answer.toString('utf8')) : answer);
+  }
+}
+
+/** The value a header was sent with, as one string. */
+function headerValue(value: string | string[] | undefined): string {
+  return Array.isArray(value) ? value.join(', ') : (value ?? '');
 }
 
 function presentedToken(req: FastifyRequest): string | null {
@@ -193,6 +297,7 @@ export class UsageMeter {
   #json: Buffer[] = [];
   #jsonBytes = 0;
   #input = 0;
+  #cached = 0;
   #output = 0;
 
   constructor(sse: boolean) {
@@ -217,9 +322,9 @@ export class UsageMeter {
     if (this.#buffer.length > 1024 * 1024) this.#buffer = ''; // a single line this long is not a usage event
   }
 
-  finish(): { inputTokens: number; outputTokens: number } {
+  finish(): { inputTokens: number; outputTokens: number; cachedTokens: number } {
     if (!this.#sse && this.#jsonBytes <= 8 * 1024 * 1024) this.#observe(Buffer.concat(this.#json).toString('utf8'));
-    return { inputTokens: this.#input, outputTokens: this.#output };
+    return { inputTokens: this.#input, outputTokens: this.#output, cachedTokens: Math.min(this.#cached, this.#input) };
   }
 
   #observe(payload: string): void {
@@ -238,5 +343,6 @@ export class UsageMeter {
     // Streams report cumulative counts across several events, so keep the largest value seen.
     this.#input = Math.max(this.#input, input);
     this.#output = Math.max(this.#output, output);
+    this.#cached = Math.max(this.#cached, n('cache_read_input_tokens'));
   }
 }

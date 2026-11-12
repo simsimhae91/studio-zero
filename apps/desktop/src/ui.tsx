@@ -11,10 +11,15 @@ export function TitlebarSpace() {
 type Variant = 'primary' | 'quiet' | 'danger';
 
 const variants: Record<Variant, string> = {
-  primary: 'bg-accent text-on-accent',
+  primary: 'border border-transparent bg-accent text-on-accent',
   quiet: 'border border-control-border bg-surface text-fg',
   danger: 'border border-control-border bg-surface text-danger',
 };
+/**
+ * A button that cannot be pressed looks like one: a flat, bordered, muted slab, the same for every variant.
+ * A faded version of the live button (the accent at 60%) reads as a button in some other state, and gets pressed.
+ */
+const inactive = 'disabled:cursor-not-allowed disabled:border-border disabled:bg-sunken disabled:text-fg-muted';
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: Variant;
@@ -30,7 +35,7 @@ export function Button({ variant = 'quiet', busy = false, icon, children, classN
       {...props}
       disabled={disabled || busy}
       aria-busy={busy || undefined}
-      className={`inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center gap-2 rounded-md px-4 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-60 ${variants[variant]} ${className}`}
+      className={`inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center gap-2 rounded-md px-4 text-sm font-medium ${inactive} ${variants[variant]} ${className}`}
     >
       {busy ? <LoaderCircle className="size-4 animate-spin" aria-hidden /> : icon}
       {children}
@@ -89,12 +94,16 @@ export function Field({ label, hint, children }: { label: string; hint?: string;
 
 export const inputClass = 'min-h-11 w-full rounded-md border border-control-border bg-surface px-3 text-base text-fg placeholder:text-fg-muted';
 
-/** A few mutually exclusive options, all visible. Used where a native select would hide two or three choices behind a click. */
+/**
+ * A few mutually exclusive options, all visible. Used where a native select would hide two or three choices behind a click.
+ * Drawn as one control: a sunken track with the chosen option raised in it. It is a setting, so it stays quieter
+ * than the button that acts on it; an inverted block for the chosen option read as a second primary button.
+ */
 export function Segmented<T extends string>({ label, value, options, onChange, disabled, compact = false }: { label: string; value: T; options: readonly { id: T; label: string }[]; onChange: (value: T) => void; disabled?: boolean; compact?: boolean }) {
   return (
-    <div role="radiogroup" aria-label={label} className="flex flex-wrap gap-1">
+    <div role="radiogroup" aria-label={label} className="inline-flex max-w-full flex-wrap gap-1 self-start rounded-lg border border-border bg-sunken p-1">
       {options.map((o) => (
-        <button key={o.id} type="button" role="radio" aria-checked={value === o.id} disabled={disabled} onClick={() => onChange(o.id)} className={`rounded-md text-sm font-medium disabled:opacity-60 ${compact ? 'min-h-9 pointer-coarse:min-h-11 px-3' : 'min-h-11 min-w-11 px-4'} ${value === o.id ? 'bg-fg text-bg' : 'text-fg-muted hover:bg-sunken'}`}>
+        <button key={o.id} type="button" role="radio" aria-checked={value === o.id} disabled={disabled} onClick={() => onChange(o.id)} className={`rounded-md border text-sm font-medium disabled:opacity-60 ${compact ? 'min-h-9 pointer-coarse:min-h-11 px-3' : 'min-h-11 min-w-11 px-4'} ${value === o.id ? 'border-control-border bg-surface text-fg shadow-sm' : 'border-transparent text-fg-muted hover:text-fg'}`}>
           {o.label}
         </button>
       ))}

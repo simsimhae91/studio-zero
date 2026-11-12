@@ -7,16 +7,23 @@ import {
   Checkpoint,
   CredentialMeta,
   Eval,
+  ExternalApi,
   FileEntry,
   Lesson,
+  LedgerEntry,
   LessonState,
   McpServerInfo,
+  PowerMode,
+  PowerState,
   Project,
   ProposalCard,
   SandboxInfo,
   SandboxState,
+  SelfHostStatus,
   Session,
   Slug,
+  SubscriptionQuota,
+  ReviewerPref,
   Task,
   TaskKind,
   TaskTrack,
@@ -36,6 +43,8 @@ const McpServerId = z.string().regex(/^[a-z][a-z0-9-]{1,30}$/);
 export const EnginePref = z.enum(['native-claude', 'claude-code', 'codex', 'cursor', 'antigravity']);
 /** A path inside the project's workspace, relative to /workspace. The daemon confines it again. */
 const WorkspacePath = z.string().min(1).max(1024);
+/** A page to take design principles from. Checked again by the daemon before anything opens it. */
+const ReferenceUrl = z.string().min(12).max(300);
 const TerminalId = z.string().min(1).max(64);
 const TerminalSize = { cols: z.number().int().min(2).max(500), rows: z.number().int().min(1).max(300) };
 
@@ -126,6 +135,10 @@ export const methods = {
       sessionId: z.string().optional(),
       /** Left out: `full`. */
       track: TaskTrack.optional(),
+      /** Cross-check this task with this subscription. Left out: the one paired with the engine, never the engine's own vendor. */
+      reviewer: ReviewerPref.optional(),
+      /** Up to three pages to take design principles from. Each is opened only inside the QA browser container. */
+      references: z.array(ReferenceUrl).max(3).optional(),
     }),
     result: Task,
   },
@@ -161,6 +174,9 @@ export const methods = {
    * the result is audited again.
    */
   'audits.redesign': { params: z.object({ auditId: z.string() }), result: Task },
+
+  /** The project's receipts, newest first: one per finished task, each with its deltas against the one before. */
+  'ledger.list': { params: z.object({ projectId: z.string(), limit: z.number().int().min(1).max(200).optional() }), result: z.object({ entries: z.array(LedgerEntry) }) },
 
   'lessons.list': { params: z.object({ projectId: z.string().optional(), state: LessonState.optional() }), result: z.object({ lessons: z.array(Lesson) }) },
   'lessons.setState': { params: z.object({ lessonId: z.string(), state: z.enum(['active', 'retired', 'quarantined']) }), result: Lesson },
@@ -216,6 +232,19 @@ export const methods = {
     result: z.object({ advisor: AdvisorId, answer: z.string(), durationMs: z.number().int() }),
   },
 
+  // This Mac: keeping it awake, and what the daemon has seen of each subscription.
+  'power.get': { params: empty, result: PowerState },
+  'power.set': { params: z.object({ mode: PowerMode }), result: PowerState },
+  'quota.get': { params: empty, result: z.object({ at: z.number().int(), subscriptions: z.array(SubscriptionQuota) }) },
+
+  /** The studio's own repository as a project. Read-only: what a task there would start from and whether its result could be merged. */
+  'selfhost.status': { params: empty, result: SelfHostStatus },
+  /**
+   * Merges the feature branch a Core task exported into the base branch of this Mac's checkout, fast-forward
+   * only, and only when that checkout is clean and on the base branch. Otherwise it is refused and nothing moves.
+   */
+  'selfhost.merge': { params: z.object({ taskId: z.string() }), result: z.object({ branch: z.string(), into: z.string(), commit: z.string() }) },
+
   // External tool servers (MCP). Configured by the owner; used by agents through the daemon, one approved tool at a time.
   'mcp.list': { params: empty, result: z.object({ servers: z.array(McpServerInfo) }) },
   'mcp.add': {
@@ -228,6 +257,20 @@ export const methods = {
   },
   'mcp.remove': { params: z.object({ serverId: z.string() }), result: z.object({ removed: z.literal(true) }) },
   'mcp.revoke': { params: z.object({ serverId: z.string(), projectId: z.string() }), result: z.object({ revoked: z.number().int() }) },
+
+  // Outside APIs a project's own code calls with the owner's key. The key is stored once and never read back.
+  'external.list': { params: z.object({ projectId: z.string() }), result: z.object({ apis: z.array(ExternalApi) }) },
+  /** Connects an API (or replaces its keys). Inbound only, like `vault.set`. */
+  'external.set': {
+    params: z.object({
+      projectId: z.string(),
+      name: ExternalApi.shape.name,
+      origin: z.string().min(12).max(200),
+      variables: z.array(z.object({ name: z.string().regex(/^[A-Z][A-Z0-9_]{0,30}$/, 'capital letters, digits and underscores'), secret: z.string().min(1).max(8192) })).min(1).max(6),
+    }),
+    result: ExternalApi,
+  },
+  'external.remove': { params: z.object({ projectId: z.string(), name: ExternalApi.shape.name }), result: z.object({ removed: z.literal(true) }) },
 
   'vault.list': { params: empty, result: z.object({ credentials: z.array(CredentialMeta) }) },
   /** Inbound only. There is deliberately no `vault.get`: secrets never travel from the daemon to a client. */

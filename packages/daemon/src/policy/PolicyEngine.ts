@@ -1,5 +1,5 @@
 import { posix } from 'node:path';
-import type { Approval, Origin } from '@studio-zero/protocol';
+import { CORE_PROJECT_ID, type Approval, type Origin } from '@studio-zero/protocol';
 import type { Config } from '../config.ts';
 import type { ApprovalRow, Store } from '../db/Store.ts';
 import type { EventLog } from '../events/EventLog.ts';
@@ -83,6 +83,25 @@ const rules: Rule[] = [
     },
   },
   {
+    // A key for an outside API is a credential like any other: it enters at the desk and nowhere else.
+    id: 'external.configure-local-owner-only',
+    evaluate: (actor, action) => {
+      if (action.kind !== 'external.configure') return undefined;
+      return actor.type === 'owner' && actor.via === 'desktop' ? allow('owner on the control socket') : deny('outside APIs and their keys can only be connected from an authenticated desktop client');
+    },
+  },
+  {
+    // The owner connecting an API to a project is the grant. The call goes where that connection says and
+    // nowhere else, so a steered agent can reach that one host with that one key and no further.
+    id: 'external.call-connected-only',
+    evaluate: (_actor, action, { store }) => {
+      if (action.kind !== 'external.call') return undefined;
+      const api = store.listExternalApis(action.projectId).find((a) => a.name === action.name);
+      if (!api) return deny(`no outside API named "${action.name}" is connected to this project`);
+      return hostOf(api.origin) === action.host ? allow('the owner connected this API to this project') : deny('the connection is not the one this call was prepared for');
+    },
+  },
+  {
     id: 'mcp.configure-local-owner-only',
     evaluate: (actor, action) => {
       if (action.kind !== 'mcp.configure') return undefined;
@@ -137,6 +156,44 @@ const rules: Rule[] = [
     evaluate: (actor, action) => {
       if (action.kind !== 'sandbox.terminal') return undefined;
       return actor.type === 'owner' && actor.via === 'desktop' ? allow('owner on the control socket; the shell runs inside the project container') : deny('terminals can only be opened from an authenticated desktop client');
+    },
+  },
+  {
+    // A reference is a page someone else controls. Only a public https page is opened, only in the QA browser
+    // container, and only because the owner named it: an agent cannot point the studio's browser anywhere.
+    id: 'reference.public-pages-only',
+    evaluate: (actor, action) => {
+      if (action.kind !== 'reference.capture') return undefined;
+      const check = parseReferenceUrl(action.url);
+      if (!check.ok) return deny(check.reason);
+      return actor.type === 'agent' ? deny('agents do not choose which pages the studio opens') : allow('a public page the owner named, opened in the QA browser container');
+    },
+  },
+  {
+    id: 'power.owner-only',
+    evaluate: (actor, action) => {
+      if (action.kind !== 'power.set') return undefined;
+      return actor.type === 'agent' ? deny('agents do not control whether this Mac sleeps') : allow(`${actor.type} may change the power mode`);
+    },
+  },
+  {
+    // The harness copies a verified Core task's branch out as a new `feature/` ref. Only the harness, only for
+    // the Core project, only under that prefix: an agent cannot write refs into the checkout, and no existing
+    // branch can be named.
+    id: 'selfhost.export-harness-only',
+    evaluate: (actor, action) => {
+      if (action.kind !== 'selfhost.export') return undefined;
+      if (action.projectId !== CORE_PROJECT_ID) return deny('only the Core project is exported to the studio\'s checkout');
+      if (!/^feature\/[a-z0-9][a-z0-9-]{0,60}$/.test(action.branch)) return deny('exports go to a new feature/ branch');
+      return actor.type === 'system' ? allow('the harness exports verified work as a feature branch; nothing is merged') : deny('only the harness exports a task\'s branch');
+    },
+  },
+  {
+    // The one path by which work leaves a sandbox and lands in files this daemon runs from. The desk only.
+    id: 'selfhost.merge-local-owner-only',
+    evaluate: (actor, action) => {
+      if (action.kind !== 'selfhost.merge') return undefined;
+      return actor.type === 'owner' && actor.via === 'desktop' ? allow('owner on the control socket') : deny('the studio\'s own repository can only be merged into from an authenticated desktop client');
     },
   },
   {
@@ -214,6 +271,71 @@ const rules: Rule[] = [
     },
   },
 ];
+
+const hostOf = (origin: string): string => {
+  try {
+    return new URL(origin).host;
+  } catch {
+    return '';
+  }
+};
+
+/**
+ * Where an outside API lives: an https origin on a public host name, with an optional port, and nothing after it.
+ * The origin is fixed when the owner connects the API; a call can choose its path but never its destination.
+ */
+export function parseApiOrigin(raw: string): { ok: true; origin: string; host: string } | { ok: false; reason: string } {
+  let url: URL;
+  try {
+    url = new URL(raw.trim());
+  } catch {
+    return { ok: false, reason: 'not a valid URL' };
+  }
+  if (url.protocol !== 'https:') return { ok: false, reason: 'only https:// APIs can be connected' };
+  if (url.username !== '' || url.password !== '') return { ok: false, reason: 'URLs with embedded credentials are rejected' };
+  if ((url.pathname !== '/' && url.pathname !== '') || url.search !== '' || url.hash !== '') return { ok: false, reason: 'give the origin only (scheme, host and port), without a path or a query' };
+  if (!isPublicHost(url.hostname)) return { ok: false, reason: `${url.hostname} is not a public host name` };
+  return { ok: true, origin: url.origin, host: url.host };
+}
+
+/** Names that resolve inside this Mac or its networks, whatever DNS says about them. */
+const INTERNAL_NAME = /(?:^|\.)(?:localhost|local|internal|lan|home\.arpa|intranet|corp|test|invalid|example)$/i;
+
+/** True for an address no public page lives at: loopback, private ranges, link-local, carrier NAT, unspecified. */
+export function isPrivateAddress(ip: string): boolean {
+  const v4 = /^(?:::ffff:)?(\d{1,3})\.(\d{1,3})\.\d{1,3}\.\d{1,3}$/i.exec(ip);
+  if (v4) {
+    const [a, b] = [Number(v4[1]), Number(v4[2])];
+    return a === 0 || a === 10 || a === 127 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127) || a >= 224;
+  }
+  const v6 = ip.toLowerCase();
+  return v6 === '::' || v6 === '::1' || v6.startsWith('fc') || v6.startsWith('fd') || v6.startsWith('fe8') || v6.startsWith('fe9') || v6.startsWith('fea') || v6.startsWith('feb');
+}
+
+/** A host a page in the QA browser may talk to: a public name. Not an address, not a single label (a container's name), not a private suffix. */
+export function isPublicHost(hostname: string): boolean {
+  const host = hostname.replace(/^\[|\]$/g, '');
+  return host.includes('.') && !host.includes(':') && !/^[\d.]+$/.test(host) && !INTERNAL_NAME.test(host);
+}
+
+/**
+ * A page the owner named as a design reference. https only, a public host name, the default port, no embedded
+ * credentials: nothing that could be an address inside this Mac, its containers or its network.
+ */
+export function parseReferenceUrl(raw: string): { ok: true; url: string; host: string } | { ok: false; reason: string } {
+  let url: URL;
+  try {
+    url = new URL(raw.trim());
+  } catch {
+    return { ok: false, reason: 'not a valid URL' };
+  }
+  if (url.protocol !== 'https:') return { ok: false, reason: 'only https:// pages can be used as a reference' };
+  if (url.username !== '' || url.password !== '') return { ok: false, reason: 'URLs with embedded credentials are rejected' };
+  if (url.port !== '' && url.port !== '443') return { ok: false, reason: 'a reference URL must use the default https port' };
+  if (!isPublicHost(url.hostname)) return { ok: false, reason: `${url.hostname} is not a public host name` };
+  url.hash = '';
+  return { ok: true, url: url.toString(), host: url.hostname };
+}
 
 export function parseRepoUrl(raw: string, allowedHosts: readonly string[]): { ok: true; url: string; host: string; path: string } | { ok: false; reason: string } {
   let url: URL;

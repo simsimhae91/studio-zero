@@ -106,7 +106,7 @@ test('Cursor and Antigravity engines: started inside the jail, given only the st
     assert.match(profile, new RegExp(`\\(deny file-read\\* \\(literal "${join(homedir(), '.cursor', 'mcp.json').replaceAll('/', '\\/').replaceAll('.', '\\.')}"\\)\\)$`), 'the owner\'s own MCP servers and their tokens stay out of reach');
     assert.match(String(main.args.at(-1)), /Your own shell and file tools do not work in this session[\s\S]*Build it\.$/);
     assert.match(main.env!.TMPDIR!, /sz-bridge-/);
-    assert.equal(store.getTask('tsk_cursor')!.spentTokens, 1000);
+    assert.equal(store.getTask('tsk_cursor')!.spentTokens, 928, '900 fresh + 20 out, and the 80 read from cache at a tenth');
 
     // Antigravity: over ACP, with the studio server belonging to that session alone.
     assert.equal(acps.length, 1);

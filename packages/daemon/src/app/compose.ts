@@ -11,12 +11,16 @@ import { EventLog } from '../events/EventLog.ts';
 import { CliBridgeEngine } from '../harness/engines/CliBridgeEngine.ts';
 import { NativeClaudeEngine } from '../harness/engines/NativeClaudeEngine.ts';
 import { WorkspaceProvisioner } from '../harness/bootstrap.ts';
+import { BuildMeter } from '../harness/BuildMeter.ts';
 import { CompilerGate } from '../harness/CompilerGate.ts';
 import { EvalRunner } from '../harness/EvalRunner.ts';
 import { Harness } from '../harness/Harness.ts';
+import { Ledger } from '../harness/Ledger.ts';
 import { LessonBook } from '../harness/LessonBook.ts';
 import { ReflectionAgent } from '../harness/ReflectionAgent.ts';
 import { ReviewResumer } from '../harness/ReviewResumer.ts';
+import { SandwichReviewer } from '../harness/SandwichReviewer.ts';
+import { SelfHosting } from '../harness/SelfHosting.ts';
 import { Toolbox } from '../harness/Toolbox.ts';
 import { KirbyEngine } from '../kirby/KirbyEngine.ts';
 import type { PdfRenderer } from '../knowledge/exportPdf.ts';
@@ -26,9 +30,12 @@ import { ClaudeClient, type KeyCheck } from '../llm/ClaudeClient.ts';
 import { SessionBrain } from '../llm/SessionBrain.ts';
 import { LlmGateway, type GatewayUpstreams } from '../llm/LlmGateway.ts';
 import { ModelRouter } from '../llm/ModelRouter.ts';
+import { ReviewDesk } from '../llm/ReviewDesk.ts';
 import { PolicyEngine } from '../policy/PolicyEngine.ts';
 import { PLAYWRIGHT_VERSION, QaBrowser } from '../qa/QaBrowser.ts';
+import { MockupRenderer } from '../qa/MockupRenderer.ts';
 import { QaVisionBridge } from '../qa/QaVisionBridge.ts';
+import { RefKit } from '../qa/RefKit.ts';
 import { SmokeTester, type SmokeRunner } from '../qa/SmokeTester.ts';
 import { VisualAuditor } from '../qa/VisualAuditor.ts';
 import { TaskQueue } from '../queue/TaskQueue.ts';
@@ -43,10 +50,13 @@ import { SandboxFileService } from '../sandbox/SandboxFileService.ts';
 import { ScratchService } from '../scratch/ScratchService.ts';
 import { DaemonServer } from '../server/DaemonServer.ts';
 import { createHandlers } from '../server/handlers.ts';
+import { CaffeinateManager, type PowerSpawner } from '../util/CaffeinateManager.ts';
 import { Secret, errorMessage, systemClock, type Clock } from '../util/core.ts';
 import type { CommandRunner } from '../util/run.ts';
 import { CredentialIds, KeychainVault } from '../vault/KeychainVault.ts';
+import { ExternalApis } from './ExternalApis.ts';
 import { ProjectNamer } from './ProjectNamer.ts';
+import { QuotaTracker } from './QuotaTracker.ts';
 import { Studio } from './Studio.ts';
 
 export const VERSION = '0.1.0';
@@ -61,7 +71,7 @@ export interface DaemonOverrides {
   fetch?: typeof fetch;
   openSocket?: (url: string) => SocketLike;
   anthropic?: Anthropic;
-  gatewayUpstreams?: GatewayUpstreams;
+  gatewayUpstreams?: Partial<GatewayUpstreams>;
   /** Replaces the browser container for PDF export. */
   renderPdf?: PdfRenderer;
   /** Replaces the MCP client. */
@@ -74,6 +84,10 @@ export interface DaemonOverrides {
   ptyOpen?: PtyOpen;
   /** Replaces the headless-browser smoke load. */
   smoke?: SmokeRunner;
+  /** Replaces `/usr/bin/caffeinate`. */
+  powerSpawn?: PowerSpawner;
+  /** Replaces the platform check behind keeping the Mac awake. */
+  platform?: NodeJS.Platform;
 }
 
 export interface Daemon {
@@ -105,6 +119,14 @@ export interface Daemon {
   resumer: ReviewResumer;
   pty: PtyManager;
   files: SandboxFileService;
+  ledger: Ledger;
+  refkit: RefKit;
+  mockups: MockupRenderer;
+  reviewer: SandwichReviewer;
+  power: CaffeinateManager;
+  quota: QuotaTracker;
+  selfHosting: SelfHosting;
+  external: ExternalApis;
   start(): Promise<void>;
   stop(): Promise<void>;
 }
@@ -122,10 +144,16 @@ export async function createDaemon(config: Config, log: PinoLogger, overrides: D
   const policy = new PolicyEngine({ store, events, config, clock });
 
   const sandboxes = new OrbStackManager({ config, store, clock, run: overrides.run });
-  const provisioner = new WorkspaceProvisioner(sandboxes);
+  // The studio's own repository as a project: in and out of its sandbox as git objects, merged only by the owner.
+  const selfHosting = new SelfHosting({ config, store, events, policy, sandboxes, run: overrides.run, log: log.child({ mod: 'selfhost' }) });
+  // Outside APIs a project's own code calls: keys in the Keychain, stand-ins in the workspace, the swap in the gateway.
+  const external = new ExternalApis({ config, store, vault, policy, clock });
+  const provisioner = new WorkspaceProvisioner(sandboxes, selfHosting, external);
   const bridgeSessions = new BridgeSessions(clock);
+  // What each subscription was seen to do: every call through a vendor CLI reports its outcome here.
+  const quota = new QuotaTracker({ store, events, clock });
   // With no API key in the vault, the daemon's own model calls go through the owner's Claude subscription.
-  const session = new SessionBrain({ config, sessions: bridgeSessions, clock, run: overrides.run });
+  const session = new SessionBrain({ config, sessions: bridgeSessions, clock, run: overrides.run, quota });
   const claude = new ClaudeClient({ vault, policy, store, events, clock, sdk: overrides.anthropic, checkKey: overrides.checkKey, session });
   const mcp = new McpRegistry({ store, vault, policy, clock, connect: overrides.mcpConnect });
   mcp.seed();
@@ -133,7 +161,7 @@ export async function createDaemon(config: Config, log: PinoLogger, overrides: D
   const steering = new SteeringQueue();
   const calibration = new ConfidenceCalibration(store, clock);
 
-  const bridge = { config, sessions: bridgeSessions, store, events, policy, clock, steering, toolbox, run: overrides.run };
+  const bridge = { config, sessions: bridgeSessions, store, events, policy, clock, steering, toolbox, run: overrides.run, quota };
   const codex = new CliBridgeEngine({ id: 'codex', ...bridge });
   const antigravity = new CliBridgeEngine({ id: 'antigravity', ...bridge, acp: overrides.acp });
   const cursor = new CliBridgeEngine({ id: 'cursor', ...bridge, acp: overrides.acp });
@@ -143,14 +171,20 @@ export async function createDaemon(config: Config, log: PinoLogger, overrides: D
   // One browser container serves both the smoke load and the visual audit.
   const qaBrowser = new QaBrowser({ config, sandboxes });
   // The design reviewer travels the same two ways as the rest of the daemon's thinking: API key, or subscription CLI.
-  const vision = new QaVisionBridge({ config, claude, vendors: { codex, antigravity, cursor }, log: log.child({ mod: 'vision' }) });
+  // One desk carries every question put to a reviewer: the design review's, and a task's two cross-checks.
+  const desk = new ReviewDesk({ claude, vendors: { codex, antigravity, cursor } });
+  const vision = new QaVisionBridge({ config, claude, desk, log: log.child({ mod: 'vision' }) });
   const auditor = new VisualAuditor({ config, store, events, browser: qaBrowser, vision, clock, log: log.child({ mod: 'audit' }) });
   const evals = new EvalRunner({ config, store, events, sandboxes, auditor, clock });
   const compiler = new CompilerGate({ sandboxes });
   const smoke = overrides.smoke ?? new SmokeTester({ config, sandboxes, browser: qaBrowser });
   const lessons = new LessonBook({ store, events, policy, config, clock });
   const reflection = new ReflectionAgent({ claude, store, events, lessons, evals });
-  const harness = new Harness({ config, store, events, policy, sandboxes, provisioner, router, claude, evals, compiler, smoke, lessons, reflection, clock, log: log.child({ mod: 'harness' }) });
+  const refkit = new RefKit({ config, store, events, policy, browser: qaBrowser, clock, log: log.child({ mod: 'refkit' }) });
+  const reviewer = new SandwichReviewer({ desk, router, events, log: log.child({ mod: 'review' }) });
+  const ledger = new Ledger({ config, store, events, clock, log: log.child({ mod: 'ledger' }) });
+  const mockups = new MockupRenderer({ config, store, sandboxes, browser: qaBrowser, clock, log: log.child({ mod: 'mockups' }) });
+  const harness = new Harness({ config, store, events, policy, sandboxes, provisioner, router, claude, evals, compiler, smoke, lessons, reflection, refkit, reviewer, ledger, build: new BuildMeter({ sandboxes }), mockups, selfHosting, clock, log: log.child({ mod: 'harness' }) });
   const queue = new TaskQueue({ store, events, execute: (task, signal) => harness.run(task, signal), clock, log: log.child({ mod: 'queue' }) });
   // Tasks suspended for want of a design reviewer are queued again when one answers.
   const resumer = new ReviewResumer({ store, vision, queue, log: log.child({ mod: 'resumer' }) });
@@ -195,9 +229,11 @@ export async function createDaemon(config: Config, log: PinoLogger, overrides: D
   const files = new SandboxFileService({ sandboxes });
   const pty = new PtyManager({ sandboxes, log: log.child({ mod: 'pty' }), open: overrides.ptyOpen });
   const namer = new ProjectNamer({ claude, log: log.child({ mod: 'namer' }) });
+  // Holds one caffeinate process while the owner wants the Mac awake. A change, from either side, is announced.
+  const power: CaffeinateManager = new CaffeinateManager({ log: log.child({ mod: 'power' }), spawn: overrides.powerSpawn, platform: overrides.platform, onChange: (mode) => studio.announcePower(mode) });
   // "Gemini" is reached through Antigravity's CLI, the Google agent this daemon already knows how to confine.
   const advisors = { codex, gemini: antigravity };
-  const studio = new Studio({ config, store, events, policy, sandboxes, provisioner, queue, vault, claude, router, auditor, evals, lessons, kirby, scratch, knowledge, calibration, steering, mcp, files, pty, namer, advisors, relayStates, clock, log: log.child({ mod: 'studio' }), version: VERSION });
+  const studio: Studio = new Studio({ config, store, events, policy, sandboxes, provisioner, queue, vault, claude, router, auditor, evals, lessons, kirby, scratch, knowledge, calibration, steering, mcp, files, pty, namer, ledger, power, quota, selfHosting, external, advisors, relayStates, clock, log: log.child({ mod: 'studio' }), version: VERSION });
 
   // The token every owner client presents. Created on first boot and kept in the Keychain, where the desktop
   // client on this Mac reads it directly; a second machine is paired by copying it once (`sz token`).
@@ -209,7 +245,7 @@ export async function createDaemon(config: Config, log: PinoLogger, overrides: D
   }
 
   const server = new DaemonServer({ config, handlers: createHandlers(studio), events, store, toolbox, bridgeSessions, terminals: pty, clientToken, version: VERSION, log });
-  const gateway = new LlmGateway({ config, store, events, policy, vault, clock, log: log.child({ mod: 'gateway' }), upstreams: overrides.gatewayUpstreams });
+  const gateway = new LlmGateway({ config, store, events, policy, vault, clock, log: log.child({ mod: 'gateway' }), upstreams: overrides.gatewayUpstreams, external });
 
   if (config.telegram.enabled) {
     const botToken = await vault.get(CredentialIds.telegramBotToken);
@@ -272,9 +308,21 @@ export async function createDaemon(config: Config, log: PinoLogger, overrides: D
     resumer,
     pty,
     files,
+    ledger,
+    refkit,
+    mockups,
+    reviewer,
+    power,
+    quota,
+    selfHosting,
+    external,
     async start() {
       policy.start();
       await claude.refresh();
+      // The pinned first project: the studio's own repository, when the daemon runs from a checkout of it.
+      const core = await selfHosting.mount(clock());
+      if (core) evals.seed(core);
+      await studio.restorePower();
       store.failInterruptedKnowledgeJobs(clock());
       await server.listen();
       await gateway.listen();
@@ -291,6 +339,7 @@ export async function createDaemon(config: Config, log: PinoLogger, overrides: D
       await slack?.stop();
       await ntfy?.stop();
       resumer.stop();
+      power.stop();
       await queue.stop();
       await pty.stop();
       await mcp.stop();

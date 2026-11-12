@@ -2,16 +2,17 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { Browser, BrowserContextOptions, Page } from 'playwright-core';
 import { contract } from '@studio-zero/design';
-import type { AuditReport, Finding, Project, RedesignPatch, ReviewerId, Template, ViewportId, VisionCoverage } from '@studio-zero/protocol';
+import type { AuditReport, Finding, Project, ProjectTemplate, RedesignPatch, ReviewerId, Template, ViewportId, VisionCoverage } from '@studio-zero/protocol';
 import type { Config } from '../config.ts';
 import type { Store } from '../db/Store.ts';
 import type { EventLog } from '../events/EventLog.ts';
+import { auditCopy, summariseCopy, type CopyAudit } from '../harness/TextSlopAuditor.ts';
 import { errorMessage, newId, type Clock, type Logger } from '../util/core.ts';
-import { SLOP_PASS_MAX, UNREVIEWED_SCORE_CAP, gradeAudit, runDomChecks } from './checks.ts';
+import { COPY_RULE_PREFIX, SLOP_PASS_MAX, UNREVIEWED_SCORE_CAP, gradeAudit, measureAccess, runDomChecks, type AccessMeasures } from './checks.ts';
 import { PageDigest, collectDigest } from './collector.ts';
 import type { QaBrowser } from './QaBrowser.ts';
 import { VisionUnavailableError, type QaVisionBridge } from './QaVisionBridge.ts';
-import { CLIPART_RULE, RUBRIC_AXES, SLOP_FLOOR_ON_TRAP, WEB_LAYOUT_RULE, type ScreenReview } from './vision.ts';
+import { LIVING_VISUAL_RULE, RUBRIC_AXES, SLOP_FLOOR_ON_TRAP, isTrap, type ScreenReview } from './vision.ts';
 
 export { PLAYWRIGHT_VERSION } from './QaBrowser.ts';
 
@@ -36,7 +37,7 @@ function viewportSpecs(devices: typeof import('playwright-core').devices): Recor
  * The sizes a project is judged at. An Expo app is a phone and tablet product: judging it at desktop width asks
  * for a desktop layout, and the cheapest way to supply one is the web landing page the audit exists to reject.
  */
-export function auditViewports(template: Template, configured: readonly ViewportId[]): ViewportId[] {
+export function auditViewports(template: ProjectTemplate, configured: readonly ViewportId[]): ViewportId[] {
   const handheld = configured.filter((v) => v !== 'desktop-1440');
   return template === 'mobile-expo' && handheld.length > 0 ? handheld : [...configured];
 }
@@ -89,6 +90,10 @@ export class VisualAuditor {
     const findings: Finding[] = [];
     const screenshots: AuditReport['screenshots'] = [];
     const reviews: ScreenReview[] = [];
+    const copy: CopyAudit[] = [];
+    const measures: AccessMeasures = { contrast: { passed: 0, total: 0 }, touchTargets: { passed: 0, total: 0 } };
+    // The studio's own repository has no template an owner could pick; its screens are a web application's.
+    const template: Template = req.project.template === 'studio-core' ? 'web-vite-react' : req.project.template;
     const available = await this.#vision.availability();
     /** Captured screens (viewport × route): what a complete review has to cover. */
     let screens = 0;
@@ -116,6 +121,16 @@ export class VisualAuditor {
           const viewportWidth = spec.context.viewport?.width ?? light.digest.width;
           const measured = runDomChecks(light.digest, { viewport, viewportWidth, route, touch: spec.touch, scope: 'full' }, contract);
           findings.push(...measured);
+          // The words, read apart from how they are set. The design reviewer below is not shown these findings as
+          // measured defects to skip: copy is on its rubric too, and it reads the page as a picture.
+          const words = auditCopy(light.digest, { viewport, route }, contract);
+          copy.push(words);
+          findings.push(...words.findings);
+          const access = measureAccess(light.digest, { touch: spec.touch }, contract);
+          for (const key of ['contrast', 'touchTargets'] as const) {
+            measures[key].passed += access[key].passed;
+            measures[key].total += access[key].total;
+          }
 
           const dir = join(this.#config.artifactsDir, req.project.id, auditId);
           await mkdir(dir, { recursive: true, mode: 0o700 });
@@ -140,7 +155,7 @@ export class VisualAuditor {
           screens += 1;
           if (stopped !== null) continue;
           try {
-            const answered = await this.#vision.review({ scope, viewport, route, template: req.project.template, folds: light.folds, digest: light.digest, measured, signal: req.signal });
+            const answered = await this.#vision.review({ scope, viewport, route, template, firstScreen: routeIndex === 0, folds: light.folds, digest: light.digest, measured, signal: req.signal });
             reviews.push(answered.review);
             findings.push(...answered.review.findings);
             via ??= answered.via;
@@ -174,7 +189,7 @@ export class VisualAuditor {
     const mean = (pick: (r: ScreenReview) => number): number => reviews.reduce((sum, r) => sum + pick(r), 0) / reviewed;
     const rubric = reviewed === 0 ? null : Object.fromEntries(RUBRIC_AXES.map((axis) => [axis, Number(mean((r) => r.rubric[axis] ?? 0).toFixed(1))]));
     // One trapped screen is enough for the product to read as generated, however the other screens average out.
-    const trapped = findings.some((f) => f.rule === CLIPART_RULE || f.rule === WEB_LAYOUT_RULE);
+    const trapped = findings.some(isTrap);
     const slopScore = reviewed === 0 ? null : Math.max(Math.round(mean((r) => r.slopScore)), trapped ? SLOP_FLOOR_ON_TRAP : 0);
     const worst = reviews.reduce<ScreenReview | null>((a, b) => (a === null || b.slopScore > a.slopScore ? b : a), null);
     const verdict = gradeAudit(findings, visionReviewed && rubric !== null && slopScore !== null ? { rubric, slopScore } : null, this.#config.audit.threshold);
@@ -197,6 +212,10 @@ export class VisualAuditor {
       redesignPatches: reviews.flatMap((r) => r.patches),
       findings,
       screenshots,
+      copy: summariseCopy(copy),
+      measures,
+      // Only a reviewer who saw the first screen can say whether there was anything on it to look at.
+      livingVisual: reviews.some((r) => r.route === req.routes[0]) ? !findings.some((f) => f.rule === LIVING_VISUAL_RULE && f.severity === 'blocker') : null,
     };
     this.#store.insertAudit(report);
     if (!visionReviewed) {
@@ -265,7 +284,7 @@ export function renderAuditFeedback(report: AuditReport, limit = 30): string {
     .slice(0, limit)
     .map((f) => {
       const where = [f.viewport, f.route, f.selector ? `selector: ${f.selector}` : null, f.bbox ? `box: x=${Math.round(f.bbox.x)} y=${Math.round(f.bbox.y)} ${Math.round(f.bbox.w)}×${Math.round(f.bbox.h)}px` : null].filter(Boolean).join(' | ');
-      return `- [${f.severity}] ${f.rule} (${f.source === 'dom' ? 'measured' : 'design review'})\n  ${where}\n  ${f.message}\n  Fix: ${f.fix ?? 'n/a'}`;
+      return `- [${f.severity}] ${f.rule} (${f.rule.startsWith(COPY_RULE_PREFIX) ? 'copy lint' : f.source === 'dom' ? 'measured' : 'design review'})\n  ${where}\n  ${f.message}\n  Fix: ${f.fix ?? 'n/a'}`;
     });
 
   const scores = report.rubric ? `Design review scores (0-10): ${Object.entries(report.rubric).map(([k, v]) => `${k} ${v}`).join(', ')}.` : null;
@@ -283,8 +302,9 @@ export function renderAuditFeedback(report: AuditReport, limit = 30): string {
   const patches = distinctPatches(report.redesignPatches);
   const plan = patches.length === 0 ? [] : ['Redesign plan from the design review, most important first:', ...patches.map((p, i) => `${i + 1}. [${p.action}] ${[p.viewport, p.route, p.target ? `selector: ${p.target}` : 'whole screen'].join(' | ')}\n   ${p.instruction}`)];
 
+  const habits = report.findings.filter((f) => f.rule.startsWith(COPY_RULE_PREFIX) && f.severity !== 'minor').length;
   return [
-    `Visual audit score ${report.score}/100, required ${report.threshold} with no blockers.`,
+    `Visual audit score ${report.score}/100, required ${report.threshold} with no blockers${habits > 0 ? ` and no copy habits (${habits} found: rewrite the quoted wording, do not restyle it)` : ''}.`,
     ...review.filter((line) => line !== null),
     ...plan,
     `${report.findings.length} findings${report.findings.length > limit ? ` (top ${limit} shown)` : ''}:`,

@@ -1,4 +1,4 @@
-import { blend, contrastRatio, hueSaturation, isLargeText, type DesignContract, type Rgb } from '@studio-zero/design';
+import { blend, contractFamilies, contrastRatio, hueSaturation, isAllowedRadius, isDisplayInProportion, isLargeText, isOnTypeScale, type DesignContract, type Rgb } from '@studio-zero/design';
 import { UNREVIEWED_SCORE_CAP, type DesignGrade, type Finding, type FindingCategory, type Severity, type ViewportId } from '@studio-zero/protocol';
 import type { DigestElement, PageDigest } from './collector.ts';
 
@@ -134,10 +134,26 @@ export function runDomChecks(digest: PageDigest, ctx: CheckContext, c: DesignCon
 
   // 5. Typography ---------------------------------------------------------------------------------------
   const sizes = [...new Set(texts.map((e) => round(e.fontSize)))].sort((a, b) => a - b);
-  const offScale = sizes.filter((s) => !c.typeScalePx.some((step) => near(step, s)));
+  const offScale = sizes.filter((s) => !isOnTypeScale(s, c));
   if (offScale.length > 0) {
     const example = texts.find((e) => near(e.fontSize, offScale[0]!, 0.06));
-    add('type/off-scale', 'typography', 'major', `Font sizes outside the type scale: ${offScale.map((s) => `${s}px`).join(', ')}.`, `Use text-xs … text-6xl (${c.typeScalePx.join(', ')}px).`, example);
+    add('type/off-scale', 'typography', 'major', `Font sizes outside the type scale: ${offScale.map((s) => `${s}px`).join(', ')}.`, `Use text-xs … text-10xl (${c.typeScalePx.join(', ')}px). Above ${c.display.fromPx}px a headline may be fluid, up to ${c.display.maxPx}px.`, example);
+  }
+  // Display type is allowed, in proportion: a headline that dwarfs its body is a shout, one barely above it is not a headline.
+  const largest = sizes.at(-1) ?? 0;
+  if (largest > c.display.fromPx) {
+    const running = prose.filter((e) => e.textLength >= 40);
+    const body = running.length > 0 ? Math.min(...running.map((e) => e.fontSize)) : c.minBodyPx;
+    if (!isDisplayInProportion(largest, body, c)) {
+      add(
+        'type/display-ratio',
+        'typography',
+        'major',
+        `The headline is ${largest}px over ${round(body)}px body text (${round(largest / body)} times). Display type holds between ${c.display.ratioToBody[0]} and ${c.display.ratioToBody[1]} times the body, and stops at ${c.display.maxPx}px.`,
+        'Bring the two toward each other: raise the body size, or lower the headline, until the ratio is inside the range.',
+        texts.find((e) => near(e.fontSize, largest, 0.06)),
+      );
+    }
   }
   if (sizes.length > c.maxFontSizesPerView) {
     add('type/too-many-sizes', 'typography', 'minor', `${sizes.length} font sizes on one view (${sizes.join(', ')}px); more than ${c.maxFontSizesPerView} flattens the hierarchy.`, 'Merge neighbouring sizes and separate levels with weight, colour (text-fg vs text-fg-muted) and space instead.');
@@ -159,9 +175,10 @@ export function runDomChecks(digest: PageDigest, ctx: CheckContext, c: DesignCon
     (e) => add('type/line-length', 'typography', 'minor', `Lines run to about ${Math.round(e.charsPerLine)} characters; keep running text under ${c.maxLineLengthCh}.`, `Constrain the text column (max-w-prose or max-inline-size: ${c.maxLineLengthCh}ch).`, e),
   );
   const families = [...new Set(texts.map((e) => e.fontFamily))];
-  const foreign = families.filter((f) => f !== '' && !GENERIC_FAMILIES.has(f.toLowerCase()) && ![...c.fonts.sans, ...c.fonts.mono].includes(f));
+  const allowed = contractFamilies(c);
+  const foreign = families.filter((f) => f !== '' && !GENERIC_FAMILIES.has(f.toLowerCase()) && !allowed.includes(f));
   if (foreign.length > 0) {
-    add('type/foreign-font', 'typography', 'major', `Text is set in ${foreign.join(', ')}, which is not a theme font.`, 'Use font-sans / font-mono from the theme.', texts.find((e) => e.fontFamily === foreign[0]));
+    add('type/foreign-font', 'typography', 'major', `Text is set in ${foreign.join(', ')}, which is not a theme font.`, 'Use font-sans, font-display or font-mono from the theme.', texts.find((e) => e.fontFamily === foreign[0]));
   }
   const intended = families.filter((f) => [c.fonts.sans[0], c.fonts.sans[1], c.fonts.mono[0]].includes(f));
   const missing = intended.filter((f) => !digest.loadedFonts.includes(f));
@@ -187,9 +204,10 @@ export function runDomChecks(digest: PageDigest, ctx: CheckContext, c: DesignCon
   // 7. Corner radii -------------------------------------------------------------------------------------
   const cornered = digest.elements.filter((e) => e.radius > 0 && e.radius < Math.min(e.w, e.h) / 2 - 0.5 && e.radius < 999);
   const radii = [...new Set(cornered.map((e) => round(e.radius)))].sort((a, b) => a - b);
-  const offRadii = radii.filter((r) => !c.radiiPx.some((step) => near(step, r)));
+  // Radii are a range, not a set: only a curve past the ceiling that is not a capsule is off contract.
+  const offRadii = radii.filter((r) => !isAllowedRadius(r, c));
   if (offRadii.length > 0) {
-    add('shape/off-scale-radius', 'originality', 'minor', `Corner radii outside the theme: ${offRadii.map((r) => `${r}px`).join(', ')}.`, 'Use rounded-sm, rounded-md or rounded-lg; rounded-full only for avatars and pill controls.', cornered.find((e) => near(e.radius, offRadii[0]!, 0.06)));
+    add('shape/off-scale-radius', 'originality', 'minor', `Corner radii past ${c.radius.maxPx}px that are not full pills: ${offRadii.map((r) => `${r}px`).join(', ')}.`, 'Use rounded-sm to rounded-xl for containers; rounded-full for avatars and pill controls.', cornered.find((e) => near(e.radius, offRadii[0]!, 0.06)));
   }
   if (radii.length > c.maxDistinctRadiiPerView) {
     add('shape/too-many-radii', 'originality', 'minor', `${radii.length} different corner radii on one view (${radii.join(', ')}px).`, 'Tie radius to hierarchy: one for controls, one for containers.');
@@ -229,6 +247,20 @@ export function runDomChecks(digest: PageDigest, ctx: CheckContext, c: DesignCon
   return findings;
 }
 
+/** What a ledger's pass rates are counted from: the same elements the contrast and target-size checks above read. */
+export interface AccessMeasures {
+  contrast: { passed: number; total: number };
+  touchTargets: { passed: number; total: number };
+}
+
+export function measureAccess(digest: PageDigest, ctx: Pick<CheckContext, 'touch'>, c: DesignContract): AccessMeasures {
+  const texts = digest.elements.filter((e) => e.text !== '' && e.fontSize > 0 && !e.backgroundIndeterminate);
+  const clear = texts.filter((e) => contrastRatio(blend(rgbOf(e.color), e.color[3], rgbOf(e.background)), rgbOf(e.background)) >= (isLargeText(e.fontSize, e.fontWeight) ? c.contrast.largeText : c.contrast.text) - 0.05);
+  const targets = ctx.touch ? digest.elements.filter((e) => e.interactive && !(e.inline && e.tag === 'a')) : [];
+  const sized = targets.filter((e) => e.w >= c.touchTargetPx - 0.5 && e.h >= c.touchTargetPx - 0.5);
+  return { contrast: { passed: clear.length, total: texts.length }, touchTargets: { passed: sized.length, total: targets.length } };
+}
+
 const PENALTY: Record<Severity, number> = { blocker: 14, major: 5, minor: 1.5 };
 /** One noisy rule cannot zero the score by itself. */
 const PER_RULE_CAP = 20;
@@ -249,6 +281,11 @@ export function distinctDefects(findings: readonly Finding[]): Finding[] {
   }
   return [...defects.values()];
 }
+
+/** How much of a reviewed audit's score is measurement. The rest is the design reviewer's judgement. */
+export const MEASURED_WEIGHT = 0.4;
+/** Findings of the copy lint (`harness/TextSlopAuditor.ts`). */
+export const COPY_RULE_PREFIX = 'copy/';
 
 /** Above this slop score a screen reads as generated, and the audit does not pass whatever else it scored. */
 export const SLOP_PASS_MAX = 30;
@@ -277,11 +314,15 @@ export function scoreAudit(all: readonly Finding[], rubric: Record<string, numbe
   const taste = rubric && Object.keys(rubric).length > 0 ? (Object.values(rubric).reduce((a, b) => a + b, 0) / Object.keys(rubric).length) * 10 : null;
   // Half of the judged part is how little the screen reads as generated, when the reviewer said.
   const judged = taste === null ? null : slopScore === null ? taste : (taste + (100 - slopScore)) / 2;
-  // Measurement outweighs judgement: a model's taste may raise or lower the score, it cannot outvote a defect.
-  const score = round(judged === null ? measured : measured * 0.6 + judged * 0.4);
+  // Judgement outweighs tidiness. Measured on tidiness alone, the plainer a screen the higher it scores: a
+  // sparse mock-up beats the best sites in the field. So the measured part is the smaller share of the number.
+  // What measurement keeps is its veto: a blocker fails the audit whatever the reviewer thought of the rest.
+  const score = round(judged === null ? measured : measured * MEASURED_WEIGHT + judged * (1 - MEASURED_WEIGHT));
   const count = (s: Severity): number => findings.filter((f) => f.severity === s).length;
   const blockers = count('blocker');
-  return { score, passed: blockers === 0 && score >= threshold && (slopScore === null || slopScore <= SLOP_PASS_MAX), blockers, majors: count('major'), minors: count('minor') };
+  // Generated-sounding copy is held to zero, as source slop is: a habit the copy lint names is not averaged away.
+  const copyHabits = findings.filter((f) => f.rule.startsWith(COPY_RULE_PREFIX) && f.severity !== 'minor').length;
+  return { score, passed: blockers === 0 && copyHabits === 0 && score >= threshold && (slopScore === null || slopScore <= SLOP_PASS_MAX), blockers, majors: count('major'), minors: count('minor') };
 }
 
 export interface AuditVerdict extends AuditScore {

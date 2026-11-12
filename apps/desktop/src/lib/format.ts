@@ -1,4 +1,5 @@
-import type { ApprovalState, DesignGrade, LessonState, Phase, ProposalState, RedesignAction, ReviewerId, ScreenArchetype, Severity, TaskKind, TaskState, Template, ViewportId, VisionCoverage } from '@studio-zero/protocol';
+import { Template } from '@studio-zero/protocol';
+import type { ApprovalState, DesignGrade, LessonState, Phase, PowerMode, ProjectTemplate, ProposalState, RedesignAction, ReviewerId, ReviewerPref, ScreenArchetype, Severity, TaskKind, TaskState, ViewportId, VisionCoverage } from '@studio-zero/protocol';
 
 export const taskStateLabel: Record<TaskState, string> = {
   queued: '대기 중',
@@ -17,7 +18,20 @@ export const kindLabel: Record<TaskKind, string> = { build: '만들기', refacto
 /** Engines by the name of what the owner pays for. */
 export const engineLabel: Record<string, string> = { 'native-claude': 'Claude API', 'claude-code': 'Claude Code', codex: 'Codex', cursor: 'Cursor', antigravity: 'Antigravity' };
 
-export const templateLabel: Record<Template, string> = { 'web-vite-react': '웹 (Vite + React)', 'web-next': '웹 (Next.js)', 'mobile-expo': '모바일 (Expo)' };
+export const templateLabel: Record<ProjectTemplate, string> = { 'web-vite-react': '웹 (Vite + React)', 'web-next': '웹 (Next.js)', 'mobile-expo': '모바일 (Expo)', 'studio-core': '스튜디오 자신의 저장소' };
+
+/** The kinds of project an owner can start. The studio's own repository is not one of them. */
+export const creatableTemplates: readonly { id: Template; label: string }[] = Template.options.map((id) => ({ id, label: templateLabel[id] }));
+
+/** A subscription by the name of its vendor's product, without "구독": for a row of them side by side. */
+export const subscriptionLabel: Record<ReviewerPref, string> = { 'claude-code': 'Claude', codex: 'Codex', antigravity: 'Antigravity', cursor: 'Cursor' };
+
+/** What each way of keeping the Mac awake does, in the words of what stays on. */
+export const powerLabel: Record<PowerMode, { short: string; does: string }> = {
+  off: { short: '잠자기 허용', does: 'Mac이 평소대로 잠듭니다' },
+  system: { short: '시스템 유지', does: '화면은 꺼져도 Mac은 깨어 있습니다. 밤새 도는 빌드와 조사에 씁니다' },
+  display: { short: '화면 유지', does: '화면까지 켜 둡니다. 지켜보거나 시연할 때 씁니다' },
+};
 
 export const viewportLabel: Record<ViewportId, string> = { 'iphone-15-pro': '폰', 'ipad-pro-11': '태블릿', 'desktop-1440': '데스크톱' };
 
@@ -64,7 +78,7 @@ export const proposalStateLabel: Record<ProposalState, string> = { proposed: '�
 
 export const approvalStateLabel: Record<ApprovalState, string> = { pending: '대기', approved: '승인됨', denied: '거절됨', expired: '만료됨', consumed: '승인됨' };
 
-const evalNames: Record<string, string> = { 'slop-lint': '슬롭 린트', 'visual-audit': '시각 감사', typecheck: '타입 검사', 'ideation-documents': '기획 문서' };
+const evalNames: Record<string, string> = { 'slop-lint': '슬롭 린트', 'visual-audit': '시각 감사', typecheck: '타입 검사', 'ideation-documents': '기획 문서', 'anchor-table': '고정표', tests: '테스트', build: '빌드' };
 export const evalLabel = (name: string): string => evalNames[name] ?? name;
 
 const relative = new Intl.RelativeTimeFormat('ko', { numeric: 'auto' });

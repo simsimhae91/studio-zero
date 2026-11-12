@@ -89,7 +89,7 @@ const lineRules: LineRule[] = [
     id: 'slop/arbitrary-value',
     category: 'spacing',
     severity: 'minor',
-    fix: 'Use the scale: spacing utilities are multiples of 4px and font sizes come from text-xs … text-6xl.',
+    fix: 'Use the scale: spacing utilities are multiples of 4px and font sizes come from text-xs … text-10xl.',
     applies: (f) => f.markup,
     check: (line) => {
       for (const m of line.matchAll(arbitraryValue)) {
@@ -141,7 +141,7 @@ const lineRules: LineRule[] = [
     id: 'slop/default-font',
     category: 'typography',
     severity: 'major',
-    fix: 'Use font-sans / font-mono from the theme (Geist with Pretendard for Hangul).',
+    fix: 'Use font-sans, font-display or font-mono from the theme: the faces the project\'s theme file names.',
     applies: (f) => (f.markup || f.styles) && !f.themeFile,
     check: (line) => {
       const m = /font-family\s*:\s*["']?(Inter|Roboto|Arial|Helvetica|Open Sans|Poppins|Montserrat|system-ui|sans-serif)\b/i.exec(line) ?? /(?<![\w-])font-\[['"]?(Inter|Roboto|Arial|Poppins|Montserrat)/i.exec(line);
@@ -174,11 +174,11 @@ const fileRules: FileRule[] = [
     id: 'slop/uniform-pill-cards',
     category: 'originality',
     severity: 'minor',
-    fix: 'Reserve rounded-full for avatars and pill controls; give containers rounded-md or rounded-lg so radius follows hierarchy.',
+    fix: 'Reserve rounded-full for avatars and pill controls; give containers rounded-md, rounded-lg or rounded-xl so radius follows hierarchy.',
     applies: (f) => f.markup,
     checkFile: (f) => {
       const hits = f.lines.flatMap((line, i) => (/(?<![\w-])rounded-(?:2xl|3xl)(?![\w-])/.test(line) ? [i + 1] : []));
-      return hits.length > 0 ? [{ line: hits[0]!, message: `oversized corner radius (rounded-2xl/3xl) used ${hits.length}×; the theme defines sm, md and lg only` }] : [];
+      return hits.length > 0 ? [{ line: hits[0]!, message: `oversized corner radius (rounded-2xl/3xl) used ${hits.length}×; the theme defines sm, md, lg and xl` }] : [];
     },
   },
   {

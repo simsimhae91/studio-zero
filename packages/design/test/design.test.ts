@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { referenceSeed, referenceThemePath } from '../src/build.ts';
-import { colorTokens, contract, contrastRatio, createTheme, lintSources, mobileTokens, oklchToRgb, parseHex, renderThemeCss, seedFromName, typeStepNames, type Palette } from '../src/index.ts';
+import { KOREAN_TEXT_SLOP_PATTERNS, colorTokens, contract, contractFamilies, contrastRatio, cornerRadii, createTheme, displayFaces, isAllowedDuration, isAllowedRadius, isDisplayInProportion, isOnTypeScale, lineHeightFor, lintInterfaceText, lintSources, mobileTokens, oklchToRgb, parseHex, renderThemeCss, seedFromName, textSlopScore, typeStepNames, type InterfaceText, type Palette } from '../src/index.ts';
 
 const TEXT_TOKENS = ['fg', 'fg-muted', 'accent', 'danger', 'success', 'warning'] as const;
 const BACKGROUNDS = ['bg', 'surface', 'sunken'] as const;
@@ -142,4 +142,103 @@ test('the mobile tokens add to the contract and never contradict it', () => {
   }
   assert.deepEqual(lintSources([{ path: 'mobile/tokens.tsx', content: readFileSync(new URL('../src/mobile/tokens.ts', import.meta.url), 'utf8') }]), [], 'no raw colours, no arbitrary values');
   for (const side of ['top', 'right', 'bottom', 'left'] as const) assert.equal(t.safeArea.css[side], `env(safe-area-inset-${side}, 0px)`);
+});
+
+// What the reference sites this studio is measured against actually ship. Every one of them failed the first
+// contract; a contract that fails the best work in the field is measuring tidiness, not design.
+const GOLDEN = {
+  titlePx: [120, 132.5, 160],
+  titleLineHeight: [0.9, 0.95, 1],
+  bodyPx: 20,
+  radiiPx: [5, 15, 22, 28, 30],
+  entranceMs: [600, 720, 810],
+  pageMs: [700, 900, 1100],
+};
+
+test('the contract admits what the reference sites ship: display type, tight leading, organic radii, staged motion', () => {
+  for (const size of GOLDEN.titlePx) {
+    assert.ok(isOnTypeScale(size), `${size}px title`);
+    assert.ok(isDisplayInProportion(size, size >= 150 ? 24 : GOLDEN.bodyPx), `${size}px over body text`);
+  }
+  for (const lh of GOLDEN.titleLineHeight) assert.ok(lh >= contract.lineHeight.heading[0] && lh <= contract.lineHeight.heading[1], `title line-height ${lh}`);
+  for (const size of contract.typeScalePx.filter((s) => s > contract.display.fromPx)) assert.ok(lineHeightFor(size) >= 0.9 && lineHeightFor(size) <= 1, `the theme sets ${size}px tight`);
+  for (const radius of GOLDEN.radiiPx) assert.ok(isAllowedRadius(radius), `${radius}px radius`);
+  for (const ms of [...GOLDEN.entranceMs, ...GOLDEN.pageMs, ...contract.motion.durationsMs]) assert.ok(isAllowedDuration(ms), `${ms}ms`);
+  for (const family of ['Fraunces', 'Noto Serif KR', 'Instrument Serif', 'Gowun Batang', 'Bricolage Grotesque', 'Geist', 'Pretendard']) assert.ok(contractFamilies().includes(family), family);
+});
+
+test('the contract still refuses what is merely loud or arbitrary', () => {
+  assert.ok(!isOnTypeScale(13), '13px is between steps and below the display range');
+  assert.ok(!isOnTypeScale(200), 'past the display ceiling');
+  assert.ok(!isDisplayInProportion(160, 16), 'a 160px headline over 16px body is ten times, not a hierarchy');
+  assert.ok(!isDisplayInProportion(64, 24), 'a headline under three times its body is not display type');
+  assert.ok(isDisplayInProportion(48, 16), 'sizes on the ordinary scale are not held to the display ratio');
+  assert.ok(!isAllowedRadius(48), '48px on a large card is a blob');
+  assert.ok(isAllowedRadius(48, contract, 96), 'the same radius on a 96px-tall control is a capsule');
+  assert.ok(isAllowedRadius(9999));
+  assert.ok(!isAllowedDuration(450), 'between feedback and an entrance');
+  assert.ok(!isAllowedDuration(2000));
+});
+
+test('titles, corners and motion vary by seed and reach the generated theme', () => {
+  const names = Array.from({ length: 200 }, (_, i) => seedFromName(`project-${i}`));
+  assert.deepEqual([...new Set(names.map((s) => s.display))].sort(), [...displayFaces].sort(), 'every display pairing is reachable');
+  assert.deepEqual([...new Set(names.map((s) => s.corners))].sort(), ['round', 'sharp', 'soft']);
+
+  const serif = renderThemeCss(createTheme({ ...referenceSeed, corners: 'round', display: 'serif' }));
+  assert.ok(serif.includes('--font-display: "Fraunces", "Noto Serif KR", "Geist", '), 'the display pairing leads the title stack');
+  assert.match(serif, /titles in Fraunces \+ Noto Serif KR/);
+  for (const [step, px] of Object.entries(cornerRadii.round)) assert.ok(serif.includes(`--radius-${step}: ${px}px;`), `round ${step}`);
+  assert.ok(Object.values(cornerRadii).every((r) => Object.values(r).every((px) => isAllowedRadius(px))));
+  const [entrance, page] = [/--duration-entrance: (\d+)ms/.exec(serif), /--duration-page: (\d+)ms/.exec(serif)].map((m) => Number(m![1]));
+  assert.ok(entrance! >= contract.motion.entranceMs[0] && entrance! <= contract.motion.entranceMs[1]);
+  assert.ok(page! >= contract.motion.pageMs[0] && page! <= contract.motion.pageMs[1]);
+  // A seed that names no display face sets titles in the body face.
+  assert.ok(renderThemeCss(createTheme(referenceSeed)).includes('--font-display: "Geist", "Pretendard Variable", '));
+});
+
+const t = (role: InterfaceText['role'], text: string): InterfaceText => ({ role, text });
+
+test('Korean copy lint names each generated habit with the wording to replace', () => {
+  const hits = lintInterfaceText(
+    [
+      t('title', '더 나은 협업의 미래'),
+      t('body', '팀이 함께 토론하고 문서를 고칩니다.'),
+      t('body', '설정은 세 단계로 이루어집니다. 화면을 따라가면 됩니다. 결과는 대시보드에서 확인하실 수 있습니다.'),
+      t('cta', '시작하기'),
+      t('cta', '더 알아보기'),
+    ],
+    [0, 320, 640].map((x) => ({ group: 'main > section', x, y: 400, w: 300, h: 200 })),
+  );
+  assert.deepEqual([...new Set(hits.map((h) => h.pattern))].sort(), KOREAN_TEXT_SLOP_PATTERNS.map((p) => p.id).sort(), 'all five habits');
+  const listing = hits.find((h) => h.pattern === 'feature-list-dumping')!;
+  assert.equal(listing.quote, '토론하고 문서를 고칩니다');
+  assert.equal(listing.index, 1);
+  assert.equal(listing.fix, '기능 나열 대신 구체적인 단 하나의 장면(누가, 어떤 순간에)으로 교체하라.');
+  assert.ok(hits.some((h) => h.pattern === 'passive-explanation-tone' && /이어집니다/.test(h.message)), 'a run of explaining statements is reported as a run');
+  assert.deepEqual(hits.filter((h) => h.pattern === 'generic-cta').map((h) => h.quote), ['시작하기', '더 알아보기']);
+  assert.equal(hits.find((h) => h.pattern === 'uniform-card-grid')!.severity, 'minor');
+  assert.equal(textSlopScore(hits), 100);
+});
+
+test('Korean copy lint leaves specific copy alone', () => {
+  const clean = lintInterfaceText(
+    [
+      t('title', '채우는 쪽이 2,000원 이득이에요'),
+      t('title', '새로운 경험 3가지'),
+      t('body', '이번 주에 3건이 연체됐어요.'),
+      t('body', '친구하고 봅니다.'),
+      t('body', '저장했습니다. 다시 시도해 주세요.'),
+      t('body', '알림을 관리합니다.'),
+      t('cta', '사진에서 주소 지우기'),
+      t('cta', '확인'),
+      t('label', '시작하기'),
+    ],
+    // Rows of a list are equal by nature; so are two cards, and boxes on different rows.
+    [0, 80, 160, 240].map((y) => ({ group: 'ul', x: 0, y, w: 600, h: 80 })),
+  );
+  assert.deepEqual(clean, []);
+  assert.equal(textSlopScore(clean), 0);
+  // The same wording on every card is one thing to fix, not one per card.
+  assert.equal(lintInterfaceText([t('cta', '시작하기'), t('cta', '시작하기'), t('cta', '시작하기')]).length, 1);
 });

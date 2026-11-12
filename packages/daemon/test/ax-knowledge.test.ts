@@ -5,11 +5,13 @@ import { test } from 'node:test';
 import type Anthropic from '@anthropic-ai/sdk';
 import { chromium } from 'playwright-core';
 import { lintText } from '@studio-zero/design';
+import type { KnowledgeJob } from '@studio-zero/protocol';
 import { ConfidenceCalibration } from '../src/ax/Calibration.ts';
 import { Store } from '../src/db/Store.ts';
 import { checkCitations } from '../src/knowledge/DocumentCompiler.ts';
 import { documentHtml } from '../src/knowledge/exportPdf.ts';
 import { retrieved, verifyFindings } from '../src/knowledge/ResearchPipeline.ts';
+import { PromotionWorkflow } from '../src/scratch/PromotionWorkflow.ts';
 import { sleep } from '../src/util/core.ts';
 import { testDaemon } from './helpers.ts';
 
@@ -225,6 +227,25 @@ test('scratchpad to build: questions, a calibration gate, a decision log, and lo
     assert.match(view.spec, /^# 현장 기사용 청구서 앱\n\n## 문제\n\n현장 기사가[\s\S]*## 요구사항\n\n1\. 목록은 2초 안에 열린다\.\n$/);
     assert.equal(view.entries.at(-1)!.blocks[0]!.type, 'decision');
 
+    // Publishing the plan as a document is something the note produced, not its end: it stays ready to be built.
+    const publisher = new PromotionWorkflow({
+      scratch,
+      policy: d.daemon.policy,
+      sandboxes: d.daemon.sandboxes,
+      host: { createProjectAndProvision: async () => assert.fail('no project for a document'), submitTask: async () => assert.fail('no task for a document'), publishedPlan: () => null, compileDocument: async (_actor, p) => ({ id: 'job_doc', kind: 'document', title: p.title }) as KnowledgeJob },
+    });
+    const published = await publisher.promote(OWNER, pad.id, 'document', { documentKind: 'prd' }, 'desktop');
+    assert.deepEqual([published.scratchpad.state, published.job?.id, published.project], ['ready', 'job_doc', null]);
+    assert.equal(studio.scratchView(pad.id).scratchpad.state, 'ready', 'and it can be published again, or built');
+    await publisher.promote(OWNER, pad.id, 'document', { documentKind: 'brief' }, 'desktop');
+
+    // The document that was published and read is what the build goes from: it is the reconciled, approved text.
+    assert.equal(studio.publishedPlan(pad.id), null, 'nothing has finished publishing yet');
+    const planJob: KnowledgeJob = { id: 'job_plan', kind: 'document', title: '현장 기사용 청구서 앱', state: 'running', origin: 'desktop', scratchId: pad.id, error: null, spentTokens: 0, createdAt: 5, finishedAt: null };
+    d.daemon.store.insertKnowledgeJob(planJob, {});
+    d.daemon.store.finishKnowledgeJob(planJob.id, { markdown: '# 현장 기사용 청구서 앱 기획서\n\n## 결론\n\n요구사항은 R1~R10이다. R11은 없다.\n', report: null, lint: [] }, 6);
+    assert.match(studio.publishedPlan(pad.id) ?? '', /^# 현장 기사용 청구서 앱 기획서/);
+
     // Promotion: project, sandbox, both documents in the repository and in the builder's first request.
     const visual = (id: string) => studio.setEvalEnabled(OWNER, studio.listEvals(id).find((e) => e.name === 'visual-audit')!.id, false);
     const promoted = await studio.promoteScratchpad(OWNER, { scratchId: pad.id, target: 'build', template: 'mobile-expo' }, 'desktop');
@@ -236,6 +257,8 @@ test('scratchpad to build: questions, a calibration gate, a decision log, and lo
     assert.equal(readFileSync(join(d.workspace, 'docs/decision_log.md'), 'utf8'), view.decisionLog);
     assert.match(promoted.task!.prompt, /<spec>\n# 현장 기사용 청구서 앱[\s\S]*<\/spec>\n\n<decision_log>\n# 결정 기록[\s\S]*웹: 현장에서 노트북을 펴지 않는다\n<\/decision_log>$/);
     assert.match((await d.daemon.sandboxes.exec(promoted.project!, 'git log --format=%s -3')).stdout, /docs: spec and decision log from scratchpad scr_/);
+    assert.match(promoted.task!.prompt, /read it before starting the build; it is in the repository as docs\/plan\.md\.[\s\S]*the plan is the later text and the one that was approved: follow it\.\n\n<plan>\n# 현장 기사용 청구서 앱 기획서[\s\S]*R11은 없다\.\n<\/plan>\n/);
+    assert.equal(readFileSync(join(d.workspace, 'docs/plan.md'), 'utf8'), '# 현장 기사용 청구서 앱 기획서\n\n## 결론\n\n요구사항은 R1~R10이다. R11은 없다.');
     assert.throws(() => studio.scratchSay(pad.id, '하나 더'), /promoted/);
     for (let i = 0; i < 400 && !['succeeded', 'failed'].includes(studio.getTask(promoted.task!.id).state); i++) await sleep(20);
   } finally {

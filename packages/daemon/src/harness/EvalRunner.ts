@@ -55,9 +55,18 @@ export class EvalRunner {
     this.#clock = deps.clock;
   }
 
-  /** Every project starts with the two design gates. Command evals are earned later, from commands that passed. */
+  /**
+   * Every project starts with the two design gates. Command evals are earned later, from commands that passed.
+   * The studio's own repository starts with its test suite and its build instead of a visual audit: what has
+   * to hold there is that the studio still works.
+   */
   seed(project: Project): void {
     this.#add(project.id, 'slop-lint', { kind: 'slop-lint', maxMajor: 0 }, null);
+    if (project.template === 'studio-core') {
+      this.#add(project.id, 'tests', { kind: 'command', command: 'pnpm test', timeoutSec: 900 }, null);
+      this.#add(project.id, 'build', { kind: 'command', command: 'pnpm build', timeoutSec: 600 }, null);
+      return;
+    }
     this.#add(project.id, 'visual-audit', { kind: 'visual', routes: ['/'], minScore: this.#config.audit.threshold }, null);
   }
 

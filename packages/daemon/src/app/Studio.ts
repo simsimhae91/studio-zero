@@ -21,8 +21,15 @@ import type {
   Eval,
   EventEnvelope,
   EventFilter,
+  ExternalApi,
+  LedgerEntry,
   Lesson,
   LessonState,
+  PowerMode,
+  PowerState,
+  ReviewerPref,
+  SelfHostStatus,
+  SubscriptionQuota,
   Origin,
   Project,
   ProposalCard,
@@ -34,7 +41,7 @@ import type {
   TaskTrack,
   Template,
 } from '@studio-zero/protocol';
-import { PROTOCOL_VERSION } from '@studio-zero/protocol';
+import { CORE_PROJECT_ID, PROTOCOL_VERSION } from '@studio-zero/protocol';
 import type { ConfidenceCalibration } from '../ax/Calibration.ts';
 import type { SteeringQueue } from '../ax/Steering.ts';
 import type { Config } from '../config.ts';
@@ -44,7 +51,9 @@ import type { WorkspaceProvisioner } from '../harness/bootstrap.ts';
 import { ensureDevServer } from '../harness/devServer.ts';
 import type { EvalRunner } from '../harness/EvalRunner.ts';
 import { INTEGRATION_BRANCH } from '../harness/Harness.ts';
+import type { Ledger } from '../harness/Ledger.ts';
 import type { LessonBook } from '../harness/LessonBook.ts';
+import type { SelfHosting } from '../harness/SelfHosting.ts';
 import { readProjectFile } from '../harness/projectFile.ts';
 import type { KirbyEngine } from '../kirby/KirbyEngine.ts';
 import type { KnowledgeService } from '../knowledge/KnowledgeService.ts';
@@ -52,7 +61,7 @@ import type { McpRegistry } from '../mcp/McpRegistry.ts';
 import type { ClaudeClient } from '../llm/ClaudeClient.ts';
 import type { ModelRouter } from '../llm/ModelRouter.ts';
 import type { Actor } from '../policy/actions.ts';
-import { toApproval, type PolicyEngine } from '../policy/PolicyEngine.ts';
+import { parseReferenceUrl, toApproval, type PolicyEngine } from '../policy/PolicyEngine.ts';
 import { renderAuditFeedback, type VisualAuditor } from '../qa/VisualAuditor.ts';
 import type { TaskQueue } from '../queue/TaskQueue.ts';
 import { SandboxError, sandboxNames, type OrbStackManager } from '../sandbox/OrbStackManager.ts';
@@ -62,11 +71,14 @@ import { assertBranchName } from '../sandbox/scripts.ts';
 import { PromotionWorkflow, type PromotionHost } from '../scratch/PromotionWorkflow.ts';
 import type { ScratchService, ScratchView } from '../scratch/ScratchService.ts';
 import { untrusted } from '../trust/dataBlock.ts';
+import type { CaffeinateManager } from '../util/CaffeinateManager.ts';
 import { Secret, errorMessage, excerpt, newId, type Clock, type Logger } from '../util/core.ts';
 import { shq } from '../util/run.ts';
 import { CredentialIds, type KeychainVault } from '../vault/KeychainVault.ts';
 import { ConflictError, NotFoundError, UnavailableError } from './errors.ts';
+import type { ExternalApis } from './ExternalApis.ts';
 import type { ProjectNamer } from './ProjectNamer.ts';
+import type { QuotaTracker } from './QuotaTracker.ts';
 
 /** A vendor CLI that can be asked one question with no tools in reach (see `CliBridgeEngine.ask`). */
 export interface Advisor {
@@ -102,6 +114,11 @@ export interface StudioDeps {
   files: SandboxFileService;
   pty: PtyManager;
   namer: ProjectNamer;
+  ledger: Ledger;
+  power: CaffeinateManager;
+  quota: QuotaTracker;
+  selfHosting: SelfHosting;
+  external: ExternalApis;
   advisors: Record<AdvisorId, Advisor>;
   relayStates: () => ResultOf<'system.status'>['relays'];
   clock: Clock;
@@ -118,6 +135,10 @@ export interface StudioDeps {
 /** The owner's side of a redesign task. The first line is what the task is called in the stream and in the commit. */
 const REDESIGN_REQUEST = `디자인 심사 결과대로 화면을 다시 디자인해 주세요.
 아래 심사 결과의 재설계 계획을 먼저 적용하고, 블로커와 주요 지적을 모두 해결한 뒤 멈춰 주세요. 기능과 데이터 흐름은 그대로 두고, 화면의 구조와 표현만 바꿉니다.`;
+
+/** Where the power mode is kept, so a restarted daemon holds the Mac awake as it was asked to. */
+const POWER_KEY = 'power.mode';
+const CORE_FIXED = 'Studio Zero Core는 스튜디오 자신의 저장소입니다. 이름을 바꾸거나 삭제할 수 없습니다.';
 
 const NO_MODEL = '쓸 수 있는 모델이 없습니다. Claude Code에 로그인하거나(터미널에서 claude 실행), 설정에서 Anthropic API 키를 저장해 주세요.';
 
@@ -205,6 +226,7 @@ export class Studio implements PromotionHost {
   /** The display name only. The slug names the container, the volume and the preview host, so it stays. */
   renameProject(_actor: Actor, projectId: string, name: string): Project {
     this.getProject(projectId);
+    if (projectId === CORE_PROJECT_ID) throw new ConflictError(CORE_FIXED);
     const renamed = this.#d.store.renameProject(projectId, name.trim().replace(/\s+/g, ' '))!;
     this.#d.events.emit({ projectId, taskId: null }, { type: 'project.changed', name: renamed.name });
     return renamed;
@@ -227,11 +249,14 @@ export class Studio implements PromotionHost {
   /** Removes the sandbox, the project's records and its screenshots. Events stay: they are the audit trail. */
   async deleteProject(actor: Actor, projectId: string, deleteWorkspace: boolean): Promise<void> {
     const project = this.getProject(projectId);
+    if (projectId === CORE_PROJECT_ID) throw new ConflictError(CORE_FIXED);
     await this.#d.policy.authorize(actor, { kind: 'project.delete', projectId, deleteWorkspace });
     this.#assertIdle(projectId, 'delete the project');
     for (const task of this.#d.store.listTasks(projectId, 200)) if (task.state === 'queued') this.#d.queue.cancel(task.id);
     await this.#d.pty.closeProject(projectId);
     await this.settle();
+    // The project's keys for outside APIs go with it: nothing is left in the Keychain under its name.
+    await this.#d.external.forgetProject(project);
     await this.#d.sandboxes.destroy(project, { deleteWorkspace });
     this.#d.store.deleteProject(projectId);
     await rm(join(this.#d.config.artifactsDir, projectId), { recursive: true, force: true });
@@ -399,8 +424,14 @@ export class Studio implements PromotionHost {
 
   // ----------------------------------------------------------------- tasks
 
-  async submitTask(actor: Actor, p: { projectId: string; kind: TaskKind; prompt: string; budgetTokens?: number; branch?: string; baseBranch?: string; engine?: string; sessionId?: string; track?: TaskTrack }, origin: Origin): Promise<Task> {
+  async submitTask(actor: Actor, p: { projectId: string; kind: TaskKind; prompt: string; budgetTokens?: number; branch?: string; baseBranch?: string; engine?: string; sessionId?: string; track?: TaskTrack; reviewer?: ReviewerPref; references?: string[] }, origin: Origin): Promise<Task> {
     this.getProject(p.projectId);
+    // A reference is refused here, before the task exists, so a mistyped address is not found out mid-build.
+    const references = (p.references ?? []).map((raw) => {
+      const parsed = parseReferenceUrl(raw);
+      if (!parsed.ok) throw new ConflictError(`레퍼런스로 쓸 수 없는 주소입니다 (${raw.slice(0, 80)}): ${parsed.reason}`);
+      return parsed.url;
+    });
     if (p.sessionId !== undefined && this.#session(p.sessionId).projectId !== p.projectId) throw new ConflictError('that session belongs to another project');
     if (p.baseBranch !== undefined) {
       try {
@@ -411,7 +442,7 @@ export class Studio implements PromotionHost {
     }
     const budgetTokens = p.budgetTokens ?? this.#d.config.budgets.taskTokens;
     await this.#d.policy.authorize(actor, { kind: 'task.submit', projectId: p.projectId, taskKind: p.kind, budgetTokens });
-    const task = this.#d.store.insertTask({ id: newId('tsk'), projectId: p.projectId, kind: p.kind, prompt: p.prompt, origin, budgetTokens, branch: p.branch ?? null, baseBranch: p.baseBranch ?? null, enginePref: p.engine ?? null, sessionId: p.sessionId ?? null, track: p.track ?? 'full', createdAt: this.#d.clock() });
+    const task = this.#d.store.insertTask({ id: newId('tsk'), projectId: p.projectId, kind: p.kind, prompt: p.prompt, origin, budgetTokens, branch: p.branch ?? null, baseBranch: p.baseBranch ?? null, enginePref: p.engine ?? null, sessionId: p.sessionId ?? null, track: p.track ?? 'full', reviewerPref: p.reviewer ?? null, references, createdAt: this.#d.clock() });
     this.#d.events.emit({ projectId: task.projectId, taskId: task.id }, { type: 'task.state', state: 'queued', error: null });
     this.#d.queue.pump();
     return task;
@@ -504,6 +535,8 @@ export class Studio implements PromotionHost {
     } catch (err) {
       throw new ConflictError(errorMessage(err));
     }
+    // Inside its sandbox the Core project's branches lead nowhere: its work is merged in the checkout itself.
+    if (projectId === CORE_PROJECT_ID) throw new ConflictError('Studio Zero Core의 작업은 이 Mac의 저장소로 내보낸 기능 브랜치를 병합합니다 (selfhost.merge).');
     await this.#d.policy.authorize(actor, { kind: 'git.merge', projectId, branch, into: INTEGRATION_BRANCH });
     this.#assertIdle(projectId, 'merge');
     const scope = { projectId, taskId: null };
@@ -568,6 +601,63 @@ export class Studio implements PromotionHost {
 
   listAudits(projectId: string, limit: number): Pick<AuditReport, 'id' | 'taskId' | 'createdAt' | 'score' | 'passed'>[] {
     return this.#d.store.listAudits(projectId, limit);
+  }
+
+  // ---------------------------------------------------------------- ledger
+
+  listLedger(projectId: string, limit: number): LedgerEntry[] {
+    this.getProject(projectId);
+    return this.#d.ledger.list(projectId, limit);
+  }
+
+  // -------------------------------------------------------------- this Mac
+
+  powerState(): PowerState {
+    return this.#d.power.state;
+  }
+
+  async setPower(actor: Actor, mode: PowerMode): Promise<PowerState> {
+    await this.#d.policy.authorize(actor, { kind: 'power.set', mode });
+    let state: PowerState;
+    try {
+      state = this.#d.power.set(mode);
+    } catch (err) {
+      throw new UnavailableError(errorMessage(err));
+    }
+    this.#d.store.kvSet(POWER_KEY, state.mode);
+    return state;
+  }
+
+  /** Holds the Mac awake again as it was being held when the daemon last stopped. */
+  async restorePower(): Promise<void> {
+    const saved = this.#d.store.kvGet(POWER_KEY);
+    if (saved !== 'system' && saved !== 'display') return;
+    await this.setPower({ type: 'system' }, saved).catch((err: unknown) => this.#d.log.warn({ err: errorMessage(err) }, 'could not restore the power mode'));
+  }
+
+  /** The power mode changed, by the owner or because caffeinate ended by itself: tell every client. */
+  announcePower(mode: PowerMode): void {
+    this.#d.events.emit({ projectId: null, taskId: null }, { type: 'power.changed', mode });
+  }
+
+  async quota(): Promise<{ at: number; subscriptions: SubscriptionQuota[] }> {
+    return this.#d.quota.snapshot(await this.#d.router.status());
+  }
+
+  // ---------------------------------------------------------- self-hosting
+
+  selfHostStatus(): Promise<SelfHostStatus> {
+    return this.#d.selfHosting.status();
+  }
+
+  /** The owner's merge of a Core task's exported branch into this Mac's checkout. */
+  async selfHostMerge(actor: Actor, taskId: string): Promise<{ branch: string; into: string; commit: string }> {
+    const task = this.getTask(taskId);
+    if (task.projectId !== CORE_PROJECT_ID) throw new ConflictError('that task is not on Studio Zero Core');
+    const branch = this.#d.selfHosting.exportedBranch(taskId);
+    if (branch === null) throw new NotFoundError(`an exported branch for task ${taskId}`);
+    await this.#d.policy.authorize(actor, { kind: 'selfhost.merge', projectId: task.projectId, branch });
+    return this.#d.selfHosting.merge(taskId);
   }
 
   // ------------------------------------------------------ lessons and evals
@@ -660,6 +750,16 @@ export class Studio implements PromotionHost {
     return this.#promotion.promote(actor, p.scratchId, p.target, { template: p.template, documentKind: p.documentKind }, origin);
   }
 
+  /** The latest document published from a note that finished, as Markdown. What a build from that note starts from. */
+  publishedPlan(scratchId: string): string | null {
+    const latest = this.#d.scratch
+      .view(scratchId)
+      .jobs.filter((job) => job.kind === 'document' && job.state === 'succeeded')
+      .sort((a, b) => (b.finishedAt ?? 0) - (a.finishedAt ?? 0))[0];
+    const markdown = latest ? this.#d.knowledge.get(latest.id).markdown.trim() : '';
+    return markdown === '' ? null : markdown;
+  }
+
   archiveScratchpad(scratchId: string): Scratchpad {
     return this.#d.scratch.archive(scratchId);
   }
@@ -710,6 +810,38 @@ export class Studio implements PromotionHost {
 
   mcpRevoke(actor: Actor, serverId: string, projectId: string): Promise<number> {
     return this.#d.mcp.revoke(actor, serverId, projectId);
+  }
+
+  // ---------------------------------------------------------- outside APIs
+
+  listExternalApis(projectId: string): ExternalApi[] {
+    this.getProject(projectId);
+    return this.#d.external.list(projectId);
+  }
+
+  /** Connects an outside API and its keys to a project, and puts the stand-ins in its workspace if the sandbox is up. */
+  async setExternalApi(actor: Actor, p: { projectId: string; name: string; origin: string; variables: { name: string; secret: Secret }[] }): Promise<ExternalApi> {
+    const project = this.getProject(p.projectId);
+    const api = await this.#d.external.set(actor, project, p);
+    this.#refreshStandIns(project);
+    return api;
+  }
+
+  async removeExternalApi(actor: Actor, projectId: string, name: string): Promise<void> {
+    const project = this.getProject(projectId);
+    await this.#d.external.remove(actor, project, name);
+    this.#refreshStandIns(project);
+  }
+
+  /** Rewrites the workspace's list of connected APIs behind the response. A sandbox that is down gets it when it next comes up. */
+  #refreshStandIns(project: Project): void {
+    if (this.#d.store.busyProjectIds().has(project.id)) return; // a task is in the workspace: it picks the file up at its next start
+    const job: Promise<void> = this.#d.sandboxes
+      .info(project)
+      .then((info) => (info.state === 'running' ? this.#d.provisioner.ensure(project).then(() => undefined) : undefined))
+      .catch((err: unknown) => this.#d.log.warn({ projectId: project.id, err: errorMessage(err) }, 'could not write the outside API stand-ins'))
+      .finally(() => this.#background.delete(job));
+    this.#background.add(job);
   }
 
   // ----------------------------------------------------------------- vault

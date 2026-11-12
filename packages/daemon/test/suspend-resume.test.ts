@@ -9,6 +9,7 @@ import { test } from 'node:test';
 import type Anthropic from '@anthropic-ai/sdk';
 import type { AuditReport, Eval, ReviewerId, Task } from '@studio-zero/protocol';
 import { ConflictError } from '../src/app/errors.ts';
+import type { BuildMeter } from '../src/harness/BuildMeter.ts';
 import type { CompilerGate } from '../src/harness/CompilerGate.ts';
 import type { EvalOutcome, EvalRunner } from '../src/harness/EvalRunner.ts';
 import { Harness } from '../src/harness/Harness.ts';
@@ -63,7 +64,7 @@ interface Rig {
 async function rig(turns: Block[][], rounds: EvalOutcome[][]): Promise<Rig> {
   const model = scripted(turns);
   const d = await testDaemon({}, { anthropic: model.sdk });
-  const { store, events, policy, sandboxes, provisioner, router, claude, lessons } = d.daemon;
+  const { store, events, policy, sandboxes, provisioner, router, claude, lessons, refkit, reviewer, ledger } = d.daemon;
   store.insertProject(project);
   let reflections = 0;
   const evals = {
@@ -79,6 +80,8 @@ async function rig(turns: Block[][], rounds: EvalOutcome[][]): Promise<Rig> {
     compiler: { run: async () => null } as unknown as CompilerGate,
     smoke: { run: async () => { throw new Error('the smoke gate is off in this rig'); } } as SmokeRunner,
     reflection: { reflect: async () => void (reflections += 1) } as unknown as ReflectionAgent,
+    refkit, reviewer, ledger,
+    build: { run: async () => null } as unknown as BuildMeter,
     clock: Date.now,
     log: quietLog,
   });

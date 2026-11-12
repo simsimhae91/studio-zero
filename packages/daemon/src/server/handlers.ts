@@ -88,6 +88,14 @@ export function createHandlers(studio: Studio): Handlers {
     'audits.list': (p) => ({ audits: studio.listAudits(p.projectId, p.limit ?? 20) }),
     'audits.redesign': (p) => studio.redesignFromAudit(OWNER, p.auditId, 'desktop'),
 
+    'ledger.list': (p) => ({ entries: studio.listLedger(p.projectId, p.limit ?? 50) }),
+
+    'power.get': () => studio.powerState(),
+    'power.set': (p) => studio.setPower(OWNER, p.mode),
+    'quota.get': () => studio.quota(),
+    'selfhost.status': () => studio.selfHostStatus(),
+    'selfhost.merge': (p) => studio.selfHostMerge(OWNER, p.taskId),
+
     'lessons.list': (p) => ({ lessons: studio.listLessons(p.projectId, p.state) }),
     'lessons.setState': (p) => studio.setLessonState(OWNER, p.lessonId, p.state),
     'evals.list': (p) => ({ evals: studio.listEvals(p.projectId) }),
@@ -131,6 +139,13 @@ export function createHandlers(studio: Studio): Handlers {
       return { removed: true as const };
     },
     'mcp.revoke': async (p) => ({ revoked: await studio.mcpRevoke(OWNER, p.serverId, p.projectId) }),
+
+    'external.list': (p) => ({ apis: studio.listExternalApis(p.projectId) }),
+    'external.set': (p) => studio.setExternalApi(OWNER, { projectId: p.projectId, name: p.name, origin: p.origin, variables: p.variables.map((v) => ({ name: v.name, secret: new Secret(v.secret) })) }),
+    'external.remove': async (p) => {
+      await studio.removeExternalApi(OWNER, p.projectId, p.name);
+      return { removed: true as const };
+    },
 
     'vault.list': () => ({ credentials: studio.vaultList() }),
     'vault.set': (p) => studio.vaultSet(OWNER, p.id, new Secret(p.secret)),

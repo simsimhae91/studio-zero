@@ -3,13 +3,16 @@
 //
 //   pnpm --filter @studio-zero/desktop build && node apps/desktop/scripts/audit.ts [screenshot-dir]
 //
-// Uses the fixture daemon (`?demo`), so it needs Chrome and nothing else. Exits non-zero on any blocker or major.
+// Uses the fixture daemon (`?demo`), so it needs Chrome and nothing else. Exits non-zero on any measured blocker
+// or major. The copy lint runs too and its findings are printed, but they do not fail the run yet: this
+// interface's own wording predates that lint and has not been rewritten to it.
 import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium, devices, type Page } from 'playwright-core';
 import { contract } from '@studio-zero/design';
+import { auditCopy } from '@studio-zero/daemon/src/harness/TextSlopAuditor.ts';
 import { runDomChecks, scoreAudit } from '@studio-zero/daemon/src/qa/checks.ts';
 import { PageDigest, collectDigest } from '@studio-zero/daemon/src/qa/collector.ts';
 import type { Finding, ViewportId } from '@studio-zero/protocol';
@@ -85,6 +88,12 @@ const screens: { name: string; url: string; go: (page: Page, narrow: boolean) =>
     await page.getByRole('menuitem', { name: '프로젝트 삭제' }).click();
     await page.getByRole('dialog').waitFor();
   } },
+  { name: 'project-keys', url: '/?demo', go: async (page, narrow) => {
+    await openFromIndex('Ledger')(page, narrow);
+    await page.getByRole('button', { name: '프로젝트 설정' }).click();
+    await page.getByRole('menuitem', { name: '외부 API 키' }).click();
+    await page.getByRole('dialog', { name: '외부 API 키' }).waitFor();
+  } },
   { name: 'project-create', url: '/?demo', go: async (page, narrow) => {
     await openRail(page, narrow);
     await page.getByRole('button', { name: '빈 프로젝트 만들기' }).click();
@@ -106,6 +115,22 @@ const screens: { name: string; url: string; go: (page: Page, narrow: boolean) =>
   { name: 'audit', url: '/?demo', go: workspaceTab('Ledger', '감사') },
   { name: 'audit-unreviewed', url: '/?demo', go: workspaceTab('Atlas 모바일', '감사') },
   { name: 'task-suspended', url: '/?demo', go: openFromIndex('Atlas 모바일') },
+  { name: 'ledger', url: '/?demo', go: workspaceTab('Ledger', '장부') },
+  { name: 'quota', url: '/?demo', go: async (page) => {
+    await page.getByRole('button', { name: '구독 사용 현황' }).click();
+    await page.getByRole('menu').waitFor();
+  } },
+  { name: 'core', url: '/?demo', go: openFromIndex('Studio Zero Core') },
+  { name: 'design-mockups', url: '/?demo', go: async (page, narrow) => {
+    await openFromIndex('Tide 정산')(page, narrow);
+    await page.getByRole('img', { name: 'C안 첫 화면 시안' }).waitFor();
+  } },
+  { name: 'design-mockup-zoom', url: '/?demo', go: async (page, narrow) => {
+    await openFromIndex('Tide 정산')(page, narrow);
+    await page.getByRole('button', { name: /^B안/ }).click();
+    await page.getByRole('button', { name: '크게 보기' }).nth(1).click();
+    await page.getByRole('dialog').getByRole('img', { name: 'B안 첫 화면 시안' }).waitFor();
+  } },
   { name: 'proposals', url: '/?demo', go: workspaceTab('Ledger', '제안') },
   { name: 'learning', url: '/?demo', go: workspaceTab('Ledger', '학습') },
   { name: 'settings', url: '/?demo', go: async (page) => void (await page.getByRole('button', { name: '설정' }).first().click()) },
@@ -118,6 +143,7 @@ const screens: { name: string; url: string; go: (page: Page, narrow: boolean) =>
 
 const browser = await chromium.launch({ channel: 'chrome', headless: true });
 const all: (Finding & { screen: string; scheme: string })[] = [];
+const copy: (Finding & { screen: string; scheme: string })[] = [];
 try {
   for (const viewport of viewports) {
     for (const scheme of ['light', 'dark'] as const) {
@@ -140,6 +166,8 @@ try {
         const digest = PageDigest.parse(await page.evaluate(collectDigest, 700));
         const findings = runDomChecks(digest, { viewport: viewport.id, viewportWidth: viewport.width, route: screen.name, touch: viewport.touch, scope: scheme === 'light' ? 'full' : 'color-only' }, contract);
         all.push(...findings.map((f) => ({ ...f, screen: screen.name, scheme })));
+        // The words of each screen, read as words: the copy lint the studio applies to what it builds.
+        if (scheme === 'light') copy.push(...auditCopy(digest, { viewport: viewport.id, route: screen.name }, contract).findings.map((f) => ({ ...f, screen: screen.name, scheme })));
         if (shots) await page.screenshot({ path: join(shots, `${screen.name}-${viewport.id}-${scheme}.png`) });
         await page.close();
       }
@@ -154,4 +182,6 @@ try {
 for (const f of all) console.log(`[${f.severity}] ${f.screen} ${f.viewport} ${f.scheme} ${f.rule}: ${f.message}${f.selector ? `\n    at ${f.selector}` : ''}`);
 const result = scoreAudit(all, null, 85);
 console.log(`\n${screens.length} screens × ${viewports.length} viewports × 2 schemes. Distinct defects: ${result.blockers} blocker, ${result.majors} major, ${result.minors} minor.`);
+const habits = [...new Set(copy.filter((f) => f.severity !== 'minor').map((f) => `${f.rule}: ${f.message}`))];
+console.log(`Copy lint (reported, not gating): ${habits.length} distinct habit(s) in this interface's own wording.${habits.map((h) => `\n  ${h}`).join('')}`);
 process.exit(result.blockers + result.majors > 0 ? 1 : 0);

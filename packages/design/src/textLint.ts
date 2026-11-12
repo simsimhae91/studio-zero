@@ -167,3 +167,174 @@ export function lintText(markdown: string, opts: TextLintOptions): TextFinding[]
 }
 
 export const textLintRuleIds = ['text/cliche', 'text/throat-clearing', 'text/no-bluf', 'text/long-bluf', 'text/structure', 'text/vague-quantity', 'text/hedge-stack', 'text/unsourced-figure', 'text/no-numbers', 'text/empty-list', 'text/emoji', 'text/exclamation', 'text/mermaid-syntax'];
+
+// ------------------------------------------------------------------ interface copy
+
+/**
+ * The habits that make Korean interface copy read as generated. Each entry is one habit: what it is called, the
+ * wording that gives it away, and what to write instead. `lintInterfaceText` applies them to the text of a
+ * rendered screen; the `rule` is what the builder is told.
+ *
+ * A habit is matched where it lives. A list of features is a sentence that chains predicates and ends as a
+ * statement; an empty slogan is a title; a stock call to action is the whole label of a control. So each entry
+ * says which kind of text it reads, and the regular expression only has to be right for that kind.
+ */
+export const KOREAN_TEXT_SLOP_PATTERNS = [
+  {
+    id: 'feature-list-dumping',
+    name: '사실 목록을 설명문으로 줄줄이 나열',
+    // Predicates chained with -하고/-하며 and closed with a statement of doing: "…토론하고 …고칩니다". The closing
+    // verb is one of doing or providing, so "친구하고 봅니다" (with a friend) is not a list of features.
+    regex: /(?:[가-힣]+(?:하고|하며|되고|되며)|고치고|만들고|나누고|모으고|바꾸고|찾고|돕고)[,\s][^.!?\n]*?(?:[가-힣]+(?:합니다|됩니다)|고칩니다|만듭니다|줍니다|드립니다|나눕니다|모읍니다|바꿉니다|찾습니다|돕습니다)/,
+    rule: '기능 나열 대신 구체적인 단 하나의 장면(누가, 어떤 순간에)으로 교체하라.',
+    reads: 'sentence',
+    severity: 'major',
+  },
+  {
+    id: 'passive-explanation-tone',
+    name: '…합니다/…됩니다 설명조 연속',
+    regex: /((?:으)?로 이루어집니다|따라가면 됩니다|확인하실 수 있습니다|하실 수 있습니다|제공됩니다|구성되어 있습니다)/,
+    rule: '설명문 대신 유저가 던질 말 또는 화면이 바로 내놓는 직관적 상태로 교체하라.',
+    reads: 'sentence',
+    severity: 'major',
+  },
+  {
+    id: 'empty-slogan-title',
+    name: '알맹이 없는 구호형 제목',
+    regex: /(목표.*최종.*까지|새로운.*경험|더 나은.*미래|스마트한.*관리|쉽고 빠르게|한 ?곳에서|모든 것을 한|당신의 .*(?:파트너|동반자)|일의 미래|함께 만드는 .*(?:내일|미래))/,
+    rule: '추상적 구호 대신 고유한 숫자와 실제 기능 낱말을 써라 (예: "채우는 쪽이 2,000원 이득이에요").',
+    reads: 'title',
+    severity: 'major',
+  },
+  {
+    id: 'generic-cta',
+    name: '어디에나 붙는 공용 버튼 문구',
+    regex: /^(시작하기|더 알아보기|지금 확인하기|첫 .* 열어보기|지금 시작하기|무료로 시작하기|바로 시작하기|자세히 알아보기|Get started|Learn more)$/i,
+    rule: '그 제품에서만 나올 수 있는 구체적인 행동 동사를 써라 (예: "사진에서 주소 지우기").',
+    reads: 'cta',
+    severity: 'major',
+  },
+  {
+    id: 'uniform-card-grid',
+    name: '동일한 무게의 카드 무지성 3~4개 나열',
+    regex: null,
+    rule: '중요도 1순위 항목을 2~3배 크게 배치하고 나머지는 서브로 위계를 분리하라.',
+    reads: 'layout',
+    severity: 'minor',
+  },
+] as const;
+
+export type KoreanTextSlopId = (typeof KOREAN_TEXT_SLOP_PATTERNS)[number]['id'];
+
+/** One piece of text on a screen, with what it is there. Given in reading order. */
+export interface InterfaceText {
+  role: 'title' | 'body' | 'cta' | 'label';
+  text: string;
+}
+
+/** A box that might be one of a row of cards: its parent group and where it sits, in CSS px. */
+export interface CardBox {
+  group: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+export interface TextSlopHit {
+  pattern: KoreanTextSlopId;
+  severity: 'major' | 'minor';
+  /** Index into the texts (or into the cards, for `uniform-card-grid`) the hit is about. */
+  index: number;
+  /** The wording that matched, as it appears on the screen. */
+  quote: string;
+  message: string;
+  /** What to write instead: the pattern's rule. */
+  fix: string;
+}
+
+/** A statement in the formal explaining register: "…합니다.", "…됩니다.", "…있습니다." */
+const STATEMENT_END = /[가-힣]니다[.。]?$/;
+const RUN_LENGTH = 3;
+const sentencesOf = (text: string): string[] => text.split(/(?<=[.!?。…])\s+|\n+/).map((s) => s.trim()).filter((s) => s !== '');
+const pattern = (id: KoreanTextSlopId): (typeof KOREAN_TEXT_SLOP_PATTERNS)[number] => KOREAN_TEXT_SLOP_PATTERNS.find((p) => p.id === id)!;
+
+/**
+ * Reads the words of a screen the way `lintText` reads a document: deterministically, so the same copy gets the
+ * same verdict on every round and a builder is told the exact wording to replace. It judges the writing alone.
+ * `texts` is the screen's text and nothing else, in reading order; `cards` are candidate card boxes for the one
+ * habit that is about layout (equal boxes in a row, where one should lead).
+ *
+ * Nothing here is a matter of taste a model has to weigh: each hit names a habit from the table above.
+ */
+export function lintInterfaceText(texts: readonly InterfaceText[], cards: readonly CardBox[] = []): TextSlopHit[] {
+  const hits: TextSlopHit[] = [];
+  const add = (id: KoreanTextSlopId, index: number, quote: string, message: string): void => {
+    const p = pattern(id);
+    hits.push({ pattern: id, severity: p.severity, index, quote: quote.slice(0, 120), message, fix: p.rule });
+  };
+  const listing = pattern('feature-list-dumping').regex!;
+  const explaining = pattern('passive-explanation-tone').regex!;
+  const slogan = pattern('empty-slogan-title').regex!;
+  const stockCta = pattern('generic-cta').regex!;
+
+  let run: { index: number; first: string; count: number } | null = null;
+  const closeRun = (): void => {
+    if (run && run.count >= RUN_LENGTH) add('passive-explanation-tone', run.index, run.first, `설명조 문장이 ${run.count}개 이어집니다: "${run.first.slice(0, 60)}"부터.`);
+    run = null;
+  };
+
+  texts.forEach((item, index) => {
+    const text = item.text.trim();
+    if (text === '') return;
+    if (item.role === 'cta') {
+      if (stockCta.test(text)) add('generic-cta', index, text, `버튼 문구 "${text}"는 어느 제품에나 붙습니다.`);
+      return closeRun();
+    }
+    if (item.role === 'title') {
+      const hit = slogan.exec(text);
+      // A title that carries a number names something particular, whatever words surround it.
+      if (hit && !/\d/.test(text)) add('empty-slogan-title', index, text, `제목 "${text.slice(0, 60)}"는 구호입니다: 무엇을 하는 제품인지 말하지 않습니다.`);
+      return closeRun();
+    }
+    // A run is one passage of explanation. A label or a control between two statements means they belong to
+    // different things on the screen (a list of options, each described in a line), which is not a passage.
+    if (item.role !== 'body') return closeRun();
+    for (const sentence of sentencesOf(text)) {
+      const chained = listing.exec(sentence);
+      if (chained) add('feature-list-dumping', index, chained[0], `기능을 한 문장에 이어 붙였습니다: "${sentence.slice(0, 80)}"`);
+      const phrase = explaining.exec(sentence);
+      if (phrase) add('passive-explanation-tone', index, phrase[0], `화면이 스스로를 설명합니다: "${sentence.slice(0, 80)}"`);
+      if (STATEMENT_END.test(sentence)) {
+        run ??= { index, first: sentence, count: 0 };
+        run.count += 1;
+      } else closeRun();
+    }
+  });
+  closeRun();
+
+  // Equal boxes side by side: three or more of one size on one row, under one parent.
+  const rows = new Map<string, number[]>();
+  cards.forEach((card, i) => {
+    if (card.w < 120 || card.h < 80) return;
+    const key = `${card.group}|${Math.round(card.y)}|${Math.round(card.w)}x${Math.round(card.h)}`;
+    rows.set(key, [...(rows.get(key) ?? []), i]);
+  });
+  for (const members of rows.values()) {
+    if (members.length >= 3) add('uniform-card-grid', members[0]!, '', `같은 크기의 카드 ${members.length}개가 한 줄에 나란히 있습니다.`);
+  }
+
+  // One finding per habit and wording: a phrase repeated on every card is one thing to fix.
+  const seen = new Set<string>();
+  return hits.filter((hit) => {
+    const key = `${hit.pattern}|${hit.quote}`;
+    return seen.has(key) ? false : (seen.add(key), true);
+  });
+}
+
+const SLOP_WEIGHT = { major: 20, minor: 8 } as const;
+
+/** 0 to 100, higher is worse: how much a screen's copy reads as generated. 0 means no habit was found. */
+export function textSlopScore(hits: readonly TextSlopHit[]): number {
+  return Math.min(100, hits.reduce((sum, hit) => sum + SLOP_WEIGHT[hit.severity], 0));
+}

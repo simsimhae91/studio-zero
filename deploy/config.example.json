@@ -31,5 +31,12 @@
   "engines": {
     "claudeCode": { "enabled": true },
     "codex": { "enabled": false }
+  },
+  "review": {
+    "sandwich": true
+  },
+  "selfHosting": {
+    "enabled": true,
+    "baseBranch": "main"
   }
 }

@@ -1,7 +1,7 @@
 import type { AdvisorId, EventEnvelope } from '@studio-zero/protocol';
-import { duration, evalLabel } from './format.ts';
+import { duration, evalLabel, reviewerLabel } from './format.ts';
 
-export type StepKind = 'plan' | 'scaffold' | 'install' | 'write' | 'read' | 'check' | 'run' | 'tool' | 'verify';
+export type StepKind = 'plan' | 'reference' | 'anchor' | 'review' | 'scaffold' | 'install' | 'write' | 'read' | 'check' | 'run' | 'tool' | 'verify';
 export type StepState = 'done' | 'active' | 'failed';
 
 /** One line inside an opened step: a command, a planned step, a check and how it went. */
@@ -32,12 +32,41 @@ export interface Step {
   audit: { score: number; passed: boolean; blockers: number; majors: number; minors: number; /** False: no design reviewer saw the screens. Undefined on audits recorded before that was tracked. */ visionReviewed?: boolean } | null;
 }
 
+/** One drawn direction of a design task: the page it was drawn from, and the picture of it. */
+export interface Mockup {
+  file: string;
+  title: string;
+  idea: string;
+  artifactId: string;
+  width: number;
+  height: number;
+}
+
+const BUILD_FROM_DESIGN = 'docs/prd.md, docs/architecture.md, docs/erd.md, docs/openapi.yaml에 정리한 설계대로 MVP를 구현해줘. 문서에서 범위 밖으로 둔 것은 만들지 말고, 문서와 다르게 구현해야 하는 부분이 생기면 마지막에 알려줘.';
+/** A mock-up page as the daemon names it. */
+const MOCKUP_PATH = /^docs\/mockups\/([abc])\.html$/;
+
+/** `docs/mockups/b.html` → "B안". */
+export const mockupName = (file: string): string => `${(MOCKUP_PATH.exec(file)?.[1] ?? '?').toUpperCase()}안`;
+
+/**
+ * The request that starts a build from a finished design, naming the direction the owner picked by its file.
+ * This text is sent as the owner's own words, so nothing a model wrote goes into it: not the mock-up's title,
+ * not its description, and no path that is not one of the three the daemon draws.
+ */
+export function buildRequest(mockup: string | null): string {
+  if (mockup === null || !MOCKUP_PATH.test(mockup)) return BUILD_FROM_DESIGN;
+  return `${BUILD_FROM_DESIGN}\n\n첫 화면은 ${mockup} 시안을 기준으로 만들어줘. 무엇이 앞에 오는지, 어떻게 배치하는지, 사람이 처음 하는 일은 그 시안을 따르고, 다른 시안의 구성은 섞지 마.`;
+}
+
 export type Item =
   | { kind: 'steps'; at: number; steps: Step[] }
   | { kind: 'said'; at: number; text: string }
   | { kind: 'steer'; at: number; text: string; delivered: boolean }
   | { kind: 'denied'; at: number; reason: string }
   | { kind: 'note'; at: number; text: string }
+  /** A design task's directions as pictures. The card that ends the task shows them; `title` and `idea` are a model's words. */
+  | { kind: 'mockups'; at: number; options: Mockup[] }
   | { kind: 'advisor'; at: number; advisor: AdvisorId; question: string; answer: string; ok: boolean; durationMs: number };
 
 const SCAFFOLD = /\b(?:pnpm|npm|npx|yarn|bun|bunx)\s+(?:create|dlx|init)\b|\bcreate-(?:vite|next-app|expo-app|expo|react-app)\b/;
@@ -145,7 +174,7 @@ function refresh(group: Building): void {
   }));
 }
 
-const gateLabel = { compiler: '컴파일', smoke: '스모크 테스트' } as const;
+const gateLabel = { compiler: '컴파일', smoke: '스모크 테스트', anchor: '고정표', build: '프로덕션 빌드' } as const;
 
 /**
  * A task's event stream as what the owner reads: a short list of steps with their outcome, the agent's closing
@@ -240,8 +269,64 @@ export function narrate(events: readonly EventEnvelope[]): Item[] {
         trailing = { kind: 'said', at: e.at, text: b.text };
         items.push(trailing);
         break;
-      case 'gate.result':
-        verify?.lines.push({ text: gateLabel[b.gate], mono: false, tone: b.passed ? 'good' : 'bad', meta: `${b.passed ? '통과' : `실패${b.exitCode === null ? '' : `, 종료 코드 ${b.exitCode}`}`}, ${duration(b.durationMs)}`, output: b.passed ? '' : b.detail });
+      case 'gate.result': {
+        const line: StepLine = { text: gateLabel[b.gate], mono: false, tone: b.passed ? 'good' : 'bad', meta: `${b.passed ? '통과' : `실패${b.exitCode === null ? '' : `, 종료 코드 ${b.exitCode}`}`}, ${duration(b.durationMs)}`, output: b.passed ? '' : b.detail };
+        if (verify) verify.lines.push(line);
+        // Outside a verification round: the anchor table refused before any code (a pass is told by `anchor.committed`),
+        // or the production build measured after the work was accepted.
+        else if (b.gate === 'build' || (b.gate === 'anchor' && !b.passed)) {
+          closeWork();
+          pushStep({ kind: b.gate === 'build' ? 'check' : 'anchor', state: b.passed ? 'done' : 'failed', title: b.gate === 'build' ? `프로덕션 빌드 ${b.passed ? '통과' : '실패'}` : '고정표 미완성: 코드 작성 전에 멈춤', detail: b.gate === 'build' ? `${b.name}, ${duration(b.durationMs)}` : b.name, at: e.at, lines: [line], notes: [], audit: null });
+        }
+        break;
+      }
+      case 'reference.captured':
+        closeWork();
+        pushStep({ kind: 'reference', state: b.ok ? 'done' : 'failed', title: b.ok ? '레퍼런스 측정' : '레퍼런스를 열지 못함', detail: b.url, at: e.at, lines: [{ text: b.detail, mono: false, tone: b.ok ? 'plain' : 'bad', meta: b.ok ? 'QA 브라우저 컨테이너에서 열어 측정' : '', output: '' }], notes: [], audit: null });
+        break;
+      case 'anchor.committed':
+        closeWork();
+        pushStep({
+          kind: 'anchor',
+          state: 'done',
+          title: b.author === 'workspace' ? '고정표 확인' : '고정표 확정',
+          detail: b.idea,
+          at: e.at,
+          lines: [...b.directions.map((text, i) => ({ text: `방향 ${i + 1}: ${text}`, mono: false, tone: 'plain' as const, meta: '', output: '' })), { text: `첫 화면 볼거리: ${b.livingVisual}`, mono: false, tone: 'plain', meta: '', output: '' }],
+          notes: [],
+          audit: null,
+        });
+        break;
+      case 'review.completed': {
+        closeWork();
+        const who = b.reviewer ? (reviewerLabel[b.reviewer] ?? b.reviewer) : '';
+        const stage = b.stage === 'plan' ? '계획 교차 검토' : '최종 인수 검수';
+        const title = b.reviewer === null ? `${stage}를 받지 못함` : b.stage === 'plan' ? `${stage}: 지적 ${b.points.length}건` : `${stage}: ${b.verdict === 'patch' ? '보정 패치 1건' : '통과'}`;
+        pushStep({
+          kind: 'review',
+          state: 'done',
+          title,
+          detail: b.reviewer === null ? (b.reason ?? '') : `${who}, ${duration(b.durationMs)}`,
+          at: e.at,
+          // Another model's words: shown as text.
+          lines: b.reviewer === null ? [{ text: b.reason ?? '', mono: false, tone: 'warn', meta: '', output: '' }] : b.points.map((text) => ({ text, mono: false, tone: 'plain' as const, meta: '', output: '' })),
+          notes: [],
+          audit: null,
+        });
+        break;
+      }
+      case 'mockups.rendered':
+        closeWork();
+        items.push({ kind: 'mockups', at: e.at, options: b.options });
+        break;
+      case 'ledger.recorded':
+        items.push({ kind: 'note', at: e.at, text: b.proof === '' ? '장부에 기록했습니다.' : `장부에 기록했습니다. 직전 작업 대비 ${b.proof}` });
+        break;
+      case 'selfhost.exported':
+        items.push({ kind: 'note', at: e.at, text: `이 Mac의 저장소에 ${b.branch} 브랜치로 내보냈습니다 (파일 ${b.files}개, +${b.insertions} −${b.deletions}). ${b.base}에는 아직 합쳐지지 않았습니다.` });
+        break;
+      case 'selfhost.merged':
+        items.push({ kind: 'note', at: e.at, text: `${b.branch}를 ${b.into}에 합쳤습니다.` });
         break;
       case 'eval.result':
         verify?.lines.push({ text: evalLabel(b.name), mono: false, tone: b.passed ? 'good' : b.unverified ? 'warn' : 'bad', meta: `${b.passed ? '통과' : b.unverified ? '검증하지 못함' : '실패'}, ${duration(b.durationMs)}`, output: b.passed ? '' : b.detail });

@@ -67,16 +67,18 @@ export interface LlmScope {
 export interface TokenUsage {
   inputTokens: number;
   outputTokens: number;
+  /** The part of `inputTokens` that was a cache read. Budgets charge it at a tenth (`budgetTokens`). */
+  cachedTokens: number;
   usdMicros: number;
 }
 
-/** Converts SDK usage into billable totals. Cache reads and writes count as input tokens toward budgets. */
+/** Converts SDK usage into totals. Input counts fresh, cache-written and cache-read tokens; the last is also given on its own. */
 export function meterUsage(model: string, usage: Anthropic.Beta.BetaUsage): TokenUsage {
   const cacheRead = usage.cache_read_input_tokens ?? 0;
   const cacheWrite = usage.cache_creation_input_tokens ?? 0;
   const price = PRICES[model];
   const usd = price ? usage.input_tokens * price.input + cacheWrite * price.input * 1.25 + cacheRead * price.cacheRead + usage.output_tokens * price.output : 0;
-  return { inputTokens: usage.input_tokens + cacheRead + cacheWrite, outputTokens: usage.output_tokens, usdMicros: Math.round(usd) };
+  return { inputTokens: usage.input_tokens + cacheRead + cacheWrite, outputTokens: usage.output_tokens, cachedTokens: cacheRead, usdMicros: Math.round(usd) };
 }
 
 /** Request fields that opt a model into the refusal fallback chain. Empty for models that do not support it. */
@@ -148,13 +150,13 @@ export class ClaudeClient {
   }
 
   /** Meters a subscription-billed response: tokens count against budgets, dollars do not. */
-  recordSession(scope: LlmScope, model: string, usage: { inputTokens: number; outputTokens: number }): TokenUsage {
+  recordSession(scope: LlmScope, model: string, usage: { inputTokens: number; outputTokens: number; cachedTokens?: number }): TokenUsage {
     return this.recordBridge(scope, `claude-code:${model}`, usage);
   }
 
   /** The same, for any subscription CLI the daemon asked something of in its own name. `label` is `<cli>:<model>`. */
-  recordBridge(scope: LlmScope, label: string, usage: { inputTokens: number; outputTokens: number }): TokenUsage {
-    const metered = { ...usage, usdMicros: 0 };
+  recordBridge(scope: LlmScope, label: string, usage: { inputTokens: number; outputTokens: number; cachedTokens?: number }): TokenUsage {
+    const metered = { inputTokens: usage.inputTokens, outputTokens: usage.outputTokens, cachedTokens: usage.cachedTokens ?? 0, usdMicros: 0 };
     this.#store.addUsage({ projectId: scope.projectId, taskId: scope.taskId, source: 'bridge', model: label, ...metered }, this.#clock());
     this.#events.emit({ projectId: scope.projectId, taskId: scope.taskId }, { type: 'usage', source: 'bridge', model: label, ...metered });
     scope.onUsage?.(metered);

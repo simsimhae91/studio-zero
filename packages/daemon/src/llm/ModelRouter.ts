@@ -1,7 +1,28 @@
-import type { TaskKind } from '@studio-zero/protocol';
+import type { ReviewerPref, TaskKind } from '@studio-zero/protocol';
 import { UnavailableError } from '../app/errors.ts';
 import type { Config, EngineId, RouteCandidate } from '../config.ts';
 import type { Engine } from '../harness/engines/Engine.ts';
+
+/** Whose model an engine runs: the vendor a cross-check must not share with it. */
+const VENDOR: Record<EngineId, ReviewerPref> = { 'native-claude': 'claude-code', 'claude-code': 'claude-code', codex: 'codex', cursor: 'cursor', antigravity: 'antigravity' };
+
+/**
+ * Complementary pairing: who cross-checks a lead, most preferred first. Claude is checked by Codex and Codex by
+ * Claude; a lead that runs in the host jail (Cursor, Antigravity) is checked by Claude, then Codex. A vendor is
+ * never on its own list: a second opinion from the same model family is the first opinion again.
+ */
+export const REVIEW_PAIRS: Record<ReviewerPref, readonly ReviewerPref[]> = {
+  'claude-code': ['codex', 'antigravity', 'cursor'],
+  codex: ['claude-code', 'antigravity', 'cursor'],
+  cursor: ['claude-code', 'codex', 'antigravity'],
+  antigravity: ['claude-code', 'codex', 'cursor'],
+};
+
+export interface ReviewerDecision {
+  /** Null when nobody on the list can be asked. */
+  reviewer: ReviewerPref | null;
+  considered: { reviewer: ReviewerPref; available: boolean; reason: string }[];
+}
 
 export interface RouteDecision {
   engine: Engine;
@@ -46,6 +67,34 @@ export class ModelRouter {
       if (engine && status.available) return { engine, candidate, considered };
     }
     throw new UnavailableError(`no engine available for ${kind} tasks: ${considered.map((c) => `${c.engine} (${c.reason})`).join('; ')}`);
+  }
+
+  /**
+   * Who cross-checks work authored by `author`. A table lookup and availability checks, like routing itself:
+   * the first complement that can be asked. `pref` is the owner's own choice for this task; like an engine
+   * choice it is honoured or reported unavailable, never swapped for another.
+   */
+  async pairReviewer(author: EngineId, pref: ReviewerPref | null = null): Promise<ReviewerDecision> {
+    const considered: ReviewerDecision['considered'] = [];
+    for (const reviewer of pref ? [pref] : REVIEW_PAIRS[VENDOR[author]]) {
+      const status = await this.#reviewerStatus(reviewer);
+      considered.push({ reviewer, ...status });
+      if (status.available) return { reviewer, considered };
+    }
+    return { reviewer: null, considered };
+  }
+
+  /** Claude reviews through the API key or the subscription, whichever is set up; the others through their CLI. */
+  async #reviewerStatus(reviewer: ReviewerPref): Promise<{ available: boolean; reason: string }> {
+    const ids: EngineId[] = reviewer === 'claude-code' ? ['native-claude', 'claude-code'] : [reviewer];
+    let last = { available: false, reason: 'engine not registered' };
+    for (const id of ids) {
+      const engine = this.#engines.get(id);
+      if (!engine) continue;
+      last = await engine.availability();
+      if (last.available) return last;
+    }
+    return last;
   }
 
   async status(): Promise<{ id: string; available: boolean; reason: string }[]> {

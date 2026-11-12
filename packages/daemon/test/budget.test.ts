@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type Anthropic from '@anthropic-ai/sdk';
+import { budgetTokens } from '../src/db/Store.ts';
 import { sleep } from '../src/util/core.ts';
-import { testDaemon } from './helpers.ts';
+import { sampleProject, testDaemon } from './helpers.ts';
 
 const OWNER = { type: 'owner', via: 'desktop' } as const;
 
@@ -59,12 +60,12 @@ async function run(decision: 'approve' | 'deny') {
 test('a task that runs out of budget asks the owner, and continues when the extension is approved', async () => {
   const { pending, waiting, finished, trace, decisions } = await run('approve');
   assert.equal(pending.actionKind, 'task.extend-budget');
-  assert.equal(pending.summary, `작업 ${finished.id}이(가) 토큰 예산을 다 썼습니다. 4,000 토큰을 더 줄까요?`);
+  assert.equal(pending.summary, `작업 ${finished.id}이(가) 토큰 예산을 다 썼습니다 (지금까지 4,500 토큰). 여기서 4,000 토큰을 더 쓰게 할까요?`);
   assert.equal(waiting.state, 'awaiting_approval', 'the task shows as waiting on the owner');
   assert.ok(waiting.spentTokens >= waiting.budgetTokens);
 
   assert.equal(finished.state, 'succeeded', finished.error ?? '');
-  assert.equal(finished.budgetTokens, 8000, 'the budget grew by exactly the approved amount');
+  assert.equal(finished.budgetTokens, waiting.spentTokens + 4000, 'the approved amount is counted from what had been spent');
   assert.equal(decisions[0]!.state, 'consumed');
   assert.equal(decisions[0]!.resolvedVia, 'telegram');
   const kinds = trace.map((b) => (b.type === 'task.state' ? `state:${b.state}` : b.type === 'policy.decision' ? `policy:${b.effect}:${b.rule}` : b.type === 'approval.resolved' ? `approval:${b.state}` : b.type));
@@ -79,4 +80,52 @@ test('a denied extension fails the task and leaves the work on its branch', asyn
   assert.match(finished.error ?? '', /token budget exhausted \(\d+ tokens used\) and an extension was not approved/);
   assert.equal(finished.budgetTokens, 4000);
   assert.equal(decisions[0]!.state, 'denied');
+});
+
+test('a re-read from the prompt cache is charged at a tenth, for the task and for the day', async () => {
+  assert.equal(budgetTokens({ inputTokens: 1000, outputTokens: 200 }), 1200, 'no cache figure: counted in full');
+  assert.equal(budgetTokens({ inputTokens: 1000, outputTokens: 200, cachedTokens: 900 }), 390);
+  assert.equal(budgetTokens({ inputTokens: 1000, outputTokens: 200, cachedTokens: 5000 }), 300, 'a cache figure larger than the input is capped at the input');
+  // The session the limit was found on: 8.2 million input tokens, nearly all of them the same context read again.
+  assert.ok(budgetTokens({ inputTokens: 8_225_575, outputTokens: 149_204, cachedTokens: 7_900_000 }) < 2_000_000);
+
+  const d = await testDaemon();
+  try {
+    const { store, studio } = d.daemon;
+    const project = sampleProject('refill');
+    store.insertProject(project);
+    const task = await studio.submitTask(OWNER, { projectId: project.id, kind: 'build', prompt: 'x', budgetTokens: 2_000_000 }, 'desktop');
+    const now = Date.now();
+    store.addUsage({ projectId: project.id, taskId: task.id, source: 'bridge', model: 'claude-code:opus', inputTokens: 1_000_000, outputTokens: 50_000, cachedTokens: 900_000, usdMicros: 0 }, now);
+    assert.equal(store.getTask(task.id)!.spentTokens, 240_000);
+    assert.equal(store.projectTokensSince(project.id, now - 1000), 240_000, 'the daily budget counts the same way');
+    assert.deepEqual(store.taskUsage(task.id), { calls: 1, inputTokens: 1_000_000, outputTokens: 50_000, usdMicros: 0 }, 'the ledger keeps what the provider reported');
+  } finally {
+    await d.cleanup();
+  }
+});
+
+test('an extension is counted from what was spent: a task far past its budget needs one approval, not several', async () => {
+  const d = await testDaemon();
+  try {
+    const { store, studio, policy } = d.daemon;
+    const project = sampleProject('refill');
+    store.insertProject(project);
+    const task = await studio.submitTask(OWNER, { projectId: project.id, kind: 'build', prompt: 'x', budgetTokens: 2_000_000 }, 'desktop');
+    // A CLI engine runs a whole session as one request, so the overrun is only known when it returns.
+    store.addUsage({ projectId: project.id, taskId: task.id, source: 'bridge', model: 'claude-code:opus', inputTokens: 8_300_000, outputTokens: 140_000, usdMicros: 0 }, Date.now());
+    const request = { kind: 'llm.request', projectId: project.id, taskId: task.id, model: 'claude-code:opus' } as const;
+    assert.equal(policy.evaluate({ type: 'agent', taskId: task.id }, request, task.id).effect, 'deny');
+
+    store.extendTaskBudget(task.id, 2_000_000);
+    assert.equal(store.getTask(task.id)!.budgetTokens, 10_440_000, 'two million more than the 8.44 million used, not two million more than the old limit');
+    assert.equal(policy.evaluate({ type: 'agent', taskId: task.id }, request, task.id).effect, 'allow');
+
+    // Within budget, an extension adds to the limit as before.
+    const small = await studio.submitTask(OWNER, { projectId: project.id, kind: 'build', prompt: 'y', budgetTokens: 5000 }, 'desktop');
+    store.extendTaskBudget(small.id, 5000);
+    assert.equal(store.getTask(small.id)!.budgetTokens, 10_000);
+  } finally {
+    await d.cleanup();
+  }
 });

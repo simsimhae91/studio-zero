@@ -1,6 +1,6 @@
 import { useId, useState, type FormEvent } from 'react';
 import type { Project, Scratchpad, Template } from '@studio-zero/protocol';
-import { ago, templateLabel } from '../lib/format.ts';
+import { ago, creatableTemplates, templateLabel } from '../lib/format.ts';
 import { useAction, useStudio } from '../lib/studio.tsx';
 import { Button, Problem, Segmented, TitlebarSpace } from '../ui.tsx';
 import { scratchState, type Route } from './Shell.tsx';
@@ -14,7 +14,7 @@ const MODES: readonly { id: Mode; label: string; does: string; start: string }[]
   { id: 'document', label: '문서', does: '적어 주신 내용으로 보고서를 쓰고, 문장 검사를 통과할 때까지 고칩니다.', start: '문서 쓰기' },
 ];
 type Stack = Template | 'auto';
-const STACKS: readonly { id: Stack; label: string }[] = [{ id: 'auto', label: '알아서' }, ...(Object.keys(templateLabel) as Template[]).map((id) => ({ id, label: templateLabel[id] }))];
+const STACKS: readonly { id: Stack; label: string }[] = [{ id: 'auto', label: '알아서' }, ...creatableTemplates];
 
 /**
  * A blank sheet. Whatever is written on it becomes work; the mode decides what the studio does with it first.

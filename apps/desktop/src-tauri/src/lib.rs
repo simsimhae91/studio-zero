@@ -1,5 +1,6 @@
-//! The native shell. It does two things the web view cannot: read the daemon's client token from the macOS
-//! Keychain, and keep tokens for remote daemons in the OS keychain instead of web storage.
+//! The native shell. It does three things the web view cannot: read the daemon's client token from the macOS
+//! Keychain, keep tokens for remote daemons in the OS keychain instead of web storage, and (on a desktop) put an
+//! item in the menu bar that switches whether the daemon's Mac is kept awake.
 //! `DAEMON_ACCOUNT` is only used on macOS, where a local daemon can exist.
 //!
 //! Everything else (the socket to the daemon, every screen) lives in the web frontend, which is why the same
@@ -132,14 +133,111 @@ fn forget_token(host: String) -> Result<(), String> {
     store::delete(CLIENT_SERVICE, &host)
 }
 
+/// The three ways the daemon's Mac can be held awake, as the daemon names them, with their menu labels.
+const POWER_MODES: [(&str, &str); 3] = [
+    ("off", "잠자기 허용"),
+    ("system", "시스템 유지 (화면은 꺼져도 됨)"),
+    ("display", "화면 유지"),
+];
+
+fn valid_power_mode(mode: &str) -> bool {
+    POWER_MODES.iter().any(|(id, _)| *id == mode)
+}
+
+/// The menu-bar item. It holds no state of its own and talks to no daemon: a choice is sent to the web view as
+/// a `power-request` event, the web view asks the daemon over its authenticated socket, and the check mark only
+/// moves when the web view reports back what the daemon now says (`mark_power`).
+#[cfg(desktop)]
+mod tray {
+    use super::POWER_MODES;
+    use std::sync::Mutex;
+    use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem};
+    use tauri::tray::TrayIconBuilder;
+    use tauri::{AppHandle, Emitter, Manager, Wry};
+
+    pub struct PowerMenu {
+        items: Vec<(&'static str, CheckMenuItem<Wry>)>,
+        /// What the daemon last said. A click toggles the native check mark by itself; this puts it back.
+        mode: Mutex<String>,
+    }
+
+    pub fn mark(app: &AppHandle, mode: &str) {
+        let Some(menu) = app.try_state::<PowerMenu>() else { return };
+        if let Ok(mut current) = menu.mode.lock() {
+            *current = mode.to_string();
+        }
+        for (id, item) in &menu.items {
+            let _ = item.set_checked(*id == mode);
+        }
+    }
+
+    pub fn build(app: &tauri::App) -> tauri::Result<()> {
+        let handle = app.handle();
+        let mut items = Vec::new();
+        for (id, label) in POWER_MODES {
+            items.push((id, CheckMenuItem::with_id(handle, format!("power:{id}"), label, true, id == "off", None::<&str>)?));
+        }
+        let separator = PredefinedMenuItem::separator(handle)?;
+        let open = MenuItem::with_id(handle, "open", "Studio Zero 열기", true, None::<&str>)?;
+        let menu = Menu::with_items(handle, &[&items[0].1, &items[1].1, &items[2].1, &separator, &open])?;
+
+        let mut builder = TrayIconBuilder::with_id("studio-zero")
+            .menu(&menu)
+            .tooltip("Studio Zero")
+            .on_menu_event(|app, event| {
+                let id = event.id().as_ref();
+                if let Some(mode) = id.strip_prefix("power:") {
+                    // Not switched yet: the daemon decides. Put the mark back where it was and ask.
+                    let current = app.try_state::<PowerMenu>().and_then(|menu| menu.mode.lock().ok().map(|m| m.clone()));
+                    if let Some(current) = current {
+                        mark(app, &current);
+                    }
+                    let _ = app.emit("power-request", mode);
+                } else if id == "open" {
+                    if let Some(window) = app.get_webview_window("main") {
+                        let _ = window.show();
+                        let _ = window.set_focus();
+                    }
+                }
+            });
+        if let Some(icon) = app.default_window_icon() {
+            builder = builder.icon(icon.clone());
+        }
+        builder.build(app)?;
+        app.manage(PowerMenu { items, mode: Mutex::new("off".to_string()) });
+        Ok(())
+    }
+}
+
+/// Moves the menu-bar check mark to the mode the daemon reports. Called by the web view; does nothing on a phone.
+#[tauri::command]
+fn mark_power(app: tauri::AppHandle, mode: String) -> Result<(), String> {
+    if !valid_power_mode(&mode) {
+        return Err("invalid power mode".into());
+    }
+    #[cfg(desktop)]
+    tray::mark(&app, &mode);
+    #[cfg(not(desktop))]
+    let _ = app;
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .setup(|app| {
+            #[cfg(desktop)]
+            tray::build(app)?;
+            #[cfg(not(desktop))]
+            let _ = app;
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             local_client_token,
             load_token,
             save_token,
-            forget_token
+            forget_token,
+            mark_power
         ])
         .run(tauri::generate_context!())
         .expect("Studio Zero could not start");
@@ -158,6 +256,16 @@ mod tests {
             assert!(!valid_host(bad), "{bad:?}");
         }
         assert!(!valid_host(&"a".repeat(254)));
+    }
+
+    #[test]
+    fn power_modes_are_the_three_the_daemon_knows() {
+        for good in ["off", "system", "display"] {
+            assert!(valid_power_mode(good), "{good}");
+        }
+        for bad in ["", "on", "sleep", "display "] {
+            assert!(!valid_power_mode(bad), "{bad:?}");
+        }
     }
 
     #[test]

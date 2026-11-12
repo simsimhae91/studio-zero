@@ -119,8 +119,9 @@ export class ScratchService {
     return this.#setState(scratchId, 'archived');
   }
 
-  markPromoted(scratchId: string, projectId: string | null): Scratchpad {
-    const pad = this.#store.updateScratchpad(scratchId, { state: 'promoted', ...(projectId ? { projectId } : {}) }, this.#clock());
+  /** The note became a project: from here on it is that project. */
+  markPromoted(scratchId: string, projectId: string): Scratchpad {
+    const pad = this.#store.updateScratchpad(scratchId, { state: 'promoted', projectId }, this.#clock());
     this.#events.emit(SCOPE, { type: 'scratch.state', scratchId, state: 'promoted' });
     return pad;
   }

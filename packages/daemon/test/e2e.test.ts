@@ -9,7 +9,7 @@ import type { EventEnvelope } from '@studio-zero/protocol';
 import { codingSystemPrompt } from '../src/harness/prompts.ts';
 import { sleep } from '../src/util/core.ts';
 import type { CommandRunner, RunResult } from '../src/util/run.ts';
-import { dockerArgs, testDaemon } from './helpers.ts';
+import { sampleAnchor, dockerArgs, testDaemon } from './helpers.ts';
 
 const OWNER = { type: 'owner', via: 'desktop' } as const;
 const ok = (stdout = ''): RunResult => ({ exitCode: 0, stdout, stderr: '', truncated: false, timedOut: false, durationMs: 1 });
@@ -61,7 +61,7 @@ function fakeAnthropic(turns: Anthropic.Beta.BetaContentBlock[][], port: number)
   const structured = (params: Anthropic.Beta.MessageCreateParams): unknown => {
     const system = String(params.system);
     if (system.startsWith('You are planning')) {
-      return { summary: 'Add an unpaid-invoices page built on the project theme.', steps: ['Describe the dev server in .studio-zero/project.json', 'Write index.html'], auditRoutes: ['/', 'javascript:alert(1)', 'https://evil.example/'], openQuestions: ['Assumed three sample invoices.'] };
+      return { summary: 'Add an unpaid-invoices page built on the project theme.', steps: ['Describe the dev server in .studio-zero/project.json', 'Write index.html'], auditRoutes: ['/', 'javascript:alert(1)', 'https://evil.example/'], openQuestions: ['Assumed three sample invoices.'], anchor: sampleAnchor };
     }
     if (system.startsWith('You are reviewing one screen')) {
       return { archetype: 'web-app', slopScore: 8, critique: 'Calm and legible.', rubric: { hierarchy: 9, whitespace: 9, typography: 9, color: 9, copy: 9, originality: 9, tactility: 9 }, findings: [{ category: 'hierarchy', severity: 'minor', elementId: 'e1', observation: 'The action could sit closer to the customer name.', fix: 'Reduce the gap inside the section to gap-2.' }], redesignPatches: [] };

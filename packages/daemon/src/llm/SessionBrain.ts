@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { z } from 'zod';
 import type { BridgeSessions, BridgeTools } from '../bridge/BridgeSessions.ts';
+import type { SubscriptionWatch } from '../harness/engines/CliBridgeEngine.ts';
 import { MCP_SERVER, cliEnv, safeJson, writeShimConfig } from '../bridge/cli.ts';
 import type { Config, Effort } from '../config.ts';
 import { excerpt, type Clock } from '../util/core.ts';
@@ -28,7 +29,7 @@ export interface BrainRequest {
 export interface BrainResult {
   text: string;
   structured: unknown;
-  usage: { inputTokens: number; outputTokens: number };
+  usage: { inputTokens: number; outputTokens: number; cachedTokens: number };
   /** One entry per web search the model ran, with the pages it returned. */
   searches: { url: string; title: string }[][];
 }
@@ -69,9 +70,11 @@ export class SessionBrain {
   readonly #sessions: BridgeSessions;
   readonly #clock: Clock;
   readonly #run: CommandRunner;
+  readonly #quota: SubscriptionWatch | null;
   #probe: { at: number; available: boolean; reason: string } | null = null;
 
-  constructor(deps: { config: Config; sessions: BridgeSessions; clock: Clock; run?: CommandRunner }) {
+  constructor(deps: { config: Config; sessions: BridgeSessions; clock: Clock; run?: CommandRunner; quota?: SubscriptionWatch }) {
+    this.#quota = deps.quota ?? null;
     this.#bin = deps.config.engines.claudeCode.bin;
     this.#enabled = deps.config.engines.claudeCode.enabled;
     this.#bridgeUrl = `http://127.0.0.1:${deps.config.listen.port}/v1/bridge`;
@@ -101,7 +104,19 @@ export class SessionBrain {
     return this.#probe?.available ?? false;
   }
 
+  /** One request, with its outcome noted for the Claude subscription: an answer, or a refusal for a usage limit. */
   async ask(req: BrainRequest): Promise<BrainResult> {
+    try {
+      const result = await this.#ask(req);
+      this.#quota?.answered('claude-code');
+      return result;
+    } catch (err) {
+      if (!req.signal?.aborted) this.#quota?.failed('claude-code', err);
+      throw err;
+    }
+  }
+
+  async #ask(req: BrainRequest): Promise<BrainResult> {
     const scratch = await mkdtemp(join(tmpdir(), 'sz-brain-'));
     await chmod(scratch, 0o700);
     const token = req.tools ? this.#sessions.create(req.tools, 2 * 60 * 60 * 1000) : null;
@@ -175,7 +190,7 @@ export function parse(stdout: string, exitCode: number, stderr: string): BrainRe
   return {
     text: result.result ?? '',
     structured: result.structured_output ?? null,
-    usage: { inputTokens: (u.input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0), outputTokens: u.output_tokens ?? 0 },
+    usage: { inputTokens: (u.input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0), outputTokens: u.output_tokens ?? 0, cachedTokens: u.cache_read_input_tokens ?? 0 },
     searches,
   };
 }

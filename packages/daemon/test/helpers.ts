@@ -127,7 +127,8 @@ export async function testDaemon(configOverrides: z.input<typeof ConfigSchema> =
   const ws = tempDir('sz-ws-');
   const security = fakeSecurity();
   const docker = localDocker(ws.dir);
-  const config = testConfig(home.dir, { listen: { port: 0 }, gateway: { port: 0 }, engines: { claudeCode: { enabled: false } }, ...configOverrides });
+  // The studio's own repository is not mounted unless a test asks for it: a test daemon is not a place to work on it.
+  const config = testConfig(home.dir, { listen: { port: 0 }, gateway: { port: 0 }, engines: { claudeCode: { enabled: false } }, selfHosting: { enabled: false }, ...configOverrides });
   // Tests never ask a real provider whether a key is good.
   const daemon = await createDaemon(config, quietLog, { run: wrapDocker(docker.run), securityRun: security.run, checkKey: async () => 'accepted', ...overrides });
   const port = (): number => (daemon.server.app.server.address() as { port: number }).port;
@@ -186,3 +187,18 @@ export async function freePort(): Promise<number> {
   await new Promise((resolve) => server.close(resolve));
   return port;
 }
+
+/** An anchor table that holds: what a scripted planner hands back for a design task. */
+export const sampleAnchor = {
+  idea: '밀린 돈이 며칠째인지가 금액보다 먼저 보인다.',
+  directions: ['입금이 쌓이는 타임라인 한 줄을 화면 가운데 두는 구성', '청구서 한 장을 펼쳐 놓고 그 위에 입금 도장이 찍히는 구성'],
+  firstScreen: { primaryElement: '가장 오래 밀린 청구서 한 건', interactiveAction: '청구서를 눌러 바로 독촉 문자를 보낸다', livingVisual: '고객 12곳의 실제 미결제 기록으로 채운 목록' },
+  anchors: [
+    { category: 'layout' as const, referenceObserved: '왼쪽 목록과 오른쪽 상세 패널', derivedPrinciple: '가장 급한 것이 가장 크다', ourValueAndSource: '연체 일수 순으로 한 줄씩: 독촉은 오래된 것부터 하니까' },
+    { category: 'typography' as const, referenceObserved: '모든 금액이 같은 크기', derivedPrinciple: '숫자에 위계를 준다', ourValueAndSource: '연체 일수를 금액보다 한 단계 크게' },
+    { category: 'color' as const, referenceObserved: '상태마다 다른 색 배지', derivedPrinciple: '색은 한 가지 뜻만 가진다', ourValueAndSource: '강조색은 연체에만' },
+  ],
+  retainedPrinciples: ['급한 것이 크다', '색은 연체에만', '한 화면에 한 가지 일'],
+  discardedDefaults: ['왼쪽 목록-오른쪽 카드'],
+  strictlyExcluded: [],
+};

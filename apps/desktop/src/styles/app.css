@@ -61,13 +61,20 @@ body {
   display: grid;
   block-size: 100%;
   grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
 }
 @media (min-width: 64rem) {
   .shell {
     grid-template-columns: 17rem minmax(0, 1fr);
-    grid-template-rows: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) auto;
   }
+}
+
+/* The strip along the bottom of the window: what the daemon has seen of each subscription. It spans the rail
+   and the desk, and on a phone it also clears the home indicator. */
+.statusbar {
+  grid-column: 1 / -1;
+  padding-block-end: env(safe-area-inset-bottom, 0px);
 }
 
 .desk {

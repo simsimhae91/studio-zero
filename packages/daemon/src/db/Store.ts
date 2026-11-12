@@ -3,8 +3,10 @@ import {
   AuditReport,
   AxBlock,
   AxResponse,
+  CORE_PROJECT_ID,
   EventBody,
   EvalSpec,
+  LedgerEntry,
   ProposalCard,
   ResearchReport,
   TextFinding,
@@ -34,7 +36,7 @@ import {
   type TaskKind,
   type TaskState,
   type TaskTrack,
-  type Template,
+  type ProjectTemplate,
 } from '@studio-zero/protocol';
 import { migrate } from './schema.ts';
 
@@ -65,7 +67,20 @@ export interface UsageEntry {
   model: string;
   inputTokens: number;
   outputTokens: number;
+  /** The part of `inputTokens` that was read back from the provider's prompt cache. */
+  cachedTokens?: number;
   usdMicros: number;
+}
+
+/**
+ * What a model call takes out of a token budget. A token re-read from the prompt cache is charged at a tenth,
+ * as providers price it: an agent's session re-reads its whole context every turn, so a build of a hundred
+ * turns "reads" millions of tokens that cost a small fraction of that. Counted at full weight, one ordinary
+ * build by a subscription CLI used 8.4 million against a budget of 2 million.
+ */
+export function budgetTokens(u: { inputTokens: number; outputTokens: number; cachedTokens?: number }): number {
+  const cached = Math.min(Math.max(0, u.cachedTokens ?? 0), u.inputTokens);
+  return u.inputTokens + u.outputTokens - Math.floor((cached * 9) / 10);
 }
 
 export interface LessonEvidence {
@@ -223,7 +238,7 @@ export class Store {
   }
 
   listSessions(projectId: string): Session[] {
-    return this.#all('SELECT * FROM sessions WHERE project_id = :projectId ORDER BY created_at, id', { projectId }).map(toSession);
+    return this.#all('SELECT * FROM sessions WHERE project_id = :projectId ORDER BY created_at, rowid', { projectId }).map(toSession);
   }
 
   renameSession(id: string, name: string): Session | null {
@@ -241,8 +256,15 @@ export class Store {
   }
 
   /** Projects the owner made. The studio's own budget scope (see `STUDIO_PROJECT_ID`) is not one of them. */
+  /** The owner's projects, oldest first, with the studio's own repository (when it is mounted) ahead of them all. */
   listProjects(): Project[] {
-    return this.#all('SELECT * FROM projects WHERE id <> :studio ORDER BY created_at', { studio: STUDIO_PROJECT_ID }).map(toProject);
+    return this.#all('SELECT * FROM projects WHERE id <> :studio ORDER BY (id = :core) DESC, created_at', { studio: STUDIO_PROJECT_ID, core: CORE_PROJECT_ID }).map(toProject);
+  }
+
+  /** Makes sure the pinned project that stands for the studio's own repository exists. */
+  ensureCoreProject(now: number): Project {
+    this.#run(`INSERT INTO projects (id, slug, name, template, created_at) VALUES (:id, 'studio-zero-core', 'Studio Zero Core', 'studio-core', :now) ON CONFLICT (id) DO NOTHING`, { id: CORE_PROJECT_ID, now });
+    return this.getProject(CORE_PROJECT_ID)!;
   }
 
   /** Makes sure the row that scratchpad and knowledge work is metered against exists. */
@@ -273,11 +295,12 @@ export class Store {
 
   // ---------------------------------------------------------------- tasks
 
-  insertTask(t: { id: string; projectId: string; kind: TaskKind; prompt: string; origin: Origin; budgetTokens: number; branch: string | null; baseBranch?: string | null; enginePref?: string | null; sessionId?: string | null; track?: TaskTrack; createdAt: number }): Task {
+  insertTask(t: { id: string; projectId: string; kind: TaskKind; prompt: string; origin: Origin; budgetTokens: number; branch: string | null; baseBranch?: string | null; enginePref?: string | null; sessionId?: string | null; track?: TaskTrack; reviewerPref?: string | null; references?: readonly string[]; createdAt: number }): Task {
+    const { references, ...row } = t;
     this.#run(
-      `INSERT INTO tasks (id, project_id, kind, prompt, origin, state, branch, base_branch, engine_pref, session_id, track, budget_tokens, created_at)
-       VALUES (:id, :projectId, :kind, :prompt, :origin, 'queued', :branch, :baseBranch, :enginePref, :sessionId, :track, :budgetTokens, :createdAt)`,
-      { ...t, baseBranch: t.baseBranch ?? null, enginePref: t.enginePref ?? null, sessionId: t.sessionId ?? null, track: t.track ?? 'full' },
+      `INSERT INTO tasks (id, project_id, kind, prompt, origin, state, branch, base_branch, engine_pref, session_id, track, reviewer_pref, references_json, budget_tokens, created_at)
+       VALUES (:id, :projectId, :kind, :prompt, :origin, 'queued', :branch, :baseBranch, :enginePref, :sessionId, :track, :reviewerPref, :referencesJson, :budgetTokens, :createdAt)`,
+      { ...row, baseBranch: t.baseBranch ?? null, enginePref: t.enginePref ?? null, sessionId: t.sessionId ?? null, track: t.track ?? 'full', reviewerPref: t.reviewerPref ?? null, referencesJson: JSON.stringify(references ?? []) },
     );
     return this.getTask(t.id)!;
   }
@@ -375,7 +398,9 @@ export class Store {
   }
 
   extendTaskBudget(id: string, addTokens: number): void {
-    this.#run('UPDATE tasks SET budget_tokens = budget_tokens + :addTokens WHERE id = :id', { id, addTokens });
+    // Measured from what has been spent, not from the old limit. An engine that runs a whole session as one
+    // request can be far past its budget by the time it is stopped; "N more" has to mean N more from there.
+    this.#run('UPDATE tasks SET budget_tokens = MAX(budget_tokens, spent_tokens) + :addTokens WHERE id = :id', { id, addTokens });
   }
 
   /** Tasks whose work is done and whose remaining checks are waiting on something outside the task. Oldest first. */
@@ -514,22 +539,84 @@ export class Store {
   addUsage(u: UsageEntry, now: number): void {
     this.tx(() => {
       this.#run(
-        `INSERT INTO usage_ledger (at, project_id, task_id, source, model, input_tokens, output_tokens, usd_micros)
-         VALUES (:now, :projectId, :taskId, :source, :model, :inputTokens, :outputTokens, :usdMicros)`,
-        { ...u, now },
+        `INSERT INTO usage_ledger (at, project_id, task_id, source, model, input_tokens, output_tokens, cached_tokens, usd_micros)
+         VALUES (:now, :projectId, :taskId, :source, :model, :inputTokens, :outputTokens, :cachedTokens, :usdMicros)`,
+        { projectId: u.projectId, taskId: u.taskId, source: u.source, model: u.model, inputTokens: u.inputTokens, outputTokens: u.outputTokens, cachedTokens: Math.min(Math.max(0, u.cachedTokens ?? 0), u.inputTokens), usdMicros: u.usdMicros, now },
       );
       if (u.taskId !== null) {
         this.#run('UPDATE tasks SET spent_tokens = spent_tokens + :tokens, spent_usd_micros = spent_usd_micros + :usd WHERE id = :id', {
           id: u.taskId,
-          tokens: u.inputTokens + u.outputTokens,
+          tokens: budgetTokens(u),
           usd: u.usdMicros,
         });
       }
     });
   }
 
+  /** What one task's model calls came to: one row of the usage ledger per call. */
+  taskUsage(taskId: string): { calls: number; inputTokens: number; outputTokens: number; usdMicros: number } {
+    const r = this.#get('SELECT COUNT(*) AS calls, COALESCE(SUM(input_tokens), 0) AS i, COALESCE(SUM(output_tokens), 0) AS o, COALESCE(SUM(usd_micros), 0) AS usd FROM usage_ledger WHERE task_id = :taskId', { taskId })!;
+    return { calls: num(r.calls), inputTokens: num(r.i), outputTokens: num(r.o), usdMicros: num(r.usd) };
+  }
+
+  /** What went through one subscription CLI since a moment, across every project. Its rows are labelled `<cli>:<model>`. */
+  subscriptionUsage(cli: string, since: number): { tokens: number; calls: number } {
+    const r = this.#get(`SELECT COUNT(*) AS calls, COALESCE(SUM(input_tokens + output_tokens), 0) AS t FROM usage_ledger WHERE source = 'bridge' AND model LIKE :prefix AND at >= :since`, { prefix: `${cli}:%`, since })!;
+    return { tokens: num(r.t), calls: num(r.calls) };
+  }
+
+  // -------------------------------------------------------- outside APIs
+
+  /** Connects an API to a project, replacing whatever was connected under that name. `variables` carry their stand-ins. */
+  putExternalApi(api: { projectId: string; name: string; origin: string; createdAt: number }, variables: readonly { variable: string; placeholder: string }[]): void {
+    this.tx(() => {
+      this.#run('DELETE FROM external_apis WHERE project_id = :projectId AND name = :name', { projectId: api.projectId, name: api.name });
+      this.#run('INSERT INTO external_apis (project_id, name, origin, created_at) VALUES (:projectId, :name, :origin, :createdAt)', { ...api });
+      for (const v of variables) this.#run('INSERT INTO external_api_vars (placeholder, project_id, name, variable) VALUES (:placeholder, :projectId, :name, :variable)', { ...v, projectId: api.projectId, name: api.name });
+    });
+  }
+
+  listExternalApis(projectId: string): { projectId: string; name: string; origin: string; createdAt: number; variables: { variable: string; placeholder: string }[] }[] {
+    const vars = this.#all('SELECT name, variable, placeholder FROM external_api_vars WHERE project_id = :projectId ORDER BY rowid', { projectId });
+    return this.#all('SELECT * FROM external_apis WHERE project_id = :projectId ORDER BY created_at, name', { projectId }).map((r) => ({
+      projectId: str(r.project_id),
+      name: str(r.name),
+      origin: str(r.origin),
+      createdAt: num(r.created_at),
+      variables: vars.filter((v) => str(v.name) === str(r.name)).map((v) => ({ variable: str(v.variable), placeholder: str(v.placeholder) })),
+    }));
+  }
+
+  deleteExternalApi(projectId: string, name: string): boolean {
+    return this.#run('DELETE FROM external_apis WHERE project_id = :projectId AND name = :name', { projectId, name }) > 0;
+  }
+
+  /** What a stand-in stands for: the project, the API and the variable. Null for a string that is not one. */
+  findExternalPlaceholder(placeholder: string): { projectId: string; name: string; variable: string; origin: string } | null {
+    const r = this.#get('SELECT v.project_id, v.name, v.variable, a.origin FROM external_api_vars v JOIN external_apis a ON a.project_id = v.project_id AND a.name = v.name WHERE v.placeholder = :placeholder', { placeholder });
+    return r ? { projectId: str(r.project_id), name: str(r.name), variable: str(r.variable), origin: str(r.origin) } : null;
+  }
+
+  // --------------------------------------------------------------- ledger
+
+  insertLedgerEntry(entry: LedgerEntry): void {
+    this.#run('INSERT INTO ledger_entries (id, project_id, task_id, outcome, entry_json, created_at) VALUES (:id, :projectId, :taskId, :outcome, :json, :createdAt) ON CONFLICT (task_id) DO UPDATE SET outcome = excluded.outcome, entry_json = excluded.entry_json, created_at = excluded.created_at', {
+      id: entry.id,
+      projectId: entry.projectId,
+      taskId: entry.taskId,
+      outcome: entry.outcome,
+      json: JSON.stringify(entry),
+      createdAt: entry.createdAt,
+    });
+  }
+
+  /** Newest first. */
+  listLedgerEntries(projectId: string, limit: number): LedgerEntry[] {
+    return this.#all('SELECT entry_json FROM ledger_entries WHERE project_id = :projectId ORDER BY created_at DESC, rowid DESC LIMIT :limit', { projectId, limit }).map((r) => LedgerEntry.parse(JSON.parse(str(r.entry_json))));
+  }
+
   projectTokensSince(projectId: string, since: number): number {
-    return num(this.#get('SELECT COALESCE(SUM(input_tokens + output_tokens), 0) AS t FROM usage_ledger WHERE project_id = :projectId AND at >= :since', { projectId, since })!.t);
+    return num(this.#get('SELECT COALESCE(SUM(input_tokens + output_tokens - (cached_tokens * 9) / 10), 0) AS t FROM usage_ledger WHERE project_id = :projectId AND at >= :since', { projectId, since })!.t);
   }
 
   // ---------------------------------------------------------- checkpoints
@@ -1034,7 +1121,7 @@ function toSession(r: Row): Session {
 }
 
 function toProject(r: Row): Project {
-  return { id: str(r.id), slug: str(r.slug), name: str(r.name), template: str(r.template) as Template, createdAt: num(r.created_at) };
+  return { id: str(r.id), slug: str(r.slug), name: str(r.name), template: str(r.template) as ProjectTemplate, createdAt: num(r.created_at) };
 }
 
 function toSandbox(r: Row): SandboxRow {
@@ -1067,6 +1154,8 @@ function toTask(r: Row): Task {
     baseBranch: nstr(r.base_branch),
     enginePref: nstr(r.engine_pref),
     sessionId: nstr(r.session_id),
+    reviewerPref: nstr(r.reviewer_pref),
+    references: JSON.parse(str(r.references_json)) as string[],
     track: str(r.track) as TaskTrack,
     summary: nstr(r.summary),
     error: nstr(r.error),

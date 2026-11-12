@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import type { AxBlock, DocumentKind, Fact, KnowledgeJob, Origin, ResearchReport, TextFinding } from '@studio-zero/protocol';
 import { ConflictError, NotFoundError } from '../app/errors.ts';
 import type { Config } from '../config.ts';
-import { STUDIO_PROJECT_ID, type KnowledgeRow, type Store } from '../db/Store.ts';
+import { STUDIO_PROJECT_ID, budgetTokens, type KnowledgeRow, type Store } from '../db/Store.ts';
 import type { EventLog } from '../events/EventLog.ts';
 import type { ClaudeClient, LlmScope } from '../llm/ClaudeClient.ts';
 import { errorMessage, newId, type Clock, type Logger } from '../util/core.ts';
@@ -89,7 +89,7 @@ export class KnowledgeService {
   #start(meta: Pick<KnowledgeJob, 'kind' | 'title' | 'origin' | 'scratchId'>, input: Input): KnowledgeJob {
     const job: KnowledgeJob = { id: newId('job'), ...meta, state: 'running', error: null, spentTokens: 0, createdAt: this.#clock(), finishedAt: null };
     this.#store.insertKnowledgeJob(job, input);
-    const scope: LlmScope = { projectId: STUDIO_PROJECT_ID, taskId: job.id, onUsage: (u) => this.#store.addKnowledgeTokens(job.id, u.inputTokens + u.outputTokens) };
+    const scope: LlmScope = { projectId: STUDIO_PROJECT_ID, taskId: job.id, onUsage: (u) => this.#store.addKnowledgeTokens(job.id, budgetTokens(u)) };
     const step = (text: string | null, state: KnowledgeJob['state'] = 'running'): void => void this.#events.emit({ projectId: null, taskId: job.id }, { type: 'knowledge.state', jobId: job.id, state, step: text });
     step('시작');
     const run = this.#run(job, input, scope, step)

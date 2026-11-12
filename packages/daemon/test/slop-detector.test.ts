@@ -57,14 +57,16 @@ const SLOP_REPLY: VisionReply = {
 const at = (template: Template, viewport: VisionInput['viewport'] = 'iphone-15-pro'): Pick<VisionInput, 'viewport' | 'route' | 'template' | 'digest'> => ({ viewport, route: '/', template, digest: SCREEN });
 const rules = (findings: readonly Finding[]): string[] => findings.map((f) => `${f.severity} ${f.rule}`);
 
-test('the review brief: both traps are blockers by name, tactility and type hierarchy are judged, and a redesign plan is owed', () => {
+test('the review brief: the traps are blockers by name, tactility and type hierarchy are judged, and a redesign plan is owed', () => {
   assert.match(VISION_SYSTEM_PROMPT, /^You are reviewing one screen/);
   assert.match(VISION_SYSTEM_PROMPT, /stock clip-art trap \(category "stock-clipart", always a blocker\)[\s\S]*Generic clip-art detected[\s\S]*interactive viewfinder or drop zone/);
   assert.match(VISION_SYSTEM_PROMPT, /landing page on mobile trap \(category "web-layout-on-mobile", always a blocker\)[\s\S]*Web marketing layout detected in a mobile viewport[\s\S]*safe-area app bar[\s\S]*bottom action dock/);
   assert.match(VISION_SYSTEM_PROMPT, /Tactility and affordances \(category "tactility"\)/);
   assert.match(VISION_SYSTEM_PROMPT, /24px\/700 title over a 14px\/500 muted label/);
   assert.match(VISION_SYSTEM_PROMPT, /Every blocker gets one\./);
-  assert.match(VISION_SYSTEM_PROMPT, /a screen caught in either trap scores 60 or more/);
+  assert.match(VISION_SYSTEM_PROMPT, /empty first screen trap \(category "no-living-visual", a blocker on a product's first screen\)[\s\S]*anything there besides text and rules[\s\S]*Nothing to look at on the first screen/);
+  assert.match(VISION_SYSTEM_PROMPT, /a screen caught in any of the three traps scores 60 or more/);
+  assert.match(VISION_SYSTEM_PROMPT, /A large headline, a deep curve or a serif title is not a defect; a habit is\./);
 
   const schema = z.toJSONSchema(VisionReply) as { properties: Record<string, { enum?: string[]; items?: { properties: Record<string, { enum?: string[] }> } }> };
   assert.deepEqual(schema.properties.archetype!.enum, ['mobile-app', 'web-app', 'web-dashboard', 'marketing']);
@@ -148,9 +150,11 @@ test('the verdict: slop fails a clean screen, a trap is an F, and no review mean
   const taste = (score: number): Record<string, number> => ({ hierarchy: score, whitespace: score, typography: score, color: score, copy: score, originality: score, tactility: score });
   const blocker: Finding = { rule: 'contrast/text', category: 'contrast', severity: 'blocker', source: 'dom', viewport: 'iphone-15-pro', route: '/', message: 'm', selector: 'p', bbox: null, fix: 'f', file: null, line: null };
 
-  assert.deepEqual(gradeAudit([], { rubric: taste(9), slopScore: 5 }, 85), { score: 97, passed: true, blockers: 0, majors: 0, minors: 0, grade: 'S' });
-  assert.equal(gradeAudit([], { rubric: taste(8), slopScore: 20 }, 85).grade, 'A');
-  assert.deepEqual([gradeAudit([], { rubric: taste(7), slopScore: SLOP_PASS_MAX }, 85).grade, gradeAudit([], { rubric: taste(7), slopScore: SLOP_PASS_MAX }, 85).passed], ['B', true]);
+  assert.deepEqual(gradeAudit([], { rubric: taste(9), slopScore: 5 }, 85), { score: 95.5, passed: true, blockers: 0, majors: 0, minors: 0, grade: 'S' });
+  assert.equal(gradeAudit([], { rubric: taste(9), slopScore: 20 }, 85).grade, 'A');
+  assert.deepEqual([gradeAudit([], { rubric: taste(8), slopScore: SLOP_PASS_MAX }, 85).grade, gradeAudit([], { rubric: taste(8), slopScore: SLOP_PASS_MAX }, 85).passed], ['B', true]);
+  // Measured clean and judged merely decent: tidiness no longer carries it.
+  assert.deepEqual([gradeAudit([], { rubric: taste(7), slopScore: SLOP_PASS_MAX }, 85).grade, gradeAudit([], { rubric: taste(7), slopScore: SLOP_PASS_MAX }, 85).passed], ['C', false]);
 
   const generic = gradeAudit([], { rubric: taste(9), slopScore: SLOP_PASS_MAX + 1 }, 85);
   assert.deepEqual([generic.passed, generic.grade, generic.score > 85], [false, 'C', true], 'a high number does not carry a templated screen over the line');
@@ -250,7 +254,7 @@ test('a web product is still judged at all three sizes, and a screen that earns 
   const vision = fakeVision(READY, () => good);
   const { report } = await auditWith(sampleProject(), vision.bridge);
   assert.deepEqual(vision.calls.map((c) => c.viewport), ['iphone-15-pro', 'ipad-pro-11', 'desktop-1440']);
-  assert.deepEqual([report.visionReviewed, report.passed, report.grade, report.score, report.slopScore], [true, true, 'S', 96.8, 6]);
+  assert.deepEqual([report.visionReviewed, report.passed, report.grade, report.score, report.slopScore], [true, true, 'S', 95.2, 6]);
   assert.deepEqual(auditViewports('mobile-expo', ['desktop-1440']), ['desktop-1440'], 'an owner who configured only desktop still gets an audit');
 });
 

@@ -22,7 +22,7 @@ const SEARCH_RUN = [
 test('subscription brain: the event stream gives the answer, the usage and what each search returned', () => {
   const run = parse(SEARCH_RUN, 0, '');
   assert.equal(run.text, 'Tauri is at tauri.app.');
-  assert.deepEqual(run.usage, { inputTokens: 1502, outputTokens: 75 });
+  assert.deepEqual(run.usage, { inputTokens: 1502, outputTokens: 75, cachedTokens: 500 });
   assert.deepEqual(run.searches, [[{ url: 'https://tauri.app/', title: 'Tauri' }, { url: 'https://v2.tauri.app/blog/', title: 'Tauri 2.0' }]]);
   assert.deepEqual(parse(result({ result: '{"n":2}', structured_output: { n: 2 } }), 0, '').structured, { n: 2 });
 
@@ -64,7 +64,7 @@ test('with no API key the daemon\'s own calls go to the subscription CLI as a to
     assert.ok(!call.args.join(' ').includes('SECRET-PROMPT-TEXT'), 'the prompt is on stdin, not in the argument list');
     assert.match(call.cwd!, /sz-brain-/);
     assert.deepEqual(Object.keys(call.env!).filter((k) => /KEY|TOKEN|ANTHROPIC/.test(k)), [], 'no provider credential from the daemon\'s environment reaches the CLI');
-    assert.equal(store.projectTokensSince('prj_studio', 0), 1577, 'subscription tokens count against the budget');
+    assert.equal(store.projectTokensSince('prj_studio', 0), 1127, 'subscription tokens count against the budget, the 500 re-read from cache at a tenth');
 
     // Images go in as a stream-json message; a schema mismatch is still caught here.
     answer = result({ result: '', structured_output: { summary: 1 } });

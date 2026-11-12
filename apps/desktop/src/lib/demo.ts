@@ -1,4 +1,4 @@
-import type { Approval, AuditReport, AxBlock, Checkpoint, Eval, EventBody, EventEnvelope, FileEntry, KnowledgeJob, Lesson, MethodName, ParamsOf, Project, ProposalCard, ResultOf, SandboxInfo, ScratchEntry, Scratchpad, Session, Task } from '@studio-zero/protocol';
+import type { Approval, AuditReport, AxBlock, Checkpoint, Eval, EventBody, EventEnvelope, FileEntry, KnowledgeJob, LedgerEntry, Lesson, MethodName, ParamsOf, Project, ProposalCard, ResultOf, SandboxInfo, ScratchEntry, Scratchpad, Session, SubscriptionQuota, Task } from '@studio-zero/protocol';
 import { matchesFilter } from '@studio-zero/protocol';
 import type { Backend } from './backend.ts';
 
@@ -11,13 +11,26 @@ const T0 = Date.UTC(2026, 10, 12, 1, 30);
 const min = (n: number): number => T0 + n * 60_000;
 
 const projects: Project[] = [
+  // The studio's own repository, pinned ahead of everything the owner made.
+  { id: 'prj_core', slug: 'studio-zero-core', name: 'Studio Zero Core', template: 'studio-core', createdAt: min(-30) },
   { id: 'prj_ledger', slug: 'ledger', name: 'Ledger', template: 'web-vite-react', createdAt: min(-600) },
   { id: 'prj_atlas', slug: 'atlas', name: 'Atlas 모바일', template: 'mobile-expo', createdAt: min(-300) },
+  { id: 'prj_tide', slug: 'tide', name: 'Tide 정산', template: 'web-vite-react', createdAt: min(-70) },
 ];
 
-const baseTask = { projectId: 'prj_ledger', origin: 'desktop', engine: 'native-claude', model: 'claude-opus-5-5', budgetTokens: 2_000_000, error: null, baseBranch: null, enginePref: null, sessionId: null, track: 'full' } as const;
+const baseTask = { projectId: 'prj_ledger', origin: 'desktop', engine: 'native-claude', model: 'claude-opus-5-5', budgetTokens: 2_000_000, error: null, baseBranch: null, enginePref: null, sessionId: null, reviewerPref: null, references: [] as string[], track: 'full' } as const;
 const sessions: Session[] = [{ id: 'ses_refactor', projectId: 'prj_ledger', name: 'refactor/dates', createdAt: min(-241) }];
 const tasks: Task[] = [
+  {
+    // A design task that ended: documents written, three first screens drawn, the build waiting for the owner's pick.
+    ...baseTask, id: 'tsk_tide_design', projectId: 'prj_tide', engine: 'claude-code', model: 'opus', kind: 'ideate', prompt: '프리랜서 셋이 같이 쓰는 정산 도구. 누가 누구에게 얼마를 줘야 하는지 한눈에 보여야 한다.', state: 'succeeded', phase: null, branch: 'sz/tsk_tide_design',
+    spentTokens: 318_000, spentUsdMicros: 0, baseCheckpointId: null, summary: '설계 문서 네 개와 첫 화면 시안 세 개를 만들었습니다. 문서는 A안을 기준으로 썼습니다.', createdAt: min(-66), startedAt: min(-66), finishedAt: min(-58),
+  },
+  {
+    // A change to the studio itself: verified in its sandbox, copied out as a feature branch, waiting for the owner's merge.
+    ...baseTask, id: 'tsk_core_quota', projectId: 'prj_core', engine: 'claude-code', model: 'opus', kind: 'build', prompt: '워크벤치 하단에 구독 현황 팝오버를 추가해줘', state: 'succeeded', phase: null, branch: 'sz/tsk_core_quota',
+    spentTokens: 684_000, spentUsdMicros: 0, baseCheckpointId: null, summary: '하단 상태바와 팝오버를 추가했습니다. 컨테이너 엔진이 필요한 테스트는 이 샌드박스에서 건너뛰었습니다.', createdAt: min(-44), startedAt: min(-44), finishedAt: min(-31),
+  },
   {
     // Done and committed, waiting for a design reviewer whose usage limit has to lift first.
     ...baseTask, id: 'tsk_atlas_home', projectId: 'prj_atlas', engine: 'claude-code', model: 'opus', kind: 'build', prompt: '지도 홈 화면을 모바일 키트로 다시 짜줘', state: 'suspended', phase: null, branch: 'sz/tsk_atlas_home',
@@ -40,7 +53,7 @@ const tasks: Task[] = [
 const approvals: Approval[] = [
   {
     id: 'apr_budget', projectId: 'prj_ledger', taskId: 'tsk_detail', actionKind: 'task.extend-budget', actionHash: 'f'.repeat(64),
-    summary: '작업 tsk_detail이(가) 토큰 예산을 다 썼습니다. 2,000,000 토큰을 더 줄까요?', state: 'pending', requestedAt: min(-1), expiresAt: min(59), resolvedAt: null, resolvedVia: null,
+    summary: '작업 tsk_detail이(가) 토큰 예산을 다 썼습니다 (지금까지 2,004,300 토큰). 여기서 2,000,000 토큰을 더 쓰게 할까요?', state: 'pending', requestedAt: min(-1), expiresAt: min(59), resolvedAt: null, resolvedVia: null,
   },
 ];
 
@@ -50,6 +63,10 @@ const bodies: EventBody[] = [
   { type: 'route.decided', taskKind: 'build', engine: 'native-claude', model: 'claude-opus-5-5', effort: 'high', considered: [{ engine: 'native-claude', available: true, reason: 'Anthropic API key present in vault' }] },
   { type: 'checkpoint.created', checkpointId: 'ckp_b', label: 'before build tsk_detail' },
   { type: 'plan.created', summary: '상세 화면 아래쪽에 결제 이력 섹션을 추가합니다. 이력이 없을 때는 다음 행동을 안내합니다.', steps: ['결제 이력 타입과 예시 데이터를 src/data/payments.ts에 정의', 'InvoiceDetail에 이력 섹션 추가', '빈 상태 문구 작성'], auditRoutes: ['/invoices/1'], appliedLessonIds: ['les_tokens'] },
+  { type: 'reference.captured', url: 'https://usekuroko.com/', ok: true, artifactId: 'art_ref', detail: 'Kuroko: 장부를 넘기는 가장 조용한 방법' },
+  { type: 'gate.result', gate: 'anchor', name: '.studio-zero/anchor-table.json', passed: true, exitCode: null, durationMs: 30, detail: '' },
+  { type: 'anchor.committed', author: 'planner', idea: '밀린 돈이 며칠째인지가 금액보다 먼저 보인다.', directions: ['입금이 쌓이는 타임라인 한 줄을 화면 가운데 두는 구성', '청구서 한 장을 펼쳐 놓고 그 위에 입금 도장이 찍히는 구성'], livingVisual: '고객 12곳의 실제 입금 기록으로 움직이는 타임라인' },
+  { type: 'review.completed', stage: 'plan', reviewer: 'codex', verdict: 'noted', points: ['이력이 회색 줄의 반복으로 굳어 있습니다. 가장 최근 입금 한 건을 크게 두세요.', '부분 입금과 환불 상태가 계획에 없습니다.'], reason: null, durationMs: 41_000 },
   { type: 'task.phase', phase: 'execute', round: 1 },
   { type: 'tool.call', callId: 'call_1', tool: 'read_file', input: 'src/routes/InvoiceDetail.tsx' },
   { type: 'tool.result', callId: 'call_1', ok: true, exitCode: null, durationMs: 41, preview: '     1\timport { useParams } from "react-router";' },
@@ -81,7 +98,41 @@ const bodies: EventBody[] = [
   { type: 'approval.requested', approvalId: 'apr_budget', actionKind: 'task.extend-budget', summary: approvals[0]!.summary, expiresAt: min(59) },
   { type: 'task.state', state: 'awaiting_approval', error: null },
 ];
-const events: EventEnvelope[] = bodies.map((body, i) => ({ seq: 100 + i, at: min(-18) + i * 35_000, projectId: 'prj_ledger', taskId: 'tsk_detail', body }));
+const designBodies: EventBody[] = [
+  { type: 'task.state', state: 'running', error: null },
+  { type: 'task.phase', phase: 'execute', round: 1 },
+  { type: 'tool.call', callId: 'tide_1', tool: 'write_file', input: 'docs/prd.md (4210 chars)' },
+  { type: 'tool.result', callId: 'tide_1', ok: true, exitCode: null, durationMs: 44, preview: 'wrote docs/prd.md' },
+  { type: 'tool.call', callId: 'tide_2', tool: 'write_file', input: 'docs/mockups/a.html (9120 chars)' },
+  { type: 'tool.result', callId: 'tide_2', ok: true, exitCode: null, durationMs: 51, preview: 'wrote docs/mockups/a.html' },
+  { type: 'agent.text', text: '설계 문서 네 개와 첫 화면 시안 세 개를 만들었습니다. 문서는 A안을 기준으로 썼습니다.' },
+  {
+    type: 'mockups.rendered',
+    options: [
+      { file: 'docs/mockups/a.html', title: '흐름 한 줄', idea: '세 사람 사이에 오가야 할 돈을 화살표 한 줄로 먼저 보여 주고, 내역은 그 아래에 둡니다.', artifactId: 'art_mock_a', width: 1440, height: 900 },
+      { file: 'docs/mockups/b.html', title: '이번 달 영수증', idea: '이번 달 지출을 영수증 한 장처럼 펼쳐 놓고, 맨 아래 합계에서 각자 몫이 갈립니다.', artifactId: 'art_mock_b', width: 1440, height: 900 },
+      { file: 'docs/mockups/c.html', title: '사람별 저울', idea: '사람마다 낸 돈과 쓴 돈을 저울처럼 나란히 놓아 기운 쪽이 줄 사람임을 보입니다.', artifactId: 'art_mock_c', width: 1440, height: 900 },
+    ],
+  },
+  { type: 'task.state', state: 'succeeded', error: null },
+];
+const events: EventEnvelope[] = [
+  ...bodies.map((body, i): EventEnvelope => ({ seq: 100 + i, at: min(-18) + i * 35_000, projectId: 'prj_ledger', taskId: 'tsk_detail', body })),
+  ...designBodies.map((body, i): EventEnvelope => ({ seq: 40 + i, at: min(-66) + i * 50_000, projectId: 'prj_tide', taskId: 'tsk_tide_design', body })),
+];
+
+/**
+ * Three flat drawings that stand in for a design task's mock-ups. Each is arranged differently, because that is
+ * what the real ones are for: a row of flows, one long sheet, columns side by side.
+ */
+function fakeMockup(which: 'a' | 'b' | 'c'): string {
+  const shapes = {
+    a: `<rect x="96" y="96" width="420" height="44" fill="#2b2b2d"/><rect x="96" y="250" width="200" height="200" rx="100" fill="#d7d7d9"/><rect x="620" y="250" width="200" height="200" rx="100" fill="#d7d7d9"/><rect x="1144" y="250" width="200" height="200" rx="100" fill="#d7d7d9"/><rect x="316" y="338" width="284" height="24" fill="#2b2b2d"/><rect x="840" y="338" width="284" height="24" fill="#8a8a8e"/>${[0, 1, 2].map((i) => `<rect x="96" y="${560 + i * 84}" width="1248" height="60" fill="#e9e9ea"/>`).join('')}`,
+    b: `<rect x="460" y="60" width="520" height="780" fill="#ffffff" stroke="#c9c9cc" stroke-width="2"/><rect x="508" y="112" width="260" height="36" fill="#2b2b2d"/>${[0, 1, 2, 3, 4, 5].map((i) => `<rect x="508" y="${208 + i * 68}" width="${300 - (i % 3) * 40}" height="18" fill="#8a8a8e"/><rect x="852" y="${208 + i * 68}" width="80" height="18" fill="#2b2b2d"/>`).join('')}<rect x="508" y="640" width="424" height="2" fill="#2b2b2d"/><rect x="508" y="680" width="140" height="56" fill="#d7d7d9"/><rect x="664" y="680" width="120" height="56" fill="#d7d7d9"/><rect x="800" y="680" width="132" height="56" fill="#2b2b2d"/>`,
+    c: `<rect x="96" y="84" width="340" height="40" fill="#2b2b2d"/>${[0, 1, 2].map((i) => `<rect x="${96 + i * 432}" y="${220 + i * 60}" width="384" height="${560 - i * 60}" fill="#e9e9ea"/><rect x="${128 + i * 432}" y="${252 + i * 60}" width="160" height="28" fill="#2b2b2d"/><rect x="${128 + i * 432}" y="${320 + i * 60}" width="${300 - i * 70}" height="120" fill="#8a8a8e"/><rect x="${128 + i * 432}" y="${470 + i * 60}" width="${180 + i * 60}" height="120" fill="#d7d7d9"/>`).join('')}`,
+  }[which];
+  return `data:image/svg+xml;utf8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 900" width="1440" height="900"><rect width="100%" height="100%" fill="#fbfbfb"/>${shapes}</svg>`)}`;
+}
 
 /** A flat drawing that stands in for a captured screen. Greys only: the proof marks are what should read. */
 function fakeScreen(width: number, height: number): string {
@@ -241,6 +292,48 @@ const fileEntries: FileEntry[] = [
   ...Object.entries(fileBodies).map(([path, body]): FileEntry => ({ path, name: path.slice(path.lastIndexOf('/') + 1), type: 'file', size: new TextEncoder().encode(body).length, mtime: min(-12) })),
 ].sort((a, b) => (a.type === b.type ? a.name.localeCompare(b.name) : a.type === 'directory' ? -1 : 1));
 
+const receipt = (over: Partial<LedgerEntry> & Pick<LedgerEntry, 'id' | 'taskId' | 'createdAt'>): LedgerEntry => ({
+  projectId: 'prj_ledger', taskKind: 'build', track: 'full', outcome: 'succeeded', engine: 'native-claude',
+  code: { compilerErrors: 0, firstCompilerErrors: 0, verifyRounds: 1, checksPassed: 2, checksFailed: [], buildMs: 9800, bundleBytes: 188_600 },
+  design: { grade: 'A', score: 91, slopScore: 18, livingVisual: true, contrastAaa: 1, touchTargets: 1, textSlop: 0 },
+  cost: { modelCalls: 14, inputTokens: 368_000, outputTokens: 44_800, usdMicros: 1_890_000, wallMs: 14 * 60_000 },
+  review: { plan: 'codex', acceptance: 'codex', verdict: 'pass' },
+  delta: [], proof: '',
+  ...over,
+});
+const ledger: LedgerEntry[] = [
+  receipt({
+    id: 'led_3', taskId: 'tsk_list', createdAt: min(-81),
+    code: { compilerErrors: 0, firstCompilerErrors: 3, verifyRounds: 2, checksPassed: 2, checksFailed: [], buildMs: 9800, bundleBytes: 188_600 },
+    design: { grade: 'S', score: 96, slopScore: 8, livingVisual: true, contrastAaa: 1, touchTargets: 1, textSlop: 0 },
+    review: { plan: 'codex', acceptance: 'codex', verdict: 'patch' },
+    delta: [
+      { metric: '타입 에러', before: '3', after: '0', better: true },
+      { metric: '디자인 등급', before: 'B', after: 'S', better: true },
+      { metric: '텍스트 슬롭', before: '4건', after: '0건 클린', better: true },
+      { metric: '번들', before: '212KB', after: '184KB', better: true },
+    ],
+    proof: '타입 에러 3→0, 디자인 등급 B→S, 텍스트 슬롭 4건→0건 클린, 번들 212KB→184KB',
+  }),
+  receipt({
+    id: 'led_2', taskId: 'tsk_refactor', createdAt: min(-231), taskKind: 'refactor', outcome: 'failed', engine: 'claude-code',
+    code: { compilerErrors: 3, firstCompilerErrors: 5, verifyRounds: 4, checksPassed: 1, checksFailed: ['unit-tests'], buildMs: null, bundleBytes: null },
+    design: { grade: 'B', score: 86, slopScore: 27, livingVisual: true, contrastAaa: 0.94, touchTargets: 1, textSlop: 4 },
+    cost: { modelCalls: 9, inputTokens: 88_000, outputTokens: 8200, usdMicros: 0, wallMs: 9 * 60_000 },
+    review: { plan: null, acceptance: null, verdict: null },
+    delta: [{ metric: '타입 에러', before: '0', after: '3', better: false }, { metric: '검증 회차', before: '1회', after: '4회', better: false }],
+    proof: '타입 에러 0→3, 검증 회차 1회→4회',
+  }),
+  receipt({ id: 'led_1', taskId: 'tsk_first', createdAt: min(-420), track: 'fast', design: { grade: 'B', score: 85, slopScore: 30, livingVisual: false, contrastAaa: 0.9, touchTargets: 0.92, textSlop: 6 }, review: { plan: null, acceptance: null, verdict: null } }),
+];
+
+const quota: SubscriptionQuota[] = [
+  { id: 'claude-code', connected: true, detail: '2.1.322 (Claude Code)', state: 'ok', resetsAt: null, limitedSince: null, lastAnswerAt: min(-2), recent: { tokens: 1_840_000, calls: 61 }, week: { tokens: 12_400_000, calls: 388 } },
+  { id: 'codex', connected: true, detail: 'codex-cli 0.153.4', state: 'limited', resetsAt: Date.now() + 134 * 60_000, limitedSince: min(-12), lastAnswerAt: min(-40), recent: { tokens: 420_000, calls: 14 }, week: { tokens: 2_900_000, calls: 96 } },
+  { id: 'antigravity', connected: false, detail: 'agy is not installed', state: 'unknown', resetsAt: null, limitedSince: null, lastAnswerAt: null, recent: { tokens: 0, calls: 0 }, week: { tokens: 0, calls: 0 } },
+  { id: 'cursor', connected: true, detail: '2026.11.11', state: 'unknown', resetsAt: null, limitedSince: null, lastAnswerAt: null, recent: { tokens: 0, calls: 0 }, week: { tokens: 0, calls: 0 } },
+];
+
 type Handlers = { [M in MethodName]?: (params: ParamsOf<M>) => ResultOf<M> };
 
 const handlers: Handlers = {
@@ -255,7 +348,15 @@ const handlers: Handlers = {
     ],
     brain: 'api',
   }),
-  'projects.list': () => ({ projects, live: [{ projectId: 'prj_ledger', sandbox: 'running', busy: true }, { projectId: 'prj_atlas', sandbox: 'stopped', busy: false }] }),
+  'projects.list': () => ({ projects, live: [{ projectId: 'prj_core', sandbox: 'running', busy: false }, { projectId: 'prj_ledger', sandbox: 'running', busy: true }, { projectId: 'prj_atlas', sandbox: 'stopped', busy: false }, { projectId: 'prj_tide', sandbox: 'stopped', busy: false }] }),
+  'ledger.list': (p) => ({ entries: ledger.filter((e) => e.projectId === p.projectId) }),
+  'external.list': (p) => ({ apis: p.projectId === 'prj_ledger' ? [{ projectId: 'prj_ledger', name: 'tosspay', origin: 'https://api.tosspayments.com', variables: ['SECRET_KEY'], createdAt: min(-200) }] : [] }),
+  'power.get': () => ({ mode: 'system', supported: true }),
+  'quota.get': () => ({ at: Date.now(), subscriptions: quota }),
+  'selfhost.status': () => ({
+    available: true, detail: 'tasks start from main at 9f3f205a1c3e', repoPath: '/Users/owner/studio-zero', baseBranch: 'main', head: '9f3f205a1c3e', clean: true, projectId: 'prj_core',
+    pending: [{ taskId: 'tsk_core_quota', branch: 'feature/quota-popover-quota0', files: 6, insertions: 214, deletions: 9 }],
+  }),
   'sessions.list': (p) => ({ sessions: sessions.filter((s) => s.projectId === p.projectId) }),
   'files.list': (p) => ({ entries: p.projectId === 'prj_ledger' ? fileEntries.filter((e) => parentOf(e.path) === (p.path ?? '.')) : [], truncated: false }),
   'files.read': (p) => {
@@ -343,7 +444,7 @@ export function demoBackend(): Backend {
         },
       };
     },
-    artifactUrl: async (id) => (id === 'art_tablet' ? fakeScreen(834, 1194) : id === 'art_desktop' ? fakeScreen(1440, 900) : fakeScreen(393, 659)),
+    artifactUrl: async (id) => (id === 'art_mock_a' ? fakeMockup('a') : id === 'art_mock_b' ? fakeMockup('b') : id === 'art_mock_c' ? fakeMockup('c') : id === 'art_tablet' ? fakeScreen(834, 1194) : id === 'art_desktop' ? fakeScreen(1440, 900) : fakeScreen(393, 659)),
     close: () => undefined,
   };
 }

@@ -339,6 +339,52 @@ const migrations: string[] = [
   ALTER TABLE tasks ADD COLUMN session_id TEXT REFERENCES sessions(id) ON DELETE SET NULL;
   ALTER TABLE tasks ADD COLUMN track TEXT NOT NULL DEFAULT 'full';
   `,
+
+  // 6: the ledger (one receipt per finished task), the owner's choice of cross-checker, and reference pages.
+  `
+  CREATE TABLE ledger_entries (
+    id          TEXT PRIMARY KEY,
+    project_id  TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    task_id     TEXT NOT NULL UNIQUE,
+    outcome     TEXT NOT NULL,
+    entry_json  TEXT NOT NULL,
+    created_at  INTEGER NOT NULL
+  ) STRICT;
+  CREATE INDEX ledger_by_project ON ledger_entries(project_id, created_at);
+  ALTER TABLE tasks ADD COLUMN reviewer_pref TEXT;
+  ALTER TABLE tasks ADD COLUMN references_json TEXT NOT NULL DEFAULT '[]';
+  `,
+
+  // 7: publishing a document used to close its note, which left no way to build from the plan just written up.
+  // Notes closed that way (promoted, with no project) are open again; they were ready when they were published.
+  `
+  UPDATE scratchpads SET state = 'ready' WHERE state = 'promoted' AND project_id IS NULL;
+  `,
+
+  // 8: outside APIs a project's code may call through the gateway. The keys are in the Keychain; what is here
+  // is where each API lives and the stand-in a sandbox holds for each of its variables. A stand-in is not a secret.
+  `
+  CREATE TABLE external_apis (
+    project_id  TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    name        TEXT NOT NULL,
+    origin      TEXT NOT NULL,
+    created_at  INTEGER NOT NULL,
+    PRIMARY KEY (project_id, name)
+  ) STRICT;
+  CREATE TABLE external_api_vars (
+    placeholder  TEXT PRIMARY KEY,
+    project_id   TEXT NOT NULL,
+    name         TEXT NOT NULL,
+    variable     TEXT NOT NULL,
+    UNIQUE (project_id, name, variable),
+    FOREIGN KEY (project_id, name) REFERENCES external_apis(project_id, name) ON DELETE CASCADE
+  ) STRICT;
+  `,
+  // 9: how much of a call's input was a re-read from the prompt cache. Budgets charge that part at a tenth.
+  // Rows from before this are counted as they were then: in full.
+  `
+  ALTER TABLE usage_ledger ADD COLUMN cached_tokens INTEGER NOT NULL DEFAULT 0;
+  `,
 ];
 
 export function migrate(db: DatabaseSync): void {

@@ -156,10 +156,10 @@ test('gateway: the sandbox token is swapped for the real key on the host, metere
     assert.equal(seen.headers.authorization, undefined);
     assert.ok(!JSON.stringify(seen).includes(sandboxToken), 'the sandbox token never leaves the machine');
 
-    // Metered into the ledger: 120 input + 30 cache read, 45 output.
-    assert.equal(t.daemon.store.projectTokensSince(project.id, 0), 195);
+    // Metered into the ledger: 120 input + 30 cache read, 45 output. Toward the budget the cache read counts a tenth.
+    assert.equal(t.daemon.store.projectTokensSince(project.id, 0), 168);
     const usage = t.daemon.events.history({ projectId: project.id }, 0, 100).find((e) => e.body.type === 'usage')!.body;
-    assert.deepEqual(usage, { type: 'usage', source: 'gateway', model: 'claude-opus-5-5', inputTokens: 150, outputTokens: 45, usdMicros: 0 });
+    assert.deepEqual(usage, { type: 'usage', source: 'gateway', model: 'claude-opus-5-5', inputTokens: 150, cachedTokens: 30, outputTokens: 45, usdMicros: 0 });
 
     // 195 of 300 used; one more request passes the gate and lands the project over budget; the next is refused.
     assert.equal((await post('/anthropic/v1/messages', sandboxToken).then(async (r) => (await r.text(), r))).status, 200);
@@ -178,19 +178,19 @@ test('gateway: the sandbox token is swapped for the real key on the host, metere
 test('usage metering understands Anthropic and OpenAI response shapes', () => {
   const sse = new UsageMeter(true);
   sse.feed(Buffer.from('data: {"type":"response.completed","response":{"usage":{"input_tokens":10,"output_tokens":4}}}\n\ndata: [DONE]\n'));
-  assert.deepEqual(sse.finish(), { inputTokens: 10, outputTokens: 4 });
+  assert.deepEqual(sse.finish(), { inputTokens: 10, outputTokens: 4, cachedTokens: 0 });
 
   const split = new UsageMeter(true);
   const payload = 'data: {"choices":[],"usage":{"prompt_tokens":7,"completion_tokens":3}}\n';
   split.feed(Buffer.from(payload.slice(0, 20)));
   split.feed(Buffer.from(payload.slice(20)));
-  assert.deepEqual(split.finish(), { inputTokens: 7, outputTokens: 3 }, 'events split across chunks are reassembled');
+  assert.deepEqual(split.finish(), { inputTokens: 7, outputTokens: 3, cachedTokens: 0 }, 'events split across chunks are reassembled');
 
   const json = new UsageMeter(false);
   json.feed(Buffer.from('{"id":"msg_1","usage":{"input_tokens":5,"cache_creation_input_tokens":2,"output_tokens":9}}'));
-  assert.deepEqual(json.finish(), { inputTokens: 7, outputTokens: 9 });
+  assert.deepEqual(json.finish(), { inputTokens: 7, outputTokens: 9, cachedTokens: 0 });
 
   const garbage = new UsageMeter(false);
   garbage.feed(Buffer.from('<html>502</html>'));
-  assert.deepEqual(garbage.finish(), { inputTokens: 0, outputTokens: 0 });
+  assert.deepEqual(garbage.finish(), { inputTokens: 0, outputTokens: 0, cachedTokens: 0 });
 });

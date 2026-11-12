@@ -10,7 +10,7 @@ export const Action = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('llm.request'), projectId: z.string(), taskId: z.string().nullable(), model: z.string() }),
 
   z.object({ kind: z.literal('project.delete'), projectId: z.string(), deleteWorkspace: z.boolean() }),
-  z.object({ kind: z.literal('task.extend-budget'), projectId: z.string(), taskId: z.string(), addTokens: z.number().int().positive() }),
+  z.object({ kind: z.literal('task.extend-budget'), projectId: z.string(), taskId: z.string(), addTokens: z.number().int().positive(), spentTokens: z.number().int().nonnegative().optional() }),
   z.object({ kind: z.literal('task.steer'), projectId: z.string(), taskId: z.string() }),
   z.object({ kind: z.literal('checkpoint.fork'), projectId: z.string(), checkpointId: z.string() }),
   z.object({ kind: z.literal('scratch.promote'), scratchId: z.string(), target: z.enum(['build', 'document']) }),
@@ -27,6 +27,17 @@ export const Action = z.discriminatedUnion('kind', [
   // One question to another vendor's model through its subscription CLI: it spends the owner's quota there.
   z.object({ kind: z.literal('advisor.ask'), projectId: z.string(), advisor: z.enum(['codex', 'gemini']) }),
 
+  // Opening a page the owner named as a design reference. It is opened inside the QA browser container, never
+  // on this Mac, and only a public https page is ever opened: `url` is checked again by the rule.
+  z.object({ kind: z.literal('reference.capture'), projectId: z.string(), url: z.string() }),
+  // Holding this Mac awake (or letting it sleep again).
+  z.object({ kind: z.literal('power.set'), mode: z.enum(['off', 'system', 'display']) }),
+  // Copying a finished Core task's branch out of its sandbox into the studio's own checkout, as a new feature
+  // branch. Adds a ref; changes no file and no existing branch.
+  z.object({ kind: z.literal('selfhost.export'), projectId: z.string(), branch: z.string() }),
+  // Moving the base branch of the studio's own checkout forward to a branch a Core task produced.
+  z.object({ kind: z.literal('selfhost.merge'), projectId: z.string(), branch: z.string() }),
+
   z.object({ kind: z.literal('checkpoint.rollback'), projectId: z.string(), checkpointId: z.string() }),
   z.object({ kind: z.literal('git.merge'), projectId: z.string(), branch: z.string(), into: z.string() }),
 
@@ -42,6 +53,12 @@ export const Action = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('mcp.search'), projectId: z.string() }),
   z.object({ kind: z.literal('mcp.call'), projectId: z.string(), serverId: z.string(), host: z.string(), tool: z.string() }),
   z.object({ kind: z.literal('mcp.configure'), serverId: z.string(), op: z.enum(['add', 'remove', 'revoke']) }),
+
+  // Connecting or disconnecting an outside API and its key for a project.
+  z.object({ kind: z.literal('external.configure'), projectId: z.string(), name: z.string(), op: z.enum(['set', 'remove']) }),
+  // A call from a project's own code to an outside API, with the owner's key put in by the gateway. `host` is
+  // where the stored connection says it goes.
+  z.object({ kind: z.literal('external.call'), projectId: z.string(), name: z.string(), host: z.string() }),
 
   z.object({ kind: z.literal('vault.write'), credentialId: z.string() }),
   z.object({ kind: z.literal('vault.delete'), credentialId: z.string() }),
@@ -77,7 +94,7 @@ export function describeAction(action: Action): string {
     case 'project.delete':
       return `프로젝트 ${action.projectId}${action.deleteWorkspace ? '와 워크스페이스를' : '를'} 삭제`;
     case 'task.extend-budget':
-      return `작업 ${action.taskId}이(가) 토큰 예산을 다 썼습니다. ${n(action.addTokens)} 토큰을 더 줄까요?`;
+      return `작업 ${action.taskId}이(가) 토큰 예산을 다 썼습니다${action.spentTokens === undefined ? '' : ` (지금까지 ${n(action.spentTokens)} 토큰)`}. 여기서 ${n(action.addTokens)} 토큰을 더 쓰게 할까요?`;
     case 'task.steer':
       return `작업 ${action.taskId}에 방향 전달`;
     case 'checkpoint.fork':
@@ -98,6 +115,14 @@ export function describeAction(action: Action): string {
       return `프로젝트 ${action.projectId}의 샌드박스에서 터미널 열기`;
     case 'advisor.ask':
       return `${action.advisor === 'codex' ? 'Codex' : 'Gemini'}에게 의견 묻기`;
+    case 'reference.capture':
+      return `레퍼런스 페이지 ${action.url.slice(0, 120)}을(를) QA 브라우저 컨테이너에서 열어 측정`;
+    case 'power.set':
+      return action.mode === 'off' ? '이 Mac의 잠자기 방지 해제' : action.mode === 'system' ? '이 Mac이 잠들지 않게 유지 (화면은 꺼질 수 있음)' : '이 Mac의 화면을 켜 둔 채 유지';
+    case 'selfhost.export':
+      return `Studio Zero 저장소에 작업 결과를 브랜치 "${action.branch}"(으)로 내보내기`;
+    case 'selfhost.merge':
+      return `Studio Zero 저장소에 브랜치 "${action.branch}" 병합`;
     case 'checkpoint.rollback':
       return `워크스페이스를 체크포인트 ${action.checkpointId}(으)로 되돌리기`;
     case 'git.merge':
@@ -118,6 +143,10 @@ export function describeAction(action: Action): string {
         : `외부 도구 서버 ${action.serverId} (${action.host})의 "${action.tool}" 도구를 프로젝트 ${action.projectId}에서 쓰도록 허용할까요? 승인하면 이 프로젝트에서는 이 도구를 다시 묻지 않습니다.`;
     case 'mcp.configure':
       return `외부 도구 서버 ${action.serverId} ${action.op === 'add' ? '추가' : action.op === 'remove' ? '삭제' : '허용 취소'}`;
+    case 'external.configure':
+      return `프로젝트 ${action.projectId}의 외부 API "${action.name}" ${action.op === 'set' ? '연결' : '연결 해제'}`;
+    case 'external.call':
+      return `프로젝트 ${action.projectId}가 외부 API "${action.name}" (${action.host}) 호출`;
     case 'vault.write':
       return `자격 증명 ${action.credentialId} 저장`;
     case 'vault.delete':

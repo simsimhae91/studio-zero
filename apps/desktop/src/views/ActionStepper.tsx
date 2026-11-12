@@ -4,6 +4,8 @@ import type { Step } from '../lib/steps.ts';
 import { Button } from '../ui.tsx';
 
 const stateWord = { done: '완료', active: '진행 중', failed: '실패' } as const;
+/** Steps whose subject is a sentence, not a command or a path. */
+const WORDED: ReadonlySet<Step['kind']> = new Set(['verify', 'anchor', 'review', 'reference']);
 
 function Mark({ state }: { state: Step['state'] }) {
   return (
@@ -40,7 +42,7 @@ function StepRow({ step, onAudit }: { step: Step; onAudit: () => void }) {
         <Mark state={step.state} />
         <span className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-3">
           <span className={`text-sm font-medium ${step.state === 'failed' ? 'text-danger' : 'text-fg'}`}>{step.title}</span>
-          {step.detail && !prose ? <span className={`line-clamp-1 min-w-0 break-all text-sm text-fg-muted ${step.kind === 'verify' ? '' : 'font-mono'}`}>{step.detail}</span> : null}
+          {step.detail && !prose ? <span className={`line-clamp-1 min-w-0 break-all text-sm text-fg-muted ${WORDED.has(step.kind) ? '' : 'font-mono'}`}>{step.detail}</span> : null}
         </span>
         {expandable ? <ChevronDown className={`size-4 shrink-0 text-fg-muted ${open ? 'rotate-180' : ''}`} aria-hidden /> : null}
       </button>

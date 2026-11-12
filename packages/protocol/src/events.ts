@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { ScratchState } from './ax.ts';
-import { AdvisorId, ApprovalState, DesignGrade, LessonState, Origin, Phase, ProposalState, SandboxState, TaskKind, TaskState } from './domain.ts';
+import { AdvisorId, ApprovalState, DesignGrade, LessonState, Origin, Phase, PowerMode, ProposalState, ReviewerId, ReviewerPref, SandboxState, TaskKind, TaskState } from './domain.ts';
 
 /**
  * Every state change in the daemon is an append-only event with a monotonically increasing `seq`.
@@ -63,7 +63,8 @@ export const EventBody = z.discriminatedUnion('type', [
    */
   z.object({
     type: z.literal('gate.result'),
-    gate: z.enum(['compiler', 'smoke']),
+    /** `anchor`: the anchor table a design task owes before code. `build`: the production build, measured for the ledger. */
+    gate: z.enum(['compiler', 'smoke', 'anchor', 'build']),
     /** What ran: the command line for the compiler gate, the routes for the smoke gate. */
     name: z.string(),
     passed: z.boolean(),
@@ -88,6 +89,8 @@ export const EventBody = z.discriminatedUnion('type', [
     source: z.enum(['native', 'gateway', 'bridge']),
     model: z.string(),
     inputTokens: z.number().int(),
+    /** The part of `inputTokens` re-read from the provider's prompt cache. A budget charges it at a tenth. */
+    cachedTokens: z.number().int().optional(),
     outputTokens: z.number().int(),
     usdMicros: z.number().int(),
   }),
@@ -115,6 +118,41 @@ export const EventBody = z.discriminatedUnion('type', [
   z.object({ type: z.literal('project.changed'), name: z.string() }),
   /** An owner asked another vendor's model one question. `answer` is that model's raw reply: rendered as text, never interpreted. */
   z.object({ type: z.literal('advisor.answered'), advisor: AdvisorId, question: z.string(), ok: z.boolean(), answer: z.string(), durationMs: z.number().int() }),
+  /** A reference page the owner pointed at was opened in the QA browser container and measured. `detail` is page content or an error: inert text. */
+  z.object({ type: z.literal('reference.captured'), url: z.string(), ok: z.boolean(), artifactId: z.string().nullable(), detail: z.string() }),
+  /**
+   * The anchor table a design task is built to was written and committed, before any code. `author` says who
+   * filled it in: the planner, the engine in a round of its own, or an earlier task (`workspace`).
+   */
+  z.object({ type: z.literal('anchor.committed'), author: z.enum(['planner', 'engine', 'workspace']), idea: z.string(), directions: z.array(z.string()), livingVisual: z.string() }),
+  /**
+   * One of a task's two cross-checks by another vendor's model: `plan` before the build, `acceptance` after it.
+   * `reviewer` is null and `reason` set when it could not be had; a task is never failed for that.
+   * `points` are that model's words: rendered as text, never interpreted.
+   */
+  z.object({
+    type: z.literal('review.completed'),
+    stage: z.enum(['plan', 'acceptance']),
+    reviewer: ReviewerId.nullable(),
+    verdict: z.enum(['noted', 'pass', 'patch']).nullable(),
+    points: z.array(z.string()),
+    reason: z.string().nullable(),
+    durationMs: z.number().int(),
+  }),
+  /**
+   * A design task's directions, drawn: one picture per mock-up page it wrote. `title` and `idea` come from the
+   * page's own head and are a model's words. The owner picks one of these to build.
+   */
+  z.object({
+    type: z.literal('mockups.rendered'),
+    options: z.array(z.object({ file: z.string(), title: z.string(), idea: z.string(), artifactId: z.string(), width: z.number(), height: z.number() })),
+  }),
+  z.object({ type: z.literal('ledger.recorded'), entryId: z.string(), proof: z.string() }),
+  z.object({ type: z.literal('power.changed'), mode: PowerMode }),
+  z.object({ type: z.literal('quota.changed'), subscription: ReviewerPref, state: z.enum(['ok', 'limited']), resetsAt: z.number().int().nullable() }),
+  /** A finished task on the studio's own repository was copied out to this Mac's checkout as a feature branch. Nothing is merged by this. */
+  z.object({ type: z.literal('selfhost.exported'), branch: z.string(), base: z.string(), files: z.number().int(), insertions: z.number().int(), deletions: z.number().int() }),
+  z.object({ type: z.literal('selfhost.merged'), branch: z.string(), into: z.string(), commit: z.string() }),
   z.object({ type: z.literal('notice'), level: z.enum(['info', 'warn', 'error']), message: z.string() }),
 ]);
 export type EventBody = z.infer<typeof EventBody>;

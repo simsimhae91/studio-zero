@@ -1,22 +1,31 @@
+import { readFile } from 'node:fs/promises';
 import { z } from 'zod';
-import type { Phase, Project, Task, TaskState } from '@studio-zero/protocol';
+import { ReviewerPref, type AuditReport, type Phase, type Project, type Task, type TaskState } from '@studio-zero/protocol';
 import { EngineId, type Config } from '../config.ts';
 import type { Store } from '../db/Store.ts';
 import type { EventLog } from '../events/EventLog.ts';
-import { textBlock, type ClaudeClient } from '../llm/ClaudeClient.ts';
+import { pngBlock, textBlock, type ClaudeClient } from '../llm/ClaudeClient.ts';
 import type { ModelRouter } from '../llm/ModelRouter.ts';
 import { ApprovalDeniedError, type PolicyEngine } from '../policy/PolicyEngine.ts';
+import type { MockupRenderer } from '../qa/MockupRenderer.ts';
+import type { ReferenceCapture, RefKit } from '../qa/RefKit.ts';
 import type { SmokeRunner } from '../qa/SmokeTester.ts';
 import type { OrbStackManager } from '../sandbox/OrbStackManager.ts';
+import { ANCHOR_FILE, AnchorTableShape, anchorTableJson, readAnchorTable, renderAnchorTable, type AnchorRead, type AnchorTable } from '../scratch/AnchorTable.ts';
 import { untrusted, type UntrustedSource } from '../trust/dataBlock.ts';
 import { errorMessage, excerpt, type Clock, type Logger } from '../util/core.ts';
 import type { WorkspaceProvisioner } from './bootstrap.ts';
+import type { BuildMeter } from './BuildMeter.ts';
 import type { CompilerGate } from './CompilerGate.ts';
 import type { EvalRunner } from './EvalRunner.ts';
 import type { EngineResult, EngineSession } from './engines/Engine.ts';
+import { countCompilerErrors, emptyRun, renderEvidence, type Ledger, type RunRecord } from './Ledger.ts';
 import type { LessonBook } from './LessonBook.ts';
-import { DRAFT_BRIEF, IDEATION_BRIEF, IDEATION_REQUIRED_FILES, PLANNER_SYSTEM_PROMPT, codingSystemPrompt } from './prompts.ts';
+import { ANCHOR_BRIEF, DRAFT_BRIEF, IDEATION_BRIEF, IDEATION_REQUIRED_FILES, PLANNER_SYSTEM_PROMPT, codingSystemPrompt } from './prompts.ts';
 import type { ReflectionAgent } from './ReflectionAgent.ts';
+import { renderCritique, renderPatch, type Acceptance, type PlanCritique, type SandwichReviewer } from './SandwichReviewer.ts';
+import type { SelfHosting } from './SelfHosting.ts';
+import { copyBlock } from './TextSlopAuditor.ts';
 
 export const INTEGRATION_BRANCH = 'main';
 /** How many times one task may ask the owner for more tokens. */
@@ -28,8 +37,12 @@ const Plan = z.object({
   steps: z.array(z.string()).describe('Ordered, concrete steps. Each names what is done and where.'),
   auditRoutes: z.array(z.string()).describe('Paths of the running app to review visually afterwards, e.g. "/" or "/settings". Empty when nothing visible changes.'),
   openQuestions: z.array(z.string()).describe('Assumptions made where the request was ambiguous. Empty when there were none.'),
+  anchor: AnchorTableShape.nullable().describe('The anchor table, when the request says one is needed. null otherwise.'),
 });
 type Plan = z.infer<typeof Plan>;
+
+/** How many times an engine may correct an anchor table it was asked to write, before the task is refused. */
+const ANCHOR_CORRECTIONS = 2;
 
 /** One thing a verification round found wrong. `detail` is tool or page output: it reaches the engine inside a data block. */
 interface Failure {
@@ -42,8 +55,11 @@ interface Failure {
 
 class Cancelled extends Error {}
 
-/** Where a suspended task left off: what the engine last said, and the parts of its plan the checks still read. */
-const Resume = z.object({ finalText: z.string(), plan: Plan.nullable() });
+/**
+ * Where a suspended task left off: what the engine last said, the parts of its plan the checks still read, and
+ * whether its one acceptance review has already been spent.
+ */
+const Resume = z.object({ finalText: z.string(), plan: Plan.partial({ anchor: true }).nullable(), accepted: z.boolean().default(false) });
 const resumeKey = (taskId: string): string => `task.resume:${taskId}`;
 
 /** Abort reason used when the daemon is stopping, as opposed to the owner cancelling a task. */
@@ -58,8 +74,11 @@ export class ShutdownSignal extends Error {
  * One task, end to end: Plan → Execute → Verify → Reflect → Evolve. One engine does the work; what decides
  * whether it is done is execution, not a second model's opinion of the first.
  *
- *   Plan     route to an engine (table lookup), checkpoint the workspace, branch, load lessons, draft a plan.
- *   Execute  the engine works in the sandbox through the Toolbox.
+ *   Plan     route to an engine (table lookup), checkpoint the workspace, branch, load lessons, measure any
+ *            reference pages, draft a plan. A design task (a build whose design gates are on) then gets its
+ *            anchor table: written, checked and committed before a line of code, or the task is refused.
+ *            Another vendor's model red-teams the plan and the table, once.
+ *   Execute  the engine works in the sandbox through the Toolbox, alone.
  *   Verify   the daemon checks the work itself, cheapest and least arguable first:
  *              1. the compiler gate: the type check (or tests) in the sandbox; a failure goes back verbatim;
  *              2. the smoke gate: the running app in a headless browser, listening for exceptions, console
@@ -67,11 +86,16 @@ export class ShutdownSignal extends Error {
  *              3. the project's evals: regression commands, then the design gates (slop lint, visual audit).
  *            A round stops at the first stage that fails, and the engine gets up to `verifyRounds` corrections.
  *            The engine's own claim of success is never the gate.
+ *            When every check has passed, the other vendor's model looks once more: it accepts the result or
+ *            sends it back with a single corrective patch, which is verified like any other change.
  *   Reflect  a judge model reads the trace and proposes lessons and regression checks.
  *   Evolve   code decides which proposals are kept; the lesson files are re-rendered.
  *
  * A `fast` task (Draft 0) is the same loop with the model-judged parts left out: no planning call before the
- * engine starts, no design gates, no reflection. Compiler, smoke load and regression commands still gate it.
+ * engine starts, no anchor table, no cross-checks, no design gates, no reflection. Compiler, smoke load and
+ * regression commands still gate it.
+ *
+ * Every task that reaches a verdict leaves a receipt in the ledger: what its code, design and cost measured.
  *
  * A task can also stop short of a verdict. When everything that could be checked passed but the design review
  * could not be had because every reviewer is at a usage limit, the work is committed and the task is
@@ -95,6 +119,12 @@ export class Harness {
   readonly #smoke: SmokeRunner;
   readonly #lessons: LessonBook;
   readonly #reflection: ReflectionAgent;
+  readonly #refkit: RefKit;
+  readonly #reviewer: SandwichReviewer;
+  readonly #ledger: Ledger;
+  readonly #build: BuildMeter;
+  readonly #mockups: Pick<MockupRenderer, 'render'> | null;
+  readonly #core: SelfHosting | null;
   readonly #clock: Clock;
   readonly #log: Logger;
 
@@ -112,6 +142,12 @@ export class Harness {
     smoke: SmokeRunner;
     lessons: LessonBook;
     reflection: ReflectionAgent;
+    refkit: RefKit;
+    reviewer: SandwichReviewer;
+    ledger: Ledger;
+    build: BuildMeter;
+    mockups?: Pick<MockupRenderer, 'render'> | null;
+    selfHosting?: SelfHosting | null;
     clock: Clock;
     log: Logger;
   }) {
@@ -128,6 +164,12 @@ export class Harness {
     this.#smoke = deps.smoke;
     this.#lessons = deps.lessons;
     this.#reflection = deps.reflection;
+    this.#refkit = deps.refkit;
+    this.#reviewer = deps.reviewer;
+    this.#ledger = deps.ledger;
+    this.#build = deps.build;
+    this.#mockups = deps.mockups ?? null;
+    this.#core = deps.selfHosting ?? null;
     this.#clock = deps.clock;
     this.#log = deps.log;
   }
@@ -148,6 +190,14 @@ export class Harness {
     let onBranch = false;
     let appliedLessons: string[] = [];
     const resume = this.#resumeState(initial.id);
+    // A build whose design gates are on is a design task: it owes an anchor table before code.
+    const design = initial.kind === 'build' && !draft && this.#evals.usesBrowser(project.id);
+    // The two cross-checks by another vendor's model go with a full build, unless the owner switched them off.
+    const crossChecked = initial.kind === 'build' && !draft && this.#config.review.sandwich;
+    const reviewerPref = ReviewerPref.nullable().catch(null).parse(initial.reviewerPref);
+    const record = emptyRun();
+    let anchor: AnchorTable | null = null;
+    let accepted = resume?.accepted ?? false;
 
     const phase = (p: Phase, round: number): void => {
       task = this.#store.updateTask(task.id, { phase: p });
@@ -184,7 +234,7 @@ export class Harness {
           if (result.deniedRule !== 'budget.task') throw new Error(`the project's daily token budget is used up (task has spent ${spent} tokens)`);
           if (extensions >= MAX_BUDGET_EXTENSIONS) throw new Error(`token budget exhausted after ${extensions} extensions (${spent} tokens used)`);
           try {
-            await this.#policy.authorize({ type: 'system' }, { kind: 'task.extend-budget', projectId: project.id, taskId: task.id, addTokens: initial.budgetTokens }, { taskId: task.id, signal, onWaiting });
+            await this.#policy.authorize({ type: 'system' }, { kind: 'task.extend-budget', projectId: project.id, taskId: task.id, addTokens: initial.budgetTokens, spentTokens: spent }, { taskId: task.id, signal, onWaiting });
           } catch (err) {
             if (err instanceof ApprovalDeniedError) throw new Error(`token budget exhausted (${spent} tokens used) and an extension was not approved`);
             throw err;
@@ -202,11 +252,13 @@ export class Harness {
         // The work exists, committed on its branch. Go back to it; what is left is the verdict.
         await this.#sandboxes.checkout(project, branch);
         onBranch = true;
-        plan = resume.plan;
+        plan = resume.plan ? { ...resume.plan, anchor: null } : null;
         result = { finalText: resume.finalText, stopped: 'completed' };
       } else {
         // ---------------------------------------------------------------- Plan
         phase('plan', 0);
+        // The studio's own repository: start from what is committed in the checkout now.
+        if (project.template === 'studio-core') await this.#core?.sync(project, { signal });
         const decided = await routed();
         this.#events.emit(scope, { type: 'route.decided', taskKind: task.kind, engine: decided.candidate.engine, model: decided.candidate.model, effort: decided.candidate.effort, considered: decided.considered });
         const base = await this.#sandboxes.checkpoint(project, `before ${task.kind} ${task.id}`, task.id);
@@ -219,46 +271,131 @@ export class Harness {
 
         const lessons = this.#lessons.forTask(project.id);
         appliedLessons = lessons.ids;
+        // What the builder is handed before it builds decides more than how the build is organised. So first:
+        // the references the owner pointed at, measured in the browser container; the anchor table; one red team.
+        const references = task.references.length > 0 && !draft ? await this.#refkit.capture(project, task.id, task.references, signal) : [];
+        const existing = design ? await this.#readAnchor(project) : null;
         // A draft goes straight to the engine: the planning call is a model round trip the owner would wait through.
-        plan = !draft && (task.kind === 'build' || task.kind === 'refactor' || task.kind === 'kirby_materialize') ? await this.#plan(project, task, lessons.text, signal) : null;
+        plan = !draft && (task.kind === 'build' || task.kind === 'refactor' || task.kind === 'kirby_materialize') ? await this.#plan(project, task, lessons.text, signal, { anchor: design && existing?.ok !== true, references }) : null;
         if (plan) this.#events.emit(scope, { type: 'plan.created', summary: plan.summary, steps: plan.steps, auditRoutes: plan.auditRoutes, appliedLessonIds: lessons.ids });
         checkCancel();
+
+        if (design) {
+          anchor = await this.#anchor(project, task, { existing, drafted: plan?.anchor ?? null, references, send, checkCancel });
+          checkCancel();
+        }
+        let critique: PlanCritique | null = null;
+        if (crossChecked && (plan !== null || anchor !== null)) {
+          // The plan was drafted by Claude when there is one; otherwise what is reviewed is the engine's own work.
+          const checked = await this.#reviewer.redTeam({ scope, author: plan !== null ? 'native-claude' : decided.candidate.engine, pref: reviewerPref, request: task.prompt, plan: plan ? planText(plan) : null, anchor: anchor ? renderAnchorTable(anchor) : null, signal });
+          record.planReviewer = checked.reviewer;
+          critique = checked.result;
+          checkCancel();
+        }
 
         // ------------------------------------------------------------- Execute
         phase('execute', 1);
         await open();
-        result = await send(executeMessage(task, plan, lessons.text));
+        result = await send(executeMessage(task, plan, lessons.text, { anchor, critique, references }));
         checkCancel();
       }
 
       // ---------------------------------------------------------------- Verify
-      const corrections = this.#config.budgets.verifyRounds;
       let unverified: string[] = [];
       let waitingOn: string | null = null;
-      for (let round = 1; ; round++) {
-        phase('verify', round);
-        const checked = ideation ? { failures: await this.#verifyIdeation(project), unverified: [], waitingOn: null } : await this.#verify(project, task, plan, signal);
-        const failures = checked.failures;
-        unverified = checked.unverified;
-        waitingOn = checked.waitingOn;
-        checkCancel();
-        if (failures.length === 0) break;
-        if (round > corrections) throw new Error(`verification still failing after ${corrections} corrections: ${failures.map((f) => f.name).join(', ')}`);
+      let round = 0;
+      /** Verifies, and has the engine repair what failed, until a round is clean or the corrections run out. */
+      const verifyUntilClean = async (): Promise<void> => {
+        const corrections = this.#config.budgets.verifyRounds;
+        for (let used = 0; ; used++) {
+          round += 1;
+          phase('verify', round);
+          const checked = ideation ? { failures: await this.#verifyIdeation(project), unverified: [], waitingOn: null } : await this.#verify(project, task, plan, signal, { design, record });
+          record.rounds = round;
+          const failures = checked.failures;
+          unverified = checked.unverified;
+          waitingOn = checked.waitingOn;
+          checkCancel();
+          if (failures.length === 0) return;
+          if (used >= corrections) throw new Error(`verification still failing after ${corrections} corrections: ${failures.map((f) => f.name).join(', ')}`);
 
-        phase('execute', round + 1);
-        result = await send(repairMessage(failures));
+          phase('execute', round + 1);
+          result = await send(repairMessage(failures));
+          checkCancel();
+        }
+      };
+      await verifyUntilClean();
+
+      // ------------------------------------------------------------ Acceptance
+      // The one look after the build, by the other vendor's model. Not while a design review is still owed
+      // (it reads that review's verdict), and never twice for one task.
+      if (crossChecked && !accepted && waitingOn === null) {
+        accepted = true;
+        const lead = EngineId.catch('native-claude').parse(task.engine);
+        // The table as the work leaves it: the engine may have revised it, and a resumed task reads it afresh.
+        const kept = design ? await this.#readAnchor(project) : null;
+        const tableNow = kept?.ok ? kept.table : anchor;
+        const checked = await this.#reviewer.accept({
+          scope,
+          author: lead,
+          pref: reviewerPref,
+          request: task.prompt,
+          plan: plan ? planText(plan) : null,
+          anchor: tableNow ? renderAnchorTable(tableNow) : null,
+          evidence: renderEvidence(record),
+          copy: record.audit?.copy && record.audit.copy.texts.length > 0 ? copyBlock(record.audit.copy.texts) : null,
+          captures: await this.#firstScreen(record.audit),
+          signal,
+        });
+        record.acceptanceReviewer = checked.reviewer;
+        record.verdict = checked.result?.verdict ?? null;
         checkCancel();
+        if (checked.result?.verdict === 'patch') {
+          phase('execute', round + 1);
+          result = await send(patchMessage(checked.result));
+          checkCancel();
+          await verifyUntilClean();
+        }
       }
 
       await this.#sandboxes.commitAll(project, commitSubject(task));
       if (waitingOn !== null) {
         // Nothing is known to be wrong and the one judgement still owed cannot be had today. The work stays on
         // its branch; the task steps out of the queue's way until a reviewer is back.
-        this.#store.kvSet(resumeKey(task.id), JSON.stringify({ finalText: excerpt(result.finalText, 6000), plan } satisfies z.infer<typeof Resume>));
+        this.#store.kvSet(resumeKey(task.id), JSON.stringify({ finalText: excerpt(result.finalText, 6000), plan: plan ? { ...plan, anchor: null } : null, accepted } satisfies z.infer<typeof Resume>));
         task = this.#store.updateTask(task.id, { state: 'suspended', phase: null });
         this.#events.emit(scope, { type: 'notice', level: 'warn', message: `The design review is waiting on a usage limit (${waitingOn}). The work is committed on ${branch}; this task is suspended and resumes at verification by itself when a reviewer answers.` });
         this.#events.emit(scope, { type: 'task.state', state: 'suspended', error: null });
         return;
+      }
+      // A design task's directions are drawn, so the owner chooses a build by looking at it and not by reading about it.
+      if (ideation && this.#mockups) {
+        const options = await this.#mockups.render(project, signal);
+        if (options.length > 0) this.#events.emit(scope, { type: 'mockups.rendered', options });
+        else this.#events.emit(scope, { type: 'notice', level: 'warn', message: 'The mock-ups could not be drawn (the QA browser did not start, or no mock-up page was found). The documents are complete.' });
+      }
+      // The production build, for the ledger. It runs after the commit and gates nothing; a failure is said.
+      if (!draft && !ideation) {
+        const built = await this.#build.run(project, signal).catch((err: unknown) => {
+          if (signal.aborted) throw err;
+          this.#log.warn({ taskId: task.id, err: errorMessage(err) }, 'the build could not be measured');
+          return null;
+        });
+        if (built) {
+          this.#events.emit(scope, { type: 'gate.result', gate: 'build', name: built.command, passed: built.passed, exitCode: built.exitCode, durationMs: built.durationMs, detail: built.passed ? '' : excerpt(built.output, 2000) });
+          if (built.passed) record.build = { ms: built.durationMs, bytes: built.bundleBytes };
+          else unverified = [...unverified, `the production build (${built.command}) exits ${built.exitCode}`];
+        }
+      }
+      // A finished task on the studio's own repository leaves its sandbox as a feature branch in the checkout.
+      if (project.template === 'studio-core' && this.#core) {
+        try {
+          const exported = await this.#core.export(project, { id: task.id, prompt: task.prompt, branch });
+          if (!exported) this.#events.emit(scope, { type: 'notice', level: 'info', message: 'This task committed nothing, so there is no branch to hand over.' });
+        } catch (err) {
+          this.#log.warn({ taskId: task.id, err: errorMessage(err) }, 'could not export the Core branch');
+          unverified = [...unverified, `the work is committed in the Core sandbox on ${branch} but could not be copied to the checkout (${errorMessage(err)})`];
+        }
       }
       const notes = plan && plan.openQuestions.length > 0 ? `\n\nAssumptions made: ${plan.openQuestions.join(' | ')}` : '';
       // The work passed every check that could run. What could not be checked is said, not left to be assumed.
@@ -279,6 +416,12 @@ export class Harness {
       await engine.session?.close().catch(() => undefined);
     }
 
+    // ---------------------------------------------------------------- Ledger
+    // A task that reached a verdict leaves a receipt, pass or fail. Documents-only work has nothing to measure.
+    if ((task.state === 'succeeded' || task.state === 'failed') && !ideation) {
+      await this.#ledger.record(project, task, record).catch((err: unknown) => this.#log.warn({ taskId: task.id, err: errorMessage(err) }, 'could not write the ledger entry'));
+    }
+
     // ------------------------------------------------------- Reflect, Evolve
     if (task.state !== 'cancelled' && !ideation && !draft && this.#claude.isConfigured()) {
       this.#store.updateTask(task.id, { phase: 'reflect' });
@@ -293,8 +436,9 @@ export class Harness {
     }
   }
 
-  async #plan(project: Project, task: Task, lessonText: string, signal: AbortSignal): Promise<Plan | null> {
+  async #plan(project: Project, task: Task, lessonText: string, signal: AbortSignal, want: { anchor: boolean; references: readonly ReferenceCapture[] }): Promise<Plan | null> {
     if (!this.#claude.isConfigured()) return null; // bridge-only installs: the engine plans for itself
+    const captured = want.references.filter((r) => r.ok);
     const listing = await this.#sandboxes.exec(project, 'git ls-files --cached --others --exclude-standard | head -n 400', { timeoutSec: 30 });
     const plan = await this.#claude.structured({
       scope: { projectId: project.id, taskId: task.id },
@@ -308,10 +452,72 @@ export class Harness {
         textBlock(`Owner's request (${task.kind}):\n${task.prompt}`),
         ...(lessonText ? [textBlock(lessonText)] : []),
         textBlock(`Project stack template: ${project.template}. Files in the workspace:\n${untrusted('sandbox-output', listing.stdout.trim() || '(empty workspace)')}`),
+        textBlock(want.anchor ? 'This task needs an anchor table: fill in "anchor".' : 'No anchor table is needed from you for this task: set "anchor" to null.'),
+        // The planner is shown the references themselves; the engine, which has no eyes, gets the measurements.
+        ...captured.flatMap((r) => [textBlock(referenceBlock(r)), ...(r.png ? [pngBlock(r.png)] : [])]),
       ],
     });
     // The routes end up in URLs the QA browser visits; only plain app paths are kept.
-    return { ...plan, steps: plan.steps.slice(0, 20), auditRoutes: plan.auditRoutes.filter((r) => /^\/[\w\-./~%]*$/.test(r) && r.length <= 200).slice(0, 6), openQuestions: plan.openQuestions.slice(0, 6) };
+    return { ...plan, steps: plan.steps.slice(0, 20), auditRoutes: plan.auditRoutes.filter((r) => /^\/[\w\-./~%]*$/.test(r) && r.length <= 200).slice(0, 6), openQuestions: plan.openQuestions.slice(0, 6), anchor: want.anchor ? (plan.anchor ?? null) : null };
+  }
+
+  /** The anchor table as the workspace has it: read and checked, or null when there is no such file. */
+  async #readAnchor(project: Project): Promise<AnchorRead | null> {
+    const res = await this.#sandboxes.exec(project, `[ -f ${ANCHOR_FILE} ] && head -c 65536 ${ANCHOR_FILE}`, { timeoutSec: 20 });
+    return res.exitCode !== 0 || res.stdout.trim() === '' ? null : readAnchorTable(res.stdout);
+  }
+
+  /**
+   * The gate before code. A design task proceeds only with a valid anchor table committed in its workspace:
+   * the one an earlier task left, the one the planner just drafted, or one the engine writes in a round of its
+   * own when there is neither. The check is the same for all three (`checkAnchorTable`), and an engine that
+   * cannot produce a table that passes it does not get to start building.
+   */
+  async #anchor(project: Project, task: Task, p: { existing: AnchorRead | null; drafted: unknown; references: readonly ReferenceCapture[]; send: (content: string) => Promise<EngineResult>; checkCancel: () => void }): Promise<AnchorTable> {
+    const scope = { projectId: project.id, taskId: task.id };
+    const started = Date.now();
+    const gate = (passed: boolean, detail: string): void => void this.#events.emit(scope, { type: 'gate.result', gate: 'anchor', name: ANCHOR_FILE, passed, exitCode: null, durationMs: Date.now() - started, detail });
+    const committed = async (table: AnchorTable, author: 'planner' | 'engine' | 'workspace'): Promise<AnchorTable> => {
+      if (author !== 'workspace') await this.#sandboxes.commitAll(project, `docs: anchor table\n\nStudio Zero task ${task.id}`);
+      gate(true, '');
+      this.#events.emit(scope, { type: 'anchor.committed', author, idea: table.idea, directions: [...table.directions], livingVisual: table.firstScreen.livingVisual });
+      return table;
+    };
+    if (p.existing?.ok) return committed(p.existing.table, 'workspace');
+
+    let problems = p.existing?.problems ?? [];
+    if (p.drafted !== null && p.drafted !== undefined) {
+      const drafted = readAnchorTable(p.drafted);
+      if (drafted.ok) {
+        await this.#sandboxes.writeFile(project, ANCHOR_FILE, anchorTableJson(drafted.table));
+        return committed(drafted.table, 'planner');
+      }
+      problems = drafted.problems;
+      // The planner's draft is where the engine starts from, with what was wrong with it.
+      await this.#sandboxes.writeFile(project, ANCHOR_FILE, `${JSON.stringify(p.drafted, null, 2)}\n`);
+    }
+    for (let attempt = 0; attempt <= ANCHOR_CORRECTIONS; attempt++) {
+      await p.send(anchorMessage(task, p.references, problems));
+      p.checkCancel();
+      const read = await this.#readAnchor(project);
+      if (read?.ok) return committed(read.table, 'engine');
+      problems = read ? read.problems : [`${ANCHOR_FILE} was not written.`];
+    }
+    gate(false, problems.join('\n'));
+    throw new Error(`blocked before any code: ${ANCHOR_FILE} is missing or incomplete after ${ANCHOR_CORRECTIONS} corrections (${excerpt(problems.join(' '), 400)})`);
+  }
+
+  /** The first screen as the last audit captured it: the top of the first route, at up to two sizes. */
+  async #firstScreen(audit: AuditReport | null): Promise<Uint8Array[]> {
+    const route = audit?.screenshots[0]?.route;
+    const tops = (audit?.screenshots ?? []).filter((shot) => shot.fold === 0 && shot.route === route).slice(0, 2);
+    const captures: Uint8Array[] = [];
+    for (const shot of tops) {
+      const artifact = this.#store.getArtifact(shot.artifactId);
+      const png = artifact ? await readFile(artifact.file).catch(() => null) : null;
+      if (png) captures.push(png);
+    }
+    return captures;
   }
 
   /**
@@ -329,13 +535,26 @@ export class Harness {
     }
   }
 
-  async #verify(project: Project, task: Task, plan: Plan | null, signal: AbortSignal): Promise<{ failures: Failure[]; unverified: string[]; waitingOn: string | null }> {
+  async #verify(project: Project, task: Task, plan: Pick<Plan, 'auditRoutes'> | null, signal: AbortSignal, run: { design: boolean; record: RunRecord }): Promise<{ failures: Failure[]; unverified: string[]; waitingOn: string | null }> {
     const scope = { projectId: project.id, taskId: task.id };
+    const record = run.record;
 
     const compiled = await this.#compiler.run(project, signal);
     if (compiled) {
+      record.compilerErrors = countCompilerErrors(compiled.output, compiled.passed);
+      record.firstCompilerErrors ??= record.compilerErrors;
       this.#events.emit(scope, { type: 'gate.result', gate: 'compiler', name: compiled.command, passed: compiled.passed, exitCode: compiled.exitCode, durationMs: compiled.durationMs, detail: compiled.passed ? '' : excerpt(compiled.output, 2000) });
       if (!compiled.passed) return { failures: [{ name: 'compiler', source: 'sandbox-output', detail: compiled.output, compiler: { command: compiled.command, exitCode: compiled.exitCode } }], unverified: [], waitingOn: null };
+    }
+
+    // The engine may revise the anchor table as it builds; it may not leave the work without a valid one.
+    if (run.design) {
+      const table = await this.#readAnchor(project);
+      if (!table?.ok) {
+        const detail = table ? table.problems.join('\n') : `${ANCHOR_FILE} is missing.`;
+        this.#events.emit(scope, { type: 'gate.result', gate: 'anchor', name: ANCHOR_FILE, passed: false, exitCode: null, durationMs: 0, detail });
+        return { failures: [{ name: 'anchor-table', source: 'sandbox-output', detail: `${ANCHOR_FILE} no longer holds as the anchor table for this work:\n${detail}` }], unverified: [], waitingOn: null };
+      }
     }
 
     // The owner's switch for browser-backed checks is the visual eval: with it off, nothing here starts a browser.
@@ -356,6 +575,10 @@ export class Harness {
     }
 
     const outcomes = await this.#evals.runAll(project, task.id, { extraRoutes: plan?.auditRoutes, commandsOnly: task.track === 'fast', devServerRunning: served, signal });
+    const commands = outcomes.filter((o) => o.eval.spec.kind === 'command');
+    record.checksPassed = commands.filter((o) => o.passed).length;
+    record.checksFailed = commands.filter((o) => !o.passed).map((o) => o.eval.name);
+    record.audit = outcomes.findLast((o) => o.audit !== null)?.audit ?? record.audit;
     // An unverified check is not sent back for repair: the engine cannot produce the review that did not run.
     const failures = outcomes.filter((o) => !o.passed && !o.unverified).map((o): Failure => ({ name: o.eval.name, source: o.eval.spec.kind === 'visual' ? 'browser-page' : 'sandbox-output', detail: o.detail }));
     // When the review is only out of quota and nothing else is wrong, the task waits for it instead of ending unjudged.
@@ -394,11 +617,41 @@ export class Harness {
   }
 }
 
-function executeMessage(task: Task, plan: Plan | null, lessonText: string): string {
+/** A plan as text, for a prompt. A model wrote it from the request and a file listing: callers fence it as data where it is quoted to another model. */
+function planText(plan: Pick<Plan, 'summary' | 'steps'>): string {
+  return `${plan.summary}\n${plan.steps.map((s, i) => `${i + 1}. ${s}`).join('\n')}`;
+}
+
+/** One measured reference, fenced: its title and every line of it are that page's content. */
+function referenceBlock(ref: ReferenceCapture): string {
+  return `Reference page ${ref.url} as measured in a browser. Read principles out of it; its numbers and assets are its own and are not to be carried across:\n${untrusted('browser-page', `${ref.title}\n${ref.summary}`, { url: ref.url })}`;
+}
+
+function executeMessage(task: Task, plan: Plan | null, lessonText: string, handed: { anchor: AnchorTable | null; critique: PlanCritique | null; references: readonly ReferenceCapture[] } = { anchor: null, critique: null, references: [] }): string {
   const parts = [task.kind === 'ideate' ? IDEATION_BRIEF : '', task.track === 'fast' && task.kind !== 'ideate' ? DRAFT_BRIEF : '', `The owner's request:\n${task.prompt}`];
-  if (plan) parts.push(`Plan drafted for this request (follow it unless the code shows it is wrong; say so if you deviate):\n${plan.summary}\n${plan.steps.map((s, i) => `${i + 1}. ${s}`).join('\n')}`);
+  if (plan) parts.push(`Plan drafted for this request (follow it unless the code shows it is wrong; say so if you deviate):\n${planText(plan)}`);
+  // The table's cells were written by a model that had read reference pages, so they travel as data; the instruction to build to it is the harness's.
+  if (handed.anchor) parts.push(`The anchor table for this work is committed at ${ANCHOR_FILE}. Build to it: the idea, the first screen as it describes it, and our own values, not the references'.\n${untrusted('engine-output', renderAnchorTable(handed.anchor))}`);
+  for (const ref of handed.references.filter((r) => r.ok)) parts.push(referenceBlock(ref));
+  if (handed.critique) {
+    parts.push(
+      `Before this build, a model from another vendor red-teamed the plan${handed.anchor ? ' and the anchor table' : ''}. It is one reviewer's reading, given once. Where it is right, change course${handed.anchor ? ` (and correct ${ANCHOR_FILE} first, keeping its shape)` : ''}; where it is wrong, carry on and say why in your final message.\n${untrusted('engine-output', renderCritique(handed.critique))}`,
+    );
+  }
   if (lessonText) parts.push(lessonText);
   return parts.filter(Boolean).join('\n\n');
+}
+
+/** The pre-code round: the engine is asked for the anchor table and nothing else. */
+function anchorMessage(task: Task, references: readonly ReferenceCapture[], problems: readonly string[]): string {
+  const parts = [ANCHOR_BRIEF, `The owner's request:\n${task.prompt}`, ...references.filter((r) => r.ok).map(referenceBlock)];
+  if (problems.length > 0) parts.push(`The table in ${ANCHOR_FILE} was checked and does not hold yet. Correct exactly these:\n${problems.map((p) => `- ${p}`).join('\n')}`);
+  return parts.join('\n\n');
+}
+
+/** The acceptance reviewer's single corrective patch, as the engine receives it. */
+function patchMessage(acceptance: Acceptance): string {
+  return `The work passed the harness's own checks, and a model from another vendor then reviewed it against the request and the anchor table. It did not accept it as it is and issued one corrective patch. Carry it out, then stop so the work can be verified again. There is no further review after this one, so make the changes completely; if a point is mistaken about what was asked, leave it and say why in your final message.\n\n${untrusted('engine-output', renderPatch(acceptance))}`;
 }
 
 /**

@@ -142,6 +142,25 @@ export const ConfigSchema = z.object({
     })
     .prefault({}),
   routes: z.record(TaskKind, z.array(RouteCandidate).min(1)).default(defaultRoutes as Record<TaskKind, RouteCandidate[]>),
+  review: z
+    .object({
+      /**
+       * The two cross-checks of a full build task by another vendor's model: one on the plan before the build,
+       * one on the result after it. Each is a single call on the owner's subscription; off, neither is made.
+       */
+      sandwich: z.boolean().default(true),
+    })
+    .prefault({}),
+  selfHosting: z
+    .object({
+      /** Mount the studio's own repository as the pinned first project. */
+      enabled: z.boolean().default(true),
+      /** The checkout to work on. Default: the repository this daemon is running from. */
+      repoPath: z.string().optional(),
+      /** The branch tasks start from and finished work is merged into. */
+      baseBranch: z.string().regex(/^[\w][\w./-]{0,80}$/).default('main'),
+    })
+    .prefault({}),
   kirby: z
     .object({
       allowedHosts: z.array(z.string()).default(['github.com', 'gitlab.com', 'codeberg.org']),

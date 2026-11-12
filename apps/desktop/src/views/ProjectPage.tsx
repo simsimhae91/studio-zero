@@ -1,18 +1,20 @@
 import * as Tabs from '@radix-ui/react-tabs';
-import { ChevronDown, FileText, FolderTree, GitMerge, Globe, History as HistoryIcon, Lightbulb, MessageCircleQuestion, Monitor, MoreHorizontal, Pencil, Plus, RotateCw, ScanEye, Smartphone, Sparkles, Square, SquareTerminal, Trash2, X } from 'lucide-react';
+import { Check, ChevronDown, FileText, FolderTree, GitFork, GitMerge, Globe, History as HistoryIcon, KeyRound, Lightbulb, Maximize2, MessageCircleQuestion, Monitor, MoreHorizontal, Pencil, Plus, ReceiptText, RotateCw, ScanEye, Smartphone, Sparkles, Square, SquareTerminal, Star, Trash2, X } from 'lucide-react';
 import { Suspense, lazy, useEffect, useMemo, useState, type ReactNode } from 'react';
-import type { AdvisorId, Approval, Project, Session, Task, TaskKind, TaskState, TaskTrack } from '@studio-zero/protocol';
+import { ReviewerPref, type AdvisorId, type Approval, type Project, type Session, type Task, type TaskKind, type TaskState, type TaskTrack } from '@studio-zero/protocol';
 import { Markdown } from '@studio-zero/ax/react';
-import { duration, engineLabel, kindLabel, phaseLabel, stamp, taskStateLabel, templateLabel, tokens } from '../lib/format.ts';
-import { advisorCommand, narrate, type Item } from '../lib/steps.ts';
+import { duration, engineLabel, kindLabel, phaseLabel, stamp, subscriptionLabel, taskStateLabel, templateLabel, tokens } from '../lib/format.ts';
+import { advisorCommand, buildRequest, mockupName, narrate, type Item, type Mockup } from '../lib/steps.ts';
 import { errorText, useAction, useQuery, useStudio, useTaskEvents } from '../lib/studio.tsx';
-import { Button, IconButton, Menu, MenuItem, MenuSeparator, Problem, Segmented, Status, TitlebarSpace } from '../ui.tsx';
+import { Button, IconButton, Menu, MenuItem, MenuSeparator, Problem, Segmented, Sheet, Status, TitlebarSpace, inputClass } from '../ui.tsx';
 import { ActionStepper } from './ActionStepper.tsx';
+import { ExternalApisModal } from './ExternalApis.tsx';
 import { Composer, useStickToEnd } from './page.tsx';
 import { Audit } from './panels/Audit.tsx';
 import { FileTree } from './panels/FileTree.tsx';
 import { History } from './panels/History.tsx';
 import { Learning } from './panels/Learning.tsx';
+import { Ledger } from './panels/Ledger.tsx';
 import { Preview } from './panels/Preview.tsx';
 import { Proposals } from './panels/Proposals.tsx';
 import { DeleteProjectModal, InlineName, restartSandbox } from './projectActions.tsx';
@@ -21,7 +23,9 @@ import type { Route } from './Shell.tsx';
 // The terminal emulator is the largest thing in the client: fetched when the terminal tab is first opened.
 const InteractiveTerminal = lazy(() => import('./panels/InteractiveTerminal.tsx').then((m) => ({ default: m.InteractiveTerminal })));
 
-type TabId = 'preview' | 'files' | 'terminal' | 'history' | 'audit' | 'proposals' | 'learning';
+type TabId = 'preview' | 'files' | 'terminal' | 'history' | 'audit' | 'ledger' | 'proposals' | 'learning';
+/** Addresses typed into the reference field: up to three, separated by spaces, commas or new lines. */
+const referencesOf = (text: string): string[] => text.split(/[\s,]+/).filter((part) => part !== '').slice(0, 3);
 type Pane = 'chat' | 'work';
 type Kind = Exclude<TaskKind, 'kirby_materialize' | 'ideate'>;
 
@@ -51,8 +55,6 @@ const DESIGN_DOCS: readonly { path: string; label: string }[] = [
   { path: 'docs/erd.md', label: '데이터 모델' },
   { path: 'docs/openapi.yaml', label: 'API 명세' },
 ];
-const BUILD_FROM_DESIGN = 'docs/prd.md, docs/architecture.md, docs/erd.md, docs/openapi.yaml에 정리한 설계대로 MVP를 구현해줘. 문서에서 범위 밖으로 둔 것은 만들지 말고, 문서와 다르게 구현해야 하는 부분이 생기면 마지막에 알려줘.';
-
 interface Advice {
   advisor: AdvisorId;
   question: string;
@@ -107,8 +109,13 @@ function Workbench({ project, onOpen, onChanged }: { project: Project; onOpen: (
   const [trackChoice, setTrackChoice] = useState<TaskTrack | null>(null);
   // 'auto' leaves the choice to the routing table; anything else is the owner's own pick for the next task.
   const [engine, setEngine] = useState('auto');
+  // 'auto' pairs the reviewer with the engine (never its own vendor); anything else is the owner's pick.
+  const [reviewer, setReviewer] = useState<ReviewerPref | 'auto'>('auto');
+  const [references, setReferences] = useState('');
+  const core = project.template === 'studio-core';
   const [renaming, setRenaming] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [keys, setKeys] = useState(false);
   const [asking, setAsking] = useState<AdvisorId | null>(null);
   const [askError, setAskError] = useState<string | null>(null);
   const [advice, setAdvice] = useState<Advice[]>([]);
@@ -142,8 +149,12 @@ function Workbench({ project, onOpen, onChanged }: { project: Project; onOpen: (
 
   const steer = useAction((message: string) => backend.call('tasks.steer', { taskId: active!.id, message }));
   const submit = useAction(async (prompt: string, as: { kind: Kind; track: TaskTrack } = { kind, track }) => {
-    const task = await backend.call('tasks.submit', { projectId: project.id, kind: as.kind, prompt, track: as.track, ...(session ? { sessionId: session } : {}), ...(fork ? { baseBranch: fork } : {}), ...(engine === 'auto' ? {} : { engine: engine as never }) });
+    // The cross-checks and the reference kit belong to a full build: a draft has neither a plan nor a review.
+    const designed = as.kind === 'build' && as.track === 'full';
+    const refs = designed && !core ? referencesOf(references) : [];
+    const task = await backend.call('tasks.submit', { projectId: project.id, kind: as.kind, prompt, track: as.track, ...(session ? { sessionId: session } : {}), ...(fork ? { baseBranch: fork } : {}), ...(engine === 'auto' ? {} : { engine: engine as never }), ...(designed && reviewer !== 'auto' ? { reviewer } : {}), ...(refs.length > 0 ? { references: refs } : {}) });
     setFork(null);
+    setReferences('');
     setPicked((prev) => ({ ...prev, [key]: task.id }));
     tasks.reload();
   });
@@ -195,13 +206,18 @@ function Workbench({ project, onOpen, onChanged }: { project: Project; onOpen: (
     return true;
   };
 
-  const TemplateIcon = project.template === 'mobile-expo' ? Smartphone : Globe;
+  const TemplateIcon = core ? Star : project.template === 'mobile-expo' ? Smartphone : Globe;
+  const available = new Set((status.data?.engines ?? []).filter((e) => e.available).map((e) => e.id));
+  // Claude can review through its API key or its subscription; the others through their own CLI.
+  const reviewers = [{ id: 'auto' as const, label: '자동 짝꿍' }, ...ReviewerPref.options.filter((id) => available.has(id) || (id === 'claude-code' && available.has('native-claude'))).map((id) => ({ id, label: subscriptionLabel[id] }))];
+  const designed = kind === 'build' && track === 'full';
   const tabs: readonly { id: TabId; label: string; icon: typeof Monitor }[] = [
     { id: 'preview', label: '프리뷰', icon: project.template === 'mobile-expo' ? Smartphone : Monitor },
     { id: 'files', label: '파일', icon: FolderTree },
     { id: 'terminal', label: '터미널', icon: SquareTerminal },
     { id: 'history', label: '시점', icon: HistoryIcon },
     { id: 'audit', label: '감사', icon: ScanEye },
+    { id: 'ledger', label: '장부', icon: ReceiptText },
     { id: 'proposals', label: '제안', icon: Sparkles },
     { id: 'learning', label: '학습', icon: Lightbulb },
   ];
@@ -241,6 +257,8 @@ function Workbench({ project, onOpen, onChanged }: { project: Project; onOpen: (
             }}
           />
         );
+      case 'ledger':
+        return <Ledger project={project} />;
       case 'proposals':
         return <Proposals project={project} />;
       case 'learning':
@@ -254,7 +272,9 @@ function Workbench({ project, onOpen, onChanged }: { project: Project; onOpen: (
       <header className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-border px-4 py-2">
         <TemplateIcon className="size-5 shrink-0 text-fg-muted" aria-hidden />
         <h1 className="min-w-0 text-lg font-semibold">
-          {renaming ? (
+          {core ? (
+            <span className="line-clamp-1 break-all px-1">{project.name}</span>
+          ) : renaming ? (
             <InlineName value={project.name} label="프로젝트 이름" maxLength={80} className="text-lg font-semibold" onCommit={(name) => (setRenaming(false), void rename.run(name))} onCancel={() => setRenaming(false)} />
           ) : (
             <button type="button" onClick={() => setRenaming(true)} title="눌러서 이름 변경" className="line-clamp-1 min-h-9 pointer-coarse:min-h-11 break-all rounded-md px-1 text-left hover:bg-sunken">
@@ -275,16 +295,27 @@ function Workbench({ project, onOpen, onChanged }: { project: Project; onOpen: (
               </IconButton>
             }
           >
-            <MenuItem onSelect={() => setRenaming(true)} icon={<Pencil className="size-4" aria-hidden />}>
-              이름 변경
-            </MenuItem>
+            {core ? null : (
+              <MenuItem onSelect={() => setRenaming(true)} icon={<Pencil className="size-4" aria-hidden />}>
+                이름 변경
+              </MenuItem>
+            )}
             <MenuItem onSelect={() => void restart.run()} disabled={restart.busy} icon={<RotateCw className="size-4" aria-hidden />}>
               샌드박스 재기동
             </MenuItem>
-            <MenuSeparator />
-            <MenuItem danger onSelect={() => setDeleting(true)} icon={<Trash2 className="size-4" aria-hidden />}>
-              프로젝트 삭제
-            </MenuItem>
+            {core ? null : (
+              <MenuItem onSelect={() => setKeys(true)} icon={<KeyRound className="size-4" aria-hidden />}>
+                외부 API 키
+              </MenuItem>
+            )}
+            {core ? null : (
+              <>
+                <MenuSeparator />
+                <MenuItem danger onSelect={() => setDeleting(true)} icon={<Trash2 className="size-4" aria-hidden />}>
+                  프로젝트 삭제
+                </MenuItem>
+              </>
+            )}
           </Menu>
         </div>
       </header>
@@ -323,7 +354,9 @@ function Workbench({ project, onOpen, onChanged }: { project: Project; onOpen: (
                     onShow={show}
                     onCheckpoint={(checkpointId) => (setFocus(checkpointId), show('history'))}
                     onFile={(path) => (setOpenFile(path), show('files'))}
-                    onBuild={(as) => void submit.run(BUILD_FROM_DESIGN, { kind: 'build', track: as })}
+                    onBuild={(as, mockup) => void submit.run(buildRequest(mockup), { kind: 'build', track: as })}
+                    onContinue={setFork}
+                    core={core}
                   />
                 );
               })}
@@ -358,6 +391,35 @@ function Workbench({ project, onOpen, onChanged }: { project: Project; onOpen: (
                         </MenuItem>
                       ))}
                     </Menu>
+                  ) : null}
+                  {designed && reviewers.length > 2 ? (
+                    <Menu
+                      align="start"
+                      trigger={
+                        <button type="button" title="계획을 한 번, 결과를 한 번 다른 회사의 모델이 봅니다" className="inline-flex min-h-9 pointer-coarse:min-h-11 items-center gap-1 rounded-md px-3 text-sm font-medium text-fg-muted hover:bg-sunken hover:text-fg">
+                          검수: {reviewers.find((r) => r.id === reviewer)?.label ?? '자동 짝꿍'}
+                          <ChevronDown className="size-4" aria-hidden />
+                        </button>
+                      }
+                    >
+                      {reviewers.map((r) => (
+                        <MenuItem key={r.id} onSelect={() => setReviewer(r.id)}>
+                          {r.label}
+                        </MenuItem>
+                      ))}
+                    </Menu>
+                  ) : null}
+                  {designed && !core ? (
+                    <input
+                      aria-label="레퍼런스 주소"
+                      value={references}
+                      onChange={(e) => setReferences(e.target.value)}
+                      placeholder="레퍼런스 주소 (https, 3개까지)"
+                      inputMode="url"
+                      autoCapitalize="none"
+                      spellCheck={false}
+                      className={`${inputClass} min-h-9 pointer-coarse:min-h-11 max-w-sm flex-1 text-sm`}
+                    />
                   ) : null}
                   {fork ? (
                     <span className="flex items-center gap-1 pl-2 text-sm font-medium text-accent">
@@ -415,6 +477,7 @@ function Workbench({ project, onOpen, onChanged }: { project: Project; onOpen: (
         </Tabs.Root>
       </div>
 
+      <ExternalApisModal project={project} open={keys} onOpenChange={setKeys} />
       <DeleteProjectModal
         project={deleting ? project : null}
         onOpenChange={setDeleting}
@@ -481,7 +544,7 @@ function SessionTabs({ sessions, current, busy, onSelect, onCreate, onRename, on
 }
 
 /** One session's task stream, in its own scrolling layer. */
-function SessionStream({ visible, loaded, tasks, selected, pending, asking, advice, onPick, onShow, onCheckpoint, onFile, onBuild }: { visible: boolean; loaded: boolean; tasks: Task[]; selected: Task | null; pending: Approval[]; asking: AdvisorId | null; advice: Advice[]; onPick: (taskId: string) => void; onShow: (tab: TabId) => void; onCheckpoint: (checkpointId: string) => void; onFile: (path: string) => void; onBuild: (track: TaskTrack) => void }) {
+function SessionStream({ visible, loaded, tasks, selected, pending, asking, advice, onPick, onShow, onCheckpoint, onFile, onBuild, onContinue, core }: { visible: boolean; loaded: boolean; tasks: Task[]; selected: Task | null; pending: Approval[]; asking: AdvisorId | null; advice: Advice[]; onPick: (taskId: string) => void; onShow: (tab: TabId) => void; onCheckpoint: (checkpointId: string) => void; onFile: (path: string) => void; onBuild: (track: TaskTrack, mockup: string | null) => void; onContinue: (branch: string) => void; core: boolean }) {
   const events = useTaskEvents(selected?.id ?? null);
   const items = useMemo(() => narrate(events), [events]);
   const scroll = useStickToEnd(`${selected?.id}:${events.length}:${selected?.state}:${asking}:${advice.length}`);
@@ -496,7 +559,7 @@ function SessionStream({ visible, loaded, tasks, selected, pending, asking, advi
         ) : null}
         {tasks.map((task) =>
           task.id === selected?.id ? (
-            <Passage key={task.id} task={task} items={items} pending={pending} onShow={onShow} onCheckpoint={onCheckpoint} onFile={onFile} onBuild={onBuild} />
+            <Passage key={task.id} task={task} items={items} pending={pending} onShow={onShow} onCheckpoint={onCheckpoint} onFile={onFile} onBuild={onBuild} onContinue={onContinue} core={core} />
           ) : (
             <button key={task.id} type="button" onClick={() => onPick(task.id)} className="flex min-h-11 flex-wrap items-baseline justify-between gap-x-4 gap-y-1 rounded-lg border border-border px-4 py-2 text-left hover:bg-sunken">
               <span className="line-clamp-1 min-w-0 flex-1 break-all text-base">{task.prompt.split('\n')[0]}</span>
@@ -591,9 +654,11 @@ function AdvisorCard({ advisor, question, answer, ok, durationMs }: Advice) {
 }
 
 /** One task, opened out: the request, the steps, what was said, and how it ended. */
-function Passage({ task, items, pending, onShow, onCheckpoint, onFile, onBuild }: { task: Task; items: Item[]; pending: Approval[]; onShow: (tab: TabId) => void; onCheckpoint: (checkpointId: string) => void; onFile: (path: string) => void; onBuild: (track: TaskTrack) => void }) {
+function Passage({ task, items, pending, onShow, onCheckpoint, onFile, onBuild, onContinue, core }: { task: Task; items: Item[]; pending: Approval[]; onShow: (tab: TabId) => void; onCheckpoint: (checkpointId: string) => void; onFile: (path: string) => void; onBuild: (track: TaskTrack, mockup: string | null) => void; onContinue: (branch: string) => void; core: boolean }) {
   const { backend } = useStudio();
   const [merged, setMerged] = useState<string | null>(null);
+  // Drawn once at the end of a design task; a re-run draws again, and the latest set is the one on offer.
+  const mockups = items.findLast((item) => item.kind === 'mockups')?.options ?? [];
   const merge = useAction(async () => {
     const result = await backend.call('git.merge', { projectId: task.projectId, branch: task.branch! });
     setMerged(result.into);
@@ -635,6 +700,9 @@ function Passage({ task, items, pending, onShow, onCheckpoint, onFile, onBuild }
             );
           case 'advisor':
             return <AdvisorCard key={i} {...item} />;
+          case 'mockups':
+            // Shown on the card that ends the task, where the choice is made.
+            return null;
         }
       })}
 
@@ -679,7 +747,9 @@ function Passage({ task, items, pending, onShow, onCheckpoint, onFile, onBuild }
               </div>
             </div>
           ) : task.state === 'succeeded' && task.kind === 'ideate' ? (
-            <DesignDecision onFile={onFile} onBuild={onBuild} />
+            <DesignDecision mockups={mockups} onFile={onFile} onBuild={onBuild} />
+          ) : core && task.state === 'succeeded' ? (
+            <CoreHandover task={task} />
           ) : (
             <div className="flex flex-wrap gap-2">
               {task.state === 'succeeded' ? (
@@ -696,6 +766,12 @@ function Passage({ task, items, pending, onShow, onCheckpoint, onFile, onBuild }
                   </Button>
                 )
               ) : null}
+              {/* A failed task's work is committed on its branch. The next task can start from there instead of from scratch. */}
+              {task.state === 'failed' && task.branch ? (
+                <Button variant="primary" onClick={() => onContinue(task.branch!)} icon={<GitFork className="size-4" aria-hidden />}>
+                  이 작업물에서 이어가기
+                </Button>
+              ) : null}
               {task.state === 'failed' && task.baseCheckpointId ? (
                 <Button onClick={() => onCheckpoint(task.baseCheckpointId!)} icon={<HistoryIcon className="size-4" aria-hidden />}>
                   시작 전 시점 보기
@@ -710,16 +786,94 @@ function Passage({ task, items, pending, onShow, onCheckpoint, onFile, onBuild }
 }
 
 /**
- * The end of a deep-track task: the design is written down, and the next step is the owner's to approve.
- * One click starts the build from those documents; nothing is built until then.
+ * The end of a task on the studio's own repository. Its branch has been copied to this Mac's checkout as a
+ * feature branch; nothing is merged until the owner, having read it, says so here.
  */
-function DesignDecision({ onFile, onBuild }: { onFile: (path: string) => void; onBuild: (track: TaskTrack) => void }) {
+function CoreHandover({ task }: { task: Task }) {
+  const { backend } = useStudio();
+  const status = useQuery('selfhost.status', {}, ['selfhost.exported', 'selfhost.merged']);
+  const [merged, setMerged] = useState<string | null>(null);
+  const merge = useAction(async () => {
+    const result = await backend.call('selfhost.merge', { taskId: task.id });
+    setMerged(result.into);
+    status.reload();
+  });
+  const branch = status.data?.pending.find((p) => p.taskId === task.id);
+  if (merged) return <Status tone="good">{merged}에 합쳤습니다</Status>;
+  if (!branch) return status.data ? <p className="text-base text-fg-muted">넘겨받을 브랜치가 없습니다. 이미 합쳤거나, 이 작업이 바꾼 파일이 없습니다.</p> : null;
   return (
     <div className="flex flex-col gap-3 border-l-4 border-accent pl-4">
       <div className="flex flex-col gap-1">
-        <p className="text-base font-semibold">설계 문서가 준비됐습니다. 이대로 만들까요?</p>
-        <p className="text-base text-fg-muted">문서를 읽어 보고, 고칠 곳이 있으면 아래 입력창에 적어 주세요. 승인하면 이 문서들을 기준으로 구현을 시작합니다.</p>
+        <p className="text-base font-semibold">Studio Zero 자체 기능 브랜치를 확인하고 머지하시겠습니까?</p>
+        <p className="text-base text-fg-muted">
+          이 Mac의 저장소에 <code className="break-all font-mono text-sm">{branch.branch}</code> 브랜치가 생겼습니다. 파일 {branch.files}개, +{branch.insertions} −{branch.deletions}. {status.data?.baseBranch}는 그대로입니다.
+        </p>
+        <code className="break-all font-mono text-sm text-fg-muted">
+          git diff {status.data?.baseBranch}...{branch.branch}
+        </code>
       </div>
+      {merge.error ? <Problem>{merge.error}</Problem> : null}
+      {status.data?.clean === false ? <p className="text-sm text-fg-muted">저장소에 커밋하지 않은 변경이 있으면 머지를 받지 않습니다.</p> : null}
+      <div className="flex flex-wrap gap-2">
+        <Button variant="primary" busy={merge.busy} onClick={() => void merge.run()} icon={<GitMerge className="size-4" aria-hidden />}>
+          {status.data?.baseBranch}에 머지
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The end of a deep-track task: the design is written down and its directions are drawn, and the next step is
+ * the owner's to approve. They pick a direction by looking at it; one click starts the build from the documents
+ * and that picture. Nothing is built until then.
+ */
+function DesignDecision({ mockups, onFile, onBuild }: { mockups: Mockup[]; onFile: (path: string) => void; onBuild: (track: TaskTrack, mockup: string | null) => void }) {
+  // The first page is the direction the documents argue for, so it starts chosen.
+  const [chosen, setChosen] = useState<string | null>(null);
+  const [zoomed, setZoomed] = useState<Mockup | null>(null);
+  const pick = mockups.find((m) => m.file === chosen) ?? mockups[0] ?? null;
+  const drawn = mockups.length > 0;
+  // Phone screens are tall: three fit side by side. Desktop screens are wide: two.
+  const tall = drawn && mockups[0]!.height > mockups[0]!.width;
+  return (
+    <div className="flex flex-col gap-3 border-l-4 border-accent pl-4">
+      <div className="flex flex-col gap-1">
+        <p className="text-base font-semibold">{drawn ? `설계 문서와 첫 화면 시안 ${mockups.length}개가 준비됐습니다. 어느 안으로 만들까요?` : '설계 문서가 준비됐습니다. 이대로 만들까요?'}</p>
+        <p className="text-base text-fg-muted">
+          {drawn ? '시안은 구성이 서로 다른 방향입니다. 하나를 고르고, 고칠 곳이 있으면 아래 입력창에 적어 주세요. 승인하면 문서와 고른 시안을 기준으로 구현을 시작합니다.' : '문서를 읽어 보고, 고칠 곳이 있으면 아래 입력창에 적어 주세요. 승인하면 이 문서들을 기준으로 구현을 시작합니다.'}
+        </p>
+      </div>
+      {drawn ? (
+        <div role="group" aria-label="첫 화면 시안" className={`grid gap-3 ${tall ? 'grid-cols-2 sm:grid-cols-3' : 'grid-cols-1 sm:grid-cols-2'}`}>
+          {mockups.map((m, i) => {
+            const on = m.file === pick?.file;
+            return (
+              <div key={m.file} className={`flex flex-col rounded-lg border bg-surface ${on ? 'border-accent' : 'border-border'}`}>
+                <button type="button" aria-pressed={on} onClick={() => setChosen(m.file)} className="flex flex-1 flex-col gap-2 rounded-lg p-2 text-left">
+                  <MockupImage mockup={m} className="w-full rounded-md border border-border" />
+                  <span className="flex items-center gap-2">
+                    <span className={`flex size-5 shrink-0 items-center justify-center rounded-full border ${on ? 'border-accent bg-accent text-on-accent' : 'border-control-border'}`} aria-hidden>
+                      {on ? <Check className="size-3" /> : null}
+                    </span>
+                    <span className="text-sm font-semibold">
+                      {mockupName(m.file)}
+                      {i === 0 ? ' · 문서의 추천' : ''}
+                    </span>
+                  </span>
+                  {/* The page's own title and description: a model's words, shown as text. */}
+                  <span className="break-words text-sm font-medium">{m.title}</span>
+                  {m.idea ? <span className="break-words text-sm text-fg-muted">{m.idea}</span> : null}
+                </button>
+                <button type="button" onClick={() => setZoomed(m)} className="flex min-h-9 pointer-coarse:min-h-11 items-center gap-2 border-t border-border px-3 text-sm text-fg-muted hover:bg-sunken">
+                  <Maximize2 className="size-4 shrink-0" aria-hidden />
+                  크게 보기
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
       <ul className="flex flex-col">
         {DESIGN_DOCS.map((doc) => (
           <li key={doc.path} className="max-w-none">
@@ -732,12 +886,53 @@ function DesignDecision({ onFile, onBuild }: { onFile: (path: string) => void; o
         ))}
       </ul>
       <div className="flex flex-wrap gap-2">
-        <Button variant="primary" onClick={() => onBuild('full')}>
-          승인하고 구현 시작
+        <Button variant="primary" onClick={() => onBuild('full', pick?.file ?? null)}>
+          {pick ? `${mockupName(pick.file)}으로 승인하고 구현 시작` : '승인하고 구현 시작'}
         </Button>
-        <Button onClick={() => onBuild('fast')}>초안만 먼저 만들기</Button>
+        <Button onClick={() => onBuild('fast', pick?.file ?? null)}>초안만 먼저 만들기</Button>
       </div>
+      <Sheet open={zoomed !== null} onOpenChange={(open) => (open ? undefined : setZoomed(null))} title={zoomed ? `${mockupName(zoomed.file)} · ${zoomed.title}` : ''} description={zoomed?.idea || undefined} wide>
+        {zoomed ? (
+          <div className="flex flex-col items-start gap-4 px-6 py-4">
+            <MockupImage mockup={zoomed} className="max-w-full border border-border" />
+            <div className="flex flex-wrap gap-2">
+              <Button variant="primary" onClick={() => (setChosen(zoomed.file), setZoomed(null))}>
+                이 안 고르기
+              </Button>
+              <Button onClick={() => (onFile(zoomed.file), setZoomed(null))} icon={<FileText className="size-4" aria-hidden />}>
+                시안 파일 열기
+              </Button>
+            </div>
+          </div>
+        ) : null}
+      </Sheet>
     </div>
+  );
+}
+
+/** A mock-up as the QA browser drew it. A picture: whatever the page contained, nothing of it runs here. */
+function MockupImage({ mockup, className }: { mockup: Mockup; className: string }) {
+  const { backend } = useStudio();
+  const [src, setSrc] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    setSrc(null);
+    setFailed(false);
+    let stale = false;
+    backend.artifactUrl(mockup.artifactId).then(
+      (url) => !stale && setSrc(url),
+      () => !stale && setFailed(true),
+    );
+    return () => {
+      stale = true;
+    };
+  }, [backend, mockup.artifactId]);
+  if (failed) return <p className="px-1 py-6 text-sm text-fg-muted">그림을 불러오지 못했습니다.</p>;
+  // The box keeps the picture's proportions while it loads, so the card does not jump.
+  return src ? (
+    <img src={src} alt={`${mockupName(mockup.file)} 첫 화면 시안`} width={mockup.width} height={mockup.height} className={`block h-auto ${className}`} />
+  ) : (
+    <div className={`bg-sunken ${className}`} style={{ aspectRatio: `${mockup.width} / ${mockup.height}` }} aria-hidden />
   );
 }
 

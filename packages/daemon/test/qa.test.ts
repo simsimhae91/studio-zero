@@ -55,8 +55,13 @@ test('measured defects: contrast, touch targets, overflow, scale, rhythm and gen
   );
   const findings = runDomChecks(page, phone, contract);
   assert.deepEqual(rules(findings), [
-    'contrast/text', 'responsive/horizontal-overflow', 'shape/off-scale-radius', 'slop/caps-eyebrow', 'slop/cliche-gradient', 'slop/emoji-as-icon', 'slop/identical-cards', 'spacing/off-grid', 'touch/target-size', 'type/off-scale',
+    'contrast/text', 'responsive/horizontal-overflow', 'slop/caps-eyebrow', 'slop/cliche-gradient', 'slop/emoji-as-icon', 'slop/identical-cards', 'spacing/off-grid', 'touch/target-size', 'type/off-scale',
   ]);
+
+  // A 24px curve on a card is a choice the contract admits now; a radius past the ceiling that is not a capsule is not.
+  assert.ok(!rules(findings).includes('shape/off-scale-radius'));
+  const blob = runDomChecks(digest([el({ tag: 'div', text: '', w: 200, h: 120, radius: 48 }), el({ tag: 'button', text: 'Pay', interactive: true, w: 160, h: 48, radius: 24 })]), phone, contract);
+  assert.deepEqual(blob.filter((f) => f.rule === 'shape/off-scale-radius').map((f) => f.message), ['Corner radii past 32px that are not full pills: 48px.'], 'the 48px card is flagged; the pill button (radius half its height) is not');
 
   const contrast = findings.filter((f) => f.rule === 'contrast/text');
   assert.equal(contrast.length, 2, 'the large heading and the text over an image are not flagged');
@@ -82,8 +87,19 @@ test('scoring: judgement can move the score, measurement decides whether it can 
   const blocker: Finding = { rule: 'responsive/horizontal-overflow', category: 'responsive', severity: 'blocker', source: 'dom', viewport: 'iphone-15-pro', route: '/', message: 'm', selector: 'main > div', bbox: { x: 0, y: 10, w: 900, h: 80 }, fix: 'f', file: null, line: null };
   const perfectTaste = { hierarchy: 10, whitespace: 10, typography: 10, color: 10, copy: 10, originality: 10 };
   assert.equal(scoreAudit([blocker], perfectTaste, 85).passed, false, 'a blocker fails the audit whatever the reviewer thinks');
-  assert.deepEqual(scoreAudit([], { ...perfectTaste, originality: 2, hierarchy: 4 }, 85), { score: 90.7, passed: true, blockers: 0, majors: 0, minors: 0 });
-  assert.equal(scoreAudit([], Object.fromEntries(Object.keys(perfectTaste).map((k) => [k, 5])), 85).passed, false, 'a clean but mediocre screen does not pass');
+  assert.deepEqual(scoreAudit([], { ...perfectTaste, originality: 2, hierarchy: 4 }, 85), { score: 86, passed: true, blockers: 0, majors: 0, minors: 0 });
+  const allAt = (score: number): Record<string, number> => Object.fromEntries(Object.keys(perfectTaste).map((k) => [k, score]));
+  assert.equal(scoreAudit([], allAt(5), 85).passed, false, 'a clean but mediocre screen does not pass');
+  // Tidiness is the smaller share of the number: a spotless screen a reviewer finds only decent no longer rides its measurements over the line.
+  assert.deepEqual([scoreAudit([], allAt(7), 85).score, scoreAudit([], allAt(7), 85).passed], [82, false]);
+  assert.deepEqual([scoreAudit([], allAt(8), 85).score, scoreAudit([], allAt(8), 85).passed], [88, true]);
+  // And a striking screen with a few untidy corners is not sunk by them.
+  const untidy = Array.from({ length: 4 }, (_, i) => ({ ...blocker, severity: 'minor' as const, rule: `shape/rule-${i}`, selector: 'main' }));
+  assert.deepEqual([scoreAudit(untidy, allAt(9.5), 85).score, scoreAudit(untidy, allAt(9.5), 85).passed], [94.6, true]);
+  // Copy that reads as generated fails the audit by itself, as source slop does, however the rest scored.
+  const habit = { ...blocker, severity: 'major' as const, rule: 'copy/generic-cta', category: 'copy' as const, selector: 'button' };
+  assert.deepEqual([scoreAudit([habit], perfectTaste, 85).score, scoreAudit([habit], perfectTaste, 85).passed], [98, false]);
+  assert.equal(scoreAudit([{ ...habit, rule: 'copy/uniform-card-grid', severity: 'minor' }], perfectTaste, 85).passed, true, 'the layout habit is reported, not held to zero');
   const noisy = Array.from({ length: 30 }, (_, i) => ({ ...blocker, severity: 'minor' as const, rule: 'spacing/off-grid', selector: `li:nth-of-type(${i})` }));
   assert.equal(scoreAudit(noisy, null, 85).score, 80, 'one rule on many elements cannot take more than its cap');
 

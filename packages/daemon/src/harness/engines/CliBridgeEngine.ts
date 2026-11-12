@@ -16,6 +16,12 @@ import type { Toolbox } from '../Toolbox.ts';
 import { runCommand, type CommandRunner } from '../../util/run.ts';
 import { EngineError, type Engine, type EngineResult, type EngineRun, type EngineSession } from './Engine.ts';
 
+/** Who is told how each call through a subscription went (see `QuotaTracker`). */
+export interface SubscriptionWatch {
+  answered(cli: BridgeEngineId): void;
+  failed(cli: BridgeEngineId, err: unknown): void;
+}
+
 interface Invocation {
   /** The CLI as configured: a name to find on PATH, or a path. */
   bin: string;
@@ -37,6 +43,8 @@ interface Parsed {
   text: string;
   inputTokens: number;
   outputTokens: number;
+  /** The part of `inputTokens` the CLI reports as re-read from cache, when it says. A session re-reads its context every turn. */
+  cachedTokens?: number;
 }
 
 /** One round of a CLI: what to start, with what, and (for CLIs that keep their own tools) what to confine it to. */
@@ -130,6 +138,7 @@ const claudeCode: VendorAdapter = {
       text: parsed.data.result ?? '',
       inputTokens: (u.input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0),
       outputTokens: u.output_tokens ?? 0,
+      cachedTokens: u.cache_read_input_tokens ?? 0,
     };
   },
 };
@@ -168,14 +177,17 @@ const codex: VendorAdapter = {
   parse: async (stdout, inv) => {
     let inputTokens = 0;
     let outputTokens = 0;
+    let cachedTokens = 0;
     for (const line of stdout.split('\n')) {
-      const event = z.object({ type: z.string(), usage: z.object({ input_tokens: z.number().optional(), output_tokens: z.number().optional() }).optional() }).safeParse(safeJson(line));
+      // Codex counts cached input inside `input_tokens` and repeats it as `cached_input_tokens`.
+      const event = z.object({ type: z.string(), usage: z.object({ input_tokens: z.number().optional(), cached_input_tokens: z.number().optional(), output_tokens: z.number().optional() }).optional() }).safeParse(safeJson(line));
       if (event.success && event.data.type === 'turn.completed') {
         inputTokens += event.data.usage?.input_tokens ?? 0;
         outputTokens += event.data.usage?.output_tokens ?? 0;
+        cachedTokens += event.data.usage?.cached_input_tokens ?? 0;
       }
     }
-    return { text: await readFile(inv.lastMessageFile, 'utf8').catch(() => ''), inputTokens, outputTokens };
+    return { text: await readFile(inv.lastMessageFile, 'utf8').catch(() => ''), inputTokens, outputTokens, cachedTokens: Math.min(cachedTokens, inputTokens) };
   },
 };
 
@@ -226,7 +238,7 @@ const cursor: VendorAdapter = {
     if (!parsed.success) throw new EngineError(`cursor-agent returned unparseable output: ${excerpt(stdout, 300)}`);
     if (parsed.data.is_error) throw new EngineError(`cursor-agent reported an error: ${excerpt(parsed.data.result ?? '', 300)}`);
     const u = parsed.data.usage ?? {};
-    return { text: parsed.data.result ?? '', inputTokens: (u.inputTokens ?? 0) + (u.cacheReadTokens ?? 0) + (u.cacheWriteTokens ?? 0), outputTokens: u.outputTokens ?? 0 };
+    return { text: parsed.data.result ?? '', inputTokens: (u.inputTokens ?? 0) + (u.cacheReadTokens ?? 0) + (u.cacheWriteTokens ?? 0), outputTokens: u.outputTokens ?? 0, cachedTokens: u.cacheReadTokens ?? 0 };
   },
 };
 
@@ -292,10 +304,12 @@ export class CliBridgeEngine implements Engine {
   readonly #steering: SteeringQueue;
   readonly #toolbox: Toolbox;
   readonly #acp: (req: AcpRequest) => Promise<AcpResult>;
+  readonly #quota: SubscriptionWatch | null;
   #probe: { at: number; available: boolean; reason: string } | null = null;
 
-  constructor(deps: { id: BridgeEngineId; config: Config; sessions: BridgeSessions; store: Store; events: EventLog; policy: PolicyEngine; clock: Clock; steering: SteeringQueue; toolbox: Toolbox; run?: CommandRunner; acp?: (req: AcpRequest) => Promise<AcpResult> }) {
+  constructor(deps: { id: BridgeEngineId; config: Config; sessions: BridgeSessions; store: Store; events: EventLog; policy: PolicyEngine; clock: Clock; steering: SteeringQueue; toolbox: Toolbox; run?: CommandRunner; acp?: (req: AcpRequest) => Promise<AcpResult>; quota?: SubscriptionWatch }) {
     this.id = deps.id;
+    this.#quota = deps.quota ?? null;
     this.#acp = deps.acp ?? acpPrompt;
     this.#toolbox = deps.toolbox;
     this.#steering = deps.steering;
@@ -373,7 +387,7 @@ export class CliBridgeEngine implements Engine {
           throw err;
         }
         const model = `${this.id}:${inv.model}`;
-        const usage = { inputTokens: parsed.inputTokens, outputTokens: parsed.outputTokens, usdMicros: 0 }; // subscription-billed
+        const usage = { inputTokens: parsed.inputTokens, outputTokens: parsed.outputTokens, cachedTokens: parsed.cachedTokens ?? 0, usdMicros: 0 }; // subscription-billed
         this.#store.addUsage({ ...scope, source: 'bridge', model, ...usage }, this.#clock());
         this.#events.emit(scope, { type: 'usage', source: 'bridge', model, ...usage });
         if (parsed.text) this.#events.emit(scope, { type: 'agent.text', text: parsed.text.slice(0, 8000) });
@@ -428,8 +442,20 @@ export class CliBridgeEngine implements Engine {
     }
   }
 
-  /** Starts the CLI once with `prompt` and reads its answer. The confinement is the adapter's, whoever is asking. */
+  /** One round, with its outcome noted for the subscription it ran on: an answer, or a refusal for a usage limit. */
   async #round(inv: Invocation, prompt: string, timeoutMs: number, signal: AbortSignal | undefined): Promise<Parsed> {
+    try {
+      const parsed = await this.#launch(inv, prompt, timeoutMs, signal);
+      this.#quota?.answered(this.id);
+      return parsed;
+    } catch (err) {
+      if (!signal?.aborted) this.#quota?.failed(this.id, err);
+      throw err;
+    }
+  }
+
+  /** Starts the CLI once with `prompt` and reads its answer. The confinement is the adapter's, whoever is asking. */
+  async #launch(inv: Invocation, prompt: string, timeoutMs: number, signal: AbortSignal | undefined): Promise<Parsed> {
     const launch = await this.#adapter.launch(inv, prompt);
     // A jailed CLI gets the scratch folder as its temp directory too: it is one of the few places it may write.
     const profile = launch.jail ? jailProfile(inv.scratch, launch.jail) : null;
