@@ -63,8 +63,8 @@ const bodies: EventBody[] = [
   { type: 'gate.result', gate: 'compiler', name: 'npm run --silent typecheck', passed: true, exitCode: 0, durationMs: 4100, detail: '' },
   { type: 'gate.result', gate: 'smoke', name: '/ /invoices/1', passed: true, exitCode: null, durationMs: 2300, detail: '2 routes loaded without errors' },
   { type: 'eval.result', evalId: 'evl_lint', name: 'slop-lint', passed: true, durationMs: 60, detail: '0 minor findings' },
-  { type: 'audit.completed', auditId: 'aud_1', score: 71.4, passed: false, blockers: 1, majors: 2, minors: 1 },
-  { type: 'eval.result', evalId: 'evl_vis', name: 'visual-audit', passed: false, durationMs: 14200, detail: 'Visual audit score 71.4/100, required 85 with no blockers.' },
+  { type: 'audit.completed', auditId: 'aud_1', score: 66, passed: false, blockers: 1, majors: 3, minors: 1, visionReviewed: true, grade: 'D' },
+  { type: 'eval.result', evalId: 'evl_vis', name: 'visual-audit', passed: false, durationMs: 14200, detail: 'Visual audit score 66/100, required 85 with no blockers.' },
   { type: 'task.phase', phase: 'execute', round: 2 },
   { type: 'steer.queued', text: '영수증 버튼은 목록 아래가 아니라 각 행 오른쪽에 두세요' },
   { type: 'tool.call', callId: 'call_6', tool: 'edit_file', input: 'src/routes/InvoiceDetail.tsx' },
@@ -86,18 +86,42 @@ function fakeScreen(width: number, height: number): string {
 }
 
 const audit: AuditReport = {
-  id: 'aud_1', projectId: 'prj_ledger', taskId: 'tsk_detail', createdAt: min(-4), score: 71.4, threshold: 85, passed: false,
-  rubric: { hierarchy: 8, whitespace: 7, typography: 8, color: 9, copy: 7, originality: 8 },
+  id: 'aud_1', projectId: 'prj_ledger', taskId: 'tsk_detail', createdAt: min(-4), score: 66, threshold: 85, passed: false,
+  visionReviewed: true,
+  vision: { status: 'reviewed', via: 'session', model: 'claude-fable-5-2', reviewed: 3, expected: 3, reason: null },
+  rubric: { hierarchy: 6, whitespace: 7, typography: 8, color: 9, copy: 6, originality: 5, tactility: 5 },
+  slopScore: 44,
+  archetype: 'web-app',
+  critique: '결제 이력이 표가 아니라 똑같은 회색 줄의 반복으로 보여서, 어느 입금이 최근인지와 무엇을 누를 수 있는지가 드러나지 않습니다. 가장 최근 입금을 맨 위에 크게 두고, 영수증 받기를 각 줄의 오른쪽 끝에 붙이세요.',
+  grade: 'D',
+  redesignPatches: [
+    { viewport: 'iphone-15-pro', route: '/invoices/1', target: 'section.history > ul', bbox: { x: 24, y: 236, w: 345, h: 288 }, action: 'restructure', instruction: '결제 이력을 날짜, 금액, 영수증 버튼 순서의 줄로 다시 짜고, 가장 최근 입금 한 건은 text-2xl 금액으로 목록 위에 따로 둡니다.' },
+    { viewport: 'iphone-15-pro', route: '/invoices/1', target: 'section.history button.receipt', bbox: { x: 269, y: 575, w: 100, h: 32 }, action: 'restyle', instruction: '영수증 버튼을 목록 아래에서 각 줄 오른쪽 끝으로 옮기고 min-h-11, rounded-md, border-control-border로 눌리는 모양을 줍니다.' },
+    { viewport: 'iphone-15-pro', route: '/invoices/1', target: 'section.history > p', bbox: { x: 24, y: 168, w: 150, h: 26 }, action: 'rewrite_copy', instruction: '"아직 입금된 내역이 없습니다. 입금이 확인되면 여기에 표시됩니다."' },
+  ],
   findings: [
     { rule: 'contrast/text', category: 'contrast', severity: 'blocker', source: 'dom', viewport: 'iphone-15-pro', route: '/invoices/1', message: '"2026년 10월 31일 입금" has contrast 3.42:1; 7:1 is required (WCAG AAA, and it fails AA 4.5:1)', selector: 'section.history > ul > li:nth-of-type(1) > time', bbox: { x: 24, y: 252, w: 168, h: 22 }, fix: 'Use text-fg or text-fg-muted on bg-bg / bg-surface / bg-sunken. Do not lighten text with opacity.', file: null, line: null },
     { rule: 'touch/target-size', category: 'touch-target', severity: 'major', source: 'dom', viewport: 'iphone-15-pro', route: '/invoices/1', message: 'button "영수증" is 62×28px; touch targets need 44×44px', selector: 'section.history button.receipt', bbox: { x: 269, y: 575, w: 100, h: 32 }, fix: 'Give the control min-h-11 min-w-11 (44px); keep the icon size and grow the hit area.', file: null, line: null },
     { rule: 'spacing/off-grid', category: 'spacing', severity: 'major', source: 'dom', viewport: 'ipad-pro-11', route: '/invoices/1', message: '34% of paddings, margins and gaps are off the 4px grid (e.g. 10, 14, 18px).', selector: 'section.history', bbox: { x: 24, y: 236, w: 786, h: 288 }, fix: 'Use spacing utilities (multiples of 4px).', file: null, line: null },
+    { rule: 'vision/tactility', category: 'tactility', severity: 'major', source: 'vlm', viewport: 'iphone-15-pro', route: '/invoices/1', message: '결제 이력의 네 줄이 모두 같은 회색 면이라 누를 수 있는 것과 읽기만 하는 것이 구분되지 않습니다.', selector: 'section.history > ul', bbox: { x: 24, y: 236, w: 345, h: 288 }, fix: '줄은 bg-surface에 border-border 가는 선으로 나누고, 누를 수 있는 것은 영수증 버튼 하나로 분명히 하세요.', file: null, line: null },
     { rule: 'vision/copy', category: 'copy', severity: 'minor', source: 'vlm', viewport: 'iphone-15-pro', route: '/invoices/1', message: '빈 상태 문구 "데이터가 없습니다"는 무엇이 없는지, 다음에 무엇을 할 수 있는지 말해주지 않습니다.', selector: 'section.history > p', bbox: { x: 24, y: 168, w: 150, h: 26 }, fix: '"아직 입금된 내역이 없습니다. 입금이 확인되면 여기에 표시됩니다."처럼 상태와 다음 일을 적으세요.', file: null, line: null },
   ],
   screenshots: [
     { viewport: 'iphone-15-pro', route: '/invoices/1', fold: 0, artifactId: 'art_phone', width: 393, height: 659 },
     { viewport: 'ipad-pro-11', route: '/invoices/1', fold: 0, artifactId: 'art_tablet', width: 834, height: 1194 },
     { viewport: 'desktop-1440', route: '/invoices/1', fold: 0, artifactId: 'art_desktop', width: 1440, height: 900 },
+  ],
+};
+
+/** The other thing an audit can say: the measurements are clean and nobody looked. No grade, a capped score, and the reason. */
+const unreviewedAudit: AuditReport = {
+  id: 'aud_2', projectId: 'prj_atlas', taskId: null, createdAt: min(-40), score: 50, threshold: 85, passed: false,
+  visionReviewed: false,
+  vision: { status: 'failed', via: null, model: null, reviewed: 0, expected: 2, reason: 'Claude subscription (CLI): Claude 구독의 사용 한도에 걸렸습니다.' },
+  rubric: null, slopScore: null, archetype: null, critique: null, grade: null, redesignPatches: [], findings: [],
+  screenshots: [
+    { viewport: 'iphone-15-pro', route: '/', fold: 0, artifactId: 'art_phone', width: 393, height: 659 },
+    { viewport: 'ipad-pro-11', route: '/', fold: 0, artifactId: 'art_tablet', width: 834, height: 1194 },
   ],
 };
 
@@ -239,8 +263,9 @@ const handlers: Handlers = {
   'tasks.get': (p) => tasks.find((t) => t.id === p.taskId)!,
   'approvals.list': (p) => ({ approvals: approvals.filter((a) => p.state === undefined || a.state === p.state) }),
   'checkpoints.list': (p) => ({ checkpoints: checkpoints.filter((c) => c.projectId === p.projectId) }),
-  'audits.list': (p) => ({ audits: p.projectId === 'prj_ledger' ? [{ id: audit.id, taskId: audit.taskId, createdAt: audit.createdAt, score: audit.score, passed: audit.passed }] : [] }),
-  'audits.get': () => audit,
+  'audits.list': (p) => ({ audits: [audit, unreviewedAudit].filter((a) => a.projectId === p.projectId).map((a) => ({ id: a.id, taskId: a.taskId, createdAt: a.createdAt, score: a.score, passed: a.passed })) }),
+  'audits.get': (p) => (p.auditId === unreviewedAudit.id ? unreviewedAudit : audit),
+  'audits.redesign': () => tasks[0]!,
   'lessons.list': (p) => ({ lessons: lessons.filter((l) => p.projectId === undefined || l.projectId === p.projectId) }),
   'evals.list': (p) => ({ evals: evals.filter((e) => e.projectId === p.projectId) }),
   'kirby.proposals': (p) => ({ proposals: proposals.filter((c) => c.projectId === p.projectId) }),

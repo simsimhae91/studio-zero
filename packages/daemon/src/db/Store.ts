@@ -8,6 +8,7 @@ import {
   ProposalCard,
   ResearchReport,
   TextFinding,
+  UNREVIEWED_SCORE_CAP,
   type Confidence,
   type KnowledgeJob,
   type ScratchEntry,
@@ -551,7 +552,24 @@ export class Store {
 
   getAudit(id: string): AuditReport | null {
     const r = this.#get('SELECT report_json FROM audits WHERE id = :id', { id });
-    return r ? AuditReport.parse(JSON.parse(str(r.report_json))) : null;
+    if (!r) return null;
+    const stored = JSON.parse(str(r.report_json)) as Record<string, unknown>;
+    if ('visionReviewed' in stored) return AuditReport.parse(stored);
+    // A report written before design-review coverage was tracked says only whether a rubric came back. One
+    // without a rubric was scored on measurements alone and may say "100, passed". It is read back the way
+    // such an audit is reported now: unreviewed, capped, not passed. The row itself is left as it was written.
+    const reviewed = stored.rubric !== null && stored.rubric !== undefined;
+    const legacy = {
+      visionReviewed: reviewed,
+      vision: { status: reviewed ? 'reviewed' : 'failed', via: null, model: null, reviewed: 0, expected: 0, reason: reviewed ? null : 'this audit was recorded without a design review' },
+      slopScore: null,
+      archetype: null,
+      critique: null,
+      grade: null,
+      redesignPatches: [],
+    };
+    const verdict = reviewed ? {} : { score: Math.min(Number(stored.score), UNREVIEWED_SCORE_CAP), passed: false };
+    return AuditReport.parse({ ...stored, ...legacy, ...verdict });
   }
 
   listAudits(projectId: string, limit: number): Pick<AuditReport, 'id' | 'taskId' | 'createdAt' | 'score' | 'passed'>[] {

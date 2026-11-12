@@ -27,6 +27,7 @@ import { LlmGateway, type GatewayUpstreams } from '../llm/LlmGateway.ts';
 import { ModelRouter } from '../llm/ModelRouter.ts';
 import { PolicyEngine } from '../policy/PolicyEngine.ts';
 import { PLAYWRIGHT_VERSION, QaBrowser } from '../qa/QaBrowser.ts';
+import { QaVisionBridge } from '../qa/QaVisionBridge.ts';
 import { SmokeTester, type SmokeRunner } from '../qa/SmokeTester.ts';
 import { VisualAuditor } from '../qa/VisualAuditor.ts';
 import { TaskQueue } from '../queue/TaskQueue.ts';
@@ -137,7 +138,9 @@ export async function createDaemon(config: Config, log: PinoLogger, overrides: D
 
   // One browser container serves both the smoke load and the visual audit.
   const qaBrowser = new QaBrowser({ config, sandboxes });
-  const auditor = new VisualAuditor({ config, store, events, browser: qaBrowser, claude, clock, log: log.child({ mod: 'audit' }) });
+  // The design reviewer travels the same two ways as the rest of the daemon's thinking: API key, or subscription CLI.
+  const vision = new QaVisionBridge({ config, claude, log: log.child({ mod: 'vision' }) });
+  const auditor = new VisualAuditor({ config, store, events, browser: qaBrowser, vision, clock, log: log.child({ mod: 'audit' }) });
   const evals = new EvalRunner({ config, store, events, sandboxes, auditor, clock });
   const compiler = new CompilerGate({ sandboxes });
   const smoke = overrides.smoke ?? new SmokeTester({ config, sandboxes, browser: qaBrowser });

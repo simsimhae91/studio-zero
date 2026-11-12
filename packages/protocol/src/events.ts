@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { ScratchState } from './ax.ts';
-import { AdvisorId, ApprovalState, LessonState, Origin, Phase, ProposalState, SandboxState, TaskKind, TaskState } from './domain.ts';
+import { AdvisorId, ApprovalState, DesignGrade, LessonState, Origin, Phase, ProposalState, SandboxState, TaskKind, TaskState } from './domain.ts';
 
 /**
  * Every state change in the daemon is an append-only event with a monotonically increasing `seq`.
@@ -52,6 +52,8 @@ export const EventBody = z.discriminatedUnion('type', [
     evalId: z.string(),
     name: z.string(),
     passed: z.boolean(),
+    /** Set when the check could not reach a verdict (the design review did not run): not a pass, and nothing the engine can fix. */
+    unverified: z.boolean().optional(),
     durationMs: z.number().int(),
     detail: z.string(),
   }),
@@ -77,6 +79,9 @@ export const EventBody = z.discriminatedUnion('type', [
     blockers: z.number().int(),
     majors: z.number().int(),
     minors: z.number().int(),
+    /** Absent on events recorded before design-review coverage was tracked. False: nobody judged the design. */
+    visionReviewed: z.boolean().optional(),
+    grade: DesignGrade.nullable().optional(),
   }),
   z.object({
     type: z.literal('usage'),

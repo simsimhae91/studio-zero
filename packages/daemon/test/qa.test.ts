@@ -92,8 +92,13 @@ test('scoring: judgement can move the score, measurement decides whether it can 
   const everywhere = [major, { ...major, viewport: 'ipad-pro-11' as const }, { ...major, viewport: 'desktop-1440' as const, severity: 'minor' as const }];
   assert.deepEqual(scoreAudit(everywhere, null, 85), { score: 95, passed: true, blockers: 0, majors: 1, minors: 0 });
 
-  const report: AuditReport = { id: 'aud_1', projectId: 'p', taskId: null, createdAt: 0, score: 51, threshold: 85, passed: false, rubric: null, findings: [blocker], screenshots: [] };
+  const report: AuditReport = {
+    id: 'aud_1', projectId: 'p', taskId: null, createdAt: 0, score: 50, threshold: 85, passed: false,
+    visionReviewed: false, vision: { status: 'unavailable', via: null, model: null, reviewed: 0, expected: 1, reason: 'no model to ask' },
+    rubric: null, slopScore: null, archetype: null, critique: null, grade: null, redesignPatches: [], findings: [blocker], screenshots: [],
+  };
   const feedback = renderAuditFeedback(report);
+  assert.match(feedback, /Design review did not run \(no model to ask\)\. The design is unverified: the score is capped at 50/);
   assert.match(feedback, /\[blocker\] responsive\/horizontal-overflow \(measured\)/);
   assert.match(feedback, /iphone-15-pro \| \/ \| selector: main > div \| box: x=0 y=10 900×80px/);
 });

@@ -58,7 +58,7 @@ function StepRow({ step, onAudit }: { step: Step; onAudit: () => void }) {
                 <li key={i} className="flex max-w-none flex-col gap-1">
                   <span className="flex flex-wrap items-baseline justify-between gap-x-4">
                     <span className={`min-w-0 break-words ${line.mono ? 'font-mono text-sm' : 'text-base'} ${line.tone === 'bad' ? 'text-danger' : 'text-fg'}`}>{line.text}</span>
-                    {line.meta ? <span className={`shrink-0 text-sm ${line.tone === 'bad' ? 'font-medium text-danger' : line.tone === 'good' ? 'text-success' : 'text-fg-muted'}`}>{line.meta}</span> : null}
+                    {line.meta ? <span className={`shrink-0 text-sm ${line.tone === 'bad' ? 'font-medium text-danger' : line.tone === 'warn' ? 'font-medium text-warning' : line.tone === 'good' ? 'text-success' : 'text-fg-muted'}`}>{line.meta}</span> : null}
                   </span>
                   {/* Sandbox and page output is untrusted: it is only ever a text node. */}
                   {line.output ? <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-md border border-border bg-sunken p-3 font-mono text-sm">{line.output}</pre> : null}
@@ -69,7 +69,7 @@ function StepRow({ step, onAudit }: { step: Step; onAudit: () => void }) {
           {step.audit ? (
             <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
               <p className="text-base">
-                시각 감사 {step.audit.score.toFixed(0)}점, {step.audit.passed ? '기준을 넘었습니다' : '기준에 못 미쳤습니다'}. 블로커 {step.audit.blockers}건, 주요 {step.audit.majors}건, 사소 {step.audit.minors}건
+                시각 감사 {step.audit.score.toFixed(0)}점, {step.audit.visionReviewed === false ? '디자인 심사가 실행되지 않아 디자인은 보증되지 않습니다' : step.audit.passed ? '기준을 넘었습니다' : '기준에 못 미쳤습니다'}. 블로커 {step.audit.blockers}건, 주요 {step.audit.majors}건, 사소 {step.audit.minors}건
               </p>
               <Button onClick={onAudit} icon={<ScanEye className="size-4" aria-hidden />}>
                 증거 보기

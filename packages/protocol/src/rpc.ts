@@ -153,6 +153,12 @@ export const methods = {
     params: z.object({ projectId: z.string(), limit: z.number().int().min(1).max(100).optional() }),
     result: z.object({ audits: z.array(AuditReport.pick({ id: true, taskId: true, createdAt: true, score: true, passed: true })) }),
   },
+  /**
+   * Starts a task that redesigns the audited screens from that audit's design review: its critique, its redesign
+   * plan and its findings. The task continues from the branch the audit looked at and runs the full checks, so
+   * the result is audited again.
+   */
+  'audits.redesign': { params: z.object({ auditId: z.string() }), result: Task },
 
   'lessons.list': { params: z.object({ projectId: z.string().optional(), state: LessonState.optional() }), result: z.object({ lessons: z.array(Lesson) }) },
   'lessons.setState': { params: z.object({ lessonId: z.string(), state: z.enum(['active', 'retired', 'quarantined']) }), result: Lesson },

@@ -9,7 +9,8 @@ export interface StepLine {
   text: string;
   /** Commands and paths are set in the code face. */
   mono: boolean;
-  tone: 'plain' | 'good' | 'bad';
+  /** `warn`: a check that could not reach a verdict. Not a failure, and not a pass. */
+  tone: 'plain' | 'good' | 'bad' | 'warn';
   /** How it ended, in a few words: "완료, 1.2초". */
   meta: string;
   /** Raw output of something that failed. Sandbox or page output: only ever rendered as text. */
@@ -28,7 +29,7 @@ export interface Step {
   /** Things the agent said while doing this. Kept with the step instead of interrupting the list. */
   notes: string[];
   /** Verify steps only: the visual audit of that round, if one ran. */
-  audit: { score: number; passed: boolean; blockers: number; majors: number; minors: number } | null;
+  audit: { score: number; passed: boolean; blockers: number; majors: number; minors: number; /** False: no design reviewer saw the screens. Undefined on audits recorded before that was tracked. */ visionReviewed?: boolean } | null;
 }
 
 export type Item =
@@ -168,9 +169,11 @@ export function narrate(events: readonly EventEnvelope[]): Item[] {
   const settleVerify = (): void => {
     if (!verify) return;
     const failed = verify.lines.filter((l) => l.tone === 'bad');
+    // Nothing failed, but something could not be checked: the round is over without being a clean pass.
+    const unverified = failed.length > 0 ? [] : verify.lines.filter((l) => l.tone === 'warn');
     verify.state = failed.length > 0 ? 'failed' : 'done';
-    verify.title = failed.length > 0 ? `${verify.title} 실패` : verify.lines.length === 0 ? `${verify.title}: 확인할 항목 없음` : `${verify.title} 통과`;
-    verify.detail = (failed.length > 0 ? failed : verify.lines).map((l) => l.text).join(', ');
+    verify.title = failed.length > 0 ? `${verify.title} 실패` : unverified.length > 0 ? `${verify.title}: 검증하지 못한 항목 있음` : verify.lines.length === 0 ? `${verify.title}: 확인할 항목 없음` : `${verify.title} 통과`;
+    verify.detail = (failed.length > 0 ? failed : unverified.length > 0 ? unverified : verify.lines).map((l) => l.text).join(', ');
     verify = null;
   };
   const closeWork = (): void => {
@@ -241,10 +244,10 @@ export function narrate(events: readonly EventEnvelope[]): Item[] {
         verify?.lines.push({ text: gateLabel[b.gate], mono: false, tone: b.passed ? 'good' : 'bad', meta: `${b.passed ? '통과' : `실패${b.exitCode === null ? '' : `, 종료 코드 ${b.exitCode}`}`}, ${duration(b.durationMs)}`, output: b.passed ? '' : b.detail });
         break;
       case 'eval.result':
-        verify?.lines.push({ text: evalLabel(b.name), mono: false, tone: b.passed ? 'good' : 'bad', meta: `${b.passed ? '통과' : '실패'}, ${duration(b.durationMs)}`, output: b.passed ? '' : b.detail });
+        verify?.lines.push({ text: evalLabel(b.name), mono: false, tone: b.passed ? 'good' : b.unverified ? 'warn' : 'bad', meta: `${b.passed ? '통과' : b.unverified ? '검증하지 못함' : '실패'}, ${duration(b.durationMs)}`, output: b.passed ? '' : b.detail });
         break;
       case 'audit.completed':
-        if (verify) verify.audit = { score: b.score, passed: b.passed, blockers: b.blockers, majors: b.majors, minors: b.minors };
+        if (verify) verify.audit = { score: b.score, passed: b.passed, blockers: b.blockers, majors: b.majors, minors: b.minors, ...(b.visionReviewed === undefined ? {} : { visionReviewed: b.visionReviewed }) };
         break;
       case 'steer.queued': {
         closeWork();

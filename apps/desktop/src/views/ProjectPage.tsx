@@ -229,7 +229,18 @@ function Workbench({ project, onOpen, onChanged }: { project: Project; onOpen: (
           />
         );
       case 'audit':
-        return <Audit project={project} />;
+        return (
+          <Audit
+            project={project}
+            onTaskStarted={(task) => {
+              // A redesign runs in the project's default stream: go there and open it.
+              setPicked((prev) => ({ ...prev, [DEFAULT_SESSION]: task.id }));
+              pickSession(null);
+              tasks.reload();
+              setPane('chat');
+            }}
+          />
+        );
       case 'proposals':
         return <Proposals project={project} />;
       case 'learning':

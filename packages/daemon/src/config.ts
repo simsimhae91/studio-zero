@@ -18,7 +18,8 @@ export type RouteCandidate = z.infer<typeof RouteCandidate>;
 /**
  * Routing is a table, not a judgement call: for each task kind, the first candidate whose engine is available wins.
  * Planning-class work goes to Claude Fable 5.2; multi-file refactors prefer a bridged coding CLI and fall back to
- * the native loop; verification-side model calls (vision audit, reflection) are fixed in code to `claude-opus-5-5`.
+ * the native loop; verification-side model calls are fixed in code: the audit's design review to `claude-fable-5-2`
+ * (`qa/vision.ts`), reflection to `claude-opus-5-5`.
  */
 const defaultRoutes: Record<TaskKind, z.input<typeof RouteCandidate>[]> = {
   ideate: [

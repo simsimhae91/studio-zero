@@ -1,5 +1,5 @@
 import { blend, contrastRatio, hueSaturation, isLargeText, type DesignContract, type Rgb } from '@studio-zero/design';
-import type { Finding, FindingCategory, Severity, ViewportId } from '@studio-zero/protocol';
+import { UNREVIEWED_SCORE_CAP, type DesignGrade, type Finding, type FindingCategory, type Severity, type ViewportId } from '@studio-zero/protocol';
 import type { DigestElement, PageDigest } from './collector.ts';
 
 export interface CheckContext {
@@ -250,15 +250,63 @@ export function distinctDefects(findings: readonly Finding[]): Finding[] {
   return [...defects.values()];
 }
 
-export function scoreAudit(all: readonly Finding[], rubric: Record<string, number> | null, threshold: number): { score: number; passed: boolean; blockers: number; majors: number; minors: number } {
+/** Above this slop score a screen reads as generated, and the audit does not pass whatever else it scored. */
+export const SLOP_PASS_MAX = 30;
+/** From this slop score up the grade is F. */
+export const SLOP_FAIL = 60;
+export { UNREVIEWED_SCORE_CAP };
+
+export interface AuditScore {
+  score: number;
+  passed: boolean;
+  blockers: number;
+  majors: number;
+  minors: number;
+}
+
+/**
+ * The arithmetic. `rubric` and `slopScore` are a reviewer's judgement; with neither, the score is the measured
+ * one. A caller that reports a design verdict wants `gradeAudit`, which knows the difference between "no
+ * judgement was asked for" and "no judgement could be had".
+ */
+export function scoreAudit(all: readonly Finding[], rubric: Record<string, number> | null, threshold: number, slopScore: number | null = null): AuditScore {
   const findings = distinctDefects(all);
   const perRule = new Map<string, number>();
   for (const f of findings) perRule.set(f.rule, Math.min(PER_RULE_CAP, (perRule.get(f.rule) ?? 0) + PENALTY[f.severity]));
   const measured = Math.max(0, 100 - [...perRule.values()].reduce((a, b) => a + b, 0));
-  const judged = rubric && Object.keys(rubric).length > 0 ? (Object.values(rubric).reduce((a, b) => a + b, 0) / Object.keys(rubric).length) * 10 : null;
+  const taste = rubric && Object.keys(rubric).length > 0 ? (Object.values(rubric).reduce((a, b) => a + b, 0) / Object.keys(rubric).length) * 10 : null;
+  // Half of the judged part is how little the screen reads as generated, when the reviewer said.
+  const judged = taste === null ? null : slopScore === null ? taste : (taste + (100 - slopScore)) / 2;
   // Measurement outweighs judgement: a model's taste may raise or lower the score, it cannot outvote a defect.
   const score = round(judged === null ? measured : measured * 0.6 + judged * 0.4);
   const count = (s: Severity): number => findings.filter((f) => f.severity === s).length;
   const blockers = count('blocker');
-  return { score, passed: blockers === 0 && score >= threshold, blockers, majors: count('major'), minors: count('minor') };
+  return { score, passed: blockers === 0 && score >= threshold && (slopScore === null || slopScore <= SLOP_PASS_MAX), blockers, majors: count('major'), minors: count('minor') };
+}
+
+export interface AuditVerdict extends AuditScore {
+  /** Null when no reviewer saw every screen: an unreviewed design has no grade. */
+  grade: DesignGrade | null;
+}
+
+/**
+ * The verdict an audit reports. `judgement` is null when a design reviewer did not see every captured screen,
+ * for whatever reason (switched off, nobody to ask, refused, failed). Then the audit does not pass and its
+ * score is capped: a page can be measured clean and still be something no designer would ship, and a number
+ * nobody's eye confirmed must not look like one somebody's did.
+ */
+export function gradeAudit(findings: readonly Finding[], judgement: { rubric: Record<string, number>; slopScore: number } | null, threshold: number): AuditVerdict {
+  if (!judgement) {
+    const measured = scoreAudit(findings, null, threshold);
+    return { ...measured, score: Math.min(measured.score, UNREVIEWED_SCORE_CAP), passed: false, grade: null };
+  }
+  const result = scoreAudit(findings, judgement.rubric, threshold, judgement.slopScore);
+  return { ...result, grade: gradeOf(result, judgement.slopScore) };
+}
+
+function gradeOf(result: AuditScore, slopScore: number): DesignGrade {
+  if (slopScore >= SLOP_FAIL) return 'F';
+  if (!result.passed) return result.blockers === 0 && result.score >= 70 ? 'C' : result.score >= 50 ? 'D' : 'F';
+  if (result.score >= 95 && slopScore <= 10 && result.majors === 0) return 'S';
+  return result.score >= 90 ? 'A' : 'B';
 }

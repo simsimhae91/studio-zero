@@ -1,4 +1,4 @@
-import type { ApprovalState, LessonState, Phase, ProposalState, Severity, TaskKind, TaskState, Template, ViewportId } from '@studio-zero/protocol';
+import type { ApprovalState, DesignGrade, LessonState, Phase, ProposalState, RedesignAction, ScreenArchetype, Severity, TaskKind, TaskState, Template, ViewportId, VisionCoverage } from '@studio-zero/protocol';
 
 export const taskStateLabel: Record<TaskState, string> = {
   queued: '대기 중',
@@ -21,6 +21,38 @@ export const templateLabel: Record<Template, string> = { 'web-vite-react': '웹 
 export const viewportLabel: Record<ViewportId, string> = { 'iphone-15-pro': '폰', 'ipad-pro-11': '태블릿', 'desktop-1440': '데스크톱' };
 
 export const severityLabel: Record<Severity, string> = { blocker: '블로커', major: '주요', minor: '사소' };
+
+/** What a design grade means for the owner: whether this can ship. */
+export const gradeLabel: Record<DesignGrade, string> = { S: '그대로 출시해도 됩니다', A: '통과', B: '통과, 다듬을 곳이 있습니다', C: '기준 미달', D: '기준 미달, 구조를 고쳐야 합니다', F: '슬롭 감지' };
+
+export const archetypeLabel: Record<ScreenArchetype, string> = { 'mobile-app': '모바일 앱', 'web-app': '웹 앱', 'web-dashboard': '웹 대시보드', marketing: '마케팅 랜딩' };
+
+export const redesignActionLabel: Record<RedesignAction, string> = {
+  replace_with_viewfinder: '뷰파인더로 교체',
+  dock_to_bottom: '하단 도크로 이동',
+  add_app_bar: '앱 바 추가',
+  move_to_sheet: '바텀 시트로 이동',
+  restructure: '구조 다시 짜기',
+  restyle: '표현 바꾸기',
+  rewrite_copy: '문구 다시 쓰기',
+  remove: '삭제',
+};
+
+/** Why nobody judged the design, in the owner's terms. The daemon's own account is shown beside it. */
+export function visionGap(vision: VisionCoverage): string {
+  switch (vision.status) {
+    case 'off':
+      return '설정에서 디자인 심사가 꺼져 있습니다.';
+    case 'unavailable':
+      return 'Anthropic API 키도 Claude Code 로그인도 없어 심사를 맡길 모델이 없습니다.';
+    case 'partial':
+      return `화면 ${vision.expected}개 중 ${vision.reviewed}개만 심사했습니다.`;
+    case 'failed':
+      return '디자인 심사를 요청했지만 답을 받지 못했습니다.';
+    case 'reviewed':
+      return '';
+  }
+}
 
 export const lessonStateLabel: Record<LessonState, string> = { candidate: '후보', active: '적용 중', quarantined: '격리됨', retired: '폐기' };
 
@@ -100,6 +132,9 @@ const ruleTitles: Record<string, string> = {
   'slop/caps-eyebrow': '자간 넓힌 대문자 라벨',
   'slop/emoji-as-icon': '아이콘 자리의 이모지',
   'slop/identical-cards': '똑같은 카드의 반복',
+  'vision/stock-clipart': '기능 없는 범용 클립아트',
+  'vision/web-layout-on-mobile': '모바일 화면의 웹 랜딩 레이아웃',
+  'vision/tactility': '촉감과 어포던스',
   'vision/hierarchy': '위계',
   'vision/spacing': '여백',
   'vision/typography': '타이포그래피',

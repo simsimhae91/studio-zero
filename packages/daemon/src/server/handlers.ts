@@ -85,6 +85,7 @@ export function createHandlers(studio: Studio): Handlers {
     'audits.run': (p) => studio.runAudit(OWNER, p.projectId, p.routes),
     'audits.get': (p) => studio.getAudit(p.auditId),
     'audits.list': (p) => ({ audits: studio.listAudits(p.projectId, p.limit ?? 20) }),
+    'audits.redesign': (p) => studio.redesignFromAudit(OWNER, p.auditId, 'desktop'),
 
     'lessons.list': (p) => ({ lessons: studio.listLessons(p.projectId, p.state) }),
     'lessons.setState': (p) => studio.setLessonState(OWNER, p.lessonId, p.state),

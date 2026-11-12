@@ -27,7 +27,9 @@ await build({
 });
 
 // The AX kit is written into every project the daemon provisions, as source: ship it beside the bundle.
+// The mobile kit goes the same way into every mobile project.
 cpSync(fileURLToPath(new URL('../packages/ax/src/', import.meta.url)), `${daemon}dist/ax-kit`, { recursive: true, filter: (src) => !basename(src).startsWith('.') });
+cpSync(fileURLToPath(new URL('../packages/design/src/mobile/', import.meta.url)), `${daemon}dist/mobile-kit`, { recursive: true, filter: (src) => !basename(src).startsWith('.') });
 
 // A daemon started from the previous bundle still holds its main chunk in memory but loads the rest on demand,
 // from files this build has just replaced. If the LaunchAgent is loaded, say so instead of leaving it half-stale.

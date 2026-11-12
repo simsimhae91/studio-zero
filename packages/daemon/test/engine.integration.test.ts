@@ -42,7 +42,7 @@ const PAGE = `<!doctype html>
 function fakeModel(): Anthropic {
   const usage = { input_tokens: 400, output_tokens: 80, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 };
   const answer = (system: string): unknown => {
-    if (system.startsWith('You are reviewing one screen')) return { rubric: { hierarchy: 9, whitespace: 9, typography: 9, color: 9, copy: 9, originality: 9 }, findings: [], summary: 'Clean.' };
+    if (system.startsWith('You are reviewing one screen')) return { archetype: 'web-app', slopScore: 6, critique: 'Clean.', rubric: { hierarchy: 9, whitespace: 9, typography: 9, color: 9, copy: 9, originality: 9, tactility: 9 }, findings: [], redesignPatches: [] };
     if (system.startsWith('You are a staff engineer reviewing')) {
       return { title: 'Validate request bodies with schemas', rationale: 'Inputs are trusted as they arrive.', plannedChanges: [{ path: 'server.js', action: 'modify', description: 'Parse inputs.' }], risk: 'low', estimatedImpact: 'Fewer malformed-input bugs.', implementationBrief: 'Add a schema at the request boundary.' };
     }

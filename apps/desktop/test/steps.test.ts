@@ -81,6 +81,22 @@ test('verification is one step per round: the gates and evals that ran, the firs
   assert.ok(passed.lines.every((l) => l.tone === 'good' && l.output === ''));
 });
 
+test('a round whose design review did not run is neither a pass nor a failure, and says which check it was', () => {
+  const items = narrate(
+    envelopes([
+      { type: 'task.phase', phase: 'verify', round: 1 },
+      { type: 'gate.result', gate: 'compiler', name: 'npm run --silent typecheck', passed: true, exitCode: 0, durationMs: 3900, detail: '' },
+      { type: 'audit.completed', auditId: 'aud_2', score: 50, passed: false, blockers: 0, majors: 0, minors: 0, visionReviewed: false, grade: null },
+      { type: 'eval.result', evalId: 'e2', name: 'visual-audit', passed: false, unverified: true, durationMs: 9000, detail: 'Design review did not run (no model to ask).' },
+      { type: 'task.state', state: 'succeeded', error: null },
+    ]),
+  );
+  assert.deepEqual(rows(items), ['[✓] 검증 1회차: 검증하지 못한 항목 있음 (시각 감사)']);
+  const [round] = steps(items) as [Step];
+  assert.deepEqual(round.lines.map((l) => [l.text, l.tone, l.meta]), [['컴파일', 'good', '통과, 3.9초'], ['시각 감사', 'warn', '검증하지 못함, 9.0초']]);
+  assert.deepEqual(round.audit, { score: 50, passed: false, blockers: 0, majors: 0, minors: 0, visionReviewed: false });
+});
+
 test('a running verification is in progress; a plan is a step with its steps inside; a round with nothing to check says so', () => {
   const running = narrate(envelopes([{ type: 'plan.created', summary: '상세 화면에 결제 이력을 추가합니다.', steps: ['타입 정의', '섹션 추가'], auditRoutes: ['/'], appliedLessonIds: ['les_1'] }, { type: 'task.phase', phase: 'verify', round: 1 }]));
   assert.deepEqual(rows(running), ['[✓] 계획 2단계 (상세 화면에 결제 이력을 추가합니다.)', '[▶] 검증 1회차']);

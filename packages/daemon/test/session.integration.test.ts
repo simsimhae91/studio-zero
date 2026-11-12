@@ -7,10 +7,15 @@ import { test } from 'node:test';
 import { z } from 'zod';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { chromium, devices } from 'playwright-core';
+import { contract, createTheme, renderThemeCss, seedFromName } from '@studio-zero/design';
 import { codingSystemPrompt } from '../src/harness/prompts.ts';
 import { loopTool, runToolLoop } from '../src/llm/toolLoop.ts';
+import { gradeAudit, runDomChecks } from '../src/qa/checks.ts';
+import { PageDigest, collectDigest } from '../src/qa/collector.ts';
+import { QaVisionBridge } from '../src/qa/QaVisionBridge.ts';
 import { runCommand } from '../src/util/run.ts';
-import { freePort, sampleProject, testDaemon } from './helpers.ts';
+import { freePort, quietLog, sampleProject, testDaemon } from './helpers.ts';
 
 const enabled = process.env.SZ_TEST_SESSION === '1';
 const OWNER = { type: 'owner', via: 'desktop' } as const;
@@ -82,6 +87,67 @@ test('with no API key the daemon thinks through the Claude subscription', { skip
 
     assert.ok(store.projectTokensSince('prj_studio', 0) > 0, 'subscription use is metered against the budget');
   } finally {
+    await d.cleanup();
+  }
+});
+
+/**
+ * A phone app's first screen built the way a code generator builds one: headline, pitch, a static picture of a
+ * parcel, three selling points and one wide button. On the project's own theme, so nothing measurable is wrong.
+ */
+const PARCEL = encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 345 220"><rect width="345" height="220" fill="#e8eef0"/><path d="M92 86l80-34 82 34v78l-82 36-80-36z" fill="#c9a26b"/><path d="M92 86l80 34 82-34M172 120v80" stroke="#8b6b3d" stroke-width="5" fill="none"/><rect x="150" y="60" width="44" height="26" fill="#f4ead8"/></svg>');
+const SLOPPY_PHONE_SCREEN = `<!doctype html><html lang="ko"><head><meta name="viewport" content="width=device-width, initial-scale=1"><style>${renderThemeCss(createTheme(seedFromName('garim')))}</style><style>
+  body { margin: 0; font-family: Geist, sans-serif; background: var(--sz-bg); color: var(--sz-fg); }
+  main { padding: 24px; display: grid; gap: 24px; text-align: center; }
+  h1 { font-size: 30px; line-height: 1.3; margin: 0; }
+  p { font-size: 18px; line-height: 1.6; margin: 0; color: var(--sz-fg-muted); }
+  img { width: 100%; border-radius: 12px; display: block; }
+  ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+  li { font-size: 16px; line-height: 1.6; color: var(--sz-fg-muted); }
+  button { min-height: 56px; width: 100%; border: 0; border-radius: 8px; background: var(--sz-accent); color: var(--sz-on-accent); font-size: 18px; font-weight: 600; }
+</style></head><body><main>
+  <h1>올리기 전에, 가릴 것부터</h1>
+  <p>당근이나 단톡방에 올릴 사진에서 집을 알려 주는 글자를 찾아 가리고 위치정보를 지워요.</p>
+  <img alt="택배 상자" src="data:image/svg+xml,${PARCEL}">
+  <ul><li>글자를 찾아 모자이크</li><li>위치정보 삭제</li><li>휴대폰 안에서만 처리</li></ul>
+  <button type="button">사진 선택</button>
+</main></body></html>`;
+
+test('with no API key the audit\'s design review runs through the Claude subscription, and rejects a landing page in a phone frame', { skip: enabled ? false : 'set SZ_TEST_SESSION=1 (uses the Claude Code login on this machine)', timeout: 12 * 60 * 1000 }, async (t) => {
+  const browser = await chromium.launch({ channel: 'chrome', headless: true, timeout: 15_000 }).catch(() => null);
+  if (!browser) return t.skip('headless Chrome cannot be launched here');
+  const port = await freePort();
+  const d = await testDaemon({ listen: { port }, engines: { claudeCode: { enabled: true } } }, {}, (docker) => (file, args, opts) => (file === 'claude' ? runCommand(file, args, opts) : docker(file, args, opts)));
+  try {
+    const context = await browser.newContext({ ...devices['iPhone 15 Pro'], colorScheme: 'light' });
+    const page = await context.newPage();
+    await page.setContent(SLOPPY_PHONE_SCREEN, { waitUntil: 'load' });
+    const digest = PageDigest.parse(await page.evaluate(collectDigest, 600));
+    const png = await page.screenshot({ type: 'png' });
+    const measured = runDomChecks(digest, { viewport: 'iphone-15-pro', viewportWidth: 393, route: '/', touch: true, scope: 'full' }, contract);
+    assert.equal(measured.filter((f) => f.severity === 'blocker').length, 0, 'measurement has no objection to this screen');
+
+    await d.daemon.claude.refresh();
+    const bridge = new QaVisionBridge({ config: d.config, claude: d.daemon.claude, log: quietLog });
+    assert.deepEqual(bridge.availability().paths, ['session']);
+    const started = Date.now();
+    const { review, via } = await bridge.review({ scope: { projectId: 'prj_studio', taskId: null }, viewport: 'iphone-15-pro', route: '/', template: 'mobile-expo', folds: [png], digest, measured });
+    assert.equal(via, 'session');
+
+    const verdict = gradeAudit([...measured, ...review.findings], { rubric: review.rubric, slopScore: review.slopScore }, 85);
+    t.diagnostic(`${Math.round((Date.now() - started) / 1000)}s; archetype ${review.archetype}; slop ${review.slopScore}; grade ${verdict.grade}; score ${verdict.score}`);
+    t.diagnostic(`findings: ${review.findings.map((f) => `${f.severity} ${f.rule}${f.selector ? ` @ ${f.selector}` : ''}`).join('; ')}`);
+    t.diagnostic(`patches: ${review.patches.map((p) => `${p.action}${p.target ? ` @ ${p.target}` : ''}`).join('; ')}`);
+    t.diagnostic(`critique: ${review.critique}`);
+    assert.equal(verdict.passed, false, 'the reviewer does not pass a marketing page in a phone frame');
+    assert.ok(review.findings.some((f) => f.severity === 'blocker'), 'and says what blocks it');
+    assert.ok(review.patches.length > 0, 'with a redesign plan');
+    assert.ok(digest.elements.some((e) => e.tag === 'img'), 'the collector saw the picture');
+    const clipart = review.findings.find((f) => f.rule === 'vision/stock-clipart');
+    if (clipart) assert.equal(clipart.selector, 'main > img', 'and the reviewer could point at it, so it can be boxed on the capture');
+    assert.ok(d.daemon.store.projectTokensSince('prj_studio', 0) > 0, 'the review is metered');
+  } finally {
+    await browser.close();
     await d.cleanup();
   }
 });

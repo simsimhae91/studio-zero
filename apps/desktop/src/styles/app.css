@@ -304,11 +304,51 @@ body {
   background: var(--color-surface);
 }
 
-/* The proof view: findings are marked on the screenshot the way a reviewer would mark a print. */
+/* The proof view: findings are marked on the screenshot the way a reviewer would mark a print. A red box is
+   something to fix; a grey one is polish; a dashed one in the accent is where a redesign move applies. */
 .proof-mark {
   position: absolute;
-  outline: 2px solid var(--color-accent);
+  outline: 2px solid var(--color-danger);
   outline-offset: 2px;
+}
+.proof-mark[data-active="true"] {
+  background: color-mix(in oklch, var(--color-danger) 14%, transparent);
+}
+.proof-mark[data-tone="minor"] {
+  outline-color: var(--color-control-border);
+}
+.proof-mark[data-tone="minor"][data-active="true"] {
+  background: color-mix(in oklch, var(--color-fg-muted) 14%, transparent);
+}
+.proof-mark[data-tone="patch"] {
+  outline: 2px dashed var(--color-accent);
   background: color-mix(in oklch, var(--color-accent) 14%, transparent);
   pointer-events: none;
+}
+
+/* The number a note and its mark share. */
+.proof-number {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  inline-size: 1.5rem;
+  block-size: 1.5rem;
+  border-radius: 9999px;
+  color: var(--color-bg);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  line-height: 1;
+}
+/* On the capture the number sits on the corner of its box, and is the way in for a keyboard or a finger. */
+.proof-pin {
+  position: absolute;
+  z-index: 10;
+  transform: translate(-50%, -50%);
+}
+@media (pointer: coarse) {
+  .proof-pin {
+    inline-size: 2.75rem;
+    block-size: 2.75rem;
+  }
 }

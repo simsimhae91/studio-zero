@@ -177,6 +177,8 @@ export const FindingCategory = z.enum([
   'color',
   'copy',
   'originality',
+  /** Whether what can be touched looks and answers like it: pressed states, affordances, a place to act. */
+  'tactility',
 ]);
 export type FindingCategory = z.infer<typeof FindingCategory>;
 
@@ -206,6 +208,52 @@ export const Finding = z.object({
 });
 export type Finding = z.infer<typeof Finding>;
 
+/** What a screen is laid out as, whatever the project calls itself. */
+export const ScreenArchetype = z.enum(['mobile-app', 'web-app', 'web-dashboard', 'marketing']);
+export type ScreenArchetype = z.infer<typeof ScreenArchetype>;
+
+/** The moves a design reviewer can prescribe. A closed set, so a client can label them and an engine can act on them. */
+export const RedesignAction = z.enum(['replace_with_viewfinder', 'dock_to_bottom', 'add_app_bar', 'move_to_sheet', 'restructure', 'restyle', 'rewrite_copy', 'remove']);
+export type RedesignAction = z.infer<typeof RedesignAction>;
+
+/** One concrete change the design reviewer asks for, located the same way a finding is. */
+export const RedesignPatch = z.object({
+  viewport: ViewportId,
+  route: z.string(),
+  /** CSS selector of the element to change; null when the patch is about the screen as a whole. */
+  target: z.string().nullable(),
+  bbox: BBox.nullable(),
+  action: RedesignAction,
+  /** What to build instead, in terms of the project's components and theme tokens. */
+  instruction: z.string(),
+});
+export type RedesignPatch = z.infer<typeof RedesignPatch>;
+
+/** S: ships as it is. A, B: passes. C, D: does not pass. F: reads as generated. */
+export const DesignGrade = z.enum(['S', 'A', 'B', 'C', 'D', 'F']);
+export type DesignGrade = z.infer<typeof DesignGrade>;
+
+/** How the design review went: who looked, at how much, and why not when it did not happen. */
+export const VisionCoverage = z.object({
+  /**
+   * `reviewed`: every captured screen was seen. `partial`: some were. `failed`: it was tried and none were.
+   * `off`: switched off in the daemon's config. `unavailable`: no API key and no subscription CLI to ask.
+   */
+  status: z.enum(['reviewed', 'partial', 'failed', 'off', 'unavailable']),
+  /** The path that carried the reviews: the API key, or the owner's subscription through the Claude Code CLI. */
+  via: z.enum(['api', 'session']).nullable(),
+  model: z.string().nullable(),
+  /** Screens (viewport × route) a reviewer saw, out of those captured. */
+  reviewed: z.number().int(),
+  expected: z.number().int(),
+  /** Why screens went unreviewed, in the daemon's words. */
+  reason: z.string().nullable(),
+});
+export type VisionCoverage = z.infer<typeof VisionCoverage>;
+
+/** The most an audit can score when no design reviewer saw every screen. Well under any passing threshold. */
+export const UNREVIEWED_SCORE_CAP = 50;
+
 export const AuditReport = z.object({
   id: z.string(),
   projectId: z.string(),
@@ -214,8 +262,22 @@ export const AuditReport = z.object({
   score: z.number(),
   threshold: z.number(),
   passed: z.boolean(),
+  /**
+   * True only when a design reviewer saw every captured screen. When false the score is capped and the audit
+   * does not pass: measurements say a screen is legible, not that it is designed.
+   */
+  visionReviewed: z.boolean(),
+  vision: VisionCoverage,
   /** 0-10 per rubric axis, averaged across viewports; null when the vision pass did not run. */
   rubric: z.record(z.string(), z.number()).nullable(),
+  /** 0-100, higher is worse: how much the screens read as the default output of a code generator. Null without a review. */
+  slopScore: z.number().nullable(),
+  archetype: ScreenArchetype.nullable(),
+  /** The design reviewer's verdict on the weakest screen, in a few sentences. */
+  critique: z.string().nullable(),
+  /** Null when no reviewer saw the screens: an unreviewed design has no grade. */
+  grade: DesignGrade.nullable(),
+  redesignPatches: z.array(RedesignPatch),
   findings: z.array(Finding),
   screenshots: z.array(
     z.object({ viewport: ViewportId, route: z.string(), fold: z.number().int(), artifactId: z.string(), width: z.number(), height: z.number() }),

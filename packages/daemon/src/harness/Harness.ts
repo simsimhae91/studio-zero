@@ -162,6 +162,8 @@ export class Harness {
       this.#events.emit(scope, { type: 'checkpoint.created', checkpointId: base.id, label: base.label });
       await this.#sandboxes.startBranch(project, branch, task.baseBranch ?? INTEGRATION_BRANCH);
       onBranch = true;
+      // The branch the engine works on may predate a kit the prompt is about to promise it.
+      await this.#provisioner.ensure(project);
       task = this.#store.updateTask(task.id, { engine: route.candidate.engine, model: route.candidate.model, branch, baseCheckpointId: base.id });
 
       const lessons = this.#lessons.forTask(project.id);
@@ -201,9 +203,12 @@ export class Harness {
 
       // ---------------------------------------------------------------- Verify
       const corrections = this.#config.budgets.verifyRounds;
+      let unverified: string[] = [];
       for (let round = 1; ; round++) {
         phase('verify', round);
-        const failures = ideation ? await this.#verifyIdeation(project) : await this.#verify(project, task, plan, signal);
+        const checked = ideation ? { failures: await this.#verifyIdeation(project), unverified: [] } : await this.#verify(project, task, plan, signal);
+        const failures = checked.failures;
+        unverified = checked.unverified;
         checkCancel();
         if (failures.length === 0) break;
         if (round > corrections) throw new Error(`verification still failing after ${corrections} corrections: ${failures.map((f) => f.name).join(', ')}`);
@@ -215,7 +220,9 @@ export class Harness {
 
       await this.#sandboxes.commitAll(project, commitSubject(task));
       const notes = plan && plan.openQuestions.length > 0 ? `\n\nAssumptions made: ${plan.openQuestions.join(' | ')}` : '';
-      task = this.#finish(task, 'succeeded', { summary: excerpt(result.finalText || 'Task completed.', 1500) + notes });
+      // The work passed every check that could run. What could not be checked is said, not left to be assumed.
+      const caveat = unverified.length > 0 ? `\n\nNot verified: ${unverified.join(' | ')}` : '';
+      task = this.#finish(task, 'succeeded', { summary: excerpt(result.finalText || 'Task completed.', 1500) + notes + caveat });
     } catch (err) {
       if (signal.aborted && signal.reason instanceof ShutdownSignal) {
         // Not a verdict on the task: leave it in flight so the queue re-queues it on the next boot.
@@ -271,13 +278,13 @@ export class Harness {
    * ends at the first stage that fails: there is no point loading a page that does not compile, or measuring
    * the layout of one that throws on load.
    */
-  async #verify(project: Project, task: Task, plan: Plan | null, signal: AbortSignal): Promise<Failure[]> {
+  async #verify(project: Project, task: Task, plan: Plan | null, signal: AbortSignal): Promise<{ failures: Failure[]; unverified: string[] }> {
     const scope = { projectId: project.id, taskId: task.id };
 
     const compiled = await this.#compiler.run(project, signal);
     if (compiled) {
       this.#events.emit(scope, { type: 'gate.result', gate: 'compiler', name: compiled.command, passed: compiled.passed, exitCode: compiled.exitCode, durationMs: compiled.durationMs, detail: compiled.passed ? '' : excerpt(compiled.output, 2000) });
-      if (!compiled.passed) return [{ name: 'compiler', source: 'sandbox-output', detail: compiled.output, compiler: { command: compiled.command, exitCode: compiled.exitCode } }];
+      if (!compiled.passed) return { failures: [{ name: 'compiler', source: 'sandbox-output', detail: compiled.output, compiler: { command: compiled.command, exitCode: compiled.exitCode } }], unverified: [] };
     }
 
     // The owner's switch for browser-backed checks is the visual eval: with it off, nothing here starts a browser.
@@ -288,7 +295,7 @@ export class Harness {
         const smoke = await this.#smoke.run(project, { extraRoutes: plan?.auditRoutes, signal });
         served = smoke.passed;
         this.#events.emit(scope, { type: 'gate.result', gate: 'smoke', name: smoke.routes.join(' '), passed: smoke.passed, exitCode: null, durationMs: smoke.durationMs, detail: excerpt(smoke.detail, 2000) });
-        if (!smoke.passed) return [{ name: 'smoke', source: 'browser-page', detail: smoke.detail }];
+        if (!smoke.passed) return { failures: [{ name: 'smoke', source: 'browser-page', detail: smoke.detail }], unverified: [] };
       } catch (err) {
         if (signal.aborted) throw err;
         // The browser not starting is the studio's problem, not a defect in the work: say so and carry on.
@@ -298,7 +305,11 @@ export class Harness {
     }
 
     const outcomes = await this.#evals.runAll(project, task.id, { extraRoutes: plan?.auditRoutes, commandsOnly: task.track === 'fast', devServerRunning: served, signal });
-    return outcomes.filter((o) => !o.passed).map((o) => ({ name: o.eval.name, source: o.eval.spec.kind === 'visual' ? 'browser-page' : 'sandbox-output', detail: o.detail }));
+    // An unverified check is not sent back for repair: the engine cannot produce the review that did not run.
+    return {
+      failures: outcomes.filter((o) => !o.passed && !o.unverified).map((o) => ({ name: o.eval.name, source: o.eval.spec.kind === 'visual' ? 'browser-page' : 'sandbox-output', detail: o.detail })),
+      unverified: outcomes.filter((o) => o.unverified).map((o) => `${o.eval.name}: the design review did not run (${o.audit?.vision.reason ?? 'no reason recorded'}), so the design is not vouched for`),
+    };
   }
 
   /** Ideation produces documents, not screens: the check is that each required document exists and has substance. */

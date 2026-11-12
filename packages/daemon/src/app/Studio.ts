@@ -53,7 +53,7 @@ import type { ClaudeClient } from '../llm/ClaudeClient.ts';
 import type { ModelRouter } from '../llm/ModelRouter.ts';
 import type { Actor } from '../policy/actions.ts';
 import { toApproval, type PolicyEngine } from '../policy/PolicyEngine.ts';
-import type { VisualAuditor } from '../qa/VisualAuditor.ts';
+import { renderAuditFeedback, type VisualAuditor } from '../qa/VisualAuditor.ts';
 import type { TaskQueue } from '../queue/TaskQueue.ts';
 import { SandboxError, sandboxNames, type OrbStackManager } from '../sandbox/OrbStackManager.ts';
 import type { PtyManager, TerminalSink } from '../sandbox/PtyManager.ts';
@@ -61,7 +61,9 @@ import type { FileContent, FileListing, SandboxFileService } from '../sandbox/Sa
 import { assertBranchName } from '../sandbox/scripts.ts';
 import { PromotionWorkflow, type PromotionHost } from '../scratch/PromotionWorkflow.ts';
 import type { ScratchService, ScratchView } from '../scratch/ScratchService.ts';
+import { untrusted } from '../trust/dataBlock.ts';
 import { Secret, errorMessage, excerpt, newId, type Clock, type Logger } from '../util/core.ts';
+import { shq } from '../util/run.ts';
 import { CredentialIds, type KeychainVault } from '../vault/KeychainVault.ts';
 import { ConflictError, NotFoundError, UnavailableError } from './errors.ts';
 import type { ProjectNamer } from './ProjectNamer.ts';
@@ -113,6 +115,10 @@ export interface StudioDeps {
  * identically, and is policy-checked identically, whichever channel it arrives on.
  */
 /** Shown when nothing can think: neither way in to a model is set up. */
+/** The owner's side of a redesign task. The first line is what the task is called in the stream and in the commit. */
+const REDESIGN_REQUEST = `디자인 심사 결과대로 화면을 다시 디자인해 주세요.
+아래 심사 결과의 재설계 계획을 먼저 적용하고, 블로커와 주요 지적을 모두 해결한 뒤 멈춰 주세요. 기능과 데이터 흐름은 그대로 두고, 화면의 구조와 표현만 바꿉니다.`;
+
 const NO_MODEL = '쓸 수 있는 모델이 없습니다. Claude Code에 로그인하거나(터미널에서 claude 실행), 설정에서 Anthropic API 키를 저장해 주세요.';
 
 export class Studio implements PromotionHost {
@@ -523,6 +529,27 @@ export class Studio implements PromotionHost {
     const server = await ensureDevServer(this.#d.sandboxes, project, file, { reuse: false });
     if (!server.ready) throw new UnavailableError(`the dev server did not answer on port ${file.dev.port}: ${excerpt(server.log, 400)}`);
     return this.#d.auditor.audit({ project, taskId: null, port: file.dev.port, routes: routes ?? file.routes });
+  }
+
+  /**
+   * One click from the audit: a task that redesigns the audited screens from the design review. It continues
+   * from the code the audit looked at (the audited task's branch while that is unmerged, otherwise whatever is
+   * checked out) and runs the full checks, so the result faces the same reviewer.
+   */
+  async redesignFromAudit(actor: Actor, auditId: string, origin: Origin): Promise<Task> {
+    const audit = this.getAudit(auditId);
+    if (audit.findings.length === 0 && audit.redesignPatches.length === 0) throw new ConflictError('this audit found nothing to redesign');
+    const project = this.getProject(audit.projectId);
+    await this.#provision(project);
+    const audited = audit.taskId ? (this.#d.store.getTask(audit.taskId)?.branch ?? null) : null;
+    // Prints the branch to continue from, or nothing when the audited code is already on the integration branch.
+    const script = audited
+      ? `git rev-parse -q --verify ${shq(`refs/heads/${audited}`)} >/dev/null && ! git merge-base --is-ancestor ${shq(audited)} ${INTEGRATION_BRANCH} && echo ${shq(audited)}; true`
+      : `b=$(git rev-parse --abbrev-ref HEAD); [ "$b" != HEAD ] && [ "$b" != ${INTEGRATION_BRANCH} ] && ! git merge-base --is-ancestor "$b" ${INTEGRATION_BRANCH} && echo "$b"; true`;
+    const baseBranch = (await this.#d.sandboxes.exec(project, script, { timeoutSec: 30 })).stdout.trim() || undefined;
+    // The review is a model's reading of a page the engine built: it reaches the engine as data, like every audit.
+    const prompt = `${REDESIGN_REQUEST}\n\n${untrusted('browser-page', excerpt(renderAuditFeedback(audit), 14_000), { check: 'visual-audit' })}`;
+    return this.submitTask(actor, { projectId: project.id, kind: 'build', prompt, track: 'full', ...(baseBranch ? { baseBranch } : {}) }, origin);
   }
 
   getAudit(auditId: string): AuditReport {

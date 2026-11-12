@@ -48,9 +48,18 @@ export class ModelRefusedError extends Error {
   }
 }
 
+/** One of the two ways the daemon's own model calls can travel. */
+export type LlmPath = 'api' | 'session';
+
 export interface LlmScope {
   projectId: string;
   taskId: string | null;
+  /**
+   * Set by the verification side (the audit's design review). Such a call is still metered into the task's
+   * ledger, but it is gated on the project's daily budget alone: the work under review must not be able to
+   * starve its own judge by spending the task's budget first.
+   */
+  judge?: boolean;
   /** Called with each metered response, for callers that keep their own running total (knowledge jobs). */
   onUsage?: (usage: TokenUsage) => void;
 }
@@ -114,9 +123,14 @@ export class ClaudeClient {
     return this.#injected !== null || this.#store.hasCredential(CredentialIds.anthropicApiKey);
   }
 
-  /** How the daemon's own model calls travel right now. A stored key wins: it is the more exact path. */
-  mode(): 'api' | 'session' | 'none' {
-    return this.hasApiKey() ? 'api' : this.#session?.ready() ? 'session' : 'none';
+  /** The ways in that work right now, preferred first. A stored key comes first: it is the more exact path. */
+  paths(): LlmPath[] {
+    return [...(this.hasApiKey() ? (['api'] as const) : []), ...(this.#session?.ready() ? (['session'] as const) : [])];
+  }
+
+  /** How the daemon's own model calls travel right now. */
+  mode(): LlmPath | 'none' {
+    return this.paths()[0] ?? 'none';
   }
 
   isConfigured(): boolean {
@@ -166,7 +180,9 @@ export class ClaudeClient {
 
   /** Budget gate. Throws `PolicyDeniedError` when the task or project budget is spent. */
   async gate(scope: LlmScope, model: string): Promise<void> {
-    await this.#policy.authorize(scope.taskId ? { type: 'agent', taskId: scope.taskId } : { type: 'system' }, { kind: 'llm.request', projectId: scope.projectId, taskId: scope.taskId, model }, { taskId: scope.taskId });
+    // A judge's request is the daemon's own, not the agent's: it answers to the project budget only.
+    const taskId = scope.judge ? null : scope.taskId;
+    await this.#policy.authorize(taskId ? { type: 'agent', taskId } : { type: 'system' }, { kind: 'llm.request', projectId: scope.projectId, taskId, model }, { taskId: scope.taskId });
   }
 
   record(scope: LlmScope, model: string, usage: Anthropic.Beta.BetaUsage): TokenUsage {
@@ -190,11 +206,14 @@ export class ClaudeClient {
     schema: Schema;
     maxTokens?: number;
     signal?: AbortSignal;
+    /** Travel this way instead of the preferred one. Throws `UnavailableError` when that way is not set up. */
+    via?: LlmPath;
+    timeoutMs?: number;
   }): Promise<z.infer<Schema>> {
     await this.gate(req.scope, req.model);
-    if (this.mode() === 'session') {
+    if ((req.via ?? this.mode()) === 'session') {
       const { z: zod } = await import('zod');
-      const answer = await this.session().ask({ system: req.system, content: brainParts(req.content), model: req.model, effort: req.effort, jsonSchema: zod.toJSONSchema(req.schema) as Record<string, unknown>, signal: req.signal });
+      const answer = await this.session().ask({ system: req.system, content: brainParts(req.content), model: req.model, effort: req.effort, jsonSchema: zod.toJSONSchema(req.schema) as Record<string, unknown>, signal: req.signal, timeoutMs: req.timeoutMs });
       this.recordSession(req.scope, req.model, answer.usage);
       // The CLI enforces the schema; it is checked again here because nothing a model returns is taken on trust.
       return req.schema.parse(answer.structured ?? JSON.parse(answer.text)) as z.infer<Schema>;
@@ -210,7 +229,7 @@ export class ClaudeClient {
         output_config: { effort: req.effort, format: betaZodOutputFormat(req.schema) },
         ...fallbackParams(req.model),
       },
-      { signal: req.signal },
+      { signal: req.signal, ...(req.timeoutMs === undefined ? {} : { timeout: req.timeoutMs }) },
     );
     this.record(req.scope, message.model, message.usage);
     if (message.stop_reason === 'refusal') throw new ModelRefusedError(message.stop_details?.category ?? null);

@@ -107,6 +107,8 @@ export function collectDigest(maxElements: number): unknown {
   const INTERACTIVE_TAGS = new Set(['A', 'BUTTON', 'INPUT', 'SELECT', 'TEXTAREA', 'SUMMARY']);
   const INTERACTIVE_ROLES = new Set(['button', 'link', 'tab', 'menuitem', 'checkbox', 'radio', 'switch', 'option', 'combobox', 'slider']);
   const SKIP = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'TEMPLATE', 'HEAD', 'META', 'LINK', 'BR', 'WBR']);
+  // Pictures have no text and no fill, but they take up the screen: a reviewer has to be able to point at one.
+  const MEDIA = new Set(['IMG', 'VIDEO', 'CANVAS']);
 
   const interactive: unknown[] = [];
   const textual: unknown[] = [];
@@ -136,7 +138,9 @@ export function collectDigest(maxElements: number): unknown {
     const hasBorder = ['Top', 'Right', 'Bottom', 'Left'].some((side) => px(cs.getPropertyValue(`border-${side.toLowerCase()}-width`)) > 0 && cs.getPropertyValue(`border-${side.toLowerCase()}-style`) !== 'none');
     const radius = Math.max(px(cs.borderTopLeftRadius), px(cs.borderTopRightRadius), px(cs.borderBottomLeftRadius), px(cs.borderBottomRightRadius));
     const isContainer = rect.width >= 40 && rect.height >= 24 && (own[3] > 0.02 || hasBorder || cs.boxShadow !== 'none' || cs.backgroundImage !== 'none');
-    if (!ownText && !isInteractive && !isContainer) continue;
+    // An inline drawing counts once it is the size of an illustration; smaller ones are icons, part of their control.
+    const isMedia = rect.width >= 40 && rect.height >= 24 && (MEDIA.has(node.tagName) || (node.tagName === 'svg' && rect.width >= 96 && rect.height >= 96));
+    if (!ownText && !isInteractive && !isContainer && !isMedia) continue;
 
     // Composite backgrounds from the element outwards until something opaque is reached.
     let bg: [number, number, number, number] = [0, 0, 0, 0];

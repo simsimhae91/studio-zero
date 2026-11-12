@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { referenceSeed, referenceThemePath } from '../src/build.ts';
-import { colorTokens, contract, contrastRatio, createTheme, lintSources, oklchToRgb, parseHex, renderThemeCss, seedFromName, typeStepNames, type Palette } from '../src/index.ts';
+import { colorTokens, contract, contrastRatio, createTheme, lintSources, mobileTokens, oklchToRgb, parseHex, renderThemeCss, seedFromName, typeStepNames, type Palette } from '../src/index.ts';
 
 const TEXT_TOKENS = ['fg', 'fg-muted', 'accent', 'danger', 'success', 'warning'] as const;
 const BACKGROUNDS = ['bg', 'surface', 'sunken'] as const;
@@ -118,4 +118,28 @@ test('a CSS gradient between saturated blue and purple stops is flagged, a neutr
   assert.ok(flagged.some((f) => f.rule === 'slop/cliche-gradient'));
   const neutral = lintSources([{ path: 'src/app.css', content: '.scrim { background: linear-gradient(#111111, #333333); }' }]);
   assert.ok(!neutral.some((f) => f.rule === 'slop/cliche-gradient'));
+});
+
+test('the mobile tokens add to the contract and never contradict it', () => {
+  const t = mobileTokens;
+  assert.equal(t.touchTarget, contract.touchTargetPx);
+  assert.equal(t.space.unit, contract.spacingUnitPx);
+  for (const [name, px] of Object.entries({ ...t.space, minBottom: t.safeArea.minBottom, barHeight: t.bar.height, badge: t.dropzone.badge, corner: t.dropzone.corner })) {
+    assert.equal(px % contract.spacingUnitPx, 0, `${name} (${px}px) is on the ${contract.spacingUnitPx}px rhythm`);
+  }
+  assert.ok(t.bar.height >= t.touchTarget && t.bar.action >= t.touchTarget, 'a bar holds a full thumb target');
+  assert.deepEqual([t.motion.fast, t.motion.base, t.motion.slow], [...contract.motion.durationsMs]);
+  assert.ok(t.press.scale < t.press.scaleLarge && t.press.scaleLarge < 1, 'a large surface gives way less than a small one');
+
+  // Shape and surface are class names from the project's theme, so a project's palette and corners carry through.
+  const theme = renderThemeCss(createTheme(referenceSeed));
+  for (const radius of [t.radius.control, t.radius.container, t.radius.pill]) assert.match(theme, new RegExp(`--radius-${radius.replace('rounded-', '')}:`), radius);
+  assert.equal(t.radius.sheet, 'rounded-t-lg');
+  const colours = new Set<string>(colorTokens);
+  const classes = Object.values(t.surface).flatMap((recipe) => recipe.split(' '));
+  for (const cls of classes.filter((c) => /^(bg|border)-[a-z]/.test(c) && !/^(border|backdrop)$/.test(c) && !c.startsWith('border-dashed'))) {
+    assert.ok(colours.has(cls.replace(/^(bg|border)-/, '').replace(/\/\d+$/, '')), `${cls} names a theme colour`);
+  }
+  assert.deepEqual(lintSources([{ path: 'mobile/tokens.tsx', content: readFileSync(new URL('../src/mobile/tokens.ts', import.meta.url), 'utf8') }]), [], 'no raw colours, no arbitrary values');
+  for (const side of ['top', 'right', 'bottom', 'left'] as const) assert.equal(t.safeArea.css[side], `env(safe-area-inset-${side}, 0px)`);
 });

@@ -3,6 +3,7 @@ import type { AuditReport, Eval, EvalSpec, Finding, Project } from '@studio-zero
 import type { Config } from '../config.ts';
 import type { Store } from '../db/Store.ts';
 import type { EventLog } from '../events/EventLog.ts';
+import { scoreAudit } from '../qa/checks.ts';
 import { renderAuditFeedback, type VisualAuditor } from '../qa/VisualAuditor.ts';
 import { extractorScript, parseExtraction } from '../sandbox/extract.ts';
 import type { OrbStackManager } from '../sandbox/OrbStackManager.ts';
@@ -13,6 +14,12 @@ import { readProjectFile } from './projectFile.ts';
 export interface EvalOutcome {
   eval: Eval;
   passed: boolean;
+  /**
+   * The check could not reach a verdict, and nothing in the work is known to be wrong: the visual audit's
+   * measurements are clean but no design reviewer saw the screens. Not a pass, and not a failure to send back
+   * to the engine, which has nothing to fix.
+   */
+  unverified?: boolean;
   /** Human- and model-readable account of the failure (or a one-line pass note). Contains sandbox/page content. */
   detail: string;
   audit: AuditReport | null;
@@ -92,7 +99,7 @@ export class EvalRunner {
       }
       const durationMs = Date.now() - started;
       this.#store.insertEvalRun({ evalId: ev.id, taskId, passed: outcome.passed, durationMs, detail: excerpt(outcome.detail, 4000), createdAt: this.#clock() });
-      this.#events.emit({ projectId: project.id, taskId }, { type: 'eval.result', evalId: ev.id, name: ev.name, passed: outcome.passed, durationMs, detail: excerpt(outcome.detail, 800) });
+      this.#events.emit({ projectId: project.id, taskId }, { type: 'eval.result', evalId: ev.id, name: ev.name, passed: outcome.passed, ...(outcome.unverified ? { unverified: true } : {}), durationMs, detail: excerpt(outcome.detail, 800) });
       outcomes.push(outcome);
     }
     return outcomes;
@@ -120,8 +127,7 @@ export class EvalRunner {
           return { eval: ev, passed: false, audit: null, detail: `The dev server (\`${file.dev.command}\`) did not answer on port ${file.dev.port} within 90s.\n${excerpt(server.log, 4000)}` };
         }
         const audit = await this.#auditor.audit({ project, taskId, port: file.dev.port, routes, signal: opts.signal });
-        const passed = audit.passed && audit.score >= spec.minScore;
-        return { eval: ev, passed, audit, detail: passed ? `score ${audit.score}/100` : renderAuditFeedback(audit) };
+        return { eval: ev, audit, ...visualOutcome(audit, spec.minScore) };
       }
     }
   }
@@ -134,6 +140,17 @@ export class EvalRunner {
     const { files } = parseExtraction(res.stdout, limits);
     return lintSources(files.flatMap((f) => (f.content === null ? [] : [{ path: f.path, content: f.content }])));
   }
+}
+
+/**
+ * What a finished audit means for the visual eval. An audit that is unreviewed and otherwise clean is
+ * `unverified`: the only thing between it and a pass is the review that did not happen, and that is the
+ * studio's to fix (a login, a budget), not the engine's. Any measured or reviewed defect makes it a plain failure.
+ */
+export function visualOutcome(audit: AuditReport, minScore: number): Pick<EvalOutcome, 'passed' | 'unverified' | 'detail'> {
+  const passed = audit.passed && audit.score >= minScore;
+  const unverified = !passed && !audit.visionReviewed && scoreAudit(audit.findings, null, minScore).passed;
+  return { passed, ...(unverified ? { unverified } : {}), detail: passed ? `score ${audit.score}/100, grade ${audit.grade}` : renderAuditFeedback(audit) };
 }
 
 export function renderLintFeedback(findings: readonly Finding[], limit = 40): string {

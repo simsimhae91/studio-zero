@@ -24,6 +24,10 @@
     "skipLibCheck": true,
     "jsx": "react-jsx"
   },
+  "exclude": [
+    "packages/design/src/mobile/*.tsx",
+    "packages/design/src/mobile/index.ts"
+  ],
   "include": [
     "packages/*/src/**/*.ts",
     "packages/*/src/**/*.tsx",
