@@ -1,3 +1,4 @@
+import { filmPage } from './filmstrip.ts';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { Project } from '@studio-zero/protocol';
@@ -21,6 +22,8 @@ export interface ReferenceCapture {
   summary: string;
   /** The first screenful at desktop width. */
   png: Uint8Array | null;
+  /** The page as frames over time and down the scroll, on one sheet. Null when it could not be filmed. */
+  film: Uint8Array | null;
   artifactId: string | null;
   error: string | null;
 }
@@ -121,7 +124,7 @@ export class RefKit {
   /** Captures up to three references. A page that cannot be opened is reported and left out; it never fails the task. */
   async capture(project: Project, taskId: string | null, urls: readonly string[], signal?: AbortSignal): Promise<ReferenceCapture[]> {
     const scope = { projectId: project.id, taskId };
-    const refused = (url: string, error: string): ReferenceCapture => ({ url, ok: false, title: '', summary: '', png: null, artifactId: null, error });
+    const refused = (url: string, error: string): ReferenceCapture => ({ url, ok: false, title: '', summary: '', png: null, film: null, artifactId: null, error });
     const targets: string[] = [];
     const captures: ReferenceCapture[] = [];
     for (const raw of urls.slice(0, MAX_REFERENCES)) {
@@ -174,17 +177,24 @@ export class RefKit {
       });
       const page = await context.newPage();
       const response = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: NAVIGATION_TIMEOUT_MS });
-      if (!response || response.status() >= 400) return { url, ok: false, title: '', summary: '', png: null, artifactId: null, error: `HTTP ${response?.status() ?? 'no response'}` };
+      if (!response || response.status() >= 400) return { url, ok: false, title: '', summary: '', png: null, film: null, artifactId: null, error: `HTTP ${response?.status() ?? 'no response'}` };
       // A public name can still be pointed at a private address: what answered decides, not what was asked for.
       const server = await response.serverAddr();
-      if (server && isPrivateAddress(server.ipAddress)) return { url, ok: false, title: '', summary: '', png: null, artifactId: null, error: 'the page is served from a private address' };
+      if (server && isPrivateAddress(server.ipAddress)) return { url, ok: false, title: '', summary: '', png: null, film: null, artifactId: null, error: 'the page is served from a private address' };
       await page.waitForLoadState('networkidle', { timeout: 8000 }).catch(() => undefined);
       await page.evaluate(() => document.fonts.ready.then(() => undefined)).catch(() => undefined);
 
       const digest = PageDigest.safeParse(await page.evaluate(collectDigest, 500));
-      if (!digest.success) return { url, ok: false, title: '', summary: '', png: null, artifactId: null, error: 'the page returned measurements that failed validation' };
+      if (!digest.success) return { url, ok: false, title: '', summary: '', png: null, film: null, artifactId: null, error: 'the page returned measurements that failed validation' };
       const motion = ((await page.evaluate(collectMotion).catch(() => [])) as unknown[]).filter((v): v is string => typeof v === 'string' && v.length <= 12);
       const png = await page.screenshot({ type: 'png', animations: 'disabled' });
+      // One frame says what the page looks like; a page that is its motion has to be watched. Best effort: a page
+      // that will not be filmed is still a reference.
+      const film = await filmPage(page, async () => {
+        const again = await page.reload({ waitUntil: 'domcontentloaded', timeout: NAVIGATION_TIMEOUT_MS });
+        const answered = await again?.serverAddr();
+        if (!again || again.status() >= 400 || (answered && isPrivateAddress(answered.ipAddress))) throw new Error('the page did not come back the same way');
+      }).catch(() => null);
 
       const artifactId = newId('art');
       const dir = join(this.#config.artifactsDir, project.id, 'references');
@@ -192,9 +202,9 @@ export class RefKit {
       const file = join(dir, `${artifactId}.png`);
       await writeFile(file, png, { mode: 0o600 });
       this.#store.insertArtifact({ id: artifactId, projectId: project.id, mime: 'image/png', file, createdAt: this.#clock() });
-      return { url, ok: true, title: digest.data.title, summary: summariseReference(digest.data, motion), png, artifactId, error: null };
+      return { url, ok: true, title: digest.data.title, summary: [summariseReference(digest.data, motion), ...(film?.lines ?? [])].join('\n'), png, film: film?.sheet ?? null, artifactId, error: null };
     } catch (err) {
-      return { url, ok: false, title: '', summary: '', png: null, artifactId: null, error: errorMessage(err).split('\n')[0] ?? 'navigation failed' };
+      return { url, ok: false, title: '', summary: '', png: null, film: null, artifactId: null, error: errorMessage(err).split('\n')[0] ?? 'navigation failed' };
     } finally {
       await context.close().catch(() => undefined);
     }

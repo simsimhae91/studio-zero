@@ -456,7 +456,12 @@ export class Harness {
         textBlock(`Project stack template: ${project.template}. Files in the workspace:\n${untrusted('sandbox-output', listing.stdout.trim() || '(empty workspace)')}`),
         textBlock(want.anchor ? 'This task needs an anchor table: fill in "anchor".' : 'No anchor table is needed from you for this task: set "anchor" to null.'),
         // The planner is shown the references themselves; the engine, which has no eyes, gets the measurements.
-        ...captured.flatMap((r) => [textBlock(referenceBlock(r)), ...(r.png ? [pngBlock(r.png)] : [])]),
+        ...captured.flatMap((r) => [
+          textBlock(referenceBlock(r)),
+          ...(r.png ? [pngBlock(r.png)] : []),
+          // The same page watched: read left to right, top to bottom. The captions are the studio's.
+          ...(r.film ? [textBlock('The same page as frames over time, then down the scroll. Read it as a sequence: what enters, what keeps moving, what the scroll reveals.'), pngBlock(r.film)] : []),
+        ]),
       ],
     });
     // The routes end up in URLs the QA browser visits; only plain app paths are kept.
