@@ -30,7 +30,8 @@ test('caffeinate: three states, one process at most, tied to the daemon\'s own l
   const changes: string[] = [];
   const power = new CaffeinateManager({ log: quietLog, spawn: fake.spawn, platform: 'darwin', pid: 4242, onChange: (mode) => void changes.push(mode) });
   assert.deepEqual(power.state, { mode: 'off', supported: true });
-  assert.deepEqual([CAFFEINATE_FLAGS.system, CAFFEINATE_FLAGS.display], [['-i', '-s'], ['-d']]);
+  assert.deepEqual([CAFFEINATE_FLAGS.system, CAFFEINATE_FLAGS.display], [['-i', '-s'], ['-d', '-i', '-s']]);
+  assert.ok(CAFFEINATE_FLAGS.system.every((flag) => CAFFEINATE_FLAGS.display.includes(flag)), 'keeping the display on never holds less than keeping the system awake');
 
   assert.deepEqual(power.set('system'), { mode: 'system', supported: true });
   assert.deepEqual([fake.started[0]!.file, fake.started[0]!.args], ['/usr/bin/caffeinate', ['-i', '-s', '-w', '4242']], 'no idle or system sleep; the display may turn off; it ends if the daemon does');
@@ -38,7 +39,7 @@ test('caffeinate: three states, one process at most, tied to the daemon\'s own l
   assert.equal(fake.started.length, 1, 'asking for the mode already held starts nothing');
 
   power.set('display');
-  assert.deepEqual([fake.started[0]!.alive, fake.started[1]!.args, fake.started[1]!.alive], [false, ['-d', '-w', '4242'], true], 'the old assertion is released before the new one is taken');
+  assert.deepEqual([fake.started[0]!.alive, fake.started[1]!.args, fake.started[1]!.alive], [false, ['-d', '-i', '-s', '-w', '4242'], true], 'the old assertion is released before the new one is taken');
   power.set('off');
   assert.deepEqual([fake.started.length, fake.started[1]!.alive, power.state.mode], [2, false, 'off']);
   assert.deepEqual(changes, ['system', 'display', 'off']);
@@ -69,14 +70,30 @@ test('caffeinate for real: the process macOS runs has the flags of the mode, and
   } catch {
     return t.skip('the process list cannot be read here');
   }
+  // What macOS itself says this daemon's caffeinate is holding, by assertion type. Null where pmset cannot be asked.
+  const held = (): string[] | null => {
+    try {
+      const pid = execFileSync('/usr/bin/pgrep', ['-f', `caffeinate .*-w ${process.pid}$`], { encoding: 'utf8' }).trim().split('\n')[0];
+      const listed = execFileSync('/usr/bin/pmset', ['-g', 'assertions'], { encoding: 'utf8' });
+      return [...new Set([...listed.matchAll(new RegExp(`pid ${pid}\\(caffeinate\\): \\[\\w+\\] [\\d:]+ (\\w+) named`, 'g'))].map((m) => m[1]!))].sort();
+    } catch {
+      return null;
+    }
+  };
   const power = new CaffeinateManager({ log: quietLog });
   try {
     power.set('system');
     await sleep(150);
     assert.deepEqual(mine().map((line) => line.replace(/^\S*caffeinate/, 'caffeinate')), [`caffeinate -i -s -w ${process.pid}`]);
+    const asSystem = held();
     power.set('display');
     await sleep(150);
-    assert.deepEqual(mine().map((line) => line.replace(/^\S*caffeinate/, 'caffeinate')), [`caffeinate -d -w ${process.pid}`]);
+    assert.deepEqual(mine().map((line) => line.replace(/^\S*caffeinate/, 'caffeinate')), [`caffeinate -d -i -s -w ${process.pid}`]);
+    const asDisplay = held();
+    if (asSystem && asDisplay && asSystem.length > 0) {
+      assert.ok(asDisplay.includes('PreventUserIdleDisplaySleep') && asDisplay.includes('PreventUserIdleSystemSleep'), `display mode holds the display and the idle-sleep assertion: ${asDisplay.join(', ')}`);
+      assert.deepEqual(asSystem.filter((type) => !asDisplay.includes(type)), [], 'everything system mode holds, display mode holds too');
+    }
     power.set('off');
     await sleep(150);
     assert.deepEqual(mine(), []);

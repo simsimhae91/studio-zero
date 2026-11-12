@@ -7,10 +7,15 @@ const CAFFEINATE = '/usr/bin/caffeinate';
 /**
  * What each mode asks of macOS. `system`: no idle sleep and no system sleep, while the display is free to turn
  * off (a long build overnight keeps running and the screen rests). `display`: the display stays on as well.
+ *
+ * "As well" is literal: `display` holds everything `system` holds, plus the display. `-d` by itself is only the
+ * display's idle assertion. It does not hold the system-sleep assertion (`-s`, which is what keeps a Mac on AC
+ * power running with its lid closed), so the mode that reads as the stronger one let a build be suspended in a
+ * case the weaker one covered.
  */
 export const CAFFEINATE_FLAGS: Record<Exclude<PowerMode, 'off'>, readonly string[]> = {
   system: ['-i', '-s'],
-  display: ['-d'],
+  display: ['-d', '-i', '-s'],
 };
 
 /** The little of a child process this needs, so a test can stand one in. */
