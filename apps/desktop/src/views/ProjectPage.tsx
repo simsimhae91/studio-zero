@@ -3,7 +3,7 @@ import { Check, ChevronDown, FileText, FolderTree, GitFork, GitMerge, Globe, His
 import { Suspense, lazy, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { ReviewerPref, type AdvisorId, type Approval, type Project, type Session, type Task, type TaskKind, type TaskState, type TaskTrack } from '@studio-zero/protocol';
 import { Markdown } from '@studio-zero/ax/react';
-import { duration, elapsed, engineLabel, kindLabel, phaseLabel, stamp, subscriptionLabel, taskStateLabel, templateLabel, tokens } from '../lib/format.ts';
+import { duration, effortLabel, elapsed, engineLabel, kindLabel, phaseLabel, stamp, subscriptionLabel, taskStateLabel, templateLabel, tokens } from '../lib/format.ts';
 import { redrawRequest, revisionRequest, type MockupNote } from '../lib/mockups.ts';
 import { advisorCommand, buildRequest, mockupName, narrate, type Item, type Mockup } from '../lib/steps.ts';
 import { errorText, useAction, useQuery, useStudio, useTaskEvents } from '../lib/studio.tsx';
@@ -765,7 +765,7 @@ function Passage({ task, items, pending, onShow, onCheckpoint, onFile, onBuild, 
               {[
                 `토큰 ${tokens(task.spentTokens)} 사용`,
                 // 'default' is the CLI's own setting: there is no name to show for it.
-                task.engine ? `${engineLabel[task.engine] ?? task.engine}${task.model && task.model !== 'default' ? ` · ${task.model}` : ''}` : null,
+                task.engine ? [engineLabel[task.engine] ?? task.engine, task.model && task.model !== 'default' ? task.model : null, task.effort ? `추론 ${effortLabel[task.effort] ?? task.effort}` : null].filter(Boolean).join(' · ') : null,
                 task.startedAt !== null && task.finishedAt !== null ? `${elapsed(task.finishedAt - task.startedAt)} 걸림` : null,
               ]
                 .filter(Boolean)

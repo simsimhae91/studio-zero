@@ -10,6 +10,8 @@ export interface Prefs {
   engine: string;
   /** The model picked on that engine, or `default`. */
   model: string;
+  /** How hard that engine is asked to think, or `default`. */
+  effort: string;
 }
 
 /** Each preset is a seed for the theme generator (see scripts/theme.mjs); `system` follows the OS light/dark setting. */
@@ -34,7 +36,7 @@ export const MONO_FONTS: readonly { id: MonoFont; label: string; stack: string; 
 ];
 
 const KEY = 'studio-zero.prefs';
-const DEFAULTS: Prefs = { theme: 'studio-dark', mono: 'geist-mono', engine: 'auto', model: 'default' };
+const DEFAULTS: Prefs = { theme: 'studio-dark', mono: 'geist-mono', engine: 'auto', model: 'default', effort: 'default' };
 
 function load(): Prefs {
   try {
@@ -44,6 +46,7 @@ function load(): Prefs {
       mono: MONO_FONTS.some((f) => f.id === saved?.mono) ? saved!.mono! : DEFAULTS.mono,
       engine: typeof saved?.engine === 'string' ? saved.engine : DEFAULTS.engine,
       model: typeof saved?.model === 'string' ? saved.model : DEFAULTS.model,
+      effort: typeof saved?.effort === 'string' ? saved.effort : DEFAULTS.effort,
     };
   } catch {
     return DEFAULTS;

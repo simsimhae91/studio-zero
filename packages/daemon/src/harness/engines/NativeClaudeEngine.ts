@@ -1,5 +1,5 @@
 import type Anthropic from '@anthropic-ai/sdk';
-import type { EngineModel } from '@studio-zero/protocol';
+import { Effort, type EngineModel } from '@studio-zero/protocol';
 import { steeringNote, type SteeringQueue } from '../../ax/Steering.ts';
 import type { Config } from '../../config.ts';
 import type { EventLog } from '../../events/EventLog.ts';
@@ -29,6 +29,8 @@ const MODELS: EngineModel[] = [
  */
 export class NativeClaudeEngine implements Engine {
   readonly id = 'native-claude' as const;
+  // `output_config.effort`: all five on every model listed above.
+  readonly efforts = Effort.options;
   readonly #claude: ClaudeClient;
   readonly #toolbox: Toolbox;
   readonly #events: EventLog;

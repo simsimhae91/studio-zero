@@ -2,10 +2,9 @@ import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { z } from 'zod';
-import { DEFAULT_DAEMON_PORT, DEFAULT_GATEWAY_PORT, TaskKind, ViewportId } from '@studio-zero/protocol';
+import { DEFAULT_DAEMON_PORT, DEFAULT_GATEWAY_PORT, Effort, TaskKind, ViewportId } from '@studio-zero/protocol';
 
-const Effort = z.enum(['low', 'medium', 'high', 'xhigh', 'max']);
-export type Effort = z.infer<typeof Effort>;
+export type { Effort };
 
 export const EngineId = z.enum(['native-claude', 'claude-code', 'codex', 'cursor', 'antigravity']);
 /** The engines that are a vendor's CLI run on the owner's subscription. */

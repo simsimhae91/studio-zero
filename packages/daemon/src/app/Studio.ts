@@ -45,7 +45,7 @@ import type {
 import { CORE_PROJECT_ID, PROTOCOL_VERSION } from '@studio-zero/protocol';
 import type { ConfidenceCalibration } from '../ax/Calibration.ts';
 import type { SteeringQueue } from '../ax/Steering.ts';
-import type { Config, EngineId } from '../config.ts';
+import type { Config, Effort, EngineId } from '../config.ts';
 import type { Store } from '../db/Store.ts';
 import type { EventLog } from '../events/EventLog.ts';
 import type { WorkspaceProvisioner } from '../harness/bootstrap.ts';
@@ -60,7 +60,7 @@ import type { KirbyEngine } from '../kirby/KirbyEngine.ts';
 import type { KnowledgeService } from '../knowledge/KnowledgeService.ts';
 import type { McpRegistry } from '../mcp/McpRegistry.ts';
 import type { ClaudeClient } from '../llm/ClaudeClient.ts';
-import type { ModelRouter } from '../llm/ModelRouter.ts';
+import { noEffortSetting, type ModelRouter } from '../llm/ModelRouter.ts';
 import type { Actor } from '../policy/actions.ts';
 import { parseReferenceUrl, toApproval, type PolicyEngine } from '../policy/PolicyEngine.ts';
 import { renderAuditFeedback, type VisualAuditor } from '../qa/VisualAuditor.ts';
@@ -132,9 +132,15 @@ export interface StudioDeps {
  * The WebSocket RPC handlers and the Telegram relay are thin adapters over this class, so a command behaves
  * identically, and is policy-checked identically, whichever channel it arrives on.
  */
-/** A model is named the way its engine names it, so it cannot be chosen while the engine is left to the routing table. */
-function assertModelHasEngine(p: { engine?: EngineId; model?: string }): void {
+/**
+ * A model is named the way its engine names it, and effort is a setting only some engines have: neither can be
+ * chosen while the engine is left to the routing table, and an effort cannot be asked of an engine that has none.
+ */
+function assertPick(p: { engine?: EngineId; model?: string; effort?: Effort }, router: ModelRouter): void {
   if (p.model !== undefined && p.engine === undefined) throw new ConflictError('a model is chosen together with the engine that runs it: name the engine as well');
+  if (p.effort === undefined) return;
+  if (p.engine === undefined) throw new ConflictError('an effort is chosen together with the engine that runs at it: name the engine as well');
+  if (!router.efforts(p.engine).includes(p.effort)) throw new ConflictError(noEffortSetting(p.engine));
 }
 
 /** Shown when nothing can think: neither way in to a model is set up. */
@@ -174,8 +180,8 @@ export class Studio implements PromotionHost {
     };
   }
 
-  engineModels(engine: EngineId): Promise<EngineModel[]> {
-    return this.#d.router.models(engine);
+  engineCatalog(engine: EngineId): Promise<{ models: EngineModel[]; efforts: Effort[] }> {
+    return this.#d.router.catalog(engine);
   }
 
   // -------------------------------------------------------------- projects
@@ -247,14 +253,14 @@ export class Studio implements PromotionHost {
    * template that fits unless one was given, and its first task: a working draft (`fast`), or the product
    * definition documents first (`deep`).
    */
-  async igniteProject(actor: Actor, p: { idea: string; track: 'fast' | 'deep'; template?: Template; engine?: EngineId; model?: string }, origin: Origin): Promise<{ project: Project; task: Task }> {
+  async igniteProject(actor: Actor, p: { idea: string; track: 'fast' | 'deep'; template?: Template; engine?: EngineId; model?: string; effort?: Effort }, origin: Origin): Promise<{ project: Project; task: Task }> {
     // Refused before anything is named or created: a project must not be left behind by a request that could never start.
-    assertModelHasEngine(p);
+    assertPick(p, this.#d.router);
     const identity = await this.#d.namer.name(p.idea, p.template);
     let slug = identity.slug;
     for (let n = 2; this.#d.store.getProjectBySlug(slug); n++) slug = `${identity.slug.slice(0, 36).replace(/-+$/, '')}-${n}`;
     const project = this.createProject(actor, { name: identity.name, slug, template: identity.template });
-    const task = await this.submitTask(actor, { projectId: project.id, kind: p.track === 'deep' ? 'ideate' : 'build', prompt: p.idea, track: p.track === 'deep' ? 'full' : 'fast', engine: p.engine, model: p.model }, origin);
+    const task = await this.submitTask(actor, { projectId: project.id, kind: p.track === 'deep' ? 'ideate' : 'build', prompt: p.idea, track: p.track === 'deep' ? 'full' : 'fast', engine: p.engine, model: p.model, effort: p.effort }, origin);
     return { project, task };
   }
 
@@ -436,9 +442,9 @@ export class Studio implements PromotionHost {
 
   // ----------------------------------------------------------------- tasks
 
-  async submitTask(actor: Actor, p: { projectId: string; kind: TaskKind; prompt: string; budgetTokens?: number; branch?: string; baseBranch?: string; engine?: EngineId; model?: string; sessionId?: string; track?: TaskTrack; reviewer?: ReviewerPref; references?: string[] }, origin: Origin): Promise<Task> {
+  async submitTask(actor: Actor, p: { projectId: string; kind: TaskKind; prompt: string; budgetTokens?: number; branch?: string; baseBranch?: string; engine?: EngineId; model?: string; effort?: Effort; sessionId?: string; track?: TaskTrack; reviewer?: ReviewerPref; references?: string[] }, origin: Origin): Promise<Task> {
     this.getProject(p.projectId);
-    assertModelHasEngine(p);
+    assertPick(p, this.#d.router);
     // A reference is refused here, before the task exists, so a mistyped address is not found out mid-build.
     const references = (p.references ?? []).map((raw) => {
       const parsed = parseReferenceUrl(raw);
@@ -455,7 +461,7 @@ export class Studio implements PromotionHost {
     }
     const budgetTokens = p.budgetTokens ?? this.#d.config.budgets.taskTokens;
     await this.#d.policy.authorize(actor, { kind: 'task.submit', projectId: p.projectId, taskKind: p.kind, budgetTokens });
-    const task = this.#d.store.insertTask({ id: newId('tsk'), projectId: p.projectId, kind: p.kind, prompt: p.prompt, origin, budgetTokens, branch: p.branch ?? null, baseBranch: p.baseBranch ?? null, enginePref: p.engine ?? null, modelPref: p.model ?? null, sessionId: p.sessionId ?? null, track: p.track ?? 'full', reviewerPref: p.reviewer ?? null, references, createdAt: this.#d.clock() });
+    const task = this.#d.store.insertTask({ id: newId('tsk'), projectId: p.projectId, kind: p.kind, prompt: p.prompt, origin, budgetTokens, branch: p.branch ?? null, baseBranch: p.baseBranch ?? null, enginePref: p.engine ?? null, modelPref: p.model ?? null, effortPref: p.effort ?? null, sessionId: p.sessionId ?? null, track: p.track ?? 'full', reviewerPref: p.reviewer ?? null, references, createdAt: this.#d.clock() });
     this.#d.events.emit({ projectId: task.projectId, taskId: task.id }, { type: 'task.state', state: 'queued', error: null });
     this.#d.queue.pump();
     return task;

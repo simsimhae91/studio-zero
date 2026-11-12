@@ -82,11 +82,11 @@ test('Cursor and Antigravity engines: started inside the jail, given only the st
     const project = sampleProject();
     store.insertProject(project);
     await assert.rejects(router.route('build'), /no engine available/, 'neither is in the routing table: an engine with its own tools is never picked automatically');
-    await assert.rejects(router.route('build', 'codex'), /the engine chosen for this task is not available: codex/, 'a chosen engine is not quietly swapped for another');
+    await assert.rejects(router.route('build', { engine: 'codex' }), /the engine chosen for this task is not available: codex/, 'a chosen engine is not quietly swapped for another');
 
     for (const [id, said] of [['cursor', 'cursor did it'], ['antigravity', 'agy did it']] as const) {
       const task = store.insertTask({ id: `tsk_${id}`, projectId: project.id, kind: 'build', prompt: 'x', origin: 'desktop', budgetTokens: 1_000_000, branch: null, enginePref: id, createdAt: 1 });
-      const route = await router.route('build', id);
+      const route = await router.route('build', { engine: id });
       assert.equal(route.engine.id, id);
       const session = await route.engine.open({ project, task, route: route.candidate, system: codingSystemPrompt(project.template), signal: new AbortController().signal, onWaiting: () => undefined });
       try {

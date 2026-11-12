@@ -77,7 +77,7 @@ test('complementary pairing: never the lead\'s own vendor, first available wins,
   assert.equal(REVIEW_PAIRS.codex[0], 'claude-code');
   assert.deepEqual([REVIEW_PAIRS.cursor[0], REVIEW_PAIRS.antigravity[0]], ['claude-code', 'claude-code']);
 
-  const engine = (id: Engine['id'], available: boolean): Engine => ({ id, availability: async () => ({ available, reason: available ? 'ready' : 'not installed' }), models: async () => [], open: async () => assert.fail('not opened') });
+  const engine = (id: Engine['id'], available: boolean): Engine => ({ id, availability: async () => ({ available, reason: available ? 'ready' : 'not installed' }), models: async () => [], efforts: [], open: async () => assert.fail('not opened') });
   const router = new ModelRouter(testConfig('/tmp'), [engine('native-claude', false), engine('claude-code', true), engine('codex', false), engine('antigravity', true), engine('cursor', true)]);
   assert.equal((await router.pairReviewer('native-claude')).reviewer, 'antigravity', 'Codex is not there, so the next complement of Claude');
   assert.equal((await router.pairReviewer('codex')).reviewer, 'claude-code');

@@ -2,7 +2,7 @@ import { chmod, mkdir, mkdtemp, readFile, readdir, realpath, rm, stat, writeFile
 import { homedir, tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { z } from 'zod';
-import { ModelId, type EngineModel } from '@studio-zero/protocol';
+import { Effort as EffortLevels, ModelId, type EngineModel } from '@studio-zero/protocol';
 import { steeringNote, type SteeringQueue } from '../../ax/Steering.ts';
 import type { BridgeSessions } from '../../bridge/BridgeSessions.ts';
 import { acpPrompt, type AcpRequest, type AcpResult } from '../../bridge/acp.ts';
@@ -109,6 +109,8 @@ interface VendorAdapter {
   /** True when a question to this CLI can carry pictures (see `ask`). */
   vision: boolean;
   catalog: Catalog;
+  /** The effort levels the CLI takes as a setting of their own. Empty when its model names carry the level. */
+  efforts: readonly Effort[];
   launch: (inv: Invocation, prompt: string) => Promise<Launch>;
   parse: (stdout: string, inv: Invocation) => Promise<Parsed>;
   /** Removes what a run left in the CLI's own state folder. */
@@ -144,6 +146,8 @@ const claudeCode: VendorAdapter = {
     { id: 'sonnet', label: 'Claude Sonnet' },
     { id: 'haiku', label: 'Claude Haiku' },
   ],
+  // `--effort <level>` (low, medium, high, xhigh, max).
+  efforts: EffortLevels.options,
   launch: async (inv, prompt) => {
     const mcpConfig = join(inv.scratch, 'mcp.json');
     await writeFile(
@@ -201,6 +205,9 @@ const codex: VendorAdapter = {
       return parsed.success ? parsed.data.models.filter((m) => m.visibility === undefined || m.visibility === 'list').map((m) => ({ id: m.slug, label: m.display_name ?? m.slug })) : [];
     },
   },
+  // `model_reasoning_effort`. The provider takes none, minimal, low, medium, high, xhigh and max, and refuses
+  // anything else (checked against codex-cli 0.153.4), so each level is handed over as it was asked for.
+  efforts: EffortLevels.options,
   launch: async (inv, prompt) => ({ file: inv.bin, stdin: prompt, args: [
     'exec',
     '--json', '--ephemeral', '--ignore-user-config', '--ignore-rules', '--skip-git-repo-check',
@@ -218,7 +225,7 @@ const codex: VendorAdapter = {
     // Non-interactive runs cannot answer an approval prompt. The studio's tools are approved up front, and only
     // they: each call is still decided by the daemon's own policy when it arrives at the bridge.
     '-c', `mcp_servers.${MCP_SERVER}.default_tools_approval_mode="approve"`,
-    '-c', `model_reasoning_effort=${JSON.stringify(inv.effort === 'max' ? 'xhigh' : inv.effort)}`,
+    '-c', `model_reasoning_effort=${JSON.stringify(inv.effort)}`,
     ...(inv.model === 'default' ? [] : ['--model', inv.model]),
     '--output-last-message', inv.lastMessageFile,
     '-', // prompt on stdin
@@ -256,6 +263,8 @@ const cursor: VendorAdapter = {
   // `cursor-agent models` prints `<id> - <name>` per line. `auto` is what a task runs on when no model is chosen.
   // Checked against cursor-agent 2026.11.11.
   catalog: { args: ['models'], parse: (stdout) => listedLines(stdout, ' - ').filter((m) => m.id !== 'auto') },
+  // The level is part of the model's name here (`gpt-5.3-codex-high`).
+  efforts: [],
   launch: async (inv, prompt) => {
     const launcher = which(inv.bin, cliEnv());
     if (!launcher) throw new EngineError(`${inv.bin} is not installed`);
@@ -307,6 +316,8 @@ const antigravity: VendorAdapter = {
   vision: true,
   // `agy models` prints `<id><tab><name>` per line: the ids an ACP session accepts. Checked against agy 1.5.6.
   catalog: { args: ['models'], parse: (stdout) => listedLines(stdout, '\t') },
+  // The level is part of the model's name here too (`gemini-4-argon-high`).
+  efforts: [],
   launch: async (inv) => {
     const bin = which(inv.bin, cliEnv());
     if (!bin) throw new EngineError(`${inv.bin} is not installed`);
@@ -345,6 +356,7 @@ const settingsKey: Record<BridgeEngineId, 'claudeCode' | 'codex' | 'cursor' | 'a
  */
 export class CliBridgeEngine implements Engine {
   readonly id: BridgeEngineId;
+  readonly efforts: readonly Effort[];
   readonly #adapter: VendorAdapter;
   readonly #bin: string;
   readonly #enabled: boolean;
@@ -369,6 +381,7 @@ export class CliBridgeEngine implements Engine {
     this.#toolbox = deps.toolbox;
     this.#steering = deps.steering;
     this.#adapter = adapters[deps.id];
+    this.efforts = this.#adapter.efforts;
     const settings = deps.config.engines[settingsKey[deps.id]];
     this.#bin = settings.bin;
     this.#enabled = settings.enabled;

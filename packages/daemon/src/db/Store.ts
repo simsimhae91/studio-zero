@@ -295,12 +295,12 @@ export class Store {
 
   // ---------------------------------------------------------------- tasks
 
-  insertTask(t: { id: string; projectId: string; kind: TaskKind; prompt: string; origin: Origin; budgetTokens: number; branch: string | null; baseBranch?: string | null; enginePref?: string | null; modelPref?: string | null; sessionId?: string | null; track?: TaskTrack; reviewerPref?: string | null; references?: readonly string[]; createdAt: number }): Task {
+  insertTask(t: { id: string; projectId: string; kind: TaskKind; prompt: string; origin: Origin; budgetTokens: number; branch: string | null; baseBranch?: string | null; enginePref?: string | null; modelPref?: string | null; effortPref?: string | null; sessionId?: string | null; track?: TaskTrack; reviewerPref?: string | null; references?: readonly string[]; createdAt: number }): Task {
     const { references, ...row } = t;
     this.#run(
-      `INSERT INTO tasks (id, project_id, kind, prompt, origin, state, branch, base_branch, engine_pref, model_pref, session_id, track, reviewer_pref, references_json, budget_tokens, created_at)
-       VALUES (:id, :projectId, :kind, :prompt, :origin, 'queued', :branch, :baseBranch, :enginePref, :modelPref, :sessionId, :track, :reviewerPref, :referencesJson, :budgetTokens, :createdAt)`,
-      { ...row, baseBranch: t.baseBranch ?? null, enginePref: t.enginePref ?? null, modelPref: t.modelPref ?? null, sessionId: t.sessionId ?? null, track: t.track ?? 'full', reviewerPref: t.reviewerPref ?? null, referencesJson: JSON.stringify(references ?? []) },
+      `INSERT INTO tasks (id, project_id, kind, prompt, origin, state, branch, base_branch, engine_pref, model_pref, effort_pref, session_id, track, reviewer_pref, references_json, budget_tokens, created_at)
+       VALUES (:id, :projectId, :kind, :prompt, :origin, 'queued', :branch, :baseBranch, :enginePref, :modelPref, :effortPref, :sessionId, :track, :reviewerPref, :referencesJson, :budgetTokens, :createdAt)`,
+      { ...row, baseBranch: t.baseBranch ?? null, enginePref: t.enginePref ?? null, modelPref: t.modelPref ?? null, effortPref: t.effortPref ?? null, sessionId: t.sessionId ?? null, track: t.track ?? 'full', reviewerPref: t.reviewerPref ?? null, referencesJson: JSON.stringify(references ?? []) },
     );
     return this.getTask(t.id)!;
   }
@@ -366,6 +366,7 @@ export class Store {
       phase: Phase | null;
       engine: string;
       model: string;
+      effort: string | null;
       branch: string;
       baseCheckpointId: string;
       summary: string;
@@ -378,6 +379,7 @@ export class Store {
       phase: 'phase',
       engine: 'engine',
       model: 'model',
+      effort: 'effort',
       branch: 'branch',
       baseCheckpointId: 'base_checkpoint_id',
       summary: 'summary',
@@ -1159,6 +1161,8 @@ function toTask(r: Row): Task {
     baseBranch: nstr(r.base_branch),
     enginePref: nstr(r.engine_pref),
     modelPref: nstr(r.model_pref),
+    effort: nstr(r.effort),
+    effortPref: nstr(r.effort_pref),
     sessionId: nstr(r.session_id),
     reviewerPref: nstr(r.reviewer_pref),
     references: JSON.parse(str(r.references_json)) as string[],

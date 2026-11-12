@@ -22,7 +22,7 @@ const OWNER: Actor = { type: 'owner', via: 'desktop' };
 export function createHandlers(studio: Studio): Handlers {
   return {
     'system.status': () => studio.status(),
-    'engines.models': async (p) => ({ models: await studio.engineModels(p.engine) }),
+    'engines.models': (p) => studio.engineCatalog(p.engine),
 
     'projects.create': (p) => studio.createProject(OWNER, p),
     'projects.list': () => studio.projectsOverview(),

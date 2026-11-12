@@ -389,6 +389,11 @@ const migrations: string[] = [
   `
   ALTER TABLE tasks ADD COLUMN model_pref TEXT;
   `,
+  // 11: the effort the owner picked for a task, and the effort it was run at.
+  `
+  ALTER TABLE tasks ADD COLUMN effort_pref TEXT;
+  ALTER TABLE tasks ADD COLUMN effort TEXT;
+  `,
 ];
 
 export function migrate(db: DatabaseSync): void {

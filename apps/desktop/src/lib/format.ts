@@ -15,6 +15,9 @@ export const phaseLabel: Record<Phase, string> = { plan: '계획', execute: '구
 
 export const kindLabel: Record<TaskKind, string> = { build: '만들기', refactor: '리팩터링', inline_edit: '빠른 수정', ideate: '기획', kirby_materialize: '제안 구현' };
 
+/** Effort levels in the owner's language, with the vendors' own word for each beside it in the menu. */
+export const effortLabel: Record<string, string> = { low: '낮음', medium: '보통', high: '높음', xhigh: '매우 높음', max: '최대' };
+
 /** Engines by the name of what the owner pays for. */
 export const engineLabel: Record<string, string> = { 'native-claude': 'Claude API', 'claude-code': 'Claude Code', codex: 'Codex', cursor: 'Cursor', antigravity: 'Antigravity' };
 

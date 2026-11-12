@@ -1,8 +1,8 @@
 import { ChevronDown } from 'lucide-react';
 import { useState } from 'react';
-import type { EngineModel, EnginePref } from '@studio-zero/protocol';
+import type { Effort, EngineModel, EnginePref } from '@studio-zero/protocol';
 import { resolveChoice } from '../lib/engineChoice.ts';
-import { engineLabel } from '../lib/format.ts';
+import { effortLabel, engineLabel } from '../lib/format.ts';
 import { setPrefs, usePrefs } from '../lib/prefs.ts';
 import { useQuery } from '../lib/studio.tsx';
 import { Menu, MenuItem, inputClass } from '../ui.tsx';
@@ -16,16 +16,22 @@ export interface EngineChoice {
   engine: EnginePref | null;
   model: string | null;
   modelLabel: string | null;
+  effort: Effort | null;
   /** The chosen engine's models, as its vendor lists them. Empty until they have been read. */
   models: readonly EngineModel[];
+  /** The levels the chosen engine takes as a setting. Empty where its model names carry the level, and until they have been read. */
+  efforts: readonly Effort[];
+  /** False until the daemon has said what the chosen engine offers. */
+  listed: boolean;
   pickEngine: (id: EnginePref | null) => void;
   pickModel: (id: string | null) => void;
+  pickEffort: (level: Effort | null) => void;
   /** What a request carries for this choice: nothing when it is left to the studio. */
-  fields: { engine?: EnginePref; model?: string };
+  fields: { engine?: EnginePref; model?: string; effort?: Effort };
 }
 
 /**
- * Who runs the next task: an engine, and a model on it. One choice for the whole app, and it is remembered:
+ * Who runs the next task: an engine, the model on it, and how hard it is asked to think. One choice for the whole app, and it is remembered:
  * what a project's first task was started with on the first page is what its composer shows afterwards, and
  * what the app opens with next time.
  */
@@ -33,22 +39,26 @@ export function useEngineChoice(): EngineChoice {
   const prefs = usePrefs();
   const status = useQuery('system.status', {});
   const listedEngines = status.data?.engines;
-  // The engine as far as it is known before its models are: the list of models is asked for by engine.
-  const { engine } = resolveChoice({ engine: prefs.engine, model: 'default' }, listedEngines, undefined);
+  // The engine as far as it is known before what it offers is: that is asked for by engine.
+  const { engine } = resolveChoice({ engine: prefs.engine, model: 'default', effort: 'default' }, listedEngines, undefined);
   const catalog = useQuery('engines.models', engine === null ? null : { engine });
-  const choice = resolveChoice(prefs, listedEngines, catalog.data?.models);
+  const choice = resolveChoice(prefs, listedEngines, catalog.data);
   return {
     engines: (listedEngines ?? []).filter((e) => e.available).map((e) => ({ id: e.id as EnginePref, label: engineLabel[e.id] ?? e.id })),
     ...choice,
     models: catalog.data?.models ?? [],
-    // A model belongs to its engine: changing the engine leaves the new one on its usual model.
+    efforts: catalog.data?.efforts ?? [],
+    listed: catalog.data !== undefined,
+    // A model belongs to its engine: changing the engine leaves the new one on its usual model. The level is
+    // the same scale everywhere and is about the work, so it stays.
     pickEngine: (id) => setPrefs({ engine: id ?? 'auto', model: 'default' }),
     pickModel: (id) => setPrefs({ model: id ?? 'default' }),
-    fields: choice.engine === null ? {} : { engine: choice.engine, ...(choice.model === null ? {} : { model: choice.model }) },
+    pickEffort: (level) => setPrefs({ effort: level ?? 'default' }),
+    fields: choice.engine === null ? {} : { engine: choice.engine, ...(choice.model === null ? {} : { model: choice.model }), ...(choice.effort === null ? {} : { effort: choice.effort }) },
   };
 }
 
-/** The two menus. Nothing is drawn when no engine can be picked: there is then nothing to choose between. */
+/** The menus: engine, then what that engine offers. Nothing is drawn when no engine can be picked: there is then nothing to choose between. */
 export function EnginePicker({ choice }: { choice: EngineChoice }) {
   if (choice.engines.length === 0 && choice.engine === null) return null;
   return (
@@ -74,6 +84,26 @@ export function EnginePicker({ choice }: { choice: EngineChoice }) {
       ) : choice.modelLabel ? (
         // The list has not arrived yet; the remembered pick still stands, and says so.
         <span className="px-3 text-sm font-medium text-fg-muted">모델: {choice.modelLabel}</span>
+      ) : null}
+      {choice.engine === null ? null : choice.efforts.length > 0 ? (
+        <Menu
+          align="start"
+          trigger={
+            <button type="button" title="얼마나 깊이 생각하게 할지. 고르지 않으면 작업 종류에 맞는 강도로 돕니다" className={pickerClass}>
+              추론 강도: {choice.effort ? effortLabel[choice.effort] : '기본'}
+              <ChevronDown className="size-4" aria-hidden />
+            </button>
+          }
+        >
+          <MenuItem onSelect={() => choice.pickEffort(null)}>기본</MenuItem>
+          {choice.efforts.map((level) => (
+            <MenuItem key={level} onSelect={() => choice.pickEffort(level)}>
+              {effortLabel[level]} <span className="text-fg-muted">{level}</span>
+            </MenuItem>
+          ))}
+        </Menu>
+      ) : choice.effort && !choice.listed ? (
+        <span className="px-3 text-sm font-medium text-fg-muted">추론 강도: {effortLabel[choice.effort]}</span>
       ) : null}
     </>
   );

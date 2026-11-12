@@ -178,7 +178,7 @@ test('the other subscriptions as coding engines: Codex, Cursor and Antigravity c
         if (!available.available) return st.skip(available.reason);
         const file = `hello-${id}.txt`;
         const task = store.insertTask({ id: `tsk_${id}`, projectId: project.id, kind: 'build', prompt: 'x', origin: 'desktop', budgetTokens: 2_000_000, branch: null, enginePref: id, createdAt: Date.now() });
-        const route = await router.route('build', id);
+        const route = await router.route('build', { engine: id });
         const session = await route.engine.open({ project, task, route: { ...route.candidate, effort: 'low' }, system: codingSystemPrompt(project.template), signal: new AbortController().signal, onWaiting: () => undefined });
         try {
           const result = await session.send(`Create a file named ${file} in the workspace root whose entire content is the two characters: hi. Then stop; do nothing else.`);
@@ -212,16 +212,19 @@ test('a chosen model, for real: each CLI lists its own, runs the one picked, and
       await t.test(id, { skip: only !== undefined && only !== id }, async (st) => {
         const available = (await router.status()).find((e) => e.id === id)!;
         if (!available.available) return st.skip(available.reason);
-        const models = await router.models(id);
+        const { models, efforts } = await router.catalog(id);
         assert.ok(models.length > 0, 'the CLI listed its models');
         // The smallest thing on the list: this is a one-word round.
         const pick = models.find((m) => /haiku|luna|flash-low|composer/i.test(m.id)) ?? models.at(-1)!;
-        st.diagnostic(`${id}: ${models.length} models; running ${pick.id} (${pick.label})`);
+        st.diagnostic(`${id}: ${models.length} models, efforts [${efforts.join(', ')}]; running ${pick.id} (${pick.label})`);
+        // Where the engine has effort as a setting, the round is asked for at the lowest: the level travels with the pick.
+        const effort = efforts.includes('low') ? 'low' : null;
         const round = async (model: string): Promise<string> => {
-          const task = store.insertTask({ id: `tsk_${id}_${model.replace(/\W/g, '_')}`, projectId: project.id, kind: 'build', prompt: 'x', origin: 'desktop', budgetTokens: 2_000_000, branch: null, enginePref: id, modelPref: model, createdAt: Date.now() });
-          const route = await router.route('build', id, task.modelPref);
+          const task = store.insertTask({ id: `tsk_${id}_${model.replace(/\W/g, '_')}`, projectId: project.id, kind: 'build', prompt: 'x', origin: 'desktop', budgetTokens: 2_000_000, branch: null, enginePref: id, modelPref: model, effortPref: effort, createdAt: Date.now() });
+          const route = await router.route('build', { engine: id, model: task.modelPref, effort });
           assert.equal(route.candidate.model, model);
-          const session = await route.engine.open({ project, task, route: { ...route.candidate, effort: 'low' }, system: 'You answer in one word.', signal: new AbortController().signal, onWaiting: () => undefined });
+          if (effort) assert.equal(route.candidate.effort, effort);
+          const session = await route.engine.open({ project, task, route: route.candidate, system: 'You answer in one word.', signal: new AbortController().signal, onWaiting: () => undefined });
           try {
             return (await session.send('Reply with the single word: ready. Use no tools.')).finalText;
           } finally {

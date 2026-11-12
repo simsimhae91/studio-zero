@@ -82,6 +82,9 @@ export type SandboxInfo = z.infer<typeof SandboxInfo>;
  * alphabet that cannot begin like an option.
  */
 export const ModelId = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:[\]=,-]{0,99}$/);
+/** How hard a model is asked to think. The same five levels mean the same thing on every engine that has them as a setting. */
+export const Effort = z.enum(['low', 'medium', 'high', 'xhigh', 'max']);
+export type Effort = z.infer<typeof Effort>;
 /** One model an engine can be asked to run. `label` is the vendor's own name for it: shown as text. */
 export const EngineModel = z.object({ id: ModelId, label: z.string().max(80) });
 export type EngineModel = z.infer<typeof EngineModel>;
@@ -107,6 +110,10 @@ export const Task = z.object({
   enginePref: z.string().nullable(),
   /** The model the owner asked that engine to run, if they picked one instead of the engine's usual one. */
   modelPref: z.string().nullable(),
+  /** The effort the engine was run at. Null on an engine whose vendor folds the level into the model's name, and on tasks from before this was recorded. */
+  effort: z.string().nullable(),
+  /** The effort the owner asked for, if they picked one instead of the routing table's. */
+  effortPref: z.string().nullable(),
   /** The session (task stream) this task belongs to; null for the project's default stream. */
   sessionId: z.string().nullable(),
   /** The subscription the owner chose for this task's two cross-checks, instead of the one paired with the engine. */

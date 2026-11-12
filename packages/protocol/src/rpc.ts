@@ -6,6 +6,7 @@ import {
   AuditReport,
   Checkpoint,
   CredentialMeta,
+  Effort,
   EngineModel,
   Eval,
   ExternalApi,
@@ -68,10 +69,12 @@ export const methods = {
   },
 
   /**
-   * The models an engine can be asked to run, as the vendor's own tooling lists them for this login. Empty for an
-   * engine that is not available, or whose list could not be read: the task can still be left to the usual model.
+   * What can be chosen on an engine. `models` is what the vendor's own tooling lists for this login: empty when the
+   * list could not be read, and the task can still be left to the usual model. `efforts` is the levels the engine
+   * takes as a setting of their own: empty where the vendor folds the level into the model's name. Both are empty
+   * for an engine that is not available.
    */
-  'engines.models': { params: z.object({ engine: EnginePref }), result: z.object({ models: z.array(EngineModel) }) },
+  'engines.models': { params: z.object({ engine: EnginePref }), result: z.object({ models: z.array(EngineModel), efforts: z.array(Effort) }) },
 
   'projects.create': { params: z.object({ name: z.string().min(1).max(80), slug: Slug, template: Template }), result: Project },
   /**
@@ -87,7 +90,7 @@ export const methods = {
    * `fast` builds a working draft straight away; `deep` writes the PRD, data model and API specification first.
    */
   'projects.ignite': {
-    params: z.object({ idea: z.string().min(1).max(20_000), track: z.enum(['fast', 'deep']), template: Template.optional(), engine: EnginePref.optional(), model: ModelId.optional() }),
+    params: z.object({ idea: z.string().min(1).max(20_000), track: z.enum(['fast', 'deep']), template: Template.optional(), engine: EnginePref.optional(), model: ModelId.optional(), effort: Effort.optional() }),
     result: z.object({ project: Project, task: Task }),
   },
   /** Removes the sandbox and the project's records. The workspace volume is kept unless `deleteWorkspace` is set. */
@@ -145,6 +148,11 @@ export const methods = {
        * Left out, the engine runs the one the routing table lists for it. The vendor decides whether it can be run.
        */
       model: ModelId.optional(),
+      /**
+       * Have that engine think this hard. Only together with `engine`, and only on an engine that has effort as a
+       * setting of its own (`engines.models` says which levels). Left out: the routing table's level for this kind of task.
+       */
+      effort: Effort.optional(),
       /** The session (task stream) to file this task under. Left out: the project's default stream. */
       sessionId: z.string().optional(),
       /** Left out: `full`. */

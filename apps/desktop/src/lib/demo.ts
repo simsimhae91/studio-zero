@@ -18,7 +18,7 @@ const projects: Project[] = [
   { id: 'prj_tide', slug: 'tide', name: 'Tide 정산', template: 'web-vite-react', createdAt: min(-70) },
 ];
 
-const baseTask = { projectId: 'prj_ledger', origin: 'desktop', engine: 'native-claude', model: 'claude-opus-5-5', budgetTokens: 2_000_000, error: null, baseBranch: null, enginePref: null, modelPref: null, sessionId: null, reviewerPref: null, references: [] as string[], track: 'full' } as const;
+const baseTask = { projectId: 'prj_ledger', origin: 'desktop', engine: 'native-claude', model: 'claude-opus-5-5', budgetTokens: 2_000_000, error: null, baseBranch: null, enginePref: null, modelPref: null, effort: 'high', effortPref: null, sessionId: null, reviewerPref: null, references: [] as string[], track: 'full' } as const;
 const sessions: Session[] = [{ id: 'ses_refactor', projectId: 'prj_ledger', name: 'refactor/dates', createdAt: min(-241) }];
 const tasks: Task[] = [
   {
@@ -381,7 +381,8 @@ const handlers: Handlers = {
     ],
     brain: 'api',
   }),
-  'engines.models': (p) => ({ models: demoModels[p.engine] ?? [] }),
+  // Cursor's level is part of its model names; the others take it as a setting of their own.
+  'engines.models': (p) => ({ models: demoModels[p.engine] ?? [], efforts: p.engine === 'cursor' || p.engine === 'antigravity' ? [] : ['low', 'medium', 'high', 'xhigh', 'max'] }),
   'projects.list': () => ({ projects, live: [{ projectId: 'prj_core', sandbox: 'running', busy: false }, { projectId: 'prj_ledger', sandbox: 'running', busy: true }, { projectId: 'prj_atlas', sandbox: 'stopped', busy: false }, { projectId: 'prj_tide', sandbox: 'stopped', busy: false }] }),
   'ledger.list': (p) => ({ entries: ledger.filter((e) => e.projectId === p.projectId) }),
   'external.list': (p) => ({ apis: p.projectId === 'prj_ledger' ? [{ projectId: 'prj_ledger', name: 'tosspay', origin: 'https://api.tosspayments.com', variables: ['SECRET_KEY'], createdAt: min(-200) }] : [] }),

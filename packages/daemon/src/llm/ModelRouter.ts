@@ -1,6 +1,6 @@
 import type { EngineModel, ReviewerPref, TaskKind } from '@studio-zero/protocol';
 import { UnavailableError } from '../app/errors.ts';
-import type { Config, EngineId, RouteCandidate } from '../config.ts';
+import type { Config, Effort, EngineId, RouteCandidate } from '../config.ts';
 import type { Engine } from '../harness/engines/Engine.ts';
 
 /** Whose model an engine runs: the vendor a cross-check must not share with it. */
@@ -18,10 +18,24 @@ export const REVIEW_PAIRS: Record<ReviewerPref, readonly ReviewerPref[]> = {
   antigravity: ['claude-code', 'codex', 'cursor'],
 };
 
+/** Said wherever an effort is asked of an engine that has no such setting: at submission, and again at routing. */
+export const noEffortSetting = (engine: EngineId): string => `${engine} has no effort setting of its own: the level is part of its model names, so pick the model instead`;
+
 export interface ReviewerDecision {
   /** Null when nobody on the list can be asked. */
   reviewer: ReviewerPref | null;
   considered: { reviewer: ReviewerPref; available: boolean; reason: string }[];
+}
+
+/**
+ * The owner's own choice of who runs a task: an engine, and optionally the model and the effort on it. A model
+ * is named the way its engine names it, and not every engine has effort as a setting, so neither means anything
+ * without the engine.
+ */
+export interface EnginePick {
+  engine: EngineId;
+  model?: string | null;
+  effort?: Effort | null;
 }
 
 export interface RouteDecision {
@@ -46,19 +60,21 @@ export class ModelRouter {
   }
 
   /**
-   * `pref` is the owner's own choice of engine for this task. It is honoured or refused, never substituted:
-   * someone who asked for Codex should not find out afterwards that something else did the work. `model` is
-   * their choice of model on that engine, and goes with it: a model id means nothing without the engine it names.
+   * `pick` is the owner's own choice for this task. It is honoured or refused, never substituted: someone who
+   * asked for Codex should not find out afterwards that something else did the work, and the same goes for the
+   * model and the effort they asked of it. What they left unsaid comes from the routing table's entry for that engine.
    */
-  async route(kind: TaskKind, pref: EngineId | null = null, model: string | null = null): Promise<RouteDecision> {
-    if (pref) {
+  async route(kind: TaskKind, pick: EnginePick | null = null): Promise<RouteDecision> {
+    if (pick) {
+      const pref = pick.engine;
       const engine = this.#engines.get(pref);
       const status = engine ? await engine.availability() : { available: false, reason: 'engine not registered' };
       if (!engine || !status.available) throw new UnavailableError(`the engine chosen for this task is not available: ${pref} (${status.reason})`);
+      if (pick.effort && !engine.efforts.includes(pick.effort)) throw new UnavailableError(noEffortSetting(pref));
       const listed = this.#config.routes[kind].find((c) => c.engine === pref);
       // 'default' leaves the model to the CLI's own configuration; the API loop needs a concrete one.
       const usual: RouteCandidate = listed ?? { engine: pref, model: pref === 'native-claude' ? 'claude-opus-5-5' : 'default', effort: 'high' };
-      const candidate: RouteCandidate = model === null ? usual : { ...usual, model };
+      const candidate: RouteCandidate = { ...usual, ...(pick.model ? { model: pick.model } : {}), ...(pick.effort ? { effort: pick.effort } : {}) };
       return { engine, candidate, considered: [{ engine: pref, ...status }] };
     }
     const considered: RouteDecision['considered'] = [];
@@ -100,9 +116,15 @@ export class ModelRouter {
   }
 
   /** What the owner can choose from on one engine. Nothing for an engine that cannot run a task now. */
-  async models(id: EngineId): Promise<EngineModel[]> {
+  async catalog(id: EngineId): Promise<{ models: EngineModel[]; efforts: Effort[] }> {
     const engine = this.#engines.get(id);
-    return engine && (await engine.availability()).available ? engine.models() : [];
+    if (!engine || !(await engine.availability()).available) return { models: [], efforts: [] };
+    return { models: await engine.models(), efforts: [...engine.efforts] };
+  }
+
+  /** The effort levels an engine takes as a setting of their own. Known without asking anything: it is how the engine is driven. */
+  efforts(id: EngineId): readonly Effort[] {
+    return this.#engines.get(id)?.efforts ?? [];
   }
 
   async status(): Promise<{ id: string; available: boolean; reason: string }[]> {

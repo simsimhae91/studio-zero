@@ -1,11 +1,11 @@
 import { readFile } from 'node:fs/promises';
 import { z } from 'zod';
-import { ReviewerPref, type AuditReport, type Phase, type Project, type Task, type TaskState } from '@studio-zero/protocol';
+import { Effort, ReviewerPref, type AuditReport, type Phase, type Project, type Task, type TaskState } from '@studio-zero/protocol';
 import { EngineId, type Config } from '../config.ts';
 import type { Store } from '../db/Store.ts';
 import type { EventLog } from '../events/EventLog.ts';
 import { pngBlock, textBlock, type ClaudeClient } from '../llm/ClaudeClient.ts';
-import type { ModelRouter } from '../llm/ModelRouter.ts';
+import type { EnginePick, ModelRouter } from '../llm/ModelRouter.ts';
 import { ApprovalDeniedError, type PolicyEngine } from '../policy/PolicyEngine.ts';
 import type { MockupRenderer } from '../qa/MockupRenderer.ts';
 import type { ReferenceCapture, RefKit } from '../qa/RefKit.ts';
@@ -218,7 +218,7 @@ export class Harness {
       // The engine is routed and opened when it is first needed. A resumed task needs one only if verification
       // finds something to repair.
       let route: Awaited<ReturnType<ModelRouter['route']>> | null = null;
-      const routed = async (): Promise<Awaited<ReturnType<ModelRouter['route']>>> => (route ??= await this.#router.route(task.kind, EngineId.nullable().catch(null).parse(task.enginePref), task.modelPref));
+      const routed = async (): Promise<Awaited<ReturnType<ModelRouter['route']>>> => (route ??= await this.#router.route(task.kind, pickOf(task)));
       const open = async (): Promise<EngineSession> => {
         const decided = await routed();
         return (engine.session ??= await decided.engine.open({ project, task, route: decided.candidate, system: codingSystemPrompt(project.template), signal, onWaiting }));
@@ -267,7 +267,8 @@ export class Harness {
         onBranch = true;
         // The branch the engine works on may predate a kit the prompt is about to promise it.
         await this.#provisioner.ensure(project);
-        task = this.#store.updateTask(task.id, { engine: decided.candidate.engine, model: decided.candidate.model, branch, baseCheckpointId: base.id });
+        // The table has a level for every engine; it is recorded only where the engine was actually run at one.
+        task = this.#store.updateTask(task.id, { engine: decided.candidate.engine, model: decided.candidate.model, effort: decided.engine.efforts.length > 0 ? decided.candidate.effort : null, branch, baseCheckpointId: base.id });
 
         const lessons = this.#lessons.forTask(project.id);
         appliedLessons = lessons.ids;
@@ -622,6 +623,12 @@ export class Harness {
     this.#events.emit({ projectId: task.projectId, taskId: task.id }, { type: 'task.state', state, error: patch.error ?? null });
     return updated;
   }
+}
+
+/** The owner's choice of engine, model and effort as the task carries it. Stored text is not trusted to be a choice. */
+function pickOf(task: Task): EnginePick | null {
+  const engine = EngineId.nullable().catch(null).parse(task.enginePref);
+  return engine === null ? null : { engine, model: task.modelPref, effort: Effort.nullable().catch(null).parse(task.effortPref) };
 }
 
 /** A plan as text, for a prompt. A model wrote it from the request and a file listing: callers fence it as data where it is quoted to another model. */

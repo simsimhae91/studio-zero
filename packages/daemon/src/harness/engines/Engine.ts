@@ -1,5 +1,5 @@
 import type { EngineModel, Project, Task } from '@studio-zero/protocol';
-import type { EngineId, RouteCandidate } from '../../config.ts';
+import type { Effort, EngineId, RouteCandidate } from '../../config.ts';
 
 export interface EngineRun {
   project: Project;
@@ -35,6 +35,11 @@ export interface Engine {
    * Empty when the list could not be read.
    */
   models(): Promise<EngineModel[]>;
+  /**
+   * The levels of effort this engine takes as a setting of their own. Empty where the vendor folds the level
+   * into the model's name (`…-high`): there the model is the choice, and a separate level would go nowhere.
+   */
+  readonly efforts: readonly Effort[];
   open(run: EngineRun): Promise<EngineSession>;
 }
 
