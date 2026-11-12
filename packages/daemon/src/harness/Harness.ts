@@ -21,7 +21,7 @@ import type { EvalRunner } from './EvalRunner.ts';
 import type { EngineResult, EngineSession } from './engines/Engine.ts';
 import { countCompilerErrors, emptyRun, renderEvidence, type Ledger, type RunRecord } from './Ledger.ts';
 import type { LessonBook } from './LessonBook.ts';
-import { ANCHOR_BRIEF, DRAFT_BRIEF, IDEATION_BRIEF, IDEATION_REQUIRED_FILES, PLANNER_SYSTEM_PROMPT, codingSystemPrompt } from './prompts.ts';
+import { ANCHOR_BRIEF, DRAFT_BRIEF, IDEATION_BRIEF, IDEATION_REQUIRED_FILES, IDEATION_REVISION_BRIEF, PLANNER_SYSTEM_PROMPT, codingSystemPrompt } from './prompts.ts';
 import type { ReflectionAgent } from './ReflectionAgent.ts';
 import { renderCritique, renderPatch, type Acceptance, type PlanCritique, type SandwichReviewer } from './SandwichReviewer.ts';
 import type { SelfHosting } from './SelfHosting.ts';
@@ -296,7 +296,9 @@ export class Harness {
         // ------------------------------------------------------------- Execute
         phase('execute', 1);
         await open();
-        result = await send(executeMessage(task, plan, lessons.text, { anchor, critique, references }));
+        // A design task that starts where a finished design already is (the owner sent it back with notes) revises it.
+        const revising = ideation && (await this.#verifyIdeation(project)).length === 0;
+        result = await send(executeMessage(task, plan, lessons.text, { anchor, critique, references, revising }));
         checkCancel();
       }
 
@@ -627,8 +629,8 @@ function referenceBlock(ref: ReferenceCapture): string {
   return `Reference page ${ref.url} as measured in a browser. Read principles out of it; its numbers and assets are its own and are not to be carried across:\n${untrusted('browser-page', `${ref.title}\n${ref.summary}`, { url: ref.url })}`;
 }
 
-function executeMessage(task: Task, plan: Plan | null, lessonText: string, handed: { anchor: AnchorTable | null; critique: PlanCritique | null; references: readonly ReferenceCapture[] } = { anchor: null, critique: null, references: [] }): string {
-  const parts = [task.kind === 'ideate' ? IDEATION_BRIEF : '', task.track === 'fast' && task.kind !== 'ideate' ? DRAFT_BRIEF : '', `The owner's request:\n${task.prompt}`];
+function executeMessage(task: Task, plan: Plan | null, lessonText: string, handed: { anchor: AnchorTable | null; critique: PlanCritique | null; references: readonly ReferenceCapture[]; revising?: boolean } = { anchor: null, critique: null, references: [] }): string {
+  const parts = [task.kind === 'ideate' ? (handed.revising ? IDEATION_REVISION_BRIEF : IDEATION_BRIEF) : '', task.track === 'fast' && task.kind !== 'ideate' ? DRAFT_BRIEF : '', `The owner's request:\n${task.prompt}`];
   if (plan) parts.push(`Plan drafted for this request (follow it unless the code shows it is wrong; say so if you deviate):\n${planText(plan)}`);
   // The table's cells were written by a model that had read reference pages, so they travel as data; the instruction to build to it is the harness's.
   if (handed.anchor) parts.push(`The anchor table for this work is committed at ${ANCHOR_FILE}. Build to it: the idea, the first screen as it describes it, and our own values, not the references'.\n${untrusted('engine-output', renderAnchorTable(handed.anchor))}`);

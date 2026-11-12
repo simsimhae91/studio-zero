@@ -4,11 +4,13 @@ import { Suspense, lazy, useEffect, useMemo, useState, type ReactNode } from 're
 import { ReviewerPref, type AdvisorId, type Approval, type Project, type Session, type Task, type TaskKind, type TaskState, type TaskTrack } from '@studio-zero/protocol';
 import { Markdown } from '@studio-zero/ax/react';
 import { duration, engineLabel, kindLabel, phaseLabel, stamp, subscriptionLabel, taskStateLabel, templateLabel, tokens } from '../lib/format.ts';
+import { revisionRequest, type MockupNote } from '../lib/mockups.ts';
 import { advisorCommand, buildRequest, mockupName, narrate, type Item, type Mockup } from '../lib/steps.ts';
 import { errorText, useAction, useQuery, useStudio, useTaskEvents } from '../lib/studio.tsx';
-import { Button, IconButton, Menu, MenuItem, MenuSeparator, Problem, Segmented, Sheet, Status, TitlebarSpace, inputClass } from '../ui.tsx';
+import { Button, IconButton, Menu, MenuItem, MenuSeparator, Problem, Segmented, Status, TitlebarSpace, inputClass } from '../ui.tsx';
 import { ActionStepper } from './ActionStepper.tsx';
 import { ExternalApisModal } from './ExternalApis.tsx';
+import { MockupDeskContext, MockupThumb, useMockupDesk, useMockupPages, type MockupDesk } from './mockupDesk.tsx';
 import { Composer, useStickToEnd } from './page.tsx';
 import { Audit } from './panels/Audit.tsx';
 import { FileTree } from './panels/FileTree.tsx';
@@ -148,17 +150,52 @@ function Workbench({ project, onOpen, onChanged }: { project: Project; onOpen: (
   };
 
   const steer = useAction((message: string) => backend.call('tasks.steer', { taskId: active!.id, message }));
-  const submit = useAction(async (prompt: string, as: { kind: Kind; track: TaskTrack } = { kind, track }) => {
+  const submit = useAction(async (prompt: string, as: { kind: Kind; track: TaskTrack; baseBranch?: string } = { kind, track }) => {
     // The cross-checks and the reference kit belong to a full build: a draft has neither a plan nor a review.
     const designed = as.kind === 'build' && as.track === 'full';
     const refs = designed && !core ? referencesOf(references) : [];
-    const task = await backend.call('tasks.submit', { projectId: project.id, kind: as.kind, prompt, track: as.track, ...(session ? { sessionId: session } : {}), ...(fork ? { baseBranch: fork } : {}), ...(engine === 'auto' ? {} : { engine: engine as never }), ...(designed && reviewer !== 'auto' ? { reviewer } : {}), ...(refs.length > 0 ? { references: refs } : {}) });
+    const task = await backend.call('tasks.submit', { projectId: project.id, kind: as.kind, prompt, track: as.track, ...(session ? { sessionId: session } : {}), ...((as.baseBranch ?? fork) ? { baseBranch: (as.baseBranch ?? fork)! } : {}), ...(engine === 'auto' ? {} : { engine: engine as never }), ...(designed && reviewer !== 'auto' ? { reviewer } : {}), ...(refs.length > 0 ? { references: refs } : {}) });
     setFork(null);
     setReferences('');
     setPicked((prev) => ({ ...prev, [key]: task.id }));
     tasks.reload();
   });
   const cancel = useAction(() => backend.call('tasks.cancel', { taskId: active!.id }));
+
+  // ---- the design's mock-ups: one choice and one set of notes, shared by the card and the browser pane
+  const design = list.findLast((t) => t.kind === 'ideate' && t.state === 'succeeded') ?? null;
+  const mockupPages = useMockupPages(project.id, `${design?.id}:${busy}`);
+  const [mockupPick, setMockupPick] = useState<string | null>(null);
+  const [previewSource, setPreviewSource] = useState<'app' | 'mockup' | null>(null);
+  const [mockupNotes, setMockupNotes] = useState<readonly MockupNote[]>([]);
+  const revise = useAction(async () => {
+    const prompt = revisionRequest(mockupNotes);
+    if (prompt === '' || !design?.branch) return;
+    // A revision is design work on top of the design: it starts from that task's branch, where the pages are.
+    const task = await backend.call('tasks.submit', { projectId: project.id, kind: 'ideate', prompt, track: 'full', baseBranch: design.branch, ...(session ? { sessionId: session } : {}) });
+    setMockupNotes([]);
+    setPicked((prev) => ({ ...prev, [key]: task.id }));
+    setPane('chat');
+    tasks.reload();
+  });
+  const desk: MockupDesk = {
+    pages: mockupPages.pages,
+    reload: mockupPages.reload,
+    designTaskId: design?.id ?? null,
+    picked: mockupPick,
+    pick: (file) => (setMockupPick(file), setPreviewSource('mockup')),
+    view: (file) => (setMockupPick(file), setPreviewSource('mockup'), show('preview')),
+    // Until something has been built there is no app to show: the mock-ups are what the pane opens on.
+    source: mockupPages.pages.length === 0 ? 'app' : (previewSource ?? (ready ? 'app' : 'mockup')),
+    showApp: () => setPreviewSource('app'),
+    notes: mockupNotes,
+    addNote: (note) => setMockupNotes((prev) => [...prev, note]),
+    removeNote: (index) => setMockupNotes((prev) => prev.filter((_, i) => i !== index)),
+    revise: () => void revise.run(),
+    revising: revise.busy,
+    reviseError: revise.error,
+    canRevise: design?.branch != null && !busy,
+  };
   const rename = useAction(async (name: string) => {
     await backend.call('projects.rename', { projectId: project.id, name });
     onChanged();
@@ -267,6 +304,7 @@ function Workbench({ project, onOpen, onChanged }: { project: Project; onOpen: (
   };
 
   return (
+    <MockupDeskContext.Provider value={desk}>
     <div className="flex min-h-0 flex-1 flex-col">
       <TitlebarSpace />
       <header className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-border px-4 py-2">
@@ -354,7 +392,7 @@ function Workbench({ project, onOpen, onChanged }: { project: Project; onOpen: (
                     onShow={show}
                     onCheckpoint={(checkpointId) => (setFocus(checkpointId), show('history'))}
                     onFile={(path) => (setOpenFile(path), show('files'))}
-                    onBuild={(as, mockup) => void submit.run(buildRequest(mockup), { kind: 'build', track: as })}
+                    onBuild={(as, mockup, from) => void submit.run(buildRequest(mockup), { kind: 'build', track: as, ...(from ? { baseBranch: from } : {}) })}
                     onContinue={setFork}
                     core={core}
                   />
@@ -487,6 +525,7 @@ function Workbench({ project, onOpen, onChanged }: { project: Project; onOpen: (
         }}
       />
     </div>
+    </MockupDeskContext.Provider>
   );
 }
 
@@ -544,7 +583,7 @@ function SessionTabs({ sessions, current, busy, onSelect, onCreate, onRename, on
 }
 
 /** One session's task stream, in its own scrolling layer. */
-function SessionStream({ visible, loaded, tasks, selected, pending, asking, advice, onPick, onShow, onCheckpoint, onFile, onBuild, onContinue, core }: { visible: boolean; loaded: boolean; tasks: Task[]; selected: Task | null; pending: Approval[]; asking: AdvisorId | null; advice: Advice[]; onPick: (taskId: string) => void; onShow: (tab: TabId) => void; onCheckpoint: (checkpointId: string) => void; onFile: (path: string) => void; onBuild: (track: TaskTrack, mockup: string | null) => void; onContinue: (branch: string) => void; core: boolean }) {
+function SessionStream({ visible, loaded, tasks, selected, pending, asking, advice, onPick, onShow, onCheckpoint, onFile, onBuild, onContinue, core }: { visible: boolean; loaded: boolean; tasks: Task[]; selected: Task | null; pending: Approval[]; asking: AdvisorId | null; advice: Advice[]; onPick: (taskId: string) => void; onShow: (tab: TabId) => void; onCheckpoint: (checkpointId: string) => void; onFile: (path: string) => void; onBuild: (track: TaskTrack, mockup: string | null, from: string | null) => void; onContinue: (branch: string) => void; core: boolean }) {
   const events = useTaskEvents(selected?.id ?? null);
   const items = useMemo(() => narrate(events), [events]);
   const scroll = useStickToEnd(`${selected?.id}:${events.length}:${selected?.state}:${asking}:${advice.length}`);
@@ -654,7 +693,7 @@ function AdvisorCard({ advisor, question, answer, ok, durationMs }: Advice) {
 }
 
 /** One task, opened out: the request, the steps, what was said, and how it ended. */
-function Passage({ task, items, pending, onShow, onCheckpoint, onFile, onBuild, onContinue, core }: { task: Task; items: Item[]; pending: Approval[]; onShow: (tab: TabId) => void; onCheckpoint: (checkpointId: string) => void; onFile: (path: string) => void; onBuild: (track: TaskTrack, mockup: string | null) => void; onContinue: (branch: string) => void; core: boolean }) {
+function Passage({ task, items, pending, onShow, onCheckpoint, onFile, onBuild, onContinue, core }: { task: Task; items: Item[]; pending: Approval[]; onShow: (tab: TabId) => void; onCheckpoint: (checkpointId: string) => void; onFile: (path: string) => void; onBuild: (track: TaskTrack, mockup: string | null, from: string | null) => void; onContinue: (branch: string) => void; core: boolean }) {
   const { backend } = useStudio();
   const [merged, setMerged] = useState<string | null>(null);
   // Drawn once at the end of a design task; a re-run draws again, and the latest set is the one on offer.
@@ -747,7 +786,7 @@ function Passage({ task, items, pending, onShow, onCheckpoint, onFile, onBuild, 
               </div>
             </div>
           ) : task.state === 'succeeded' && task.kind === 'ideate' ? (
-            <DesignDecision mockups={mockups} onFile={onFile} onBuild={onBuild} />
+            <DesignDecision task={task} mockups={mockups} onFile={onFile} onBuild={(track, mockup) => onBuild(track, mockup, task.branch)} />
           ) : core && task.state === 'succeeded' ? (
             <CoreHandover task={task} />
           ) : (
@@ -825,33 +864,36 @@ function CoreHandover({ task }: { task: Task }) {
 
 /**
  * The end of a deep-track task: the design is written down and its directions are drawn, and the next step is
- * the owner's to approve. They pick a direction by looking at it; one click starts the build from the documents
- * and that picture. Nothing is built until then.
+ * the owner's. They pick a direction by looking at it, send it back with notes if it is not there yet, and
+ * start the build from the documents and that page when it is. Nothing is built until then.
+ *
+ * The pictures are the pages themselves, live, at a phone's width; the browser pane beside the conversation
+ * shows the chosen one at full size, as a phone, a tablet or a desktop. An earlier design's card, or one whose
+ * pages are no longer in the workspace, falls back to the pictures taken when it finished.
  */
-function DesignDecision({ mockups, onFile, onBuild }: { mockups: Mockup[]; onFile: (path: string) => void; onBuild: (track: TaskTrack, mockup: string | null) => void }) {
+function DesignDecision({ task, mockups, onFile, onBuild }: { task: Task; mockups: Mockup[]; onFile: (path: string) => void; onBuild: (track: TaskTrack, mockup: string | null) => void }) {
+  const desk = useMockupDesk();
+  const current = desk.designTaskId === task.id;
   // The first page is the direction the documents argue for, so it starts chosen.
-  const [chosen, setChosen] = useState<string | null>(null);
-  const [zoomed, setZoomed] = useState<Mockup | null>(null);
-  const pick = mockups.find((m) => m.file === chosen) ?? mockups[0] ?? null;
+  const pick = mockups.find((m) => m.file === desk.picked) ?? mockups[0] ?? null;
   const drawn = mockups.length > 0;
-  // Phone screens are tall: three fit side by side. Desktop screens are wide: two.
-  const tall = drawn && mockups[0]!.height > mockups[0]!.width;
   return (
-    <div className="flex flex-col gap-3 border-l-4 border-accent pl-4">
+    <div className="@container flex flex-col gap-3 border-l-4 border-accent pl-4">
       <div className="flex flex-col gap-1">
         <p className="text-base font-semibold">{drawn ? `설계 문서와 첫 화면 시안 ${mockups.length}개가 준비됐습니다. 어느 안으로 만들까요?` : '설계 문서가 준비됐습니다. 이대로 만들까요?'}</p>
         <p className="text-base text-fg-muted">
-          {drawn ? '시안은 구성이 서로 다른 방향입니다. 하나를 고르고, 고칠 곳이 있으면 아래 입력창에 적어 주세요. 승인하면 문서와 고른 시안을 기준으로 구현을 시작합니다.' : '문서를 읽어 보고, 고칠 곳이 있으면 아래 입력창에 적어 주세요. 승인하면 이 문서들을 기준으로 구현을 시작합니다.'}
+          {drawn ? '시안은 구성이 서로 다른 방향입니다. 누르면 옆의 프리뷰에 실제 크기로 뜹니다. 고칠 곳은 거기서 요소를 골라 적어 보내고, 마음에 들면 승인하세요.' : '문서를 읽어 보고, 승인하면 이 문서들을 기준으로 구현을 시작합니다.'}
         </p>
       </div>
       {drawn ? (
-        <div role="group" aria-label="첫 화면 시안" className={`grid gap-3 ${tall ? 'grid-cols-2 sm:grid-cols-3' : 'grid-cols-1 sm:grid-cols-2'}`}>
+        <div role="group" aria-label="첫 화면 시안" className={`grid grid-cols-2 gap-3 ${mockups.length > 2 ? '@xl:grid-cols-3' : ''}`}>
           {mockups.map((m, i) => {
             const on = m.file === pick?.file;
+            const page = current ? desk.pages.find((p) => p.file === m.file) : undefined;
             return (
               <div key={m.file} className={`flex flex-col rounded-lg border bg-surface ${on ? 'border-accent' : 'border-border'}`}>
-                <button type="button" aria-pressed={on} onClick={() => setChosen(m.file)} className="flex flex-1 flex-col gap-2 rounded-lg p-2 text-left">
-                  <MockupImage mockup={m} className="w-full rounded-md border border-border" />
+                <button type="button" aria-pressed={on} onClick={() => desk.pick(m.file)} className="flex flex-1 flex-col gap-2 rounded-lg p-2 text-left">
+                  {page ? <MockupThumb html={page.html} label={`${mockupName(m.file)} 첫 화면 시안`} /> : <MockupImage mockup={m} className="w-full rounded-md border border-border" />}
                   <span className="flex items-center gap-2">
                     <span className={`flex size-5 shrink-0 items-center justify-center rounded-full border ${on ? 'border-accent bg-accent text-on-accent' : 'border-control-border'}`} aria-hidden>
                       {on ? <Check className="size-3" /> : null}
@@ -865,9 +907,9 @@ function DesignDecision({ mockups, onFile, onBuild }: { mockups: Mockup[]; onFil
                   <span className="break-words text-sm font-medium">{m.title}</span>
                   {m.idea ? <span className="break-words text-sm text-fg-muted">{m.idea}</span> : null}
                 </button>
-                <button type="button" onClick={() => setZoomed(m)} className="flex min-h-9 pointer-coarse:min-h-11 items-center gap-2 border-t border-border px-3 text-sm text-fg-muted hover:bg-sunken">
+                <button type="button" onClick={() => desk.view(m.file)} className="flex min-h-9 pointer-coarse:min-h-11 items-center gap-2 border-t border-border px-3 text-sm text-fg-muted hover:bg-sunken">
                   <Maximize2 className="size-4 shrink-0" aria-hidden />
-                  크게 보기
+                  프리뷰에서 보기
                 </button>
               </div>
             );
@@ -890,22 +932,8 @@ function DesignDecision({ mockups, onFile, onBuild }: { mockups: Mockup[]; onFil
           {pick ? `${mockupName(pick.file)}으로 승인하고 구현 시작` : '승인하고 구현 시작'}
         </Button>
         <Button onClick={() => onBuild('fast', pick?.file ?? null)}>초안만 먼저 만들기</Button>
+        {pick && current ? <Button onClick={() => desk.view(pick.file)}>시안 수정 요청</Button> : null}
       </div>
-      <Sheet open={zoomed !== null} onOpenChange={(open) => (open ? undefined : setZoomed(null))} title={zoomed ? `${mockupName(zoomed.file)} · ${zoomed.title}` : ''} description={zoomed?.idea || undefined} wide>
-        {zoomed ? (
-          <div className="flex flex-col items-start gap-4 px-6 py-4">
-            <MockupImage mockup={zoomed} className="max-w-full border border-border" />
-            <div className="flex flex-wrap gap-2">
-              <Button variant="primary" onClick={() => (setChosen(zoomed.file), setZoomed(null))}>
-                이 안 고르기
-              </Button>
-              <Button onClick={() => (onFile(zoomed.file), setZoomed(null))} icon={<FileText className="size-4" aria-hidden />}>
-                시안 파일 열기
-              </Button>
-            </div>
-          </div>
-        ) : null}
-      </Sheet>
     </div>
   );
 }

@@ -1,9 +1,12 @@
-import { ExternalLink, Monitor, Play, RefreshCw, Smartphone, Tablet } from 'lucide-react';
+import { ExternalLink, Monitor, MousePointerClick, Play, RefreshCw, Smartphone, Tablet } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { Project } from '@studio-zero/protocol';
+import { mockupName } from '../../lib/steps.ts';
 import { useAction, useStudio } from '../../lib/studio.tsx';
 import { Button, Empty, IconButton, Problem } from '../../ui.tsx';
+import { useMockupDesk } from '../mockupDesk.tsx';
 import { MobileFramePreview, PHONE_SCREEN, ScaledFrame } from './MobileFramePreview.tsx';
+import { MockupNotes, MockupStage, type Target } from './MockupStage.tsx';
 
 type Viewport = 'mobile' | 'tablet' | 'desktop';
 const VIEWPORTS: readonly { id: Viewport; label: string; icon: typeof Monitor }[] = [
@@ -17,6 +20,10 @@ const demoShot: Record<Viewport, string> = { mobile: 'art_phone', tablet: 'art_t
 /**
  * The running app, beside the conversation that is building it. A mobile project opens in a phone; a web
  * project opens at the pane's width, one click from a phone or a tablet.
+ *
+ * Before there is an app there are the design task's mock-ups, and this is where they are looked at: the same
+ * frames, the page itself and not a picture of it, one click between the directions. Pointing at an element
+ * and writing what should change is how a revision is asked for.
  *
  * `busy` is true while a task holds the workspace; `ready` once a task has produced something to run. The
  * preview brings itself up when there is something to show and nothing is mid-change, and refreshes when a
@@ -34,6 +41,12 @@ export function Preview({ project, busy, ready }: { project: Project; busy: bool
     setReloads((n) => n + 1);
   });
   const remote = !backend.demo && !['localhost', '127.0.0.1', '[::1]'].includes(backend.host);
+  const desk = useMockupDesk();
+  const mockup = desk.source === 'mockup' ? (desk.pages.find((page) => page.file === desk.picked) ?? desk.pages[0] ?? null) : null;
+  const [picking, setPicking] = useState(false);
+  const [target, setTarget] = useState<Target | null>(null);
+  // A choice of element belongs to the page it was made on.
+  useEffect(() => setTarget(null), [mockup?.file]);
 
   // Starting is safe to repeat: a dev server that already answers is left running.
   const wasBusy = useRef(busy);
@@ -52,16 +65,30 @@ export function Preview({ project, busy, ready }: { project: Project; busy: bool
   const title = `${project.name} 프리뷰`;
   // The built app is content, not part of this interface: a sandboxed frame on another origin, with no access to the shell.
   const frame = (className: string, size?: { width: number; height: number }) =>
-    backend.demo ? (
+    mockup ? (
+      <MockupStage page={mockup} className={`${className}${className === 'device-screen' ? '' : ' relative'}`} picking={picking} target={target} onTarget={setTarget} />
+    ) : backend.demo ? (
       demoImage ? <img src={demoImage} alt={`${VIEWPORTS.find((v) => v.id === viewport)!.label} 크기의 예시 화면`} className={`${className} object-cover object-top`} {...size} /> : null
     ) : url ? (
       <iframe key={`${url}#${reloads}`} title={title} src={url} className={className} sandbox="allow-scripts allow-forms allow-same-origin" referrerPolicy="no-referrer" {...size} />
     ) : null;
 
-  const showing = backend.demo || url !== null;
+  const showing = mockup !== null || backend.demo || url !== null;
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-2 py-1">
+        {desk.pages.length > 0 ? (
+          <div role="radiogroup" aria-label="보여 줄 것" className="flex gap-1">
+            <button type="button" role="radio" aria-checked={mockup === null} onClick={desk.showApp} className={`inline-flex min-h-9 pointer-coarse:min-h-11 items-center rounded-md px-3 text-sm font-medium ${mockup === null ? 'bg-sunken text-fg' : 'text-fg-muted hover:text-fg'}`}>
+              앱
+            </button>
+            {desk.pages.map((page) => (
+              <button key={page.file} type="button" role="radio" aria-checked={mockup?.file === page.file} onClick={() => desk.pick(page.file)} className={`inline-flex min-h-9 pointer-coarse:min-h-11 items-center rounded-md px-3 text-sm font-medium ${mockup?.file === page.file ? 'bg-sunken text-fg' : 'text-fg-muted hover:text-fg'}`}>
+                시안 {mockupName(page.file).slice(0, 1)}
+              </button>
+            ))}
+          </div>
+        ) : null}
         <div role="radiogroup" aria-label="화면 크기" className="flex gap-1">
           {VIEWPORTS.map(({ id, label, icon: Icon }) => (
             <button key={id} type="button" role="radio" aria-checked={viewport === id} onClick={() => setViewport(id)} className={`inline-flex min-h-9 pointer-coarse:min-h-11 items-center gap-2 rounded-md px-3 text-sm font-medium ${viewport === id ? 'bg-sunken text-fg' : 'text-fg-muted hover:text-fg'}`}>
@@ -72,7 +99,17 @@ export function Preview({ project, busy, ready }: { project: Project; busy: bool
         </div>
         <div className="flex items-center gap-1">
           {busy ? <span className="px-2 text-sm text-fg-muted">작업이 끝나면 새로 고칩니다</span> : null}
-          {url ? (
+          {mockup ? (
+            <>
+              <button type="button" aria-pressed={picking} onClick={() => (setPicking(!picking), setTarget(null))} className={`inline-flex min-h-9 pointer-coarse:min-h-11 items-center gap-2 rounded-md px-3 text-sm font-medium ${picking ? 'bg-accent text-on-accent' : 'text-fg-muted hover:bg-sunken hover:text-fg'}`}>
+                <MousePointerClick className="size-4" aria-hidden />
+                요소 고르기
+              </button>
+              <IconButton label="시안 다시 읽기" onClick={desk.reload}>
+                <RefreshCw className="size-4" aria-hidden />
+              </IconButton>
+            </>
+          ) : url ? (
             <>
               <IconButton label="새로 고침" onClick={() => setReloads((n) => n + 1)}>
                 <RefreshCw className="size-4" aria-hidden />
@@ -101,6 +138,7 @@ export function Preview({ project, busy, ready }: { project: Project; busy: bool
       ) : (
         <div className="flex min-h-0 flex-1 bg-sunken">{frame('preview-frame')}</div>
       )}
+      {mockup ? <MockupNotes file={mockup.file} target={target} onClear={() => setTarget(null)} /> : null}
     </div>
   );
 }

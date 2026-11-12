@@ -14,7 +14,7 @@ import type { BuildMeter } from '../src/harness/BuildMeter.ts';
 import type { CompilerGate } from '../src/harness/CompilerGate.ts';
 import type { EvalRunner } from '../src/harness/EvalRunner.ts';
 import { Harness } from '../src/harness/Harness.ts';
-import { IDEATION_BRIEF, IDEATION_REQUIRED_FILES } from '../src/harness/prompts.ts';
+import { IDEATION_BRIEF, IDEATION_REQUIRED_FILES, IDEATION_REVISION_BRIEF } from '../src/harness/prompts.ts';
 import type { ReflectionAgent } from '../src/harness/ReflectionAgent.ts';
 import type { SandwichReviewer } from '../src/harness/SandwichReviewer.ts';
 import { MIN_MOCKUPS, MOCKUP_DIR, MockupRenderer, type MockupOption } from '../src/qa/MockupRenderer.ts';
@@ -98,7 +98,7 @@ test('mock-up pages become pictures: scripts do not run, nothing is fetched, and
 const DOC = (name: string): string => `# ${name}\n\n${'정산 도구의 설계를 적는다. '.repeat(40)}`;
 
 /** A design task over a real daemon: the engine writes the scripted files, then the documents are checked for real. */
-async function designTask(files: Record<string, string>, mockups: Pick<MockupRenderer, 'render'>): Promise<{ state: string; error: string | null; bodies: EventEnvelope['body'][]; brief: string; cleanup: () => Promise<void> }> {
+async function designTask(files: Record<string, string>, mockups: Pick<MockupRenderer, 'render'>, already: Record<string, string> = {}): Promise<{ state: string; error: string | null; bodies: EventEnvelope['body'][]; brief: string; cleanup: () => Promise<void> }> {
   const turns: Block[][] = [Object.entries(files).map(([path, content], i) => use(`w${i}`, 'write_file', { path, content })), [say('설계 문서와 시안을 만들었습니다.')]];
   const sent: string[] = [];
   const base = { id: 'msg', type: 'message', role: 'assistant', model: 'claude-opus-5-5', stop_sequence: null, usage: { input_tokens: 10, output_tokens: 10, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 } };
@@ -132,6 +132,12 @@ async function designTask(files: Record<string, string>, mockups: Pick<MockupRen
     clock: Date.now,
     log: quietLog,
   });
+  // A design that is already there when the task starts: committed on the branch the task begins from.
+  if (Object.keys(already).length > 0) {
+    await d.daemon.provisioner.ensure(project);
+    for (const [path, content] of Object.entries(already)) await sandboxes.writeFile(project, path, content);
+    await sandboxes.commitAll(project, 'docs: an earlier design');
+  }
   await d.daemon.studio.submitTask({ type: 'owner', via: 'desktop' }, { projectId: project.id, kind: 'ideate', prompt: '프리랜서 셋이 같이 쓰는 정산 도구' }, 'desktop');
   const claimed = store.claimNextTask(Date.now());
   assert.ok(claimed);
@@ -184,5 +190,23 @@ test('pictures that cannot be drawn are said, and the documents still stand', as
     assert.ok(run.bodies.every((b) => b.type !== 'mockups.rendered'));
   } finally {
     await run.cleanup();
+  }
+});
+
+test('a design task that starts on a finished design is a revision: the owner\'s notes, not the whole brief again', async () => {
+  const pages = { [`${MOCKUP_DIR}/a.html`]: page('흐름 한 줄', '', '<h1>₩184,000</h1>'.repeat(20)), [`${MOCKUP_DIR}/b.html`]: page('이번 달 영수증', '', '<h1>영수증</h1>'.repeat(20)) };
+  const fresh = await designTask({ ...DOCS, ...pages }, { render: async () => DRAWN });
+  const again = await designTask({ [`${MOCKUP_DIR}/b.html`]: page('이번 달 영수증', '', '<h1>합계 먼저</h1>'.repeat(20)) }, { render: async () => DRAWN }, { ...DOCS, ...pages });
+  try {
+    assert.ok(fresh.brief.includes(JSON.stringify(IDEATION_BRIEF).slice(1, 80)) && !fresh.brief.includes('This is a revision of a design'), 'an empty workspace gets the whole brief');
+    assert.equal(again.state, 'succeeded', again.error ?? '');
+    assert.ok(again.brief.includes(JSON.stringify(IDEATION_REVISION_BRIEF).slice(1, 80)), 'a workspace with the design in it gets the revision brief');
+    assert.ok(!again.brief.includes('Work in four passes'), 'and is not told to write the design again');
+    assert.match(IDEATION_REVISION_BRIEF, /nothing else/);
+    assert.match(IDEATION_REVISION_BRIEF, /do not start building the product/);
+    assert.deepEqual(again.bodies.flatMap((b) => (b.type === 'mockups.rendered' ? [b.options.length] : [])), [2], 'the revised pages are drawn again for the next decision');
+  } finally {
+    await fresh.cleanup();
+    await again.cleanup();
   }
 });

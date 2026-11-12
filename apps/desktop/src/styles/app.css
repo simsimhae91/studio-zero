@@ -333,6 +333,20 @@ body {
   pointer-events: none;
 }
 
+/* Over a live mock-up, while the owner is pointing at things: what is under the pointer, what was chosen, what already has a note. */
+.mockup-outline {
+  position: absolute;
+  pointer-events: none;
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+.mockup-outline[data-tone="hover"] {
+  outline-style: dashed;
+}
+.mockup-outline[data-tone="chosen"] {
+  background: color-mix(in oklch, var(--color-accent) 14%, transparent);
+}
+
 /* The number a note and its mark share. */
 .proof-number {
   display: inline-flex;

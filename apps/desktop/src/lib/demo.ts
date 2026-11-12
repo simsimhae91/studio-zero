@@ -121,6 +121,28 @@ const events: EventEnvelope[] = [
   ...designBodies.map((body, i): EventEnvelope => ({ seq: 40 + i, at: min(-66) + i * 50_000, projectId: 'prj_tide', taskId: 'tsk_tide_design', body })),
 ];
 
+/** The Tide design task's three first screens: small real pages, each arranged its own way, in the project's tokens. */
+const tidePage = (title: string, idea: string, body: string): string => `<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${title}</title><meta name="description" content="${idea}">
+<style>
+:root{color-scheme:light dark;--bg:oklch(98.5% 0.006 240);--surface:oklch(100% 0 0);--fg:oklch(20% 0.01 240);--muted:oklch(43% 0.01 240);--line:oklch(90% 0.006 240);--accent:oklch(42% 0.12 255)}
+@media (prefers-color-scheme:dark){:root{--bg:oklch(16.5% 0.006 240);--surface:oklch(21% 0.006 240);--fg:oklch(96% 0.006 240);--muted:oklch(72% 0.01 240);--line:oklch(30% 0.006 240);--accent:oklch(78% 0.1 255)}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.6 system-ui,sans-serif}
+main{max-width:960px;margin:0 auto;padding:24px 20px 48px;display:flex;flex-direction:column;gap:20px}
+h1{font-size:30px;line-height:1.25;margin:0}p{margin:0;color:var(--muted)}
+.row{display:flex;justify-content:space-between;gap:12px;padding:12px 0;border-top:1px solid var(--line)}
+.sum{font-size:20px;font-weight:600}.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px}
+.flow{display:flex;align-items:center;gap:8px}.who{flex:none;inline-size:64px;block-size:64px;border-radius:999px;border:2px solid var(--fg);display:flex;align-items:center;justify-content:center;font-weight:600}
+.arrow{flex:1;block-size:4px;background:var(--accent)}button{min-height:44px;border:0;border-radius:8px;padding:0 16px;background:var(--accent);color:var(--bg);font:inherit;font-weight:600}
+.cols{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.bar{background:var(--accent);border-radius:4px}
+</style></head><body><main>${body}</main></body></html>`;
+const tideFiles: Record<string, string> = {
+  'docs/mockups/a.html': tidePage('흐름 한 줄', '세 사람 사이에 오가야 할 돈을 화살표 한 줄로 먼저 보여 주고, 내역은 그 아래에 둡니다.', `<h1>민지가 서준에게 184,000원</h1><p>11월 정산 · 지출 14건 · 11월 12일 기준</p><div class="flow"><span class="who">민지</span><span class="arrow"></span><span class="who">서준</span><span class="arrow" style="opacity:.4"></span><span class="who">하람</span></div><div class="card"><div class="row"><span>공유 오피스 11월</span><span class="sum">660,000원</span></div><div class="row"><span>촬영 장비 대여</span><span class="sum">132,000원</span></div><div class="row"><span>환불 대기 · 폰트 라이선스</span><span class="sum">−48,000원</span></div></div><button type="button">184,000원 보냈다고 표시</button>`),
+  'docs/mockups/b.html': tidePage('이번 달 영수증', '이번 달 지출을 영수증 한 장처럼 펼쳐 놓고, 맨 아래 합계에서 각자 몫이 갈립니다.', `<div class="card" style="max-width:420px;margin:0 auto;inline-size:100%"><h1>11월 영수증</h1><div class="row"><span>공유 오피스</span><span>660,000</span></div><div class="row"><span>촬영 장비 대여</span><span>132,000</span></div><div class="row"><span>택시 · 야간 촬영</span><span>41,800</span></div><div class="row"><span>폰트 라이선스 환불</span><span>−48,000</span></div><div class="row sum"><span>합계</span><span>785,800원</span></div><div class="row"><span>민지 몫</span><span>261,934원</span></div><div class="row"><span>서준 몫</span><span>261,933원</span></div><div class="row"><span>하람 몫</span><span>261,933원</span></div></div>`),
+  'docs/mockups/c.html': tidePage('사람별 저울', '사람마다 낸 돈과 쓴 돈을 저울처럼 나란히 놓아 기운 쪽이 줄 사람임을 보입니다.', `<h1>누가 더 냈나</h1><div class="cols"><div class="card"><p>민지</p><div class="bar" style="block-size:60px"></div><p class="sum">−184,000</p></div><div class="card"><p>서준</p><div class="bar" style="block-size:160px"></div><p class="sum">+151,000</p></div><div class="card"><p>하람</p><div class="bar" style="block-size:110px"></div><p class="sum">+33,000</p></div></div><p>막대는 낸 돈, 숫자는 받을 돈(+)과 줄 돈(−)입니다.</p>`),
+};
+
 /**
  * Three flat drawings that stand in for a design task's mock-ups. Each is arranged differently, because that is
  * what the real ones are for: a row of flows, one long sheet, columns side by side.
@@ -360,7 +382,7 @@ const handlers: Handlers = {
   'sessions.list': (p) => ({ sessions: sessions.filter((s) => s.projectId === p.projectId) }),
   'files.list': (p) => ({ entries: p.projectId === 'prj_ledger' ? fileEntries.filter((e) => parentOf(e.path) === (p.path ?? '.')) : [], truncated: false }),
   'files.read': (p) => {
-    const content = fileBodies[p.path] ?? '';
+    const content = (p.projectId === 'prj_tide' ? tideFiles[p.path] : fileBodies[p.path]) ?? '';
     return { content, encoding: 'utf-8', size: new TextEncoder().encode(content).length, truncated: false, binary: false };
   },
   'sandbox.info': (p) => sandbox(p.projectId),
