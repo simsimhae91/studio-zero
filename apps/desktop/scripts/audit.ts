@@ -137,6 +137,11 @@ const screens: { name: string; url: string; go: (page: Page, narrow: boolean) =>
     await page.getByRole('textbox', { name: 'B안 전체에 대한 수정 메모' }).fill('금액을 더 크게');
     await page.getByRole('button', { name: '수정 요청 2건 보내기' }).waitFor();
   } },
+  { name: 'design-mockup-redraw', url: '/?demo', go: async (page, narrow) => {
+    await openFromIndex('Tide 정산')(page, narrow);
+    await page.getByRole('button', { name: '전부 새로 그리기' }).click();
+    await page.getByRole('textbox', { name: '새로 그릴 방향' }).fill('영수증보다 사람 사이의 흐름이 주인이 되게');
+  } },
   { name: 'proposals', url: '/?demo', go: workspaceTab('Ledger', '제안') },
   { name: 'learning', url: '/?demo', go: workspaceTab('Ledger', '학습') },
   { name: 'settings', url: '/?demo', go: async (page) => void (await page.getByRole('button', { name: '설정' }).first().click()) },

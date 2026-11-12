@@ -50,6 +50,8 @@ test('the engines are told that colour is chosen from the subject, through the t
   assert.match(prompt, /two products made here must not look alike because they were made here/);
   assert.match(prompt, /set_theme tool before you draw or build/);
   assert.match(prompt, /bg-brand with text-on-brand/);
-  assert.ok(IDEATION_BRIEF.indexOf('call set_theme') < IDEATION_BRIEF.indexOf('4. Mock-ups'), 'a design task settles the look before it draws');
+  assert.match(IDEATION_BRIEF, /For each direction call set_theme with a palette and a shape that belong to that concept/, 'each direction has a look of its own');
+  assert.match(IDEATION_BRIEF, /<meta name="theme-seed"/);
+  assert.match(prompt, /using the seed the page records in its theme-seed meta tag/, 'the build takes the approved page\'s look');
   assert.match(chosenTheme(DIET).json, /"source": "2주 동안/);
 });

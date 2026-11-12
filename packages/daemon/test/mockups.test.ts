@@ -14,7 +14,7 @@ import type { BuildMeter } from '../src/harness/BuildMeter.ts';
 import type { CompilerGate } from '../src/harness/CompilerGate.ts';
 import type { EvalRunner } from '../src/harness/EvalRunner.ts';
 import { Harness } from '../src/harness/Harness.ts';
-import { IDEATION_BRIEF, IDEATION_REQUIRED_FILES, IDEATION_REVISION_BRIEF } from '../src/harness/prompts.ts';
+import { IDEATION_BRIEF, IDEATION_REQUIRED_FILES, IDEATION_REVISION_BRIEF, MOCKUP_RULES } from '../src/harness/prompts.ts';
 import type { ReflectionAgent } from '../src/harness/ReflectionAgent.ts';
 import type { SandwichReviewer } from '../src/harness/SandwichReviewer.ts';
 import { MIN_MOCKUPS, MOCKUP_DIR, MockupRenderer, type MockupOption } from '../src/qa/MockupRenderer.ts';
@@ -155,7 +155,9 @@ const DRAWN: MockupOption[] = [
 test('a design task is asked for at least two drawn directions, and ends by putting them in front of the owner', async () => {
   assert.equal(MIN_MOCKUPS, 2);
   assert.deepEqual(IDEATION_REQUIRED_FILES.filter((f) => f.startsWith(MOCKUP_DIR)), [`${MOCKUP_DIR}/a.html`, `${MOCKUP_DIR}/b.html`], 'two are required; the third is the agent\'s call');
-  assert.match(IDEATION_BRIEF, /differ in structure/);
+  assert.match(IDEATION_BRIEF, /the product doing the one thing it exists to do/);
+  assert.match(IDEATION_BRIEF, /pages that read as tabs of one app have failed/);
+  assert.match(IDEATION_BRIEF, /three different products for the same job/);
   assert.match(IDEATION_BRIEF, /no scripts, no external requests/);
 
   const run = await designTask({ ...DOCS, [`${MOCKUP_DIR}/a.html`]: page('흐름 한 줄', '', '<h1>₩184,000</h1>'.repeat(20)), [`${MOCKUP_DIR}/b.html`]: page('이번 달 영수증', '', '<h1>영수증</h1>'.repeat(20)) }, { render: async () => DRAWN });
@@ -203,7 +205,9 @@ test('a design task that starts on a finished design is a revision: the owner\'s
     assert.ok(again.brief.includes(JSON.stringify(IDEATION_REVISION_BRIEF).slice(1, 80)), 'a workspace with the design in it gets the revision brief');
     assert.ok(!again.brief.includes('Work in four passes'), 'and is not told to write the design again');
     assert.match(IDEATION_REVISION_BRIEF, /nothing else/);
-    assert.match(IDEATION_REVISION_BRIEF, /do not start building the product/);
+    assert.match(IDEATION_REVISION_BRIEF, /Never start building the product/);
+    assert.match(IDEATION_REVISION_BRIEF, /draw all of them from the start, as if for the first time, taking any direction the owner gives as the brief/);
+    assert.ok(IDEATION_REVISION_BRIEF.includes(MOCKUP_RULES) && IDEATION_BRIEF.includes(MOCKUP_RULES), 'a redraw is held to the rules of a first drawing');
     assert.deepEqual(again.bodies.flatMap((b) => (b.type === 'mockups.rendered' ? [b.options.length] : [])), [2], 'the revised pages are drawn again for the next decision');
   } finally {
     await fresh.cleanup();

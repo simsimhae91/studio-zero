@@ -35,13 +35,15 @@ export interface MockupDesk {
   removeNote: (index: number) => void;
   /** Sends the notes back as a revision of the design, with one more that is still in the field if there is one. */
   revise: (also?: MockupNote) => void;
+  /** Has every mock-up drawn again from the start, toward `direction` if the owner gave one. */
+  redraw: (direction: string) => void;
   revising: boolean;
   reviseError: string | null;
   /** False while a task holds the workspace, or when there is no finished design to revise. */
   canRevise: boolean;
 }
 
-const noDesk: MockupDesk = { pages: [], reload: () => undefined, designTaskId: null, picked: null, pick: () => undefined, view: () => undefined, ask: () => undefined, asked: 0, source: 'app', showApp: () => undefined, notes: [], addNote: () => undefined, removeNote: () => undefined, revise: () => undefined, revising: false, reviseError: null, canRevise: false };
+const noDesk: MockupDesk = { pages: [], reload: () => undefined, designTaskId: null, picked: null, pick: () => undefined, view: () => undefined, ask: () => undefined, asked: 0, source: 'app', showApp: () => undefined, notes: [], addNote: () => undefined, removeNote: () => undefined, revise: () => undefined, redraw: () => undefined, revising: false, reviseError: null, canRevise: false };
 export const MockupDeskContext = createContext<MockupDesk>(noDesk);
 export const useMockupDesk = (): MockupDesk => useContext(MockupDeskContext);
 

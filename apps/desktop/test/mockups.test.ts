@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { revisionRequest, sealMockup, structuralSelector, type PathStep } from '../src/lib/mockups.ts';
+import { redrawRequest, revisionRequest, sealMockup, structuralSelector, type PathStep } from '../src/lib/mockups.ts';
 
 const step = (tag: string, extra: Partial<PathStep> = {}): PathStep => ({ tag, id: '', classes: [], nth: 1, siblings: 1, ...extra });
 
@@ -37,4 +37,10 @@ test('a revision request carries the owner\'s words and positions, grouped by pa
     'pages in their own order; an empty note, a file that is not a mock-up and a selector this desk could not have made are left out',
   );
   assert.equal(revisionRequest([]), '');
+});
+
+test('drawing the mock-ups again is asked for in fixed words, with the owner\'s steer if there is one', () => {
+  assert.equal(redrawRequest('  '), '시안을 전부 새로 그려줘. 지금 있는 시안은 버리고 처음부터 다시 잡아. 설계 문서는 새 시안과 어긋나게 된 곳만 맞춰줘.');
+  assert.equal(redrawRequest('상대와 겨루는 장면이\n 주인이 되게').split('\n\n')[1], '원하는 방향: 상대와 겨루는 장면이 주인이 되게');
+  assert.ok(redrawRequest('가'.repeat(900)).length < 600, 'a steer is a line, not a document');
 });

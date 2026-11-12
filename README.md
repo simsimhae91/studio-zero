@@ -66,7 +66,7 @@ Mac mini 상시 가동과 원격 접속은 문서 §15를 본다.
 
 ```bash
 pnpm typecheck
-pnpm test              # 191개. 13개는 옵트인이고, Chrome이 필요한 테스트는 없으면 건너뛴다.
+pnpm test              # 192개. 13개는 옵트인이고, Chrome이 필요한 테스트는 없으면 건너뛴다.
 pnpm design:build      # packages/design/theme.css 재생성
 
 SZ_TEST_REAL_KEYCHAIN=1 pnpm test   # 임시 키체인으로 실제 Keychain 왕복 검증 (옵트인)

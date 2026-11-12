@@ -79,3 +79,12 @@ export function revisionRequest(notes: readonly MockupNote[]): string {
   }
   return lines.join('\n');
 }
+
+/**
+ * The request that has every mock-up drawn again from the start. `direction` is the owner's own steer, if they
+ * gave one; without it the directions are found afresh.
+ */
+export function redrawRequest(direction: string): string {
+  const steer = direction.replace(/\s+/g, ' ').trim().slice(0, 500);
+  return `시안을 전부 새로 그려줘. 지금 있는 시안은 버리고 처음부터 다시 잡아. 설계 문서는 새 시안과 어긋나게 된 곳만 맞춰줘.${steer === '' ? '' : `\n\n원하는 방향: ${steer}`}`;
+}

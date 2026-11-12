@@ -4,7 +4,7 @@ import { Suspense, lazy, useEffect, useMemo, useState, type ReactNode } from 're
 import { ReviewerPref, type AdvisorId, type Approval, type Project, type Session, type Task, type TaskKind, type TaskState, type TaskTrack } from '@studio-zero/protocol';
 import { Markdown } from '@studio-zero/ax/react';
 import { duration, engineLabel, kindLabel, phaseLabel, stamp, subscriptionLabel, taskStateLabel, templateLabel, tokens } from '../lib/format.ts';
-import { revisionRequest, type MockupNote } from '../lib/mockups.ts';
+import { redrawRequest, revisionRequest, type MockupNote } from '../lib/mockups.ts';
 import { advisorCommand, buildRequest, mockupName, narrate, type Item, type Mockup } from '../lib/steps.ts';
 import { errorText, useAction, useQuery, useStudio, useTaskEvents } from '../lib/studio.tsx';
 import { Button, IconButton, Menu, MenuItem, MenuSeparator, Problem, Segmented, Status, TitlebarSpace, inputClass } from '../ui.tsx';
@@ -169,8 +169,8 @@ function Workbench({ project, onOpen, onChanged }: { project: Project; onOpen: (
   const [previewSource, setPreviewSource] = useState<'app' | 'mockup' | null>(null);
   const [mockupNotes, setMockupNotes] = useState<readonly MockupNote[]>([]);
   const [asked, setAsked] = useState(0);
-  const revise = useAction(async (also?: MockupNote) => {
-    const prompt = revisionRequest(also ? [...mockupNotes, also] : mockupNotes);
+  // Both ways of sending a design back (notes on it, or "draw them all again") are design work on its branch.
+  const revise = useAction(async (prompt: string) => {
     if (prompt === '' || !design?.branch) return;
     // A revision is design work on top of the design: it starts from that task's branch, where the pages are.
     const task = await backend.call('tasks.submit', { projectId: project.id, kind: 'ideate', prompt, track: 'full', baseBranch: design.branch, ...(session ? { sessionId: session } : {}) });
@@ -194,7 +194,8 @@ function Workbench({ project, onOpen, onChanged }: { project: Project; onOpen: (
     notes: mockupNotes,
     addNote: (note) => setMockupNotes((prev) => [...prev, note]),
     removeNote: (index) => setMockupNotes((prev) => prev.filter((_, i) => i !== index)),
-    revise: (also) => void revise.run(also),
+    revise: (also) => void revise.run(revisionRequest(also ? [...mockupNotes, also] : mockupNotes)),
+    redraw: (direction) => void revise.run(redrawRequest(direction)),
     revising: revise.busy,
     reviseError: revise.error,
     canRevise: design?.branch != null && !busy,
@@ -880,6 +881,9 @@ function DesignDecision({ task, mockups, onFile, onBuild }: { task: Task; mockup
   // The first page is the direction the documents argue for, so it starts chosen.
   const pick = mockups.find((m) => m.file === desk.picked) ?? mockups[0] ?? null;
   const drawn = mockups.length > 0;
+  // Drawing them all again is a whole design pass on the owner's subscription: asked for in two steps.
+  const [redrawing, setRedrawing] = useState(false);
+  const [direction, setDirection] = useState('');
   return (
     <div className="@container flex flex-col gap-3 border-l-4 border-accent pl-4">
       <div className="flex flex-col gap-1">
@@ -936,7 +940,34 @@ function DesignDecision({ task, mockups, onFile, onBuild }: { task: Task; mockup
         </Button>
         <Button onClick={() => onBuild('fast', pick?.file ?? null)}>초안만 먼저 만들기</Button>
         {pick && current ? <Button onClick={() => desk.ask(pick.file)}>시안 수정 요청</Button> : null}
+        {drawn && current && !redrawing ? <Button onClick={() => setRedrawing(true)}>전부 새로 그리기</Button> : null}
       </div>
+      {redrawing ? (
+        <form
+          className="flex flex-col gap-2 rounded-lg border border-border bg-surface p-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            desk.redraw(direction);
+            setRedrawing(false);
+            setDirection('');
+          }}
+        >
+          <p className="text-base">
+            <span className="font-semibold">시안을 전부 새로 그립니다.</span>
+            <span className="text-fg-muted"> 지금 시안은 버리고 세 방향을 처음부터 다시 잡습니다. 원하는 방향이 있으면 적어 주세요. 비워 두면 알아서 새로 찾습니다.</span>
+          </p>
+          {/* A steer can run to a sentence or two: it wraps instead of scrolling out of sight. */}
+          <textarea aria-label="새로 그릴 방향" rows={2} className={`${inputClass} resize-none py-2`} value={direction} maxLength={500} placeholder="예: 상대와 겨루는 장면이 주인이 되게" onChange={(e) => setDirection(e.target.value)} />
+          {desk.reviseError ? <Problem>{desk.reviseError}</Problem> : null}
+          {!desk.canRevise ? <p className="text-base text-fg-muted">진행 중인 작업이 끝나면 보낼 수 있습니다.</p> : null}
+          <div className="flex flex-wrap gap-2">
+            <Button type="submit" variant="primary" busy={desk.revising} disabled={!desk.canRevise}>
+              새로 그리기
+            </Button>
+            <Button onClick={() => setRedrawing(false)}>취소</Button>
+          </div>
+        </form>
+      ) : null}
     </div>
   );
 }
