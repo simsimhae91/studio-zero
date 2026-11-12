@@ -73,6 +73,12 @@ const screens: { name: string; url: string; go: (page: Page, narrow: boolean) =>
   { name: 'proposals', url: '/?demo', go: projectPanel('제안') },
   { name: 'learning', url: '/?demo', go: projectPanel('학습') },
   { name: 'settings', url: '/?demo', go: async (page) => void (await page.getByRole('button', { name: '설정' }).first().click()) },
+  { name: 'settings-add-server', url: '/?demo', go: async (page) => {
+    await page.getByRole('button', { name: '설정' }).first().click();
+    await page.getByRole('button', { name: 'MCP 서버 추가' }).click();
+    await page.getByRole('radiogroup', { name: '연결 방식' }).scrollIntoViewIfNeeded();
+  } },
+  { name: 'project-atlas', url: '/?demo', go: openFromIndex('Atlas 모바일') },
 ];
 
 const browser = await chromium.launch({ channel: 'chrome', headless: true });

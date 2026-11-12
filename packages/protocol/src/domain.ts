@@ -60,6 +60,8 @@ export const Task = z.object({
   baseCheckpointId: z.string().nullable(),
   /** Branch this task started from. The integration branch unless the task continues a fork. */
   baseBranch: z.string().nullable(),
+  /** The engine the owner asked for, if they picked one instead of leaving it to the routing table. */
+  enginePref: z.string().nullable(),
   summary: z.string().nullable(),
   error: z.string().nullable(),
   createdAt: z.number().int(),
@@ -103,7 +105,13 @@ export type Checkpoint = z.infer<typeof Checkpoint>;
 export const McpServerInfo = z.object({
   id: z.string(),
   name: z.string(),
+  /** `http`: a remote server at `url`. `stdio`: a program on the daemon's Mac, started as `command` with `args`. */
+  transport: z.enum(['http', 'stdio']),
   url: z.string(),
+  command: z.string().nullable(),
+  args: z.array(z.string()),
+  /** For a stdio server that wants its token in an environment variable: the variable's name. */
+  tokenEnv: z.string().nullable(),
   auth: z.enum(['bearer', 'none', 'oauth']),
   about: z.string(),
   /** True for the servers the daemon ships knowing; false for ones the owner added. */

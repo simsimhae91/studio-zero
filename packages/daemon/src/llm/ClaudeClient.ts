@@ -7,6 +7,7 @@ import type { EventLog } from '../events/EventLog.ts';
 import type { PolicyEngine } from '../policy/PolicyEngine.ts';
 import type { Clock, Secret } from '../util/core.ts';
 import { CredentialIds, type KeychainVault } from '../vault/KeychainVault.ts';
+import type { BrainPart, SessionBrain } from './SessionBrain.ts';
 
 /** Fixed in code: the verification side of the loop must not be re-routable by configuration drift. */
 export const JUDGE_MODEL = 'claude-opus-5-5';
@@ -75,10 +76,16 @@ export function fallbackParams(model: string): { betas?: string[]; fallbacks?: '
 }
 
 /**
- * The daemon's own access to Claude (planning, vision audit, reflection, Kirby synthesis, the native coding loop).
- * Every request passes the `llm.request` budget rule first and is metered into the usage ledger afterwards.
- * The API key is read from the Keychain on the host and handed to the SDK in-process; it is not written to
- * disk, not put in an environment variable, and has no path into a sandbox.
+ * The daemon's own access to Claude (planning, vision audit, reflection, Kirby synthesis, scratchpad turns,
+ * research, writing, and the native coding loop). There are two ways in, and one is chosen by what the owner
+ * has set up, never by a model:
+ *
+ * - `api`: an API key in the Keychain, handed to the SDK in-process. It is not written to disk, not put in an
+ *   environment variable, and has no path into a sandbox.
+ * - `session`: no key; the owner's Claude subscription through the Claude Code CLI run as a tool-less brain
+ *   (see `SessionBrain`). The native coding loop is not available this way; coding goes to a bridged CLI engine.
+ *
+ * Either way every request passes the `llm.request` budget rule first and is metered into the usage ledger.
  */
 export class ClaudeClient {
   readonly #vault: KeychainVault;
@@ -89,10 +96,12 @@ export class ClaudeClient {
   /** A client supplied by the caller (tests). Never replaced by one built from the vault. */
   readonly #injected: Anthropic | null;
   readonly #checkKey: KeyCheck;
+  readonly #session: SessionBrain | null;
   #sdk: Anthropic | null = null;
 
-  constructor(deps: { vault: KeychainVault; policy: PolicyEngine; store: Store; events: EventLog; clock: Clock; sdk?: Anthropic; checkKey?: KeyCheck }) {
+  constructor(deps: { vault: KeychainVault; policy: PolicyEngine; store: Store; events: EventLog; clock: Clock; sdk?: Anthropic; checkKey?: KeyCheck; session?: SessionBrain }) {
     this.#checkKey = deps.checkKey ?? askProvider;
+    this.#session = deps.session ?? null;
     this.#vault = deps.vault;
     this.#policy = deps.policy;
     this.#store = deps.store;
@@ -101,8 +110,37 @@ export class ClaudeClient {
     this.#injected = deps.sdk ?? null;
   }
 
-  isConfigured(): boolean {
+  hasApiKey(): boolean {
     return this.#injected !== null || this.#store.hasCredential(CredentialIds.anthropicApiKey);
+  }
+
+  /** How the daemon's own model calls travel right now. A stored key wins: it is the more exact path. */
+  mode(): 'api' | 'session' | 'none' {
+    return this.hasApiKey() ? 'api' : this.#session?.ready() ? 'session' : 'none';
+  }
+
+  isConfigured(): boolean {
+    return this.mode() !== 'none';
+  }
+
+  /** Looks for the subscription CLI now, so the first `mode()` after boot is right. */
+  async refresh(): Promise<void> {
+    await this.#session?.availability();
+  }
+
+  session(): SessionBrain {
+    if (!this.#session) throw new UnavailableError('no Claude Code session is configured');
+    return this.#session;
+  }
+
+  /** Meters a subscription-billed response: tokens count against budgets, dollars do not. */
+  recordSession(scope: LlmScope, model: string, usage: { inputTokens: number; outputTokens: number }): TokenUsage {
+    const metered = { ...usage, usdMicros: 0 };
+    const label = `claude-code:${model}`;
+    this.#store.addUsage({ projectId: scope.projectId, taskId: scope.taskId, source: 'bridge', model: label, ...metered }, this.#clock());
+    this.#events.emit({ projectId: scope.projectId, taskId: scope.taskId }, { type: 'usage', source: 'bridge', model: label, ...metered });
+    scope.onUsage?.(metered);
+    return metered;
   }
 
   /** Whether the provider accepts this key. Asked before a key is stored, so a mistyped one fails here and not in the middle of a task. */
@@ -119,7 +157,7 @@ export class ClaudeClient {
     if (this.#injected) return this.#injected;
     if (this.#sdk) return this.#sdk;
     const key = await this.#vault.get(CredentialIds.anthropicApiKey);
-    if (!key) throw new UnavailableError(`no Anthropic API key in the vault (set ${CredentialIds.anthropicApiKey})`);
+    if (!key) throw new UnavailableError(`no Anthropic API key in the vault (set ${CredentialIds.anthropicApiKey}); this call needs the API and cannot go through a subscription`);
     const { default: Sdk } = await import('@anthropic-ai/sdk'); // loaded on first model call, not at boot
     // Only the vault's key, only to the provider: nothing ambient (ANTHROPIC_AUTH_TOKEN, ANTHROPIC_BASE_URL) is picked up.
     this.#sdk = new Sdk({ apiKey: key.expose(), authToken: null, baseURL: ANTHROPIC_API });
@@ -154,6 +192,13 @@ export class ClaudeClient {
     signal?: AbortSignal;
   }): Promise<z.infer<Schema>> {
     await this.gate(req.scope, req.model);
+    if (this.mode() === 'session') {
+      const { z: zod } = await import('zod');
+      const answer = await this.session().ask({ system: req.system, content: brainParts(req.content), model: req.model, effort: req.effort, jsonSchema: zod.toJSONSchema(req.schema) as Record<string, unknown>, signal: req.signal });
+      this.recordSession(req.scope, req.model, answer.usage);
+      // The CLI enforces the schema; it is checked again here because nothing a model returns is taken on trust.
+      return req.schema.parse(answer.structured ?? JSON.parse(answer.text)) as z.infer<Schema>;
+    }
     const sdk = await this.sdk();
     const { betaZodOutputFormat } = await import('@anthropic-ai/sdk/helpers/beta/zod');
     const message = await sdk.beta.messages.parse(
@@ -181,6 +226,11 @@ export async function writeTurn(
   req: { scope: LlmScope; model: string; effort: Effort; system: string; messages: Anthropic.Beta.BetaMessageParam[]; maxTokens?: number; signal?: AbortSignal },
 ): Promise<{ text: string; turn: Anthropic.Beta.BetaMessageParam }> {
   await claude.gate(req.scope, req.model);
+  if (claude.mode() === 'session') {
+    const answer = await claude.session().ask({ system: req.system, content: [{ type: 'text', text: transcript(req.messages) }], model: req.model, effort: req.effort, signal: req.signal });
+    claude.recordSession(req.scope, req.model, answer.usage);
+    return { text: answer.text.trim(), turn: { role: 'assistant', content: answer.text } };
+  }
   const sdk = await claude.sdk();
   const message = await sdk.beta.messages
     .stream({ model: req.model, max_tokens: req.maxTokens ?? 32_000, system: req.system, messages: req.messages, output_config: { effort: req.effort }, ...fallbackParams(req.model) }, { signal: req.signal })
@@ -191,6 +241,29 @@ export async function writeTurn(
   const text = message.content.flatMap((b) => (b.type === 'text' ? [b.text] : [])).join('\n').trim();
   // The whole content goes back into the history unchanged, thinking blocks included.
   return { text, turn: { role: 'assistant', content: message.content as Anthropic.Beta.BetaContentBlockParam[] } };
+}
+
+/** Request content as the subscription CLI takes it: text and base64 images. Other block kinds have no equivalent there. */
+export function brainParts(content: unknown): BrainPart[] {
+  if (typeof content === 'string') return [{ type: 'text', text: content }];
+  if (!Array.isArray(content)) return [];
+  return (content as Anthropic.Beta.BetaContentBlockParam[]).flatMap((block): BrainPart[] => {
+    if (block.type === 'text') return [{ type: 'text', text: block.text }];
+    if (block.type === 'image' && block.source.type === 'base64') return [{ type: 'image', mediaType: block.source.media_type, base64: block.source.data }];
+    if (block.type === 'tool_result') return brainParts(block.content).filter((part) => part.type === 'text');
+    return [];
+  });
+}
+
+/**
+ * A message history as one prompt. A CLI run is a single request, so earlier turns are restated in order and
+ * the model continues from the last one.
+ */
+export function transcript(messages: readonly Anthropic.Beta.BetaMessageParam[]): string {
+  const text = (m: Anthropic.Beta.BetaMessageParam): string => brainParts(m.content).flatMap((part) => (part.type === 'text' ? [part.text] : [])).join('\n');
+  if (messages.length === 1) return text(messages[0]!);
+  const earlier = messages.slice(0, -1).map((m) => `${m.role === 'user' ? '[to you]' : '[from you]'}\n${text(m)}`).join('\n\n');
+  return `What has been said so far, in order:\n\n${earlier}\n\nThe latest message, which you are answering now:\n\n${text(messages.at(-1)!)}`;
 }
 
 export function textBlock(text: string): Anthropic.Beta.BetaTextBlockParam {

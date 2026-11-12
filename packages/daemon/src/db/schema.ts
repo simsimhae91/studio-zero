@@ -316,6 +316,15 @@ const migrations: string[] = [
     PRIMARY KEY (project_id, server_id, tool)
   ) STRICT;
   `,
+
+  // 4: an engine the owner picked for a task; tool servers that are a program on this machine (stdio).
+  `
+  ALTER TABLE tasks ADD COLUMN engine_pref TEXT;
+  ALTER TABLE mcp_servers ADD COLUMN transport TEXT NOT NULL DEFAULT 'http';
+  ALTER TABLE mcp_servers ADD COLUMN command TEXT;
+  ALTER TABLE mcp_servers ADD COLUMN args_json TEXT NOT NULL DEFAULT '[]';
+  ALTER TABLE mcp_servers ADD COLUMN token_env TEXT;
+  `,
 ];
 
 export function migrate(db: DatabaseSync): void {

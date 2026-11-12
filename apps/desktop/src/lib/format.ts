@@ -13,6 +13,9 @@ export const phaseLabel: Record<Phase, string> = { plan: '계획', execute: '구
 
 export const kindLabel: Record<TaskKind, string> = { build: '만들기', refactor: '리팩터링', inline_edit: '빠른 수정', ideate: '기획', kirby_materialize: '제안 구현' };
 
+/** Engines by the name of what the owner pays for. */
+export const engineLabel: Record<string, string> = { 'native-claude': 'Claude API', 'claude-code': 'Claude Code', codex: 'Codex', cursor: 'Cursor', antigravity: 'Antigravity' };
+
 export const templateLabel: Record<Template, string> = { 'web-vite-react': '웹 (Vite + React)', 'web-next': '웹 (Next.js)', 'mobile-expo': '모바일 (Expo)' };
 
 export const viewportLabel: Record<ViewportId, string> = { 'iphone-15-pro': '폰', 'ipad-pro-11': '태블릿', 'desktop-1440': '데스크톱' };

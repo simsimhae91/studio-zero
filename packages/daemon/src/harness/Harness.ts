@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { Phase, Project, Task, TaskState } from '@studio-zero/protocol';
-import type { Config } from '../config.ts';
+import { EngineId, type Config } from '../config.ts';
 import type { Store } from '../db/Store.ts';
 import type { EventLog } from '../events/EventLog.ts';
 import { textBlock, type ClaudeClient } from '../llm/ClaudeClient.ts';
@@ -129,7 +129,7 @@ export class Harness {
 
       // ------------------------------------------------------------------ Plan
       phase('plan', 0);
-      const route = await this.#router.route(task.kind);
+      const route = await this.#router.route(task.kind, EngineId.nullable().catch(null).parse(task.enginePref));
       this.#events.emit(scope, { type: 'route.decided', taskKind: task.kind, engine: route.candidate.engine, model: route.candidate.model, effort: route.candidate.effort, considered: route.considered });
       const base = await this.#sandboxes.checkpoint(project, `before ${task.kind} ${task.id}`, task.id);
       this.#events.emit(scope, { type: 'checkpoint.created', checkpointId: base.id, label: base.label });

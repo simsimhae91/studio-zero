@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 import type Anthropic from '@anthropic-ai/sdk';
 import type { Logger as PinoLogger } from 'pino';
 import { ConfidenceCalibration } from '../ax/Calibration.ts';
+import type { AcpRequest, AcpResult } from '../bridge/acp.ts';
 import { SteeringQueue } from '../ax/Steering.ts';
 import { BridgeSessions } from '../bridge/BridgeSessions.ts';
 import type { Config } from '../config.ts';
@@ -20,6 +21,7 @@ import type { PdfRenderer } from '../knowledge/exportPdf.ts';
 import { KnowledgeService } from '../knowledge/KnowledgeService.ts';
 import { McpRegistry, type McpConnect } from '../mcp/McpRegistry.ts';
 import { ClaudeClient, type KeyCheck } from '../llm/ClaudeClient.ts';
+import { SessionBrain } from '../llm/SessionBrain.ts';
 import { LlmGateway, type GatewayUpstreams } from '../llm/LlmGateway.ts';
 import { ModelRouter } from '../llm/ModelRouter.ts';
 import { PolicyEngine } from '../policy/PolicyEngine.ts';
@@ -58,6 +60,8 @@ export interface DaemonOverrides {
   mcpConnect?: McpConnect;
   /** Replaces the question "does the provider accept this key?" asked before an Anthropic key is stored. */
   checkKey?: KeyCheck;
+  /** Replaces the ACP conversation with an agent CLI. */
+  acp?: (req: AcpRequest) => Promise<AcpResult>;
 }
 
 export interface Daemon {
@@ -83,6 +87,8 @@ export interface Daemon {
   knowledge: KnowledgeService;
   steering: SteeringQueue;
   provisioner: WorkspaceProvisioner;
+  claude: ClaudeClient;
+  router: ModelRouter;
   start(): Promise<void>;
   stop(): Promise<void>;
 }
@@ -101,11 +107,13 @@ export async function createDaemon(config: Config, log: PinoLogger, overrides: D
 
   const sandboxes = new OrbStackManager({ config, store, clock, run: overrides.run });
   const provisioner = new WorkspaceProvisioner(sandboxes);
-  const claude = new ClaudeClient({ vault, policy, store, events, clock, sdk: overrides.anthropic, checkKey: overrides.checkKey });
+  const bridgeSessions = new BridgeSessions(clock);
+  // With no API key in the vault, the daemon's own model calls go through the owner's Claude subscription.
+  const session = new SessionBrain({ config, sessions: bridgeSessions, clock, run: overrides.run });
+  const claude = new ClaudeClient({ vault, policy, store, events, clock, sdk: overrides.anthropic, checkKey: overrides.checkKey, session });
   const mcp = new McpRegistry({ store, vault, policy, clock, connect: overrides.mcpConnect });
   mcp.seed();
   const toolbox = new Toolbox({ sandboxes, policy, events, mcp });
-  const bridgeSessions = new BridgeSessions(clock);
   const steering = new SteeringQueue();
   const calibration = new ConfidenceCalibration(store, clock);
 
@@ -113,6 +121,8 @@ export async function createDaemon(config: Config, log: PinoLogger, overrides: D
     new NativeClaudeEngine({ claude, toolbox, events, config, steering }),
     new CliBridgeEngine({ id: 'claude-code', config, sessions: bridgeSessions, store, events, policy, clock, steering, toolbox, run: overrides.run }),
     new CliBridgeEngine({ id: 'codex', config, sessions: bridgeSessions, store, events, policy, clock, steering, toolbox, run: overrides.run }),
+    new CliBridgeEngine({ id: 'cursor', config, sessions: bridgeSessions, store, events, policy, clock, steering, toolbox, run: overrides.run }),
+    new CliBridgeEngine({ id: 'antigravity', config, sessions: bridgeSessions, store, events, policy, clock, steering, toolbox, run: overrides.run, acp: overrides.acp }),
   ];
   const router = new ModelRouter(config, engines);
 
@@ -229,8 +239,11 @@ export async function createDaemon(config: Config, log: PinoLogger, overrides: D
     knowledge,
     steering,
     provisioner,
+    claude,
+    router,
     async start() {
       policy.start();
+      await claude.refresh();
       store.failInterruptedKnowledgeJobs(clock());
       await server.listen();
       await gateway.listen();
@@ -246,6 +259,7 @@ export async function createDaemon(config: Config, log: PinoLogger, overrides: D
       await slack?.stop();
       await ntfy?.stop();
       await queue.stop();
+      await mcp.stop();
       await Promise.race([Promise.all([scratch.idle(), knowledge.idle()]), new Promise((resolve) => setTimeout(resolve, 5000).unref())]);
       await studio.settle();
       await kirby.stop();

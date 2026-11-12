@@ -26,6 +26,10 @@ const empty = z.object({});
  * The RPC contract. One table drives the server's validation, the client's types and the docs.
  * Every method is validated on the way in AND on the way out, so a handler bug cannot leak a malformed payload.
  */
+const McpServerId = z.string().regex(/^[a-z][a-z0-9-]{1,30}$/);
+/** Which engine runs a task, when the owner chooses instead of the routing table. */
+export const EnginePref = z.enum(['native-claude', 'claude-code', 'codex', 'cursor', 'antigravity']);
+
 export const methods = {
   'system.status': {
     params: empty,
@@ -37,6 +41,8 @@ export const methods = {
       relays: z.array(z.object({ id: z.enum(['telegram', 'slack', 'ntfy']), state: z.enum(['disabled', 'connected', 'degraded']) })),
       queue: z.object({ queued: z.number().int(), running: z.number().int() }),
       engines: z.array(z.object({ id: z.string(), available: z.boolean(), reason: z.string() })),
+      /** How the daemon's own model calls (planning, judging, scratchpad, writing) travel: an API key, the owner's Claude subscription, or not at all. */
+      brain: z.enum(['api', 'session', 'none']),
     }),
   },
 
@@ -63,6 +69,8 @@ export const methods = {
       budgetTokens: z.number().int().min(10_000).max(50_000_000).optional(),
       /** Start from this branch instead of the integration branch (to continue a fork). */
       baseBranch: z.string().min(1).max(120).optional(),
+      /** Run on this engine. Left out, the routing table picks; chosen and unavailable, the task fails instead of quietly using another. */
+      engine: EnginePref.optional(),
     }),
     result: Task,
   },
@@ -139,7 +147,11 @@ export const methods = {
   // External tool servers (MCP). Configured by the owner; used by agents through the daemon, one approved tool at a time.
   'mcp.list': { params: empty, result: z.object({ servers: z.array(McpServerInfo) }) },
   'mcp.add': {
-    params: z.object({ id: z.string().regex(/^[a-z][a-z0-9-]{1,30}$/), name: z.string().min(1).max(60), url: z.string().min(8).max(300), auth: z.enum(['bearer', 'none']), about: z.string().max(300) }),
+    params: z.discriminatedUnion('transport', [
+      z.object({ transport: z.literal('http'), id: McpServerId, name: z.string().min(1).max(60), about: z.string().max(300), url: z.string().min(8).max(300), auth: z.enum(['bearer', 'none']) }),
+      /** A program on the daemon's Mac that speaks MCP on stdio: Blender, Unity, Aseprite and other local tools. */
+      z.object({ transport: z.literal('stdio'), id: McpServerId, name: z.string().min(1).max(60), about: z.string().max(300), command: z.string().min(1).max(300), args: z.array(z.string().max(500)).max(24), tokenEnv: z.string().regex(/^[A-Z][A-Z0-9_]{1,60}$/).optional() }),
+    ]),
     result: McpServerInfo,
   },
   'mcp.remove': { params: z.object({ serverId: z.string() }), result: z.object({ removed: z.literal(true) }) },

@@ -3,6 +3,7 @@ import type { Approval, Origin } from '@studio-zero/protocol';
 import type { Config } from '../config.ts';
 import type { ApprovalRow, Store } from '../db/Store.ts';
 import type { EventLog } from '../events/EventLog.ts';
+import { destinationOf } from '../mcp/destination.ts';
 import { canonicalJson, newId, sha256Hex, type Clock } from '../util/core.ts';
 import { Action, actionProjectId, actorLabel, describeAction, type Actor } from './actions.ts';
 
@@ -97,7 +98,7 @@ const rules: Rule[] = [
       if (action.kind !== 'mcp.call') return undefined;
       const server = store.getMcpServer(action.serverId);
       if (!server) return deny(`unknown tool server ${action.serverId}`);
-      if (new URL(server.url).host !== action.host) return deny('the tool server address is not the one this call was prepared for');
+      if (destinationOf(server) !== action.host) return deny('the tool server is not the one this call was prepared for');
       if (actor.type === 'owner') return allow('owner-initiated');
       return store.hasMcpGrant(action.projectId, action.serverId, action.tool) ? allow('the owner allowed this tool for this project') : ask('first use of this external tool in this project');
     },

@@ -112,7 +112,12 @@ export interface IngestRow {
 export interface McpServerRow {
   id: string;
   name: string;
+  transport: 'http' | 'stdio';
   url: string;
+  /** stdio: the program, as an absolute path resolved when the server was added. */
+  command: string | null;
+  args: string[];
+  tokenEnv: string | null;
   auth: 'bearer' | 'none' | 'oauth';
   about: string;
   builtin: boolean;
@@ -121,7 +126,7 @@ export interface McpServerRow {
 
 const str = (v: SQLInputValue | undefined): string => v as string;
 const num = (v: SQLInputValue | undefined): number => Number(v);
-const mcpServerRow = (r: Record<string, SQLInputValue>): McpServerRow => ({ id: str(r.id), name: str(r.name), url: str(r.url), auth: str(r.auth) as McpServerRow['auth'], about: str(r.about), builtin: num(r.builtin) === 1, addedAt: num(r.added_at) });
+const mcpServerRow = (r: Record<string, SQLInputValue>): McpServerRow => ({ id: str(r.id), name: str(r.name), transport: str(r.transport) as McpServerRow['transport'], url: str(r.url), command: r.command === null ? null : str(r.command), args: JSON.parse(str(r.args_json)) as string[], tokenEnv: r.token_env === null ? null : str(r.token_env), auth: str(r.auth) as McpServerRow['auth'], about: str(r.about), builtin: num(r.builtin) === 1, addedAt: num(r.added_at) });
 const nstr = (v: SQLInputValue | undefined): string | null => (v == null ? null : (v as string));
 const nnum = (v: SQLInputValue | undefined): number | null => (v == null ? null : Number(v));
 
@@ -231,11 +236,11 @@ export class Store {
 
   // ---------------------------------------------------------------- tasks
 
-  insertTask(t: { id: string; projectId: string; kind: TaskKind; prompt: string; origin: Origin; budgetTokens: number; branch: string | null; baseBranch?: string | null; createdAt: number }): Task {
+  insertTask(t: { id: string; projectId: string; kind: TaskKind; prompt: string; origin: Origin; budgetTokens: number; branch: string | null; baseBranch?: string | null; enginePref?: string | null; createdAt: number }): Task {
     this.#run(
-      `INSERT INTO tasks (id, project_id, kind, prompt, origin, state, branch, base_branch, budget_tokens, created_at)
-       VALUES (:id, :projectId, :kind, :prompt, :origin, 'queued', :branch, :baseBranch, :budgetTokens, :createdAt)`,
-      { ...t, baseBranch: t.baseBranch ?? null },
+      `INSERT INTO tasks (id, project_id, kind, prompt, origin, state, branch, base_branch, engine_pref, budget_tokens, created_at)
+       VALUES (:id, :projectId, :kind, :prompt, :origin, 'queued', :branch, :baseBranch, :enginePref, :budgetTokens, :createdAt)`,
+      { ...t, baseBranch: t.baseBranch ?? null, enginePref: t.enginePref ?? null },
     );
     return this.getTask(t.id)!;
   }
@@ -693,18 +698,21 @@ export class Store {
   // ------------------------------------------------------- tool servers
 
   /** Catalog rows follow the code: a changed address replaces the stored one, and what was allowed on the old address goes with it. */
-  upsertBuiltinMcpServer(s: Omit<McpServerRow, 'builtin' | 'addedAt'>, now: number): void {
+  upsertBuiltinMcpServer(s: Pick<McpServerRow, 'id' | 'name' | 'url' | 'auth' | 'about'>, now: number): void {
     const existing = this.getMcpServer(s.id);
     if (existing && existing.url !== s.url) this.#run('DELETE FROM mcp_grants WHERE server_id = :id', { id: s.id });
     this.#run(
       `INSERT INTO mcp_servers (id, name, url, auth, about, builtin, added_at) VALUES (:id, :name, :url, :auth, :about, 1, :now)
        ON CONFLICT (id) DO UPDATE SET name = excluded.name, url = excluded.url, auth = excluded.auth, about = excluded.about, builtin = 1`,
-      { ...s, now },
+      { id: s.id, name: s.name, url: s.url, auth: s.auth, about: s.about, now },
     );
   }
 
   insertMcpServer(s: McpServerRow): void {
-    this.#run('INSERT INTO mcp_servers (id, name, url, auth, about, builtin, added_at) VALUES (:id, :name, :url, :auth, :about, :builtin, :addedAt)', { ...s, builtin: s.builtin ? 1 : 0 });
+    this.#run(
+      'INSERT INTO mcp_servers (id, name, transport, url, command, args_json, token_env, auth, about, builtin, added_at) VALUES (:id, :name, :transport, :url, :command, :argsJson, :tokenEnv, :auth, :about, :builtin, :addedAt)',
+      { id: s.id, name: s.name, transport: s.transport, url: s.url, command: s.command, argsJson: JSON.stringify(s.args), tokenEnv: s.tokenEnv, auth: s.auth, about: s.about, builtin: s.builtin ? 1 : 0, addedAt: s.addedAt },
+    );
   }
 
   getMcpServer(id: string): McpServerRow | null {
@@ -985,6 +993,7 @@ function toTask(r: Row): Task {
     spentUsdMicros: num(r.spent_usd_micros),
     baseCheckpointId: nstr(r.base_checkpoint_id),
     baseBranch: nstr(r.base_branch),
+    enginePref: nstr(r.engine_pref),
     summary: nstr(r.summary),
     error: nstr(r.error),
     createdAt: num(r.created_at),

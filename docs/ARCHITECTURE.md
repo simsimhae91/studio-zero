@@ -4,7 +4,7 @@ Studio Zero는 생각을 정리하고, 조사하고, 문서를 쓰고, 앱을 �
 이 문서는 저장소에 실제로 있는 코드를 기준으로 쓴 설계서다. 구현되지 않은 것과 검증되지 않은 것은 §17, §18에 따로 적었다.
 
 - 코드: `packages/protocol` (계약), `packages/design` (디자인 계약·테마·UI 린트·문장 린트), `packages/ax` (AX 키트: 블록 어휘·이벤트 스트림·렌더러·텔레메트리), `packages/daemon` (코어 데몬), `apps/desktop` (Tauri 2 클라이언트)
-- 규모: 소스 111개 파일 약 17,000줄, 테스트 62개
+- 규모: 소스 111개 파일 약 17,000줄, 테스트 70개
 - 런타임: Node.js 24 (개발은 TypeScript를 그대로 실행, 상시 가동은 `pnpm build`의 esbuild 번들), SQLite(`node:sqlite`), Fastify 5
 
 ## 1. 컨테이너 다이어그램 (C4 Level 2)
@@ -35,7 +35,7 @@ flowchart LR
       db[("SQLite<br/>~/.studio-zero")]
     end
     vault[("macOS Keychain")]
-    bridge["벤더 CLI (두뇌 전용)<br/>claude · codex"]
+    bridge["벤더 CLI (두뇌 전용)<br/>claude · codex · cursor-agent · agy"]
   end
 
   subgraph orb["OrbStack — 컨테이너 (비신뢰)"]
@@ -44,9 +44,9 @@ flowchart LR
     tmp["일회용 컨테이너<br/>Kirby clone"]
   end
 
-  ext["LLM 프로바이더 API<br/>(웹 검색·페치는 프로바이더가 실행)"]
+  ext["LLM 프로바이더<br/>(API 키 또는 구독 CLI 경유.<br/>웹 검색·페치는 프로바이더가 실행)"]
   chat["Telegram · Slack · ntfy 서버"]
-  tools["외부 MCP 서버<br/>GitHub · Stripe · 소유자가 추가한 서버"]
+  tools["MCP 서버<br/>원격: GitHub · Stripe …<br/>이 Mac: Blender · Unity · Aseprite …"]
 
   desktop & cli -- "ws + 토큰" --> server
   phone <--> chat
@@ -71,7 +71,7 @@ flowchart LR
   kirby --> tmp
   sandbox -- "샌드박스 토큰" --> gateway
   gateway -- "실제 키" --> ext
-  queue & scratch & know -- "실제 키 (SDK, in-process)" --> ext
+  queue & scratch & know -- "API 키 (SDK) 또는 구독 CLI" --> ext
   mcp -- "Keychain 토큰 · 승인된 도구만" --> tools
   daemon -. "security CLI" .-> vault
 ```
@@ -140,7 +140,8 @@ sequenceDiagram
 |---|---|---|
 | 데몬 자체 (Plan, 비전 감사, Reflect, Kirby, 네이티브 코딩 루프) | Keychain → 데몬 프로세스 메모리 | Anthropic SDK, in-process |
 | 샌드박스 안의 코드 (만들어진 앱이 LLM을 부를 때) | 샌드박스 전용 토큰 | `ANTHROPIC_BASE_URL` → LlmGateway → 실제 키로 교체 → 프로바이더 |
-| 구독 세션 브릿지 (Claude Code, Codex) | 벤더 CLI가 자체 보관 (데몬은 읽지 않음) | CLI는 호스트에서 "두뇌"로만 실행, 도구는 MCP shim → `/v1/bridge` → Toolbox |
+| 구독 세션 브릿지 (Claude Code, Codex, Cursor, Antigravity) | 벤더 CLI가 자체 보관 (데몬은 읽지 않음) | CLI는 호스트에서 "두뇌"로만 실행, 도구는 MCP shim → `/v1/bridge` → Toolbox (§4.1) |
+| 데몬 자체 호출, API 키가 없을 때 | Claude Code의 로그인 (데몬은 읽지 않음) | 도구를 전부 끈 `claude -p`. 데몬의 도구가 필요하면 같은 MCP shim으로만 준다 (§4.1) |
 | 외부 도구 호출 (GitHub, Stripe 등) | Keychain `mcp/<서버>/token` → 데몬 프로세스 메모리 | 에이전트는 `use_tool`로 요청만 한다. 데몬의 MCP 클라이언트가 등록된 주소로 호출하고, 리다이렉트는 같은 출처 안에서만 따른다. |
 
 ## 4. 코어 데몬 모듈
@@ -157,7 +158,9 @@ sequenceDiagram
 | 릴레이 | `relay/RelayCore.ts`, `TelegramRelay.ts`, `SlackRelay.ts`, `NtfyRelay.ts` | 명령 해석과 알림은 채널과 무관한 `RelayCore`에 있고 어댑터는 전송만 한다. Telegram: long polling, 허용된 사용자 ID의 1:1 대화만, 오프셋을 처리 전에 저장(at-most-once: 유료 태스크가 두 번 시작되지 않음), 음성 메모는 받아쓰기 후 같은 경로. Slack: Socket Mode(인바운드 포트 없음). ntfy: 알림과, 데몬이 HMAC으로 서명한 원탭 명령만 받는다. |
 | `LlmGateway` | `llm/LlmGateway.ts` | 샌드박스용 리버스 프록시. 엔드포인트 허용 목록, 예산 게이트, 키 교체, 스트림을 건드리지 않는 사용량 계측. |
 | `ModelRouter` | `llm/ModelRouter.ts`, `config.ts` | 태스크 종류별 후보 테이블에서 사용 가능한 첫 엔진을 고른다. 모델에게 묻지 않는다. 고려한 후보와 이유가 이벤트로 남는다. |
-| 엔진 | `harness/engines/` | `NativeClaudeEngine`(Messages API 수동 루프), `CliBridgeEngine`(Claude Code, Codex). 둘 다 같은 `Toolbox`만 쓰고, 같은 조타 큐를 읽는다. |
+| 엔진 | `harness/engines/` | `NativeClaudeEngine`(Messages API 수동 루프, API 키 필요), `CliBridgeEngine`(구독 CLI 4종: Claude Code, Codex, Cursor, Antigravity). 전부 같은 `Toolbox`만 쓰고, 같은 조타 큐를 읽는다. §4.1. |
+| `SessionBrain` | `llm/SessionBrain.ts` | API 키 없이 데몬 자체의 모델 호출을 Claude 구독으로 보낸다. §4.1. |
+| 가둠, ACP | `bridge/jail.ts`, `bridge/acp.ts`, `bridge/cli.ts` | 자기 도구를 끌 수 없는 CLI를 가두는 macOS 샌드박스 프로필, Agent Client Protocol 클라이언트, CLI 공통 환경. §4.1. |
 | `Toolbox` | `harness/Toolbox.ts` | 도구 6개: 샌드박스용 `bash`, `read_file`, `write_file`, `edit_file`과 외부 도구용 `find_tools`, `use_tool`. 스키마 검증 → 정책 → 샌드박스 또는 MCP 클라이언트 → 결과를 데이터 블록으로. 파일을 바꾼 턴마다 체크포인트를 남긴다. |
 | `WorkspaceProvisioner` | `harness/bootstrap.ts`, `harness/axKit.ts` | 샌드박스를 띄우고 프로젝트 고유 테마, 런타임 설명 파일, AX 키트(§12)를 첫 커밋으로 넣는다. 이미 있으면 덮어쓰지 않는다. |
 | `Harness`, `TaskQueue` | `harness/Harness.ts`, `queue/TaskQueue.ts` | §8. 큐는 SQLite 위에 있고 재시작 후 중단된 태스크를 한 번 다시 넣는다. 프로젝트당 동시 1건. |
@@ -179,6 +182,37 @@ sequenceDiagram
 | 검증 측 모델 (비전 감사, Reflect), 조사의 검색·읽기 | Claude Opus 5.5 (코드에 고정) | 없음 |
 | 작업 노트 대화, 문서 작성 | Claude Fable 5.2 (코드에 고정) | 없음 |
 
+모든 종류에 Claude Code 브릿지가 대안으로 들어 있어서 API 키 없이도 길이 끊기지 않는다. 소유자가 작업을 시작할 때 엔진을 직접 고를 수도 있다(`tasks.submit`의 `engine`). 고른 엔진을 쓸 수 없으면 다른 것으로 바꾸지 않고 실패한다. Cursor와 Antigravity는 라우팅 표에 없고 소유자가 고를 때만 쓰인다.
+
+### 4.1 구독으로 쓰기
+
+API 키는 선택 사항이다. 금고에 Anthropic 키가 없으면 데몬은 구독 모드로 돈다(`system.status`의 `brain: session`).
+
+**데몬 자체의 생각** (계획, 판정, 비전 감사, 작업 노트, 조사, 문서)은 `SessionBrain`이 Claude Code CLI를 헤드리스로 돌려서 한다.
+
+- 내장 도구는 전부 끈다(`--tools ""`). 사용자 설정·훅·플러그인은 읽지 않고(`--setting-sources project`, 빈 스크래치 폴더), MCP는 데몬이 준 것만 쓴다(`--strict-mcp-config`).
+- 구조화 출력은 `--json-schema`, 이미지는 stream-json 입력으로 보낸다. 프롬프트는 stdin으로만 간다.
+- 도구 루프(작업 노트의 `present`·`record_decision`, 조사의 `report_findings`)는 요청 하나짜리 브릿지 세션으로 MCP shim에 연결된다. 검증은 API 루프와 같은 코드가 한다.
+- 조사에는 웹 검색(`WebSearch`)만 준다. 검색은 프로바이더 쪽에서 돌고 이 Mac은 페이지를 받아 오지 않는다. 그래서 구독 모드에서는 원문 인용 대조(§11)를 할 수 없고, 출처 URL이 실제 검색 결과에 있었는지만 검증한다.
+- 토큰은 예산에 계상하고 금액은 0으로 적는다.
+
+**코딩 엔진**으로서의 구독 CLI는 네 가지고, 원칙은 하나다: CLI는 두뇌이고 손은 데몬의 Toolbox뿐이다.
+
+| CLI | 자기 도구를 무력화하는 방법 | 데몬 도구를 주는 방법 |
+|---|---|---|
+| Claude Code | `--tools ""` (도구 목록이 빈다) | `--mcp-config` |
+| Codex | `--sandbox read-only` + 기능 플래그로 셸·파일 도구 끔. 빈 도구 목록보다 약하다. | `-c mcp_servers.studio…`, studio 도구만 사전 승인 |
+| Cursor (`cursor-agent`) | 끌 수 없음 → **호스트 가둠** | 스크래치 폴더의 `.cursor/mcp.json` + `mcp enable` |
+| Antigravity (`agy`) | 끌 수 없음 → **호스트 가둠** | ACP `session/new`의 `mcpServers` (세션 한정, 사용자 설정은 건드리지 않음) |
+
+**호스트 가둠** (`bridge/jail.ts`, macOS `sandbox-exec`). 도구를 끌 수 없는 CLI는 다음 프로필 안에서 실행한다.
+
+- 읽기: 홈 디렉터리 전체, 다른 볼륨, 임시 폴더가 보이지 않는다. 예외는 CLI 자신의 상태 폴더, 스크래치 폴더, Node와 MCP shim, 그리고 Keychain 파일(두 CLI 모두 로그인을 Keychain에 둔다). 사용자가 그 CLI에 저장해 둔 MCP 서버 설정(`~/.cursor/mcp.json`, `~/.gemini/config/mcp_config.json`)은 다른 서비스의 토큰이 들어 있을 수 있어 따로 가린다.
+- 쓰기: 스크래치 폴더와 CLI 자신의 상태 폴더만.
+- 실행: CLI 자신의 바이너리, Node(shim용), `/usr/bin/security`(로그인 읽기)만. 셸이 뜰 수 없으므로 에이전트가 터미널 도구로 시키는 명령은 시작 전에 실패한다.
+
+실제 실행으로 확인한 것: 가둔 Cursor 에이전트에게 키체인 읽기, `~/.zshrc` 읽기, `ls ~`를 시키면 셋 다 실패한다(셸 spawn EPERM, 읽기 거부). 남는 위험은 §16에 적었다.
+
 ## 5. 프로토콜
 
 `packages/protocol/src/rpc.ts`의 테이블 하나가 서버 검증, 클라이언트 타입, 이 문서의 근거다. 메서드 54개, 이벤트 29종.
@@ -195,7 +229,7 @@ sequenceDiagram
 
 ## 6. 데이터베이스
 
-`~/.studio-zero/studio-zero.db`, WAL, `STRICT` 테이블 26개(`db/schema.ts`). 마이그레이션은 전진 전용이다(현재 3단계).
+`~/.studio-zero/studio-zero.db`, WAL, `STRICT` 테이블 26개(`db/schema.ts`). 마이그레이션은 전진 전용이다(현재 4단계).
 
 | 영역 | 테이블 |
 |---|---|
@@ -409,11 +443,12 @@ compile  남은 사실에 번호 붙은 출처를 달아 문서 컴파일러로 
 
 데몬이 MCP 클라이언트다(`mcp/McpRegistry.ts`, 스트리밍 HTTP). 에이전트는 서버에 직접 닿지 않는다.
 
-- **레지스트리.** 코드에 든 카탈로그(GitHub, Stripe는 토큰 방식, Notion과 Figma는 OAuth라서 아직 사용 불가로 표시)와 소유자가 추가한 서버. 추가·삭제·허용 취소는 데스크톱의 소유자만 한다(`mcp.configure-local-owner-only`). 주소는 https만 받고, 이 Mac에서 도는 서버만 http://localhost를 쓸 수 있다.
+- **레지스트리.** 코드에 든 카탈로그(GitHub, Stripe는 토큰 방식, Notion과 Figma는 OAuth라서 아직 사용 불가로 표시)와 소유자가 추가한 서버. 추가·삭제·허용 취소는 데스크톱의 소유자만 한다(`mcp.configure-local-owner-only`).
+- **두 가지 연결.** 원격 서버는 주소로 붙는다(https만, 이 Mac의 서버만 http://localhost 허용). **로컬 서버는 이 Mac에서 실행되는 프로그램**이고 stdio로 말한다: Blender, Unity, Aseprite 같은 데스크톱 도구의 MCP 서버가 이 형태다. 소유자가 실행 명령을 적으면 데몬이 그 프로그램의 절대 경로를 그때 확정해 저장하고, 필요할 때 띄워 2분 쉬면 내린다. 토큰이 필요하면 환경 변수 이름을 지정하고 값은 Keychain에 둔다. 프로그램에는 데몬의 환경 변수를 넘기지 않는다.
 - **필요할 때 찾기.** 도구 목록을 프롬프트에 미리 싣지 않는다. 엔진에는 고정된 도구 두 개가 있다: `find_tools(query)`는 서버별 사용 가능 여부와 맞는 도구의 입력 스키마를 돌려주고, `use_tool(server, tool, arguments)`가 호출한다. 도구 정의가 바뀌지 않으므로 프롬프트 캐시가 깨지지 않는다.
-- **정책.** `mcp.call` 액션은 프로젝트, 서버, 목적지 호스트, 도구 이름을 담는다. 그 프로젝트에서 그 도구를 처음 쓸 때 소유자 승인을 기다리고, 승인은 `mcp_grants`의 행으로 남아 다음부터는 묻지 않는다. 다른 도구는 다시 묻는다. 승인을 요청하기 전에 서버가 쓸 수 있는 상태인지와 그 도구가 실제로 있는지를 먼저 확인하므로, 소유자가 없는 도구를 승인하게 되는 일은 없다.
+- **정책.** `mcp.call` 액션은 프로젝트, 서버, 목적지(원격 호스트 또는 `local:<프로그램>`), 도구 이름을 담는다. 로컬 서버의 도구는 샌드박스 밖 이 Mac에서 직접 동작하므로(예: Blender 안에서 Python 실행) 승인 문구가 그 사실을 말한다. 그 프로젝트에서 그 도구를 처음 쓸 때 소유자 승인을 기다리고, 승인은 `mcp_grants`의 행으로 남아 다음부터는 묻지 않는다. 다른 도구는 다시 묻는다. 승인을 요청하기 전에 서버가 쓸 수 있는 상태인지와 그 도구가 실제로 있는지를 먼저 확인하므로, 소유자가 없는 도구를 승인하게 되는 일은 없다.
 - **자격 증명.** 토큰은 Keychain의 `mcp/<서버>/token`에 있고 데몬이 요청 헤더에 넣는다. 샌드박스, 모델, 이벤트 어디에도 나타나지 않는다.
-- **결과.** 서버가 말하는 도구 설명과 호출 결과는 `external-tool` 데이터 블록으로 들어간다.
+- **결과.** 서버가 말하는 도구 설명과 호출 결과는 `external-tool` 데이터 블록으로 들어간다. 지금은 텍스트만 전달하고 이미지 결과(뷰포트 캡처 등)는 생략 표시로 바뀐다.
 
 ## 14. 클라이언트 (Tauri 2)
 
@@ -484,13 +519,16 @@ pnpm sz task ledger build "미결제 청구서 화면을 만들어줘"
 | 외부 도구 토큰 유출 | Keychain → 요청 헤더. 샌드박스·모델·이벤트에 없음. 리다이렉트는 같은 출처만. |
 | 모델이 출처를 지어내거나 인용을 꾸밈 | 이 실행에서 실제로 받은 URL만 출처로 인정, 인용은 받아 온 본문과 대조, 확신도는 코드가 계산 (§11) |
 | 에이전트가 낮은 확신의 결정을 혼자 내림 | `record_decision`은 `high`만 받는다. 보정 기록이 나쁘면 `high`도 묻게 된다 (§12) |
+| 구독 CLI가 호스트의 파일을 읽어 샌드박스로 넘김 | Claude Code는 도구 목록이 빈다. Codex는 읽기 전용 샌드박스 + 도구 기능 끔. Cursor와 Antigravity는 호스트 가둠(§4.1): 홈이 보이지 않고 셸이 뜨지 않는다. |
+| 가둔 CLI에 남는 것 | (1) CLI 자신의 로그인은 그 CLI가 읽을 수 있어야 하므로 가릴 수 없다. 조종당한 에이전트가 그 로그인 하나를 샌드박스로 옮길 가능성은 남는다. (2) CLI 프로세스는 `/usr/bin/security`를 실행할 수 있다. 셸 없이 명령을 직접 실행하는 CLI라면 `security`로 읽히는 Keychain 항목(이 데몬의 금고 포함)에 닿을 수 있다. 확인한 두 CLI의 터미널 도구는 셸을 거치므로 막힌다. 이 때문에 두 엔진은 자동 라우팅에 넣지 않았다. |
+| 로컬 MCP 서버의 도구가 이 Mac에서 임의 동작 (예: Blender에서 코드 실행) | 로컬 서버는 데스크톱의 소유자만 추가. 도구마다 프로젝트에서 처음 쓸 때 승인, 문구에 "샌드박스 밖" 명시. 승인 뒤의 그 도구 호출은 다시 묻지 않으므로, 임의 코드 실행 도구를 승인하는 것은 그 프로젝트의 에이전트에게 이 Mac을 맡기는 것과 같다. |
 | 만들어진 앱에서 모델 출력이 마크업으로 실행됨 | AX 키트: 스키마 밖 블록은 버림, 링크는 http(s)만, Markdown은 요소로만 렌더 |
 
 남는 위험: `security` CLI로 만든 Keychain 항목은 같은 로그인 세션의 다른 프로세스가 `security`로 읽을 수 있다(디스크 탈취와 다른 사용자는 막고, 같은 세션의 악성코드는 못 막는다). 앱별 ACL은 코드 서명된 헬퍼가 필요하다.
 
 ## 17. 검증 현황
 
-`pnpm typecheck`와 `pnpm test`가 통과한다: 62개 가운데 60개 통과, 2개는 옵트인이라 기본 실행에서 건너뛴다(실제 Keychain, 실제 컨테이너 엔진). 헤드리스 Chrome이 필요한 테스트는 Chrome이 없으면 건너뛴다. 옵트인 `SZ_TEST_ENGINE=1`은 이 Mac의 OrbStack에서 9개 하위 테스트가 모두 통과했다.
+`pnpm typecheck`와 `pnpm test`가 통과한다: 70개 가운데 67개 통과, 3개는 옵트인이라 기본 실행에서 건너뛴다(실제 Keychain, 실제 컨테이너 엔진, 실제 구독 CLI). 헤드리스 Chrome이 필요한 테스트는 Chrome이 없으면 건너뛴다. 옵트인 `SZ_TEST_ENGINE=1`은 이 Mac의 OrbStack에서 9개 하위 테스트가 모두 통과했다.
 
 | 검증됨 | 방법 |
 |---|---|
@@ -512,6 +550,11 @@ pnpm sz task ledger build "미결제 청구서 화면을 만들어줘"
 | AX 키트: 바이트가 어디서 잘려도 같은 이벤트, 스키마 밖 블록과 `javascript:` 링크 거부, 텔레메트리 배치 | 단위 테스트 |
 | AX 키트가 프로젝트에 들어가는 형태 그대로 번들되는 것 (외부 의존은 react, zod뿐) | esbuild |
 | MCP: 발견, 도구별 1회 승인과 기억, 거부·없는 도구·OAuth 서버 처리, 토큰이 이벤트에 없음 | **공식 MCP SDK 클라이언트가 같은 SDK의 실제 서버와 HTTP로 통신** |
+| 로컬 MCP 서버: 프로그램 기동, "샌드박스 밖" 승인 문구, 토큰이 지정한 환경 변수로만 전달, 프로세스 재사용, 데몬 종료 시 정리 | 같은 SDK의 실제 stdio 서버를 자식 프로세스로 실행 |
+| **구독 모드 (실제 Claude 구독, `SZ_TEST_SESSION=1`)**: 계획 구조화 출력(Fable 5.2, Opus 5.5), MCP shim을 통한 데몬 도구 호출 + 웹 검색 결과 수집, 작업 노트 실제 한 턴(결정·질문 블록 생성) | 이 Mac의 Claude Code 로그인으로 실제 호출 |
+| **구독 CLI 엔진 4종 (실제)**: Claude Code, Codex, Cursor, Antigravity가 각각 데몬의 `write_file`로 샌드박스 워크스페이스에 파일을 쓰는 것 | 각 CLI의 실제 로그인으로 한 파일짜리 작업 실행 |
+| 호스트 가둠: 홈 디렉터리 읽기·쓰기 거부, 셸 기동 거부, 스크래치 쓰기 허용 | 실제 `sandbox-exec`. 가둔 Cursor 에이전트에게 키체인·홈 파일 접근을 직접 시켜 실패하는 것도 확인. |
+| ACP 클라이언트 | 가짜 에이전트 프로세스 + 실제 `agy acp` |
 | Kirby 전체 파이프라인 | 스크립트된 모델 + 로컬 저장소 픽스처 |
 | 실제 컨테이너 엔진: 격리 설정(uid 1000, 권한 0, no-new-privileges), 샌드박스→게이트웨이 키 교체, 제어 소켓 차단, dev 서버와 프리뷰 URL, 볼륨 체크포인트·롤백, 재생성, QA 브라우저 컨테이너로 시각 감사, Kirby 실제 clone | OrbStack 2.2.5 (`SZ_TEST_ENGINE=1`) |
 | 클라이언트 화면 | 15개 화면 × 3개 뷰포트 × 라이트·다크를 Chrome으로 렌더해 DOM 검사: 블로커 0, 주요 0. 슬롭 린트 0건. |
@@ -531,8 +574,9 @@ pnpm sz task ledger build "미결제 청구서 화면을 만들어줘"
 
 | 검증되지 않음 | 이유 |
 |---|---|
-| 실제 모델 호출 전부 (계획, 코딩, 비전 감사, 작업 노트, 조사의 웹 검색·페치, 문서 작성) | 요청 형태는 설치된 SDK 타입으로 검사했다. 실제 전송은 소유자의 첫 실행 한 번뿐이고 그 요청은 키가 거부되어(401) 끝났다. 유효한 키로 끝까지 돈 적은 없다. |
-| 벤더 CLI 브릿지 실행 | 플래그는 설치된 버전의 `--help`와 대조. 실행하면 구독 할당량을 쓰므로 하지 않음. |
+| 실제 모델로 끝까지 도는 빌드 태스크 (계획 → 구현 → 회귀·시각 감사 → 수정 → 회고) | 구독 경로의 조각들(위 표)은 실제로 확인했지만, 앱 하나를 처음부터 만드는 전체 루프를 실제 모델로 돌린 적은 없다. 비전 감사, 문서 작성 루프, 조사 전체 파이프라인도 실제 모델로는 아직이다. |
+| API 키 경로의 실제 호출 | 유효한 키로 호출한 적 없음. 소유자의 첫 시도는 키가 거부되어(401) 끝났다. |
+| 벤더 CLI의 다른 버전 | 플래그와 출력 형태는 이 Mac에 설치된 버전(Claude Code 2.1.322, codex-cli 0.153.4, cursor-agent 2026.11.11, agy 1.5.6)에서 확인한 것이다. |
 | Telegram·Slack·ntfy 실서버, 음성 받아쓰기 | 가짜 서버로만 확인 |
 | GitHub·Stripe의 실제 MCP 서버 | 주소는 각 사 문서로 확인했으나 토큰이 없어 호출하지 않음 |
 | Keychain 쓰기·읽기 왕복 | 옵트인 테스트로 제공(`SZ_TEST_REAL_KEYCHAIN=1`). 데몬 기동 때 클라이언트 토큰 항목이 실제로 만들어지는 것은 확인. |
@@ -551,7 +595,8 @@ pnpm sz task ledger build "미결제 청구서 화면을 만들어줘"
 | 확실한 작업은 즉시 자율 실행 | `high`만, 그리고 보정 기록이 좋을 때만 | 확신도는 모델의 자기 평가라서 실제 기록으로 깎는다 |
 | 승격 버튼의 이모지 | 글자만 | 디자인 계약이 아이콘 자리의 이모지를 금지한다 (§7.3) |
 | 심층 크롤링 | 프로바이더의 웹 검색·페치 도구 | 이 Mac이 임의의 페이지를 받아 오거나 실행하지 않게 함 |
-| Cursor, Augment, Antigravity 세션 브릿지 | Claude Code와 Codex만 | 설치된 `cursor-agent`, `agy`에는 내장 도구를 끄는 플래그가 없다. 호스트 파일 접근이 가능한 CLI는 자기 자격증명을 읽어 샌드박스로 넘길 수 있어 "keys stay out"이 깨진다. `agy acp`(Agent Client Protocol)가 다음 후보다. |
+| Cursor, Augment, Antigravity 세션 브릿지 | Claude Code, Codex, Cursor, Antigravity. Augment는 없음. | `cursor-agent`와 `agy`에는 내장 도구를 끄는 플래그가 없어 호스트 가둠 안에서 돌린다(§4.1). 남는 위험이 있어 자동 라우팅에는 넣지 않고 소유자가 고를 때만 쓴다. Augment CLI는 이 Mac에 없어 확인할 수 없었다. |
+| 구독 모드의 조사 | 웹 검색만, 페이지 페치 없음 | CLI의 페치 도구는 이 Mac에서 임의의 주소를 받아 오므로 켜지 않았다. 인용 대조가 빠진다 (§4.1). |
 | 실패율 0에 수렴 | 주장하지 않음 | 학습은 게이트를 거친다 (§8) |
 | 교훈을 `project_rules.md`에 자율 기록 | 후보 → 승격 | 자동 기록은 인젝션 영구화 통로 |
 | Kirby: 예상 성능 개선치 | 추정과 실측을 분리 표시, 정적 지표만 | 런타임 성능을 근거 없이 수치화하지 않음 |
@@ -561,6 +606,9 @@ pnpm sz task ledger build "미결제 청구서 화면을 만들어줘"
 만들지 않은 것:
 
 - **데이터 분석.** 지식 작업 가운데 조사와 문서만 있다. 데이터 파일을 받아 샌드박스에서 분석하는 작업 종류는 없다.
+- **게임용 프로젝트 템플릿.** Blender, Unity, Aseprite 같은 도구는 로컬 MCP 서버로 연결할 수 있지만, 프로젝트 템플릿은 웹과 Expo뿐이다. Unity 프로젝트처럼 호스트의 에디터 안에 사는 작업물은 샌드박스·시각 감사 흐름에 들어오지 않는다.
+- **MCP 결과의 이미지.** 뷰포트 캡처 같은 이미지 결과는 모델에 전달되지 않는다.
+- **다른 도구의 MCP 설정 가져오기.** Claude Code, Cursor 등에 이미 등록한 서버를 읽어 오는 기능은 없다. 설정에서 명령을 직접 적는다.
 - **OAuth로 로그인하는 MCP 서버.** Notion과 Figma는 카탈로그에 "사용 불가"로만 나온다. 토큰 방식 서버와 소유자가 추가한 서버만 쓸 수 있다.
 - **스킬 레지스트리.** 재사용 지식은 교훈(§8)뿐이다. 이름 붙은 스킬을 찾아 불러오는 구조는 없다.
 - **PDF 안의 Mermaid 렌더링.** PDF는 스크립트를 끄고 인쇄하므로 다이어그램이 소스로 나온다. 클라이언트의 `Flow`도 순서도만 그리고 나머지 종류는 소스로 보여 준다.

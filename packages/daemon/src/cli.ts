@@ -139,6 +139,7 @@ async function main(argv: string[]): Promise<number> {
             `runtime   ${s.runtime.context}: ${s.runtime.reachable ? `ok (${s.runtime.detail})` : `unreachable (${s.runtime.detail})`}`,
             `relays    ${s.relays.map((r) => `${r.id} ${r.state}`).join(', ')}`,
             `queue     ${s.queue.running} running, ${s.queue.queued} queued`,
+            `brain     ${s.brain === 'api' ? 'Anthropic API key' : s.brain === 'session' ? 'Claude subscription (Claude Code, tools off)' : 'none: sign in to Claude Code or store an API key'}`,
             ...s.engines.map((e) => `engine    ${e.id}: ${e.available ? 'available' : 'unavailable'} (${e.reason})`),
           ].join('\n') + '\n',
         );

@@ -2,7 +2,7 @@ import { ChevronDown, GitMerge, History as HistoryIcon, Lightbulb, Monitor, Scan
 import { useMemo, useState } from 'react';
 import type { Approval, EventEnvelope, Phase, Project, Task, TaskKind, TaskState } from '@studio-zero/protocol';
 import { Markdown } from '@studio-zero/ax/react';
-import { duration, evalLabel, kindLabel, phaseLabel, taskStateLabel, templateLabel, tokens } from '../lib/format.ts';
+import { duration, engineLabel, evalLabel, kindLabel, phaseLabel, taskStateLabel, templateLabel, tokens } from '../lib/format.ts';
 import { useAction, useQuery, useStudio, useTaskEvents } from '../lib/studio.tsx';
 import { Button, IconButton, Problem, Segmented, Sheet, Status, TitlebarSpace } from '../ui.tsx';
 import { Composer, Entry, OwnWords, Working, useStickToEnd } from './page.tsx';
@@ -144,6 +144,10 @@ function Page({ project }: { project: Project }) {
   const approvals = useQuery('approvals.list', { state: 'pending' }, ['approval.requested', 'approval.resolved']);
   const checkpoints = useQuery('checkpoints.list', { projectId: project.id }, ['checkpoint.created', 'checkpoint.restored']);
   const sandbox = useQuery('sandbox.info', { projectId: project.id }, ['sandbox.state']);
+  const status = useQuery('system.status', {});
+  // 'auto' leaves the choice to the routing table; anything else is the owner's own pick for the next task.
+  const [engine, setEngine] = useState('auto');
+  const engines = [{ id: 'auto', label: '자동' }, ...(status.data?.engines ?? []).filter((e) => e.available).map((e) => ({ id: e.id, label: engineLabel[e.id] ?? e.id }))];
   const [picked, setPicked] = useState<string | null>(null);
   const [panel, setPanel] = useState<Panel | null>(null);
   const [focus, setFocus] = useState<string | null>(null);
@@ -161,7 +165,7 @@ function Page({ project }: { project: Project }) {
 
   const steer = useAction((message: string) => backend.call('tasks.steer', { taskId: active!.id, message }));
   const submit = useAction(async (prompt: string) => {
-    const task = await backend.call('tasks.submit', { projectId: project.id, kind, prompt, ...(fork ? { baseBranch: fork } : {}) });
+    const task = await backend.call('tasks.submit', { projectId: project.id, kind, prompt, ...(fork ? { baseBranch: fork } : {}), ...(engine === 'auto' ? {} : { engine: engine as never }) });
     setFork(null);
     setPicked(task.id);
     tasks.reload();
@@ -254,6 +258,7 @@ function Page({ project }: { project: Project }) {
           ) : (
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border pb-2">
               <Segmented label="작업 종류" value={kind} options={KINDS} onChange={setKind} />
+              {engines.length > 2 ? <Segmented label="엔진" value={engine} options={engines} onChange={setEngine} /> : null}
               {fork ? (
                 <span className="flex items-center gap-1 pl-3 text-sm font-medium text-accent">
                   {fork}에서 시작
@@ -415,7 +420,7 @@ function Passage({ task, items, pending, onShow }: { task: Task; items: Item[]; 
           <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
             <Status tone={stateTone[task.state]}>{taskStateLabel[task.state]}</Status>
             <span className="text-sm text-fg-muted">
-              토큰 {tokens(task.spentTokens)} 사용{task.engine ? `, ${task.engine}` : ''}
+              토큰 {tokens(task.spentTokens)} 사용{task.engine ? `, ${engineLabel[task.engine] ?? task.engine}` : ''}
             </span>
           </div>
           {task.summary ? <Markdown source={task.summary} /> : null}

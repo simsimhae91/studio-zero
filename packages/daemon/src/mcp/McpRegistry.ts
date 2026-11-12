@@ -4,7 +4,9 @@ import type { McpServerRow, Store } from '../db/Store.ts';
 import type { Actor } from '../policy/actions.ts';
 import type { AuthorizeContext, PolicyEngine } from '../policy/PolicyEngine.ts';
 import type { KeychainVault } from '../vault/KeychainVault.ts';
+import { which } from '../bridge/jail.ts';
 import { errorMessage, excerpt, type Clock, type Secret } from '../util/core.ts';
+import { destinationOf } from './destination.ts';
 
 export interface McpTool {
   name: string;
@@ -18,14 +20,14 @@ export interface McpSession {
   callTool(name: string, args: Record<string, unknown>, signal?: AbortSignal): Promise<{ text: string; isError: boolean }>;
   close(): Promise<void>;
 }
-export type McpConnect = (server: { id: string; url: string }, token: Secret | null) => Promise<McpSession>;
+export type McpConnect = (server: McpServerRow, token: Secret | null) => Promise<McpSession>;
 
 /**
  * Tool servers the daemon knows without being told. Addresses are the vendors' own hosted endpoints (checked
  * against their documentation on 2026-11-12); a token stored for one of these is only ever sent to that address.
  * Servers that sign in with OAuth are listed so discovery can say why they cannot be used yet.
  */
-export const CATALOG: readonly Omit<McpServerRow, 'builtin' | 'addedAt'>[] = [
+export const CATALOG: readonly Pick<McpServerRow, 'id' | 'name' | 'url' | 'auth' | 'about'>[] = [
   { id: 'github', name: 'GitHub', url: 'https://api.githubcopilot.com/mcp/', auth: 'bearer', about: 'Repositories, issues, pull requests, code search and Actions. Token: a GitHub personal access token.' },
   { id: 'stripe', name: 'Stripe', url: 'https://mcp.stripe.com', auth: 'bearer', about: 'Customers, products, prices, invoices, payment links and Stripe documentation search. Token: a restricted Stripe API key.' },
   { id: 'notion', name: 'Notion', url: 'https://mcp.notion.com/mcp', auth: 'oauth', about: 'Pages, databases and comments.' },
@@ -51,12 +53,19 @@ export function parseServerUrl(raw: string): { ok: true; url: string } | { ok: f
 }
 
 const TOOLS_TTL_MS = 10 * 60 * 1000;
+/** A connection is kept this long after its last use: a local server is a process, and starting one per call is slow. */
+const IDLE_MS = 2 * 60 * 1000;
 const words = (text: string): string[] => text.toLowerCase().split(/[^a-z0-9가-힣]+/).filter((w) => w.length > 1);
 
 /**
  * Just-in-time tooling. The daemon is the MCP client: an agent asks it what tools exist for a need
  * (`search`) and asks it to make a call (`call`). The call happens here, on the host, with a credential from
  * the Keychain, so neither the token nor a connection to the outside ever belongs to the sandbox or the model.
+ *
+ * A server is either remote (streamable HTTP) or local: a program on this Mac that speaks MCP on stdio, which
+ * is how desktop tools such as Blender, Unity or Aseprite are reached. A local server runs with the owner's
+ * own rights, outside every sandbox, so only the owner at the desk can add one and the approval prompt for
+ * each of its tools says where the tool acts.
  *
  * What an agent may reach is decided by the PolicyEngine: each tool, per project, needs the owner's approval
  * the first time, and that approval is a row in the database from then on.
@@ -68,6 +77,7 @@ export class McpRegistry {
   readonly #clock: Clock;
   readonly #connect: McpConnect;
   readonly #tools = new Map<string, { at: number; tools: McpTool[] }>();
+  readonly #live = new Map<string, { session: Promise<McpSession>; timer: NodeJS.Timeout }>();
 
   constructor(deps: { store: Store; vault: KeychainVault; policy: PolicyEngine; clock: Clock; connect?: McpConnect }) {
     this.#store = deps.store;
@@ -86,12 +96,24 @@ export class McpRegistry {
     return this.#store.listMcpServers().map((server) => this.#info(server));
   }
 
-  async add(actor: Actor, p: { id: string; name: string; url: string; auth: 'bearer' | 'none'; about: string }): Promise<McpServerInfo> {
+  async add(
+    actor: Actor,
+    p: { id: string; name: string; about: string } & ({ transport: 'http'; url: string; auth: 'bearer' | 'none' } | { transport: 'stdio'; command: string; args: string[]; tokenEnv?: string }),
+  ): Promise<McpServerInfo> {
     await this.#policy.authorize(actor, { kind: 'mcp.configure', serverId: p.id, op: 'add' });
     if (this.#store.getMcpServer(p.id)) throw new ConflictError(`a tool server with id "${p.id}" already exists`);
-    const parsed = parseServerUrl(p.url);
-    if (!parsed.ok) throw new ConflictError(parsed.reason);
-    this.#store.insertMcpServer({ ...p, url: parsed.url, builtin: false, addedAt: this.#clock() });
+    const base = { id: p.id, name: p.name, about: p.about, builtin: false, addedAt: this.#clock() };
+    if (p.transport === 'http') {
+      const parsed = parseServerUrl(p.url);
+      if (!parsed.ok) throw new ConflictError(parsed.reason);
+      this.#store.insertMcpServer({ ...base, transport: 'http', url: parsed.url, command: null, args: [], tokenEnv: null, auth: p.auth });
+    } else {
+      // Resolved now and stored as an absolute path: what runs later is the program that was found today,
+      // not whatever a changed PATH points at then.
+      const program = which(p.command);
+      if (!program) throw new ConflictError(`"${p.command}" was not found on this Mac. Give the full path, or install it first.`);
+      this.#store.insertMcpServer({ ...base, transport: 'stdio', url: '', command: program, args: p.args, tokenEnv: p.tokenEnv ?? null, auth: p.tokenEnv ? 'bearer' : 'none' });
+    }
     return this.#info(this.#store.getMcpServer(p.id)!);
   }
 
@@ -103,6 +125,7 @@ export class McpRegistry {
     if (server.builtin) throw new ConflictError('a catalog server cannot be removed; delete its token to switch it off');
     this.#store.deleteMcpServer(serverId);
     this.#tools.delete(serverId);
+    await this.#hangUp(serverId);
   }
 
   /** Takes back what was allowed on a server for one project. The next use asks again. */
@@ -125,7 +148,7 @@ export class McpRegistry {
     const lines: string[] = [];
     for (const server of this.#store.listMcpServers()) {
       const info = this.#info(server);
-      const head = `${server.id} (${server.name}): ${server.about}`;
+      const head = `${server.id} (${server.name}${server.transport === 'stdio' ? ', runs on the owner\'s Mac' : ''}): ${server.about}`;
       if (info.state !== 'ready') {
         lines.push(`${head}\n  not usable now: ${info.state === 'unsupported' ? 'it signs in with OAuth, which this daemon does not do yet' : `no token stored; the owner can add one in Settings (credential ${info.credentialId})`}`);
         continue;
@@ -168,18 +191,21 @@ export class McpRegistry {
     }
     if (!tools.some((t) => t.name === tool)) return { ok: false, text: `${server.name} has no tool named "${tool}". Use find_tools to see its tools.` };
 
-    await this.#policy.authorize(actor, { kind: 'mcp.call', projectId: ctx.projectId, serverId, host: new URL(server.url).host, tool }, ctx);
+    await this.#policy.authorize(actor, { kind: 'mcp.call', projectId: ctx.projectId, serverId, host: destinationOf(server), tool }, ctx);
     this.#store.grantMcpTool(ctx.projectId, serverId, tool, this.#clock());
 
-    const session = await this.#open(server);
     try {
-      const result = await session.callTool(tool, args, ctx.signal);
+      const result = await (await this.#session(server)).callTool(tool, args, ctx.signal);
       return { ok: !result.isError, text: excerpt(result.text || '(the tool returned nothing)', 30_000) };
     } catch (err) {
+      await this.#hangUp(server.id); // a connection that failed is not reused
       return { ok: false, text: `${server.name}.${tool} failed: ${errorMessage(err).slice(0, 500)}` };
-    } finally {
-      await session.close().catch(() => undefined);
     }
+  }
+
+  /** Closes every connection. Local servers are child processes: they must not outlive the daemon. */
+  async stop(): Promise<void> {
+    await Promise.all([...this.#live.keys()].map((id) => this.#hangUp(id)));
   }
 
   #info(server: McpServerRow): McpServerInfo {
@@ -188,7 +214,11 @@ export class McpRegistry {
     return {
       id: server.id,
       name: server.name,
+      transport: server.transport,
       url: server.url,
+      command: server.command,
+      args: server.args,
+      tokenEnv: server.tokenEnv,
       auth: server.auth,
       about: server.about,
       builtin: server.builtin,
@@ -196,6 +226,27 @@ export class McpRegistry {
       state: server.auth === 'oauth' ? 'unsupported' : server.auth === 'bearer' && !stored ? 'needs-token' : 'ready',
       grants: this.#store.listMcpGrants(server.id),
     };
+  }
+
+  /** A connection to the server, reused while calls keep coming and closed after two idle minutes. */
+  #session(server: McpServerRow): Promise<McpSession> {
+    const live = this.#live.get(server.id);
+    if (live) clearTimeout(live.timer);
+    const session = live?.session ?? this.#open(server);
+    const timer = setTimeout(() => void this.#hangUp(server.id), IDLE_MS);
+    timer.unref();
+    this.#live.set(server.id, { session, timer });
+    // A connection that never came up is forgotten, so the next call tries again.
+    session.catch(() => void (this.#live.get(server.id)?.session === session && this.#live.delete(server.id)));
+    return session;
+  }
+
+  async #hangUp(serverId: string): Promise<void> {
+    const live = this.#live.get(serverId);
+    if (!live) return;
+    clearTimeout(live.timer);
+    this.#live.delete(serverId);
+    await live.session.then((s) => s.close()).catch(() => undefined);
   }
 
   async #open(server: McpServerRow): Promise<McpSession> {
@@ -207,24 +258,39 @@ export class McpRegistry {
   async #toolsOf(server: McpServerRow, signal?: AbortSignal): Promise<McpTool[]> {
     const cached = this.#tools.get(server.id);
     if (cached && this.#clock() - cached.at < TOOLS_TTL_MS) return cached.tools;
-    const session = await this.#open(server);
     try {
-      const tools = await session.listTools(signal);
+      const tools = await (await this.#session(server)).listTools(signal);
       this.#tools.set(server.id, { at: this.#clock(), tools });
       return tools;
-    } finally {
-      await session.close().catch(() => undefined);
+    } catch (err) {
+      await this.#hangUp(server.id);
+      throw err;
     }
   }
 }
 
-/** The real client: MCP over streamable HTTP. Loaded on first use, so a daemon that never calls a tool never pays for it. */
+/**
+ * The real client. Remote servers are reached over streamable HTTP; local ones are started as a child process
+ * and spoken to on stdio. Loaded on first use, so a daemon that never calls a tool never pays for it.
+ */
 export const sdkConnect: McpConnect = async (server, token) => {
-  const [{ Client }, { StreamableHTTPClientTransport }] = await Promise.all([import('@modelcontextprotocol/sdk/client/index.js'), import('@modelcontextprotocol/sdk/client/streamableHttp.js')]);
-  // The SDK follows redirects only within the server's own origin, so the token cannot be forwarded elsewhere.
-  const transport = new StreamableHTTPClientTransport(new URL(server.url), { requestInit: { headers: token ? { authorization: `Bearer ${token.expose()}` } : {} } });
+  const { Client } = await import('@modelcontextprotocol/sdk/client/index.js');
+  let transport;
+  if (server.transport === 'stdio') {
+    const { StdioClientTransport } = await import('@modelcontextprotocol/sdk/client/stdio.js');
+    // The program gets a plain environment: enough to find its own tools and files, none of the daemon's
+    // variables, and its token (if it takes one) under the name the owner gave.
+    const env: Record<string, string> = {};
+    for (const name of ['PATH', 'HOME', 'USER', 'LOGNAME', 'LANG', 'LC_ALL', 'TMPDIR', 'SHELL']) if (process.env[name] !== undefined) env[name] = process.env[name]!;
+    if (token && server.tokenEnv) env[server.tokenEnv] = token.expose();
+    transport = new StdioClientTransport({ command: server.command!, args: server.args, env, stderr: 'ignore' });
+  } else {
+    const { StreamableHTTPClientTransport } = await import('@modelcontextprotocol/sdk/client/streamableHttp.js');
+    // The SDK follows redirects only within the server's own origin, so the token cannot be forwarded elsewhere.
+    transport = new StreamableHTTPClientTransport(new URL(server.url), { requestInit: { headers: token ? { authorization: `Bearer ${token.expose()}` } : {} } });
+  }
   const client = new Client({ name: 'studio-zero', version: '0.1.0' });
-  await client.connect(transport, { timeout: 20_000 });
+  await client.connect(transport, { timeout: 30_000 });
   return {
     listTools: async (signal) => {
       const tools: McpTool[] = [];
@@ -238,7 +304,7 @@ export const sdkConnect: McpConnect = async (server, token) => {
       return tools;
     },
     callTool: async (name, args, signal) => {
-      const res = await client.callTool({ name, arguments: args }, undefined, { signal, timeout: 120_000 });
+      const res = await client.callTool({ name, arguments: args }, undefined, { signal, timeout: 300_000 });
       const parts = Array.isArray(res.content) ? (res.content as { type: string; text?: string }[]) : [];
       const text = parts.map((part) => (part.type === 'text' && typeof part.text === 'string' ? part.text : `[${part.type} content omitted]`)).join('\n');
       return { text: text || (res.structuredContent ? JSON.stringify(res.structuredContent) : ''), isError: res.isError === true };

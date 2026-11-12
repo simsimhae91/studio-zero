@@ -1,7 +1,8 @@
 import type Anthropic from '@anthropic-ai/sdk';
 import { z } from 'zod';
 import type { Effort } from '../config.ts';
-import { ModelRefusedError, fallbackParams, type ClaudeClient, type LlmScope } from './ClaudeClient.ts';
+import type { BridgeTools } from '../bridge/BridgeSessions.ts';
+import { ModelRefusedError, fallbackParams, transcript, type ClaudeClient, type LlmScope } from './ClaudeClient.ts';
 
 /** A tool implemented inside the daemon. Its input is validated against `schema` before `run` sees it. */
 export interface LoopTool<Schema extends z.ZodObject = z.ZodObject> {
@@ -43,6 +44,7 @@ export async function runToolLoop(
     signal?: AbortSignal;
   },
 ): Promise<LoopResult> {
+  if (claude.mode() === 'session') return runSessionLoop(claude, opts);
   const sdk = await claude.sdk();
   const messages = [...opts.messages];
   const blocks: Anthropic.Beta.BetaContentBlock[] = [];
@@ -99,4 +101,31 @@ export async function runToolLoop(
     messages.push({ role: 'user', content: results });
   }
   return { finalText, blocks, stopped: 'max_turns' };
+}
+
+/**
+ * The same loop on the owner's subscription. The CLI drives the turns itself; the daemon's tools reach it
+ * through the MCP shim, each call validated here exactly as in the API loop. Of the provider's server tools
+ * only web search has an equivalent (page fetch does not), and what the searches returned comes back in the
+ * same block shape the API uses, so callers that check sources against retrieved pages work unchanged.
+ */
+async function runSessionLoop(claude: ClaudeClient, opts: Parameters<typeof runToolLoop>[1]): Promise<LoopResult> {
+  await claude.gate(opts.scope, opts.model);
+  let stopped = false;
+  const tools: BridgeTools = {
+    definitions: () => opts.tools.map((t) => ({ name: t.name, description: t.description, inputSchema: z.toJSONSchema(t.schema) as Record<string, unknown> })),
+    call: async (name, args) => {
+      const tool = opts.tools.find((t) => t.name === name);
+      const parsed = tool?.schema.safeParse(args);
+      if (!tool || !parsed?.success) return { content: tool ? `invalid input: ${z.prettifyError(parsed!.error!)}` : `unknown tool: ${name}`, isError: true };
+      const out = await tool.run(parsed.data);
+      stopped ||= out.stop === true;
+      return { content: out.content, isError: out.isError === true };
+    },
+  };
+  const webSearch = (opts.serverTools ?? []).some((t) => 'type' in t && typeof t.type === 'string' && t.type.startsWith('web_search'));
+  const answer = await claude.session().ask({ system: opts.system, content: [{ type: 'text', text: transcript(opts.messages) }], model: opts.model, effort: opts.effort, tools: opts.tools.length > 0 ? tools : undefined, webSearch, signal: opts.signal });
+  claude.recordSession(opts.scope, opts.model, answer.usage);
+  const blocks = answer.searches.map((hits, i) => ({ type: 'web_search_tool_result', tool_use_id: `session_${i}`, content: hits.map((hit) => ({ type: 'web_search_result', url: hit.url, title: hit.title, encrypted_content: '', page_age: null })) })) as unknown as Anthropic.Beta.BetaContentBlock[];
+  return { finalText: answer.text.trim(), blocks, stopped: stopped ? 'tool_stop' : 'completed' };
 }

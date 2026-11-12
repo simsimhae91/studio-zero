@@ -1,7 +1,7 @@
 import { KeyRound, Unplug } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import type { McpServerInfo } from '@studio-zero/protocol';
-import { slugify } from '../lib/format.ts';
+import { engineLabel, slugify } from '../lib/format.ts';
 import { forgetToken } from '../lib/platform.ts';
 import { useAction, useQuery, useStudio } from '../lib/studio.tsx';
 import { Button, Field, Problem, Segmented, Sheet, Status, inputClass } from '../ui.tsx';
@@ -17,7 +17,7 @@ const BASE_CREDENTIALS: readonly { id: string; label: string }[] = [
 const serverState = { ready: '사용 가능', 'needs-token': '토큰 필요', unsupported: 'OAuth 로그인 필요 (아직 지원 안 함)' } as const;
 const confidenceLabel = { high: '확실', medium: '의견이 갈릴 수 있음', speculative: '추정' } as const;
 const relayLabel = { telegram: 'Telegram', slack: 'Slack', ntfy: 'ntfy' } as const;
-const engineLabel: Record<string, string> = { 'native-claude': 'Claude API', 'claude-code': 'Claude Code 구독', codex: 'Codex 구독', cursor: 'Cursor 구독', antigravity: 'Antigravity 구독' };
+const subscriptionLabel: Record<string, string> = { ...engineLabel, 'claude-code': 'Claude Code 구독', codex: 'Codex 구독', cursor: 'Cursor 구독', antigravity: 'Antigravity 구독' };
 
 export function Settings({ open, onOpenChange, onDisconnect }: { open: boolean; onOpenChange: (open: boolean) => void; onDisconnect: () => void }) {
   const { backend } = useStudio();
@@ -85,13 +85,16 @@ export function Settings({ open, onOpenChange, onDisconnect }: { open: boolean; 
       <section className="flex flex-col gap-3">
         <div className="flex flex-col gap-1">
           <h3 className="text-lg font-semibold">엔진</h3>
-          <p className="text-base text-fg-muted">작업 종류마다 정해진 순서로, 쓸 수 있는 첫 엔진이 맡습니다.</p>
+          <p className="text-base text-fg-muted">
+            작업 종류마다 정해진 순서로, 쓸 수 있는 첫 엔진이 맡습니다. 작업을 시작할 때 직접 고를 수도 있습니다. 계획, 검증, 작업 노트 같은 스튜디오 자체의 생각은{' '}
+            {s?.brain === 'api' ? '저장된 Anthropic API 키로 합니다.' : s?.brain === 'session' ? 'Claude 구독(Claude Code 로그인)으로 합니다. API 키는 필요 없습니다.' : '지금 할 방법이 없습니다. Claude Code에 로그인하거나 API 키를 저장해 주세요.'}
+          </p>
         </div>
         <ul className="flex flex-col">
           {(s?.engines ?? []).map((engine) => (
             <li key={engine.id} className="flex flex-col gap-1 border-t border-border py-3">
               <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-1">
-                <span className="text-base font-medium">{engineLabel[engine.id] ?? engine.id}</span>
+                <span className="text-base font-medium">{subscriptionLabel[engine.id] ?? engine.id}</span>
                 <Status tone={engine.available ? 'good' : 'neutral'}>{engine.available ? '사용 가능' : '사용 안 함'}</Status>
               </div>
               <span className="break-words text-base text-fg-muted">{engine.reason}</span>
@@ -103,7 +106,7 @@ export function Settings({ open, onOpenChange, onDisconnect }: { open: boolean; 
       <section className="flex flex-col gap-4">
         <div className="flex flex-col gap-1">
           <h3 className="text-lg font-semibold">외부 도구</h3>
-          <p className="text-base text-fg-muted">작업 중 GitHub나 Stripe 같은 서비스가 필요해지면 에이전트가 여기 등록된 서버에서 도구를 찾습니다. 호출은 데몬이 대신 하고, 도구마다 프로젝트에서 처음 쓸 때 한 번 승인을 받습니다.</p>
+          <p className="text-base text-fg-muted">작업 중 GitHub나 Stripe 같은 서비스, 또는 이 Mac의 Blender, Unity, Aseprite 같은 도구가 필요해지면 에이전트가 여기 등록된 MCP 서버에서 도구를 찾습니다. 호출은 데몬이 대신 하고, 도구마다 프로젝트에서 처음 쓸 때 한 번 승인을 받습니다.</p>
         </div>
         {servers.error ? <Problem>{servers.error}</Problem> : null}
         <ul className="flex flex-col">
@@ -192,7 +195,7 @@ function ToolServer({ server, onToken, onChanged }: { server: McpServerInfo; onT
         <span className="text-base font-medium">{server.name}</span>
         <Status tone={server.state === 'ready' ? 'good' : server.state === 'needs-token' ? 'warn' : 'neutral'}>{serverState[server.state]}</Status>
       </div>
-      <span className="break-all text-sm text-fg-muted">{server.url}</span>
+      <span className="break-all text-sm text-fg-muted">{server.transport === 'stdio' ? `이 Mac에서 실행: ${[server.command, ...server.args].join(' ')}` : server.url}</span>
       {projects.map((projectId) => (
         <div key={projectId} className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
           <span className="break-words text-base">
@@ -216,23 +219,38 @@ function ToolServer({ server, onToken, onChanged }: { server: McpServerInfo; onT
   );
 }
 
+/** Splits a command line the way a shell would for the simple cases: spaces separate, quotes group. */
+function words(line: string): string[] {
+  return [...line.matchAll(/"([^"]*)"|'([^']*)'|(\S+)/g)].map((m) => m[1] ?? m[2] ?? m[3] ?? '');
+}
+
 function AddToolServer({ onAdded }: { onAdded: () => void }) {
   const { backend } = useStudio();
   const [open, setOpen] = useState(false);
+  const [transport, setTransport] = useState<'stdio' | 'http'>('stdio');
   const [name, setName] = useState('');
+  const [line, setLine] = useState('');
   const [url, setUrl] = useState('');
   const [auth, setAuth] = useState<'bearer' | 'none'>('bearer');
+  const [tokenEnv, setTokenEnv] = useState('');
   const add = useAction(async () => {
-    await backend.call('mcp.add', { id: slugify(name).slice(0, 30), name: name.trim(), url: url.trim(), auth, about: '' });
+    const base = { id: slugify(name).slice(0, 30), name: name.trim(), about: '' };
+    if (transport === 'http') await backend.call('mcp.add', { ...base, transport, url: url.trim(), auth });
+    else {
+      const [command = '', ...args] = words(line);
+      await backend.call('mcp.add', { ...base, transport, command, args, ...(tokenEnv.trim() ? { tokenEnv: tokenEnv.trim() } : {}) });
+    }
     setName('');
+    setLine('');
     setUrl('');
+    setTokenEnv('');
     setOpen(false);
     onAdded();
   });
   if (!open) {
     return (
       <Button className="self-start" onClick={() => setOpen(true)}>
-        다른 MCP 서버 추가
+        MCP 서버 추가
       </Button>
     );
   }
@@ -244,13 +262,27 @@ function AddToolServer({ onAdded }: { onAdded: () => void }) {
       }}
       className="flex flex-col gap-4"
     >
+      <Segmented label="연결 방식" value={transport} onChange={setTransport} options={[{ id: 'stdio', label: '이 Mac의 프로그램' }, { id: 'http', label: '원격 주소' }]} />
       <Field label="이름">
         <input className={inputClass} value={name} onChange={(e) => setName(e.target.value)} required maxLength={60} />
       </Field>
-      <Field label="주소" hint="https:// 로 시작해야 합니다. 이 Mac에서 도는 서버만 http://localhost 를 쓸 수 있습니다.">
-        <input className={inputClass} value={url} onChange={(e) => setUrl(e.target.value)} required inputMode="url" autoCapitalize="none" />
-      </Field>
-      <Segmented label="인증" value={auth} onChange={setAuth} options={[{ id: 'bearer', label: '토큰 사용' }, { id: 'none', label: '인증 없음' }]} />
+      {transport === 'stdio' ? (
+        <>
+          <Field label="실행 명령" hint="그 도구의 MCP 서버를 켜는 명령을 그대로 적습니다. 예를 들어 Blender는 uvx mcp-for-blender 입니다. 이 프로그램은 데몬이 도는 Mac에서, 샌드박스 밖에서 실행됩니다.">
+            <input className={inputClass} value={line} onChange={(e) => setLine(e.target.value)} required autoCapitalize="none" spellCheck={false} />
+          </Field>
+          <Field label="토큰을 받는 환경 변수 (선택)" hint="서버가 토큰을 환경 변수로 받는다면 그 이름만 적습니다 (예: NOTION_TOKEN). 값은 추가한 뒤 아래 자격 증명에 저장합니다.">
+            <input className={inputClass} value={tokenEnv} onChange={(e) => setTokenEnv(e.target.value.toUpperCase())} autoCapitalize="characters" spellCheck={false} />
+          </Field>
+        </>
+      ) : (
+        <>
+          <Field label="주소" hint="https:// 로 시작해야 합니다.">
+            <input className={inputClass} value={url} onChange={(e) => setUrl(e.target.value)} required inputMode="url" autoCapitalize="none" />
+          </Field>
+          <Segmented label="인증" value={auth} onChange={setAuth} options={[{ id: 'bearer', label: '토큰 사용' }, { id: 'none', label: '인증 없음' }]} />
+        </>
+      )}
       {add.error ? <Problem>{add.error}</Problem> : null}
       <Button type="submit" variant="primary" busy={add.busy} className="self-start">
         서버 추가

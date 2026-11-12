@@ -7,7 +7,9 @@ import { DEFAULT_DAEMON_PORT, DEFAULT_GATEWAY_PORT, TaskKind, ViewportId } from 
 const Effort = z.enum(['low', 'medium', 'high', 'xhigh', 'max']);
 export type Effort = z.infer<typeof Effort>;
 
-export const EngineId = z.enum(['native-claude', 'claude-code', 'codex']);
+export const EngineId = z.enum(['native-claude', 'claude-code', 'codex', 'cursor', 'antigravity']);
+/** The engines that are a vendor's CLI run on the owner's subscription. */
+export type BridgeEngineId = Exclude<z.infer<typeof EngineId>, 'native-claude'>;
 export type EngineId = z.infer<typeof EngineId>;
 
 const RouteCandidate = z.object({ engine: EngineId, model: z.string(), effort: Effort });
@@ -19,7 +21,10 @@ export type RouteCandidate = z.infer<typeof RouteCandidate>;
  * the native loop; verification-side model calls (vision audit, reflection) are fixed in code to `claude-opus-5-5`.
  */
 const defaultRoutes: Record<TaskKind, z.input<typeof RouteCandidate>[]> = {
-  ideate: [{ engine: 'native-claude', model: 'claude-fable-5-2', effort: 'high' }],
+  ideate: [
+    { engine: 'native-claude', model: 'claude-fable-5-2', effort: 'high' },
+    { engine: 'claude-code', model: 'claude-fable-5-2', effort: 'high' },
+  ],
   build: [
     { engine: 'native-claude', model: 'claude-opus-5-5', effort: 'high' },
     { engine: 'claude-code', model: 'opus', effort: 'high' },
@@ -29,7 +34,10 @@ const defaultRoutes: Record<TaskKind, z.input<typeof RouteCandidate>[]> = {
     { engine: 'claude-code', model: 'opus', effort: 'high' },
     { engine: 'native-claude', model: 'claude-opus-5-5', effort: 'high' },
   ],
-  inline_edit: [{ engine: 'native-claude', model: 'claude-opus-5-5', effort: 'low' }],
+  inline_edit: [
+    { engine: 'native-claude', model: 'claude-opus-5-5', effort: 'low' },
+    { engine: 'claude-code', model: 'opus', effort: 'low' },
+  ],
   kirby_materialize: [
     { engine: 'native-claude', model: 'claude-opus-5-5', effort: 'high' },
     { engine: 'claude-code', model: 'opus', effort: 'high' },
@@ -119,8 +127,11 @@ export const ConfigSchema = z.object({
   engines: z
     .object({
       claudeCode: z.object({ enabled: z.boolean().default(true), bin: z.string().default('claude') }).prefault({}),
-      /** Off by default: its native tools are disabled by feature flags, which is weaker than Claude Code's `--tools ""`. */
-      codex: z.object({ enabled: z.boolean().default(false), bin: z.string().default('codex') }).prefault({}),
+      /** Its native tools are disabled by feature flags and a read-only sandbox, which is weaker than Claude Code's `--tools ""`. */
+      codex: z.object({ enabled: z.boolean().default(true), bin: z.string().default('codex') }).prefault({}),
+      /** These two cannot switch their own tools off; they run inside the host jail (macOS). */
+      cursor: z.object({ enabled: z.boolean().default(true), bin: z.string().default('cursor-agent') }).prefault({}),
+      antigravity: z.object({ enabled: z.boolean().default(true), bin: z.string().default('agy') }).prefault({}),
     })
     .prefault({}),
   routes: z.record(TaskKind, z.array(RouteCandidate).min(1)).default(defaultRoutes as Record<TaskKind, RouteCandidate[]>),

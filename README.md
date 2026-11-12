@@ -24,11 +24,14 @@ pnpm install
 pnpm daemon                                    # 제어 127.0.0.1:49200, 게이트웨이 127.0.0.1:49201
 
 # 다른 터미널에서
-pnpm sz vault set provider/anthropic/api-key   # 키는 숨김 입력으로 받아 macOS Keychain에 저장
 pnpm sz status
 pnpm sz project create ledger "Ledger"
 pnpm sz task ledger build "미결제 청구서 화면을 만들어줘"
 ```
+
+**모델은 둘 중 하나면 된다.** Claude Code에 로그인되어 있으면(`claude`를 한 번 실행) API 키 없이 구독으로 돈다. 계획·검증·작업 노트 같은 스튜디오 자체의 생각도 그 구독으로 한다. API 키를 쓰려면 `pnpm sz vault set provider/anthropic/api-key`(숨김 입력, macOS Keychain에 저장). Codex, Cursor, Antigravity CLI가 로그인되어 있으면 작업을 시작할 때 엔진으로 고를 수 있다. `pnpm sz status`가 지금 어느 쪽으로 도는지 보여 준다.
+
+Blender, Unity, Aseprite 같은 이 Mac의 도구는 앱의 설정 → 외부 도구 → MCP 서버 추가에서 실행 명령으로 연결한다.
 
 상태는 `~/.studio-zero/`(`SZ_HOME`으로 변경)에 있다. 설정 파일은 `~/.studio-zero/config.json`이고 `deploy/config.example.json`이 예시다. 없으면 기본값으로 동작한다.
 
@@ -53,11 +56,12 @@ Mac mini 상시 가동과 원격 접속은 문서 §15를 본다.
 
 ```bash
 pnpm typecheck
-pnpm test              # 62개. 2개는 옵트인이고, Chrome이 필요한 테스트는 없으면 건너뛴다.
+pnpm test              # 70개. 3개는 옵트인이고, Chrome이 필요한 테스트는 없으면 건너뛴다.
 pnpm design:build      # packages/design/theme.css 재생성
 
 SZ_TEST_REAL_KEYCHAIN=1 pnpm test   # 임시 키체인으로 실제 Keychain 왕복 검증 (옵트인)
 SZ_TEST_ENGINE=1 pnpm test          # 실제 OrbStack에서 샌드박스·게이트웨이·시각 감사 검증 (옵트인)
+SZ_TEST_SESSION=1 node --test packages/daemon/test/session.integration.test.ts   # 실제 구독 CLI로 검증 (할당량을 조금 쓴다)
 
 node apps/desktop/scripts/audit.ts  # 클라이언트 화면을 데몬의 시각 검사에 통과시킨다 (먼저 클라이언트를 빌드)
 ```

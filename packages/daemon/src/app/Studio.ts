@@ -90,6 +90,9 @@ export interface StudioDeps {
  * The WebSocket RPC handlers and the Telegram relay are thin adapters over this class, so a command behaves
  * identically, and is policy-checked identically, whichever channel it arrives on.
  */
+/** Shown when nothing can think: neither way in to a model is set up. */
+const NO_MODEL = '쓸 수 있는 모델이 없습니다. Claude Code에 로그인하거나(터미널에서 claude 실행), 설정에서 Anthropic API 키를 저장해 주세요.';
+
 export class Studio implements PromotionHost {
   readonly #d: StudioDeps;
   readonly #startedAt: number;
@@ -112,6 +115,7 @@ export class Studio implements PromotionHost {
       relays: this.#d.relayStates(),
       queue: this.#d.store.countTasks(),
       engines,
+      brain: this.#d.claude.mode(),
     };
   }
 
@@ -217,7 +221,7 @@ export class Studio implements PromotionHost {
 
   // ----------------------------------------------------------------- tasks
 
-  async submitTask(actor: Actor, p: { projectId: string; kind: TaskKind; prompt: string; budgetTokens?: number; branch?: string; baseBranch?: string }, origin: Origin): Promise<Task> {
+  async submitTask(actor: Actor, p: { projectId: string; kind: TaskKind; prompt: string; budgetTokens?: number; branch?: string; baseBranch?: string; engine?: string }, origin: Origin): Promise<Task> {
     this.getProject(p.projectId);
     if (p.baseBranch !== undefined) {
       try {
@@ -228,7 +232,7 @@ export class Studio implements PromotionHost {
     }
     const budgetTokens = p.budgetTokens ?? this.#d.config.budgets.taskTokens;
     await this.#d.policy.authorize(actor, { kind: 'task.submit', projectId: p.projectId, taskKind: p.kind, budgetTokens });
-    const task = this.#d.store.insertTask({ id: newId('tsk'), projectId: p.projectId, kind: p.kind, prompt: p.prompt, origin, budgetTokens, branch: p.branch ?? null, baseBranch: p.baseBranch ?? null, createdAt: this.#d.clock() });
+    const task = this.#d.store.insertTask({ id: newId('tsk'), projectId: p.projectId, kind: p.kind, prompt: p.prompt, origin, budgetTokens, branch: p.branch ?? null, baseBranch: p.baseBranch ?? null, enginePref: p.engine ?? null, createdAt: this.#d.clock() });
     this.#d.events.emit({ projectId: task.projectId, taskId: task.id }, { type: 'task.state', state: 'queued', error: null });
     this.#d.queue.pump();
     return task;
@@ -393,7 +397,7 @@ export class Studio implements PromotionHost {
   async kirbyIngest(actor: Actor, projectId: string, repoUrl: string, maxProposals: number): Promise<{ ingestId: string }> {
     const project = this.getProject(projectId);
     await this.#d.policy.authorize(actor, { kind: 'kirby.ingest', projectId, repoUrl });
-    if (!this.#d.claude.isConfigured()) throw new UnavailableError('Kirby needs an Anthropic API key in the vault to write proposals');
+    if (!this.#d.claude.isConfigured()) throw new UnavailableError(NO_MODEL);
     await this.#provision(project);
     return { ingestId: this.#d.kirby.ingest(project, repoUrl, maxProposals) };
   }
@@ -418,7 +422,7 @@ export class Studio implements PromotionHost {
   // ------------------------------------------------- scratchpad & promotion
 
   async createScratchpad(actor: Actor, p: { opening: string; mode: ScratchMode }, origin: Origin): Promise<Scratchpad> {
-    if (!this.#d.claude.isConfigured()) throw new UnavailableError('a scratchpad needs an Anthropic API key in the vault');
+    if (!this.#d.claude.isConfigured()) throw new UnavailableError(NO_MODEL);
     if (p.mode !== 'think') await this.#d.policy.authorize(actor, { kind: 'knowledge.run', jobKind: p.mode === 'research' ? 'research' : 'document' });
     const pad = this.#d.scratch.create(p.opening, p.mode);
     if (p.mode === 'research') this.#d.knowledge.startResearch({ question: p.opening, depth: 'deep', scratchId: pad.id }, origin);
@@ -458,13 +462,13 @@ export class Studio implements PromotionHost {
 
   async startResearch(actor: Actor, p: { question: string; depth: 'brief' | 'deep'; scratchId?: string }, origin: Origin): Promise<KnowledgeJob> {
     await this.#d.policy.authorize(actor, { kind: 'knowledge.run', jobKind: 'research' });
-    if (!this.#d.claude.isConfigured()) throw new UnavailableError('research needs an Anthropic API key in the vault');
+    if (!this.#d.claude.isConfigured()) throw new UnavailableError(NO_MODEL);
     return this.#d.knowledge.startResearch(p, origin);
   }
 
   async compileDocument(actor: Actor, p: { title: string; kind: DocumentKind; brief: string; researchJobId?: string; scratchId?: string }, origin: Origin): Promise<KnowledgeJob> {
     await this.#d.policy.authorize(actor, { kind: 'knowledge.run', jobKind: 'document' });
-    if (!this.#d.claude.isConfigured()) throw new UnavailableError('writing a document needs an Anthropic API key in the vault');
+    if (!this.#d.claude.isConfigured()) throw new UnavailableError(NO_MODEL);
     return this.#d.knowledge.compileDocument(p, origin);
   }
 
@@ -490,7 +494,7 @@ export class Studio implements PromotionHost {
     return this.#d.mcp.list();
   }
 
-  mcpAdd(actor: Actor, p: { id: string; name: string; url: string; auth: 'bearer' | 'none'; about: string }): Promise<McpServerInfo> {
+  mcpAdd(actor: Actor, p: Parameters<McpRegistry['add']>[1]): Promise<McpServerInfo> {
     return this.#d.mcp.add(actor, p);
   }
 

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { test } from 'node:test';
+import { fileURLToPath } from 'node:url';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { z } from 'zod';
@@ -67,7 +68,7 @@ test('just-in-time tools: found on demand, allowed by the owner one tool at a ti
     assert.deepEqual(studio.mcpList().map((s) => [s.id, s.state]), [['figma', 'unsupported'], ['github', 'needs-token'], ['notion', 'unsupported'], ['stripe', 'needs-token']]);
 
     // Only the owner at the desk configures servers. An agent, or the owner over a messenger, cannot.
-    const custom = { id: 'issues', name: 'Issue tracker', url: remote.url, auth: 'bearer', about: 'Issues for our repositories' } as const;
+    const custom = { transport: 'http', id: 'issues', name: 'Issue tracker', url: remote.url, auth: 'bearer', about: 'Issues for our repositories' } as const;
     await assert.rejects(studio.mcpAdd({ type: 'owner', via: 'telegram' }, custom), /only be managed from an authenticated desktop client/);
     await assert.rejects(studio.mcpAdd({ type: 'agent', taskId: 'tsk_1' }, custom), /only be managed/);
     await assert.rejects(studio.mcpAdd(OWNER, { ...custom, url: 'http://evil.example/mcp' }), /must be https/);
@@ -133,4 +134,57 @@ test('just-in-time tools: found on demand, allowed by the owner one tool at a ti
     await d.cleanup();
     await remote.close();
   }
+});
+
+test('a local tool server (stdio): a program on this Mac, added by the owner, approved per tool with a warning that it acts outside the sandbox', async () => {
+  const script = fileURLToPath(new URL('./fixtures/stdio-tool-server.mjs', import.meta.url));
+  process.env.SZ_AMBIENT_SECRET = 'must-not-reach-the-tool-server';
+  const d = await testDaemon();
+  await d.daemon.start();
+  const { studio, toolbox, store } = d.daemon;
+  let pid = 0;
+  try {
+    const project = sampleProject();
+    store.insertProject(project);
+    store.insertTask({ id: 'tsk_1', projectId: project.id, kind: 'build', prompt: 'x', origin: 'desktop', budgetTokens: 1000, branch: null, createdAt: 1 });
+    const ctx = { project, taskId: 'tsk_1' };
+    const local: Parameters<typeof studio.mcpAdd>[1] = { transport: 'stdio', id: 'paint', name: 'Pixel editor', about: 'Draws sprites in the pixel editor on this Mac', command: process.execPath, args: [script], tokenEnv: 'PAINT_TOKEN' };
+
+    await assert.rejects(studio.mcpAdd({ type: 'owner', via: 'slack' }, local), /only be managed from an authenticated desktop client/, 'a program on the host is never added from a messenger');
+    await assert.rejects(studio.mcpAdd(OWNER, { ...local, command: 'no-such-program-anywhere' }), /was not found on this Mac/);
+    const added = await studio.mcpAdd(OWNER, local);
+    assert.deepEqual([added.transport, added.command, added.state], ['stdio', process.execPath, 'needs-token'], 'the program is stored as the absolute path found today');
+    await studio.vaultSet(OWNER, 'mcp/paint/token', new Secret('paint-secret'));
+
+    const found = await toolbox.call(ctx, 'find_tools', { query: 'draw a sprite' });
+    assert.match(found.content, /paint \(Pixel editor, runs on the owner's Mac\)[\s\S]*- draw_sprite: Draw a sprite and say where it was saved\./);
+
+    const first = toolbox.call(ctx, 'use_tool', { server: 'paint', tool: 'draw_sprite', arguments: { name: 'hero', size: 32 } });
+    let approval;
+    for (let i = 0; i < 300 && !(approval = studio.listApprovals('pending')[0]); i++) await sleep(10);
+    assert.equal(approval!.summary, `이 Mac에서 실행되는 도구 서버 paint (node)의 "draw_sprite" 도구를 프로젝트 ${project.id}에서 쓰도록 허용할까요? 이 도구는 샌드박스 밖, 이 Mac에서 직접 동작합니다. 승인하면 이 프로젝트에서는 이 도구를 다시 묻지 않습니다.`);
+    studio.resolveApproval(approval!.id, 'approve', 'desktop');
+    const result = await first;
+    assert.equal(result.isError, false);
+    assert.match(result.content, /drew hero at 32px; token=present; ambient=none; pid=\d+\n\[image content omitted\]/, 'its token arrives under the name the owner gave; nothing else from the daemon\'s environment does');
+    pid = Number(/pid=(\d+)/.exec(result.content)![1]);
+
+    // The process is kept while calls keep coming, not started again for each one.
+    const second = await toolbox.call(ctx, 'use_tool', { server: 'paint', tool: 'draw_sprite', arguments: { name: 'coin', size: 16 } });
+    assert.equal(Number(/pid=(\d+)/.exec(second.content)![1]), pid);
+    assert.doesNotThrow(() => process.kill(pid, 0));
+  } finally {
+    delete process.env.SZ_AMBIENT_SECRET;
+    await d.cleanup();
+  }
+  // ...and it does not outlive the daemon.
+  for (let i = 0; i < 100; i++) {
+    try {
+      process.kill(pid, 0);
+    } catch {
+      return;
+    }
+    await sleep(20);
+  }
+  assert.fail(`the tool server process ${pid} is still running after the daemon stopped`);
 });

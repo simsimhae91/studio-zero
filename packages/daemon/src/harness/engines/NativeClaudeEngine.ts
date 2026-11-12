@@ -35,7 +35,7 @@ export class NativeClaudeEngine implements Engine {
   }
 
   async availability(): Promise<{ available: boolean; reason: string }> {
-    return this.#claude.isConfigured() ? { available: true, reason: 'Anthropic API key present in vault' } : { available: false, reason: 'no Anthropic API key in vault' };
+    return this.#claude.hasApiKey() ? { available: true, reason: 'Anthropic API key present in vault' } : { available: false, reason: 'no Anthropic API key in vault' };
   }
 
   async open(run: EngineRun): Promise<EngineSession> {

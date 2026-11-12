@@ -15,7 +15,7 @@ const projects: Project[] = [
   { id: 'prj_atlas', slug: 'atlas', name: 'Atlas 모바일', template: 'mobile-expo', createdAt: min(-300) },
 ];
 
-const baseTask = { projectId: 'prj_ledger', origin: 'desktop', engine: 'native-claude', model: 'claude-opus-5-5', budgetTokens: 2_000_000, error: null, baseBranch: null } as const;
+const baseTask = { projectId: 'prj_ledger', origin: 'desktop', engine: 'native-claude', model: 'claude-opus-5-5', budgetTokens: 2_000_000, error: null, baseBranch: null, enginePref: null } as const;
 const tasks: Task[] = [
   {
     ...baseTask, id: 'tsk_detail', kind: 'build', prompt: '청구서 상세 화면에 결제 이력을 추가해줘', state: 'awaiting_approval', phase: 'execute', branch: 'sz/tsk_detail',
@@ -196,8 +196,11 @@ const handlers: Handlers = {
     engines: [
       { id: 'native-claude', available: true, reason: 'Anthropic API key present in vault' },
       { id: 'claude-code', available: true, reason: '2.1.322 (Claude Code); lockdown: --tools "" + --strict-mcp-config' },
-      { id: 'codex', available: false, reason: 'disabled in config (engines.codex.enabled)' },
+      { id: 'codex', available: true, reason: 'codex-cli 0.153.4; lockdown: --sandbox read-only + --disable shell_tool/…' },
+      { id: 'cursor', available: true, reason: '2026.11.11; lockdown: host jail: home hidden, no shell can start' },
+      { id: 'antigravity', available: false, reason: 'agy is not installed' },
     ],
+    brain: 'api',
   }),
   'projects.list': () => ({ projects }),
   'sandbox.info': (p) => sandbox(p.projectId),
@@ -226,9 +229,10 @@ const handlers: Handlers = {
   'ax.calibration': () => ({ levels: { high: { total: 14, overridden: 1 }, medium: { total: 9, overridden: 4 }, speculative: { total: 3, overridden: 2 } }, highDemoted: false }),
   'mcp.list': () => ({
     servers: [
-      { id: 'github', name: 'GitHub', url: 'https://api.githubcopilot.com/mcp/', auth: 'bearer', about: '', builtin: true, credentialId: 'mcp/github/token', state: 'ready', grants: [{ projectId: 'prj_ledger', tool: 'create_issue' }, { projectId: 'prj_ledger', tool: 'list_pull_requests' }] },
-      { id: 'stripe', name: 'Stripe', url: 'https://mcp.stripe.com', auth: 'bearer', about: '', builtin: true, credentialId: 'mcp/stripe/token', state: 'needs-token', grants: [] },
-      { id: 'notion', name: 'Notion', url: 'https://mcp.notion.com/mcp', auth: 'oauth', about: '', builtin: true, credentialId: 'mcp/notion/token', state: 'unsupported', grants: [] },
+      { id: 'github', name: 'GitHub', transport: 'http', command: null, args: [], tokenEnv: null, url: 'https://api.githubcopilot.com/mcp/', auth: 'bearer', about: '', builtin: true, credentialId: 'mcp/github/token', state: 'ready', grants: [{ projectId: 'prj_ledger', tool: 'create_issue' }, { projectId: 'prj_ledger', tool: 'list_pull_requests' }] },
+      { id: 'stripe', name: 'Stripe', transport: 'http', command: null, args: [], tokenEnv: null, url: 'https://mcp.stripe.com', auth: 'bearer', about: '', builtin: true, credentialId: 'mcp/stripe/token', state: 'needs-token', grants: [] },
+      { id: 'blender', name: 'Blender', transport: 'stdio', command: '/Users/me/.local/bin/uvx', args: ['mcp-for-blender'], tokenEnv: null, url: '', auth: 'none', about: '', builtin: false, credentialId: 'mcp/blender/token', state: 'ready', grants: [{ projectId: 'prj_atlas', tool: 'get_scene_info' }] },
+      { id: 'notion', name: 'Notion', transport: 'http', command: null, args: [], tokenEnv: null, url: 'https://mcp.notion.com/mcp', auth: 'oauth', about: '', builtin: true, credentialId: 'mcp/notion/token', state: 'unsupported', grants: [] },
     ],
   }),
   'vault.list': () => ({ credentials: [{ id: 'daemon/client-token', createdAt: min(-900), updatedAt: min(-900) }, { id: 'provider/anthropic/api-key', createdAt: min(-890), updatedAt: min(-890) }] }),

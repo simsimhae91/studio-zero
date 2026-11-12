@@ -24,7 +24,20 @@ export class ModelRouter {
     this.#engines = new Map(engines.map((e) => [e.id, e]));
   }
 
-  async route(kind: TaskKind): Promise<RouteDecision> {
+  /**
+   * `pref` is the owner's own choice of engine for this task. It is honoured or refused, never substituted:
+   * someone who asked for Codex should not find out afterwards that something else did the work.
+   */
+  async route(kind: TaskKind, pref: EngineId | null = null): Promise<RouteDecision> {
+    if (pref) {
+      const engine = this.#engines.get(pref);
+      const status = engine ? await engine.availability() : { available: false, reason: 'engine not registered' };
+      if (!engine || !status.available) throw new UnavailableError(`the engine chosen for this task is not available: ${pref} (${status.reason})`);
+      const listed = this.#config.routes[kind].find((c) => c.engine === pref);
+      // 'default' leaves the model to the CLI's own configuration; the API loop needs a concrete one.
+      const candidate: RouteCandidate = listed ?? { engine: pref, model: pref === 'native-claude' ? 'claude-opus-5-5' : 'default', effort: 'high' };
+      return { engine, candidate, considered: [{ engine: pref, ...status }] };
+    }
     const considered: RouteDecision['considered'] = [];
     for (const candidate of this.#config.routes[kind]) {
       const engine = this.#engines.get(candidate.engine);

@@ -32,8 +32,9 @@ export const Action = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('lesson.activate'), lessonId: z.string(), scope: z.enum(['project', 'global']), projectId: z.string().nullable() }),
   z.object({ kind: z.literal('eval.disable'), projectId: z.string(), evalId: z.string() }),
 
-  // Reaching an outside service through a tool server (MCP). `host` is where the call will go, taken from the
-  // stored server by daemon code, so what the owner approves names the destination.
+  // Reaching beyond the sandbox through a tool server (MCP). `host` is where the call will go (a remote host, or
+  // `local:<program>` for a server that runs on this Mac), taken from the stored server by daemon code, so what
+  // the owner approves names the destination.
   z.object({ kind: z.literal('mcp.search'), projectId: z.string() }),
   z.object({ kind: z.literal('mcp.call'), projectId: z.string(), serverId: z.string(), host: z.string(), tool: z.string() }),
   z.object({ kind: z.literal('mcp.configure'), serverId: z.string(), op: z.enum(['add', 'remove', 'revoke']) }),
@@ -104,7 +105,9 @@ export function describeAction(action: Action): string {
     case 'mcp.search':
       return '외부 도구 찾기';
     case 'mcp.call':
-      return `외부 도구 서버 ${action.serverId} (${action.host})의 "${action.tool}" 도구를 프로젝트 ${action.projectId}에서 쓰도록 허용할까요? 승인하면 이 프로젝트에서는 이 도구를 다시 묻지 않습니다.`;
+      return action.host.startsWith('local:')
+        ? `이 Mac에서 실행되는 도구 서버 ${action.serverId} (${action.host.slice(6)})의 "${action.tool}" 도구를 프로젝트 ${action.projectId}에서 쓰도록 허용할까요? 이 도구는 샌드박스 밖, 이 Mac에서 직접 동작합니다. 승인하면 이 프로젝트에서는 이 도구를 다시 묻지 않습니다.`
+        : `외부 도구 서버 ${action.serverId} (${action.host})의 "${action.tool}" 도구를 프로젝트 ${action.projectId}에서 쓰도록 허용할까요? 승인하면 이 프로젝트에서는 이 도구를 다시 묻지 않습니다.`;
     case 'mcp.configure':
       return `외부 도구 서버 ${action.serverId} ${action.op === 'add' ? '추가' : action.op === 'remove' ? '삭제' : '허용 취소'}`;
     case 'vault.write':
