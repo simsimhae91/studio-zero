@@ -765,8 +765,15 @@ export class Studio implements PromotionHost {
     this.#d.scratch.move(scratchId, move);
   }
 
-  promoteScratchpad(actor: Actor, p: { scratchId: string; target: 'build' | 'document'; template?: Template; documentKind?: DocumentKind }, origin: Origin): Promise<PromotionResult> {
-    return this.#promotion.promote(actor, p.scratchId, p.target, { template: p.template, documentKind: p.documentKind }, origin);
+  /**
+   * A build takes the owner's pick of engine, model and effort to the project's first task. The pick is checked
+   * here, before the workflow creates anything: a note must not become a project whose first task can never start.
+   * A document is written by the studio's own writer, so a pick sent along with one is not read.
+   */
+  async promoteScratchpad(actor: Actor, p: { scratchId: string; target: 'build' | 'document'; template?: Template; documentKind?: DocumentKind; engine?: EngineId; model?: string; effort?: Effort }, origin: Origin): Promise<PromotionResult> {
+    const pick = p.target === 'build' ? { engine: p.engine, model: p.model, effort: p.effort } : {};
+    assertPick(pick, this.#d.router);
+    return this.#promotion.promote(actor, p.scratchId, p.target, { template: p.template, documentKind: p.documentKind, ...pick }, origin);
   }
 
   /** The latest document published from a note that finished, as Markdown. What a build from that note starts from. */

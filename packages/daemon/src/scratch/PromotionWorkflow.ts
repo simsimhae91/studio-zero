@@ -1,4 +1,4 @@
-import type { DocumentKind, KnowledgeJob, Origin, Project, PromotionResult, Task, Template } from '@studio-zero/protocol';
+import type { DocumentKind, Effort, EnginePref, KnowledgeJob, Origin, Project, PromotionResult, Task, Template } from '@studio-zero/protocol';
 import { ConflictError } from '../app/errors.ts';
 import type { Actor } from '../policy/actions.ts';
 import type { PolicyEngine } from '../policy/PolicyEngine.ts';
@@ -12,10 +12,19 @@ export const PLAN_FILE = 'docs/plan.md';
 /** What promotion needs from the rest of the daemon. Implemented by `Studio`. */
 export interface PromotionHost {
   createProjectAndProvision(actor: Actor, p: { name: string; slug: string; template: Template }): Promise<Project>;
-  submitTask(actor: Actor, p: { projectId: string; kind: 'build'; prompt: string }, origin: Origin): Promise<Task>;
+  submitTask(actor: Actor, p: { projectId: string; kind: 'build'; prompt: string; engine?: EnginePref; model?: string; effort?: Effort }, origin: Origin): Promise<Task>;
   compileDocument(actor: Actor, p: { title: string; kind: DocumentKind; brief: string; scratchId: string }, origin: Origin): Promise<KnowledgeJob>;
   /** The latest document published from this note, if one finished: the written-up plan the owner has read. */
   publishedPlan(scratchId: string): string | null;
+}
+
+/** What a promotion may carry besides the note itself. The engine, model and effort are the first build's, as on any task. */
+export interface PromoteOptions {
+  template?: Template;
+  documentKind?: DocumentKind;
+  engine?: EnginePref;
+  model?: string;
+  effort?: Effort;
 }
 
 /**
@@ -37,6 +46,9 @@ export interface PromotionHost {
  * ruled out), and it is the text the owner read before pressing build. A builder handed only the raw spec would
  * be building the version nobody approved.
  *
+ * The first build of a promoted note is the largest task the project will see, so it runs on what the owner
+ * picked for it (engine, model, effort), exactly as a task started from a project's own composer does.
+ *
  * The readiness check is the daemon's (see `readiness`), so an agent cannot talk its way into a build.
  */
 export class PromotionWorkflow {
@@ -52,7 +64,7 @@ export class PromotionWorkflow {
     this.#host = deps.host;
   }
 
-  async promote(actor: Actor, scratchId: string, target: 'build' | 'document', opts: { template?: Template; documentKind?: DocumentKind }, origin: Origin): Promise<PromotionResult> {
+  async promote(actor: Actor, scratchId: string, target: 'build' | 'document', opts: PromoteOptions, origin: Origin): Promise<PromotionResult> {
     const view = this.#scratch.view(scratchId);
     const pad = view.scratchpad;
     if (pad.state === 'promoted' || pad.state === 'archived') throw new ConflictError(`this scratchpad is already ${pad.state}`);
@@ -71,7 +83,7 @@ export class PromotionWorkflow {
     await this.#sandboxes.writeFile(project, DECISION_LOG_FILE, view.decisionLog);
     if (plan !== null) await this.#sandboxes.writeFile(project, PLAN_FILE, plan);
     await this.#sandboxes.commitAll(project, `docs: spec and decision log from scratchpad ${pad.id}`);
-    const task = await this.#host.submitTask(actor, { projectId: project.id, kind: 'build', prompt: buildPrompt(view.spec, view.decisionLog, plan) }, origin);
+    const task = await this.#host.submitTask(actor, { projectId: project.id, kind: 'build', prompt: buildPrompt(view.spec, view.decisionLog, plan), engine: opts.engine, model: opts.model, effort: opts.effort }, origin);
     return { scratchpad: this.#scratch.markPromoted(scratchId, project.id), project, task, job: null };
   }
 }

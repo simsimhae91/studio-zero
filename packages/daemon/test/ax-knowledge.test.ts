@@ -248,7 +248,14 @@ test('scratchpad to build: questions, a calibration gate, a decision log, and lo
 
     // Promotion: project, sandbox, both documents in the repository and in the builder's first request.
     const visual = (id: string) => studio.setEvalEnabled(OWNER, studio.listEvals(id).find((e) => e.name === 'visual-audit')!.id, false);
-    const promoted = await studio.promoteScratchpad(OWNER, { scratchId: pad.id, target: 'build', template: 'mobile-expo' }, 'desktop');
+    // The first build runs on what the owner picked for it. A pick that could never start is refused before a
+    // project exists, and the note is still there to be built.
+    const projects = studio.listProjects().length;
+    await assert.rejects(studio.promoteScratchpad(OWNER, { scratchId: pad.id, target: 'build', model: 'haiku' }, 'desktop'), /together with the engine/);
+    await assert.rejects(studio.promoteScratchpad(OWNER, { scratchId: pad.id, target: 'build', engine: 'cursor', effort: 'max' }, 'desktop'), /no effort setting/);
+    assert.deepEqual([studio.listProjects().length, studio.scratchView(pad.id).scratchpad.state], [projects, 'ready']);
+    const promoted = await studio.promoteScratchpad(OWNER, { scratchId: pad.id, target: 'build', template: 'mobile-expo', engine: 'native-claude', model: 'claude-opus-5-5', effort: 'max' }, 'desktop');
+    assert.deepEqual([promoted.task!.enginePref, promoted.task!.modelPref, promoted.task!.effortPref], ['native-claude', 'claude-opus-5-5', 'max'], 'engine, model and effort reach the first build task');
     await visual(promoted.project!.id);
     assert.equal(promoted.scratchpad.state, 'promoted');
     assert.equal(promoted.scratchpad.projectId, promoted.project!.id);

@@ -5,6 +5,7 @@ import { Block, Markdown } from '@studio-zero/ax/react';
 import { creatableTemplates, tokens } from '../lib/format.ts';
 import { useAction, useQuery, useStudio } from '../lib/studio.tsx';
 import { Button, Problem, Segmented, Sheet, Status, TitlebarSpace } from '../ui.tsx';
+import { EnginePicker, useEngineChoice } from './enginePicker.tsx';
 import { Composer, Entry, OwnWords, Working, useStickToEnd } from './page.tsx';
 import { scratchState, type Route } from './Shell.tsx';
 
@@ -193,8 +194,10 @@ function Promote({ scratchId, ready, missing, busy, published, writing, onOpen, 
   const { backend } = useStudio();
   const [template, setTemplate] = useState<Template>('web-vite-react');
   const [documentKind, setDocumentKind] = useState<DocumentKind>('prd');
+  // The same remembered pick the first page and a project's composer use: the first build is the largest task a project gets.
+  const choice = useEngineChoice();
   const build = useAction(async () => {
-    const result = await backend.call('scratch.promote', { scratchId, target: 'build', template });
+    const result = await backend.call('scratch.promote', { scratchId, target: 'build', template, ...choice.fields });
     onChanged();
     if (result.project) onOpen({ kind: 'project', id: result.project.id });
   });
@@ -246,6 +249,9 @@ function Promote({ scratchId, ready, missing, busy, published, writing, onOpen, 
           <p className="text-base text-fg-muted">{published ? '읽어 본 기획서와 명세, 결정 기록이 프로젝트의 docs 폴더와 첫 작업 지시에 들어갑니다.' : '기획서 없이 가면 명세와 결정 기록만 들어갑니다. 작은 일이면 이대로도 됩니다.'}</p>
         </div>
         <Segmented label="무엇으로 만들지" value={template} options={TEMPLATES} onChange={setTemplate} />
+        <div role="group" aria-label="첫 빌드를 맡을 엔진" className="flex flex-wrap items-center gap-1">
+          <EnginePicker choice={choice} />
+        </div>
         <Button variant={published ? 'primary' : 'quiet'} busy={build.busy} disabled={locked || write.busy} onClick={() => void build.run()} className="self-start">
           {published ? '이 기획서로 프로젝트 빌드 시작' : '기획서 없이 바로 빌드 시작'}
         </Button>

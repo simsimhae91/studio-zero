@@ -228,7 +228,16 @@ export const methods = {
   /** Runs one of the named techniques on the scratchpad: eight divergent takes, five simulated users, a red-team review, or convergence into a spec. */
   'scratch.move': { params: z.object({ scratchId: z.string(), move: ScratchMove }), result: z.object({ accepted: z.literal(true) }) },
   'scratch.promote': {
-    params: z.object({ scratchId: z.string(), target: z.enum(['build', 'document']), template: Template.optional(), documentKind: DocumentKind.optional() }),
+    params: z.object({
+      scratchId: z.string(),
+      target: z.enum(['build', 'document']),
+      template: Template.optional(),
+      documentKind: DocumentKind.optional(),
+      /** Who runs the project's first build, as on `tasks.submit`: an engine, and with it a model and an effort. Read for a build only. */
+      engine: EnginePref.optional(),
+      model: ModelId.optional(),
+      effort: Effort.optional(),
+    }),
     result: PromotionResult,
   },
   'scratch.archive': { params: z.object({ scratchId: z.string() }), result: Scratchpad },
