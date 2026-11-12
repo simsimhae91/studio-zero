@@ -1,12 +1,13 @@
 import * as Tabs from '@radix-ui/react-tabs';
 import { Check, ChevronDown, FileText, FolderTree, GitFork, GitMerge, Globe, History as HistoryIcon, KeyRound, Lightbulb, Maximize2, MessageCircleQuestion, Monitor, MoreHorizontal, Pencil, Plus, ReceiptText, RotateCw, ScanEye, Smartphone, Sparkles, Square, SquareTerminal, Star, Trash2, X } from 'lucide-react';
 import { Suspense, lazy, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { ReviewerPref, type AdvisorId, type Approval, type EngineModel, type EnginePref, type Project, type Session, type Task, type TaskKind, type TaskState, type TaskTrack } from '@studio-zero/protocol';
+import { ReviewerPref, type AdvisorId, type Approval, type Project, type Session, type Task, type TaskKind, type TaskState, type TaskTrack } from '@studio-zero/protocol';
 import { Markdown } from '@studio-zero/ax/react';
 import { duration, elapsed, engineLabel, kindLabel, phaseLabel, stamp, subscriptionLabel, taskStateLabel, templateLabel, tokens } from '../lib/format.ts';
 import { redrawRequest, revisionRequest, type MockupNote } from '../lib/mockups.ts';
 import { advisorCommand, buildRequest, mockupName, narrate, type Item, type Mockup } from '../lib/steps.ts';
 import { errorText, useAction, useQuery, useStudio, useTaskEvents } from '../lib/studio.tsx';
+import { EnginePicker, pickerClass, useEngineChoice } from './enginePicker.tsx';
 import { Button, IconButton, Menu, MenuItem, MenuSeparator, Problem, Segmented, Status, TitlebarSpace, inputClass } from '../ui.tsx';
 import { ActionStepper } from './ActionStepper.tsx';
 import { ExternalApisModal } from './ExternalApis.tsx';
@@ -46,8 +47,6 @@ const PANES: readonly { id: Pane; label: string }[] = [
 ];
 const DEFAULT_SESSION = 'default';
 const advisorName: Record<AdvisorId, string> = { codex: 'Codex', gemini: 'Gemini' };
-/** The menus above the composer: what runs the next task, and who checks it. */
-const pickerClass = 'inline-flex min-h-9 pointer-coarse:min-h-11 items-center gap-1 rounded-md px-3 text-sm font-medium text-fg-muted hover:bg-sunken hover:text-fg';
 const live = (state: TaskState): boolean => state === 'queued' || state === 'running' || state === 'awaiting_approval';
 const stateTone = { queued: 'neutral', running: 'active', awaiting_approval: 'warn', suspended: 'warn', succeeded: 'good', failed: 'bad', cancelled: 'neutral' } as const;
 const sandboxLabel = { running: '샌드박스 실행 중', stopped: '샌드박스 꺼짐', absent: '샌드박스 없음' } as const;
@@ -111,12 +110,8 @@ function Workbench({ project, onOpen, onChanged }: { project: Project; onOpen: (
   const [fork, setFork] = useState<string | null>(null);
   const [kind, setKind] = useState<Kind>('build');
   const [trackChoice, setTrackChoice] = useState<TaskTrack | null>(null);
-  // 'auto' leaves the choice to the routing table; anything else is the owner's own pick for the next task.
-  const [engine, setEngine] = useState('auto');
-  // 'default' leaves the model to the engine: what the routing table lists for it, or the CLI's own setting.
-  const [model, setModel] = useState('default');
-  // A model is named the way its engine names it, so the list is asked for once an engine is picked.
-  const catalog = useQuery('engines.models', engine === 'auto' ? null : { engine: engine as EnginePref });
+  // The engine and model for the next task: the owner's standing choice, shared with the first page.
+  const choice = useEngineChoice();
   // 'auto' pairs the reviewer with the engine (never its own vendor); anything else is the owner's pick.
   const [reviewer, setReviewer] = useState<ReviewerPref | 'auto'>('auto');
   const [references, setReferences] = useState('');
@@ -143,14 +138,6 @@ function Workbench({ project, onOpen, onChanged }: { project: Project; onOpen: (
   // A project that started as a draft keeps iterating as one, until the owner asks for the full checks.
   const track = trackChoice ?? list.findLast((t) => t.kind !== 'ideate')?.track ?? 'fast';
   const pending = (approvals.data?.approvals ?? []).filter((a) => a.projectId === project.id);
-  const engines = [{ id: 'auto', label: '자동' }, ...(status.data?.engines ?? []).filter((e) => e.available).map((e) => ({ id: e.id, label: engineLabel[e.id] ?? e.id }))];
-  const models = catalog.data?.models ?? [];
-  // A pick that is not on the list in front of the owner (the engine changed, the list reloaded) is no pick.
-  const chosenModel = models.find((m) => m.id === model) ?? null;
-  const pickEngine = (id: string): void => {
-    setEngine(id);
-    setModel('default');
-  };
 
   const show = (next: TabId): void => {
     setTab(next);
@@ -167,7 +154,7 @@ function Workbench({ project, onOpen, onChanged }: { project: Project; onOpen: (
     // The cross-checks and the reference kit belong to a full build: a draft has neither a plan nor a review.
     const designed = as.kind === 'build' && as.track === 'full';
     const refs = designed && !core ? referencesOf(references) : [];
-    const task = await backend.call('tasks.submit', { projectId: project.id, kind: as.kind, prompt, track: as.track, ...(session ? { sessionId: session } : {}), ...((as.baseBranch ?? fork) ? { baseBranch: (as.baseBranch ?? fork)! } : {}), ...(engine === 'auto' ? {} : { engine: engine as EnginePref, ...(chosenModel ? { model: chosenModel.id } : {}) }), ...(designed && reviewer !== 'auto' ? { reviewer } : {}), ...(refs.length > 0 ? { references: refs } : {}) });
+    const task = await backend.call('tasks.submit', { projectId: project.id, kind: as.kind, prompt, track: as.track, ...(session ? { sessionId: session } : {}), ...((as.baseBranch ?? fork) ? { baseBranch: (as.baseBranch ?? fork)! } : {}), ...choice.fields, ...(designed && reviewer !== 'auto' ? { reviewer } : {}), ...(refs.length > 0 ? { references: refs } : {}) });
     setFork(null);
     setReferences('');
     setPicked((prev) => ({ ...prev, [key]: task.id }));
@@ -430,24 +417,7 @@ function Workbench({ project, onOpen, onChanged }: { project: Project; onOpen: (
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-border pb-2">
                   <Segmented compact label="작업 종류" value={kind} options={KINDS} onChange={setKind} />
                   <Segmented compact label="검증 범위" value={track} options={TRACKS} onChange={setTrackChoice} />
-                  {engines.length > 2 ? (
-                    <Menu
-                      align="start"
-                      trigger={
-                        <button type="button" className={pickerClass}>
-                          엔진: {engines.find((e) => e.id === engine)?.label ?? '자동'}
-                          <ChevronDown className="size-4" aria-hidden />
-                        </button>
-                      }
-                    >
-                      {engines.map((e) => (
-                        <MenuItem key={e.id} onSelect={() => pickEngine(e.id)}>
-                          {e.label}
-                        </MenuItem>
-                      ))}
-                    </Menu>
-                  ) : null}
-                  {engine !== 'auto' && models.length > 0 ? <ModelMenu models={models} chosen={chosenModel} onPick={(id) => setModel(id ?? 'default')} /> : null}
+                  <EnginePicker choice={choice} />
                   {designed && reviewers.length > 2 ? (
                     <Menu
                       align="start"
@@ -639,68 +609,6 @@ function Working({ children }: { children: ReactNode }) {
       <span className="thinking-mark size-2 shrink-0 rounded-full bg-accent" aria-hidden />
       {children}
     </p>
-  );
-}
-
-/**
- * The models of the engine picked for the next task. A vendor may list a few or a few hundred, so a long list
- * gets a line to narrow it by: typing stays in the line, Enter takes the first match, the down arrow goes into the list.
- */
-function ModelMenu({ models, chosen, onPick }: { models: readonly EngineModel[]; chosen: EngineModel | null; onPick: (id: string | null) => void }) {
-  const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState('');
-  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
-  const shown = words.length === 0 ? models : models.filter((m) => words.every((w) => `${m.label} ${m.id}`.toLowerCase().includes(w)));
-  const toggle = (next: boolean): void => {
-    setOpen(next);
-    if (!next) setQuery('');
-  };
-  const pick = (id: string | null): void => {
-    onPick(id);
-    toggle(false);
-  };
-  return (
-    <Menu
-      align="start"
-      open={open}
-      onOpenChange={toggle}
-      trigger={
-        <button type="button" title="고르지 않으면 이 엔진이 평소 쓰는 모델로 돕니다" className={pickerClass}>
-          모델: {chosen?.label ?? '기본'}
-          <ChevronDown className="size-4" aria-hidden />
-        </button>
-      }
-    >
-      {models.length > 10 ? (
-        <input
-          autoFocus
-          aria-label="모델 찾기"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Escape' || e.key === 'Tab') return;
-            // Anything typed here is the search: the menu must not read it as a jump to an entry.
-            e.stopPropagation();
-            if (e.key === 'Enter' && words.length > 0 && shown[0]) pick(shown[0].id);
-            if (e.key === 'ArrowDown') {
-              e.preventDefault();
-              e.currentTarget.closest('[role="menu"]')?.querySelector<HTMLElement>('[role="menuitem"]')?.focus();
-            }
-          }}
-          placeholder={`모델 ${models.length}개 중에서 찾기`}
-          autoCapitalize="none"
-          spellCheck={false}
-          className={`${inputClass} sticky top-0 z-10 mb-1 shrink-0 text-sm`}
-        />
-      ) : null}
-      {words.length === 0 ? <MenuItem onSelect={() => pick(null)}>기본</MenuItem> : null}
-      {shown.map((m) => (
-        <MenuItem key={m.id} onSelect={() => pick(m.id)}>
-          {m.label}
-        </MenuItem>
-      ))}
-      {shown.length === 0 ? <p className="px-3 py-3 text-sm text-fg-muted">맞는 모델이 없습니다.</p> : null}
-    </Menu>
   );
 }
 

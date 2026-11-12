@@ -87,7 +87,7 @@ export const methods = {
    * `fast` builds a working draft straight away; `deep` writes the PRD, data model and API specification first.
    */
   'projects.ignite': {
-    params: z.object({ idea: z.string().min(1).max(20_000), track: z.enum(['fast', 'deep']), template: Template.optional(), engine: EnginePref.optional() }),
+    params: z.object({ idea: z.string().min(1).max(20_000), track: z.enum(['fast', 'deep']), template: Template.optional(), engine: EnginePref.optional(), model: ModelId.optional() }),
     result: z.object({ project: Project, task: Task }),
   },
   /** Removes the sandbox and the project's records. The workspace volume is kept unless `deleteWorkspace` is set. */

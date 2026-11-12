@@ -179,6 +179,13 @@ test('tasks.submit: a model needs its engine, cannot look like an option, and is
     const task = await rpc.call('tasks.submit', { projectId: project.id, kind: 'build', prompt: 'x', engine: 'cursor', model: 'claude-opus-5-5[context=1m]' });
     assert.deepEqual([task.enginePref, task.modelPref], ['cursor', 'claude-opus-5-5[context=1m]']);
     assert.equal((await rpc.call('tasks.submit', { projectId: project.id, kind: 'build', prompt: 'x', engine: 'cursor' })).modelPref, null);
+
+    // The first task of a new project carries the same choice, and a request that could never start leaves no project behind.
+    const before = (await rpc.call('projects.list', {})).projects.length;
+    await assert.rejects(rpc.call('projects.ignite', { idea: 'A tide table for surfers', track: 'fast', model: 'gpt-5.6-sol' }), (e: unknown) => e instanceof RpcCallError && e.code === 'conflict');
+    assert.equal((await rpc.call('projects.list', {})).projects.length, before);
+    const ignited = await rpc.call('projects.ignite', { idea: 'A tide table for surfers', track: 'fast', engine: 'cursor', model: 'composer-2.5' });
+    assert.deepEqual([ignited.task.enginePref, ignited.task.modelPref, ignited.task.projectId], ['cursor', 'composer-2.5', ignited.project.id]);
   } finally {
     rpc.close();
     await d.cleanup();

@@ -3,6 +3,7 @@ import type { Project, Scratchpad, Template } from '@studio-zero/protocol';
 import { ago, creatableTemplates, templateLabel } from '../lib/format.ts';
 import { useAction, useStudio } from '../lib/studio.tsx';
 import { Button, Problem, Segmented, TitlebarSpace } from '../ui.tsx';
+import { EnginePicker, useEngineChoice } from './enginePicker.tsx';
 import { scratchState, type Route } from './Shell.tsx';
 
 type Mode = 'fast' | 'deep' | 'think' | 'research' | 'document';
@@ -28,12 +29,14 @@ export function Home({ scratchpads, projects, onOpen, onCreated }: { scratchpads
   const [stack, setStack] = useState<Stack>('auto');
   const current = MODES.find((m) => m.id === mode)!;
   const builds = mode === 'fast' || mode === 'deep';
+  // The first task of a project is usually its largest: who runs it is chosen here, not one task later.
+  const choice = useEngineChoice();
 
   const start = useAction(async () => {
     const opening = text.trim();
     if (mode === 'fast' || mode === 'deep') {
       // The daemon names the project from the idea, picks the stack unless one was chosen here, and starts the first task.
-      const { project } = await backend.call('projects.ignite', { idea: opening, track: mode, ...(stack === 'auto' ? {} : { template: stack }) });
+      const { project } = await backend.call('projects.ignite', { idea: opening, track: mode, ...(stack === 'auto' ? {} : { template: stack }), ...choice.fields });
       onCreated();
       return onOpen({ kind: 'project', id: project.id });
     }
@@ -84,7 +87,10 @@ export function Home({ scratchpads, projects, onOpen, onCreated }: { scratchpads
           {builds ? (
             <div className="flex flex-col gap-2">
               <span className="text-sm font-medium text-fg-muted">무엇으로 만들지</span>
-              <Segmented label="무엇으로 만들지" value={stack} options={STACKS} onChange={setStack} />
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <Segmented label="무엇으로 만들지" value={stack} options={STACKS} onChange={setStack} />
+                <EnginePicker choice={choice} />
+              </div>
             </div>
           ) : null}
           {start.error ? <Problem>{start.error}</Problem> : null}

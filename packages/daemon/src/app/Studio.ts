@@ -132,6 +132,11 @@ export interface StudioDeps {
  * The WebSocket RPC handlers and the Telegram relay are thin adapters over this class, so a command behaves
  * identically, and is policy-checked identically, whichever channel it arrives on.
  */
+/** A model is named the way its engine names it, so it cannot be chosen while the engine is left to the routing table. */
+function assertModelHasEngine(p: { engine?: EngineId; model?: string }): void {
+  if (p.model !== undefined && p.engine === undefined) throw new ConflictError('a model is chosen together with the engine that runs it: name the engine as well');
+}
+
 /** Shown when nothing can think: neither way in to a model is set up. */
 /** The owner's side of a redesign task. The first line is what the task is called in the stream and in the commit. */
 const REDESIGN_REQUEST = `디자인 심사 결과대로 화면을 다시 디자인해 주세요.
@@ -242,12 +247,14 @@ export class Studio implements PromotionHost {
    * template that fits unless one was given, and its first task: a working draft (`fast`), or the product
    * definition documents first (`deep`).
    */
-  async igniteProject(actor: Actor, p: { idea: string; track: 'fast' | 'deep'; template?: Template; engine?: EngineId }, origin: Origin): Promise<{ project: Project; task: Task }> {
+  async igniteProject(actor: Actor, p: { idea: string; track: 'fast' | 'deep'; template?: Template; engine?: EngineId; model?: string }, origin: Origin): Promise<{ project: Project; task: Task }> {
+    // Refused before anything is named or created: a project must not be left behind by a request that could never start.
+    assertModelHasEngine(p);
     const identity = await this.#d.namer.name(p.idea, p.template);
     let slug = identity.slug;
     for (let n = 2; this.#d.store.getProjectBySlug(slug); n++) slug = `${identity.slug.slice(0, 36).replace(/-+$/, '')}-${n}`;
     const project = this.createProject(actor, { name: identity.name, slug, template: identity.template });
-    const task = await this.submitTask(actor, { projectId: project.id, kind: p.track === 'deep' ? 'ideate' : 'build', prompt: p.idea, track: p.track === 'deep' ? 'full' : 'fast', engine: p.engine }, origin);
+    const task = await this.submitTask(actor, { projectId: project.id, kind: p.track === 'deep' ? 'ideate' : 'build', prompt: p.idea, track: p.track === 'deep' ? 'full' : 'fast', engine: p.engine, model: p.model }, origin);
     return { project, task };
   }
 
@@ -431,8 +438,7 @@ export class Studio implements PromotionHost {
 
   async submitTask(actor: Actor, p: { projectId: string; kind: TaskKind; prompt: string; budgetTokens?: number; branch?: string; baseBranch?: string; engine?: EngineId; model?: string; sessionId?: string; track?: TaskTrack; reviewer?: ReviewerPref; references?: string[] }, origin: Origin): Promise<Task> {
     this.getProject(p.projectId);
-    // A model is named the way its engine names it, so it cannot be chosen while the engine is left to the routing table.
-    if (p.model !== undefined && p.engine === undefined) throw new ConflictError('a model is chosen together with the engine that runs it: name the engine as well');
+    assertModelHasEngine(p);
     // A reference is refused here, before the task exists, so a mistyped address is not found out mid-build.
     const references = (p.references ?? []).map((raw) => {
       const parsed = parseReferenceUrl(raw);

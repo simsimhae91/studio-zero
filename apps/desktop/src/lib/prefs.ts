@@ -6,6 +6,10 @@ export type MonoFont = 'geist-mono' | 'jetbrains-mono' | 'd2coding' | 'fira-code
 export interface Prefs {
   theme: ThemePreset;
   mono: MonoFont;
+  /** The engine picked for tasks, or `auto`. What it means now is worked out against the daemon (`resolveChoice`). */
+  engine: string;
+  /** The model picked on that engine, or `default`. */
+  model: string;
 }
 
 /** Each preset is a seed for the theme generator (see scripts/theme.mjs); `system` follows the OS light/dark setting. */
@@ -30,7 +34,7 @@ export const MONO_FONTS: readonly { id: MonoFont; label: string; stack: string; 
 ];
 
 const KEY = 'studio-zero.prefs';
-const DEFAULTS: Prefs = { theme: 'studio-dark', mono: 'geist-mono' };
+const DEFAULTS: Prefs = { theme: 'studio-dark', mono: 'geist-mono', engine: 'auto', model: 'default' };
 
 function load(): Prefs {
   try {
@@ -38,6 +42,8 @@ function load(): Prefs {
     return {
       theme: THEME_PRESETS.some((p) => p.id === saved?.theme) ? saved!.theme! : DEFAULTS.theme,
       mono: MONO_FONTS.some((f) => f.id === saved?.mono) ? saved!.mono! : DEFAULTS.mono,
+      engine: typeof saved?.engine === 'string' ? saved.engine : DEFAULTS.engine,
+      model: typeof saved?.model === 'string' ? saved.model : DEFAULTS.model,
     };
   } catch {
     return DEFAULTS;
