@@ -41,7 +41,7 @@ const PANES: readonly { id: Pane; label: string }[] = [
 const DEFAULT_SESSION = 'default';
 const advisorName: Record<AdvisorId, string> = { codex: 'Codex', gemini: 'Gemini' };
 const live = (state: TaskState): boolean => state === 'queued' || state === 'running' || state === 'awaiting_approval';
-const stateTone = { queued: 'neutral', running: 'active', awaiting_approval: 'warn', succeeded: 'good', failed: 'bad', cancelled: 'neutral' } as const;
+const stateTone = { queued: 'neutral', running: 'active', awaiting_approval: 'warn', suspended: 'warn', succeeded: 'good', failed: 'bad', cancelled: 'neutral' } as const;
 const sandboxLabel = { running: '샌드박스 실행 중', stopped: '샌드박스 꺼짐', absent: '샌드박스 없음' } as const;
 
 /** The documents a deep-track task leaves behind, and what each is. */
@@ -598,6 +598,8 @@ function Passage({ task, items, pending, onShow, onCheckpoint, onFile, onBuild }
     const result = await backend.call('git.merge', { projectId: task.projectId, branch: task.branch! });
     setMerged(result.into);
   });
+  const resume = useAction(() => backend.call('tasks.resume', { taskId: task.id }));
+  const drop = useAction(() => backend.call('tasks.cancel', { taskId: task.id }));
   useEffect(() => setMerged(null), [task.id]);
   const requestMeta = [kindLabel[task.kind], task.kind !== 'ideate' && task.track === 'fast' ? '초안' : null, task.origin === 'desktop' ? null : `${task.origin}에서`, stamp(task.createdAt)].filter(Boolean).join(' · ');
 
@@ -655,8 +657,28 @@ function Passage({ task, items, pending, onShow, onCheckpoint, onFile, onBuild }
             </span>
           </div>
           {task.error ? <Problem>{task.error}</Problem> : null}
-          {merge.error ? <Problem>{merge.error}</Problem> : null}
-          {task.state === 'succeeded' && task.kind === 'ideate' ? (
+          {(merge.error ?? resume.error ?? drop.error) ? <Problem>{merge.error ?? resume.error ?? drop.error}</Problem> : null}
+          {task.state === 'suspended' ? (
+            <div className="flex flex-col gap-3 border-l-4 border-warning pl-4">
+              <div className="flex flex-col gap-1">
+                <p className="text-base font-semibold">디자인 심사를 기다리는 중입니다</p>
+                <p className="text-base text-fg-muted">
+                  만든 것은 브랜치에 저장했고 다른 검사는 모두 통과했습니다. 심사를 맡길 구독이 전부 사용 한도에 걸려 세워 뒀습니다. 한도가 풀리면 자동으로 이어서 심사받고, 그동안 이 프로젝트에서 다른 작업을 시작할 수 있습니다.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button busy={resume.busy} onClick={() => void resume.run()} icon={<RotateCw className="size-4" aria-hidden />}>
+                  지금 다시 시도
+                </Button>
+                <Button onClick={() => onShow('audit')} icon={<ScanEye className="size-4" aria-hidden />}>
+                  감사 결과 보기
+                </Button>
+                <Button variant="danger" busy={drop.busy} onClick={() => void drop.run()}>
+                  작업 취소
+                </Button>
+              </div>
+            </div>
+          ) : task.state === 'succeeded' && task.kind === 'ideate' ? (
             <DesignDecision onFile={onFile} onBuild={onBuild} />
           ) : (
             <div className="flex flex-wrap gap-2">

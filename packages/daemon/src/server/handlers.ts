@@ -73,6 +73,7 @@ export function createHandlers(studio: Studio): Handlers {
     'tasks.get': (p) => studio.getTask(p.taskId),
     'tasks.list': (p) => ({ tasks: studio.listTasks(p.projectId, p.limit ?? 50) }),
     'tasks.cancel': (p) => studio.cancelTask(p.taskId),
+    'tasks.resume': (p) => studio.resumeTask(p.taskId),
 
     'approvals.list': (p) => ({ approvals: studio.listApprovals(p.state) }),
     'approvals.resolve': (p) => studio.resolveApproval(p.approvalId, p.decision, 'desktop'),

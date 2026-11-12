@@ -10,7 +10,12 @@ export const Slug = z.string().regex(/^[a-z][a-z0-9-]{1,38}[a-z0-9]$/, 'lowercas
 export const TaskKind = z.enum(['build', 'refactor', 'inline_edit', 'ideate', 'kirby_materialize']);
 export type TaskKind = z.infer<typeof TaskKind>;
 
-export const TaskState = z.enum(['queued', 'running', 'awaiting_approval', 'succeeded', 'failed', 'cancelled']);
+/**
+ * `suspended`: the work is done and committed on its branch, and the checks it still owes cannot be had right
+ * now (every design reviewer is at its usage limit). The task holds no slot and no engine; the daemon queues it
+ * again by itself when a reviewer answers, and it then resumes at verification.
+ */
+export const TaskState = z.enum(['queued', 'running', 'awaiting_approval', 'suspended', 'succeeded', 'failed', 'cancelled']);
 export type TaskState = z.infer<typeof TaskState>;
 
 export const Phase = z.enum(['plan', 'execute', 'verify', 'reflect', 'evolve']);
@@ -233,6 +238,10 @@ export type RedesignPatch = z.infer<typeof RedesignPatch>;
 export const DesignGrade = z.enum(['S', 'A', 'B', 'C', 'D', 'F']);
 export type DesignGrade = z.infer<typeof DesignGrade>;
 
+/** Who can carry a design review: the Anthropic API key, or one of the owner's subscriptions through its CLI. */
+export const ReviewerId = z.enum(['api', 'codex', 'claude-code', 'antigravity', 'cursor']);
+export type ReviewerId = z.infer<typeof ReviewerId>;
+
 /** How the design review went: who looked, at how much, and why not when it did not happen. */
 export const VisionCoverage = z.object({
   /**
@@ -240,9 +249,14 @@ export const VisionCoverage = z.object({
    * `off`: switched off in the daemon's config. `unavailable`: no API key and no subscription CLI to ask.
    */
   status: z.enum(['reviewed', 'partial', 'failed', 'off', 'unavailable']),
-  /** The path that carried the reviews: the API key, or the owner's subscription through the Claude Code CLI. */
-  via: z.enum(['api', 'session']).nullable(),
+  /** The reviewer that carried the reviews (the first one that answered). */
+  via: ReviewerId.nullable(),
   model: z.string().nullable(),
+  /**
+   * True when a reviewer refused for a usage or budget limit, so that time alone brings the review back.
+   * A task whose audit is unreviewed for this reason is suspended until it does, instead of ending unverified.
+   */
+  limited: z.boolean(),
   /** Screens (viewport × route) a reviewer saw, out of those captured. */
   reviewed: z.number().int(),
   expected: z.number().int(),

@@ -10,6 +10,8 @@ const MAX_ATTEMPTS = 2;
  * Durable task queue on SQLite. Tasks survive restarts: anything that was mid-flight when the daemon stopped is
  * re-queued once on boot (and failed if it had already been retried). At most one task runs per project,
  * because a project's workspace is a single working tree.
+ *
+ * A suspended task is not in flight: it holds no slot and does not block its project. `resume` queues it again.
  */
 export class TaskQueue {
   readonly #store: Store;
@@ -69,10 +71,19 @@ export class TaskQueue {
     this.#store.requestCancel(taskId);
     const running = this.#running.get(taskId);
     if (running) running.abort.abort(new Error('cancelled by the owner'));
-    else if (task.state === 'queued') {
+    else if (task.state === 'queued' || task.state === 'suspended') {
       this.#store.updateTask(taskId, { state: 'cancelled', finishedAt: this.#clock(), error: 'cancelled by the owner' });
       this.#events.emit({ projectId: task.projectId, taskId }, { type: 'task.state', state: 'cancelled', error: 'cancelled by the owner' });
     }
+    return true;
+  }
+
+  /** Queues a suspended task again. It runs when its project is free, and picks up where it was suspended. */
+  resume(taskId: string): boolean {
+    const task = this.#store.resumeTask(taskId);
+    if (!task) return false;
+    this.#events.emit({ projectId: task.projectId, taskId }, { type: 'task.state', state: 'queued', error: null });
+    this.pump();
     return true;
   }
 

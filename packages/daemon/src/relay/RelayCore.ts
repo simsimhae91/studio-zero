@@ -104,7 +104,7 @@ export class RelayCore {
       case '/status': {
         const { activeProjectId } = store.getChat(channel, chat);
         const project = activeProjectId ? store.getProject(activeProjectId) : null;
-        const tasks = studio.listTasks(project?.id, 50).filter((t) => t.state === 'running' || t.state === 'awaiting_approval' || t.state === 'queued');
+        const tasks = studio.listTasks(project?.id, 50).filter((t) => t.state === 'running' || t.state === 'awaiting_approval' || t.state === 'queued' || t.state === 'suspended');
         return say(
           ['프로젝트: ', bold(project ? project.name : '선택 안 됨')],
           [`대기 중인 승인: ${studio.listApprovals('pending').length}건`],
@@ -134,7 +134,7 @@ export class RelayCore {
       case '/cancel': {
         const projectId = this.#activeProject(chat);
         if (!projectId) return;
-        const running = studio.listTasks(projectId, 20).find((t) => t.state === 'running' || t.state === 'awaiting_approval' || t.state === 'queued');
+        const running = studio.listTasks(projectId, 20).find((t) => t.state === 'running' || t.state === 'awaiting_approval' || t.state === 'queued' || t.state === 'suspended');
         if (!running) return say(['취소할 작업이 없습니다.']);
         studio.cancelTask(running.id);
         return say(['작업 ', code(running.id), ' 취소를 요청했습니다.']);

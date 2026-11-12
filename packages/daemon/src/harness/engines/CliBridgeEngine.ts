@@ -27,6 +27,10 @@ interface Invocation {
   lastMessageFile: string;
   model: string;
   effort: Effort;
+  /** Pictures that go with the prompt (a question only): each as a file in the scratch folder and as base64. */
+  images?: { file: string; data: string }[];
+  /** A JSON Schema file the answer must match, for a CLI that can enforce one. */
+  schemaFile?: string;
 }
 
 interface Parsed {
@@ -45,8 +49,10 @@ interface Launch {
   /** Commands to run first, in the same confinement (for a CLI that must be told to accept its MCP server). */
   before?: string[][];
   /** Set when the CLI is driven over the Agent Client Protocol instead of a one-shot print mode. */
-  acp?: { mcpServers: AcpRequest['mcpServers'] };
+  acp?: { mcpServers: AcpRequest['mcpServers']; images?: AcpRequest['images'] };
 }
+
+const acpImages = (inv: Invocation): AcpRequest['images'] => (inv.images ?? []).map((image) => ({ mimeType: 'image/png', data: image.data }));
 
 /**
  * How one vendor CLI is run headless so that the daemon's tools are the only hands it has. The session
@@ -61,6 +67,8 @@ interface VendorAdapter {
   jailed: boolean;
   /** True when the CLI has no flag for a system prompt, so the instructions lead the prompt instead. */
   systemInPrompt: boolean;
+  /** True when a question to this CLI can carry pictures (see `ask`). */
+  vision: boolean;
   launch: (inv: Invocation, prompt: string) => Promise<Launch>;
   parse: (stdout: string, inv: Invocation) => Promise<Parsed>;
   /** Removes what a run left in the CLI's own state folder. */
@@ -86,6 +94,8 @@ const claudeCode: VendorAdapter = {
   lockdown: '--tools "" (no built-in tools) + --strict-mcp-config',
   jailed: false,
   systemInPrompt: false,
+  // The daemon's own Claude calls, pictures included, go through `SessionBrain`, which sends them inline.
+  vision: false,
   launch: async (inv, prompt) => {
     const mcpConfig = join(inv.scratch, 'mcp.json');
     await writeFile(
@@ -132,11 +142,16 @@ const codex: VendorAdapter = {
   lockdown: `--sandbox read-only + --disable ${CODEX_NATIVE_TOOL_FEATURES.slice(0, 3).join('/')}/… (feature flags, weaker than an empty tool list)`,
   jailed: false,
   systemInPrompt: true,
+  vision: true,
   launch: async (inv, prompt) => ({ file: inv.bin, stdin: prompt, args: [
     'exec',
     '--json', '--ephemeral', '--ignore-user-config', '--ignore-rules', '--skip-git-repo-check',
     '--sandbox', 'read-only',
     '--cd', inv.scratch,
+    // Pictures are attached by the CLI itself, which is not the model's `view_image` tool (that stays disabled).
+    // `--output-schema` holds the final message to a JSON Schema. Both checked against codex-cli 0.153.4.
+    ...(inv.images ?? []).flatMap((image) => ['--image', image.file]),
+    ...(inv.schemaFile ? ['--output-schema', inv.schemaFile] : []),
     ...CODEX_NATIVE_TOOL_FEATURES.flatMap((feature) => ['--disable', feature]),
     // `-c` values are TOML; JSON strings and string arrays are valid TOML as written.
     '-c', `mcp_servers.${MCP_SERVER}.command=${JSON.stringify(process.execPath)}`,
@@ -176,10 +191,17 @@ const cursor: VendorAdapter = {
   lockdown: 'host jail: home hidden, no shell can start; the studio MCP server is the only way to act',
   jailed: true,
   systemInPrompt: true,
+  vision: true,
   launch: async (inv, prompt) => {
     const launcher = which(inv.bin, cliEnv());
     if (!launcher) throw new EngineError(`${inv.bin} is not installed`);
     const install = dirname(launcher);
+    const jail = { own: [join(homedir(), '.cursor')], exec: [dirname(install)], hide: [join(homedir(), '.cursor', 'mcp.json')] };
+    // Print mode takes text only. A question with pictures goes over the Agent Client Protocol, whose prompt
+    // carries image blocks (`promptCapabilities.image`, checked against cursor-agent 2026.11.11), with no MCP server.
+    if ((inv.images ?? []).length > 0) {
+      return { file: join(install, 'node'), args: [join(install, 'index.js'), 'acp'], env: { CURSOR_INVOKED_AS: 'cursor-agent' }, acp: { mcpServers: [], images: acpImages(inv) }, jail };
+    }
     // Project-level MCP configuration, read from the workspace the CLI is pointed at: the scratch folder.
     await mkdir(join(inv.scratch, '.cursor'), { recursive: true });
     await writeFile(join(inv.scratch, '.cursor', 'mcp.json'), JSON.stringify({ mcpServers: { [MCP_SERVER]: shimServer(inv.bridgeUrl, inv.tokenFile) } }), { mode: 0o600 });
@@ -190,7 +212,7 @@ const cursor: VendorAdapter = {
       before: [[entry, 'mcp', 'enable', MCP_SERVER]],
       args: [entry, '--print', '--output-format', 'json', '--workspace', inv.scratch, '--trust', '--approve-mcps', '--force', '--model', inv.model === 'default' ? 'auto' : inv.model, prompt],
       env: { CURSOR_INVOKED_AS: 'cursor-agent' },
-      jail: { own: [join(homedir(), '.cursor')], exec: [dirname(install)], hide: [join(homedir(), '.cursor', 'mcp.json')] },
+      jail,
     };
   },
   // The CLI keeps a trust marker and a log per workspace; the workspace was a scratch folder that no longer exists.
@@ -218,6 +240,7 @@ const antigravity: VendorAdapter = {
   lockdown: 'host jail: home hidden, no shell can start; the studio MCP server is the only way to act',
   jailed: true,
   systemInPrompt: true,
+  vision: true,
   launch: async (inv) => {
     const bin = which(inv.bin, cliEnv());
     if (!bin) throw new EngineError(`${inv.bin} is not installed`);
@@ -225,7 +248,8 @@ const antigravity: VendorAdapter = {
     return {
       file: bin,
       args: ['acp'],
-      acp: { mcpServers: [{ name: MCP_SERVER, ...shimServer(inv.bridgeUrl, inv.tokenFile) }] },
+      // The same session carries pictures when there are any (`promptCapabilities.image`, checked against agy 1.5.6).
+      acp: { mcpServers: [{ name: MCP_SERVER, ...shimServer(inv.bridgeUrl, inv.tokenFile) }], images: acpImages(inv) },
       jail: { own: [state], exec: [bin], hide: [join(state, 'config', 'mcp_config.json'), join(state, 'config', 'mcp_config.json.bak')] },
     };
   },
@@ -233,6 +257,9 @@ const antigravity: VendorAdapter = {
     throw new EngineError('agy is driven over ACP and has no print-mode output to parse');
   },
 };
+
+/** What one screenshot costs a vision model, roughly, for a protocol that does not report usage. */
+const IMAGE_TOKEN_ESTIMATE = 1500;
 
 const adapters: Record<BridgeEngineId, VendorAdapter> = { 'claude-code': claudeCode, codex, cursor, antigravity };
 const settingsKey: Record<BridgeEngineId, 'claudeCode' | 'codex' | 'cursor' | 'antigravity'> = { 'claude-code': 'claudeCode', codex: 'codex', cursor: 'cursor', antigravity: 'antigravity' };
@@ -365,8 +392,13 @@ export class CliBridgeEngine implements Engine {
    * One question, one answer: the CLI as an advisor rather than as an engine. It runs under the same lockdown
    * as a task round, and the tool server it is pointed at offers nothing, so it can read and change nothing,
    * neither on this machine nor in any sandbox. No state is kept between questions.
+   *
+   * A question may carry pictures (PNG) and a JSON Schema for the answer. The pictures are placed in the scratch
+   * folder and handed over by the CLI or the protocol, never fetched by the model with a tool. The schema is
+   * enforced where the CLI can enforce one; the caller validates the answer either way.
    */
-  async ask(req: { system: string; question: string; signal?: AbortSignal; timeoutMs?: number }): Promise<{ text: string; inputTokens: number; outputTokens: number }> {
+  async ask(req: { system: string; question: string; images?: readonly Uint8Array[]; jsonSchema?: Record<string, unknown>; effort?: Effort; signal?: AbortSignal; timeoutMs?: number }): Promise<{ text: string; inputTokens: number; outputTokens: number }> {
+    if ((req.images ?? []).length > 0 && !this.#adapter.vision) throw new EngineError(`${this.id} cannot be shown pictures through this bridge`);
     const scratch = await realpath(await mkdtemp(join(tmpdir(), 'sz-advisor-')));
     await chmod(scratch, 0o700);
     const token = this.#sessions.create({ definitions: () => [], call: async () => ({ content: 'There are no tools in this session.', isError: true }) }, 30 * 60 * 1000);
@@ -380,10 +412,14 @@ export class CliBridgeEngine implements Engine {
       system,
       lastMessageFile: join(scratch, 'last-message.txt'),
       model: 'default',
-      effort: 'medium',
+      effort: req.effort ?? 'medium',
+      images: (req.images ?? []).map((png, i) => ({ file: join(scratch, `image-${i}.png`), data: Buffer.from(png).toString('base64') })),
+      ...(req.jsonSchema ? { schemaFile: join(scratch, 'answer.schema.json') } : {}),
     };
     try {
       await writeFile(inv.tokenFile, token, { mode: 0o600 });
+      for (const [i, image] of (inv.images ?? []).entries()) await writeFile(image.file, req.images![i]!, { mode: 0o600 });
+      if (inv.schemaFile) await writeFile(inv.schemaFile, JSON.stringify(req.jsonSchema), { mode: 0o600 });
       return await this.#round(inv, [this.#adapter.systemInPrompt ? system : '', req.question].filter(Boolean).join('\n\n'), req.timeoutMs ?? 10 * 60 * 1000, req.signal);
     } finally {
       this.#sessions.revoke(token);
@@ -406,10 +442,12 @@ export class CliBridgeEngine implements Engine {
     }
     const command = confined(launch.file, launch.args);
     if (launch.acp) {
-      const answer = await this.#acp({ file: command.file, args: command.args, env, cwd: inv.scratch, mcpServers: launch.acp.mcpServers, prompt, signal, timeoutMs });
+      const images = launch.acp.images ?? [];
+      const answer = await this.#acp({ file: command.file, args: command.args, env, cwd: inv.scratch, mcpServers: launch.acp.mcpServers, prompt, ...(images.length > 0 ? { images } : {}), signal, timeoutMs });
       // The protocol reports no token counts. Budgets still need a number, so one is estimated from the
-      // text that crossed the wire (about four characters a token); what the agent read through tools is not in it.
-      return { text: answer.text, inputTokens: Math.ceil(prompt.length / 4), outputTokens: Math.ceil(answer.text.length / 4) };
+      // text that crossed the wire (about four characters a token) and a flat figure per picture; what the
+      // agent read through tools is not in it.
+      return { text: answer.text, inputTokens: Math.ceil(prompt.length / 4) + images.length * IMAGE_TOKEN_ESTIMATE, outputTokens: Math.ceil(answer.text.length / 4) };
     }
     const res = await this.#run(command.file, command.args, { stdin: launch.stdin, cwd: inv.scratch, env, timeoutMs, maxOutputBytes: 32 * 1024 * 1024, signal });
     if (res.exitCode !== 0) throw new EngineError(`${this.id} exited ${res.exitCode}: ${excerpt(res.stderr || res.stdout, 600)}`);

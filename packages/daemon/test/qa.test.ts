@@ -94,7 +94,7 @@ test('scoring: judgement can move the score, measurement decides whether it can 
 
   const report: AuditReport = {
     id: 'aud_1', projectId: 'p', taskId: null, createdAt: 0, score: 50, threshold: 85, passed: false,
-    visionReviewed: false, vision: { status: 'unavailable', via: null, model: null, reviewed: 0, expected: 1, reason: 'no model to ask' },
+    visionReviewed: false, vision: { status: 'unavailable', via: null, model: null, limited: false, reviewed: 0, expected: 1, reason: 'no model to ask' },
     rubric: null, slopScore: null, archetype: null, critique: null, grade: null, redesignPatches: [], findings: [blocker], screenshots: [],
   };
   const feedback = renderAuditFeedback(report);

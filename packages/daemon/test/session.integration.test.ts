@@ -13,9 +13,8 @@ import { codingSystemPrompt } from '../src/harness/prompts.ts';
 import { loopTool, runToolLoop } from '../src/llm/toolLoop.ts';
 import { gradeAudit, runDomChecks } from '../src/qa/checks.ts';
 import { PageDigest, collectDigest } from '../src/qa/collector.ts';
-import { QaVisionBridge } from '../src/qa/QaVisionBridge.ts';
 import { runCommand } from '../src/util/run.ts';
-import { freePort, quietLog, sampleProject, testDaemon } from './helpers.ts';
+import { freePort, sampleProject, testDaemon } from './helpers.ts';
 
 const enabled = process.env.SZ_TEST_SESSION === '1';
 const OWNER = { type: 'owner', via: 'desktop' } as const;
@@ -113,44 +112,55 @@ const SLOPPY_PHONE_SCREEN = `<!doctype html><html lang="ko"><head><meta name="vi
   <button type="button">사진 선택</button>
 </main></body></html>`;
 
-test('with no API key the audit\'s design review runs through the Claude subscription, and rejects a landing page in a phone frame', { skip: enabled ? false : 'set SZ_TEST_SESSION=1 (uses the Claude Code login on this machine)', timeout: 12 * 60 * 1000 }, async (t) => {
-  const browser = await chromium.launch({ channel: 'chrome', headless: true, timeout: 15_000 }).catch(() => null);
-  if (!browser) return t.skip('headless Chrome cannot be launched here');
-  const port = await freePort();
-  const d = await testDaemon({ listen: { port }, engines: { claudeCode: { enabled: true } } }, {}, (docker) => (file, args, opts) => (file === 'claude' ? runCommand(file, args, opts) : docker(file, args, opts)));
-  try {
-    const context = await browser.newContext({ ...devices['iPhone 15 Pro'], colorScheme: 'light' });
-    const page = await context.newPage();
-    await page.setContent(SLOPPY_PHONE_SCREEN, { waitUntil: 'load' });
-    const digest = PageDigest.parse(await page.evaluate(collectDigest, 600));
-    const png = await page.screenshot({ type: 'png' });
-    const measured = runDomChecks(digest, { viewport: 'iphone-15-pro', viewportWidth: 393, route: '/', touch: true, scope: 'full' }, contract);
-    assert.equal(measured.filter((f) => f.severity === 'blocker').length, 0, 'measurement has no objection to this screen');
+const REVIEWERS = { codex: 'codex', 'claude-code': 'claude', antigravity: 'agy', cursor: 'cursor-agent' } as const;
 
-    await d.daemon.claude.refresh();
-    const bridge = new QaVisionBridge({ config: d.config, claude: d.daemon.claude, log: quietLog });
-    assert.deepEqual(bridge.availability().paths, ['session']);
-    const started = Date.now();
-    const { review, via } = await bridge.review({ scope: { projectId: 'prj_studio', taskId: null }, viewport: 'iphone-15-pro', route: '/', template: 'mobile-expo', folds: [png], digest, measured });
-    assert.equal(via, 'session');
+// One real review per subscription, each asked alone so that it is that reviewer answering and not a fallback.
+for (const reviewer of ['codex', 'claude-code', 'antigravity', 'cursor'] as const) {
+  test(`the audit's design review through the ${reviewer} subscription: a real screenshot, the real brief, and a landing page in a phone frame is rejected`, { skip: enabled ? false : 'set SZ_TEST_SESSION=1 (uses the vendor CLI logins on this machine)', timeout: 12 * 60 * 1000 }, async (t) => {
+    if (process.env.SZ_TEST_REVIEWER && process.env.SZ_TEST_REVIEWER !== reviewer) return t.skip(`SZ_TEST_REVIEWER asks for ${process.env.SZ_TEST_REVIEWER} only`);
+    const browser = await chromium.launch({ channel: 'chrome', headless: true, timeout: 15_000 }).catch(() => null);
+    if (!browser) return t.skip('headless Chrome cannot be launched here');
+    const real = (file: string): boolean => [REVIEWERS[reviewer], '/usr/bin/sandbox-exec'].includes(file) || file.endsWith(`/${REVIEWERS[reviewer]}`);
+    const port = await freePort();
+    const d = await testDaemon({ listen: { port }, engines: { claudeCode: { enabled: true } }, audit: { reviewers: [reviewer] } }, {}, (docker) => (file, args, opts) => (real(file) ? runCommand(file, args, opts) : docker(file, args, opts)));
+    try {
+      const context = await browser.newContext({ ...devices['iPhone 15 Pro'], colorScheme: 'light' });
+      const page = await context.newPage();
+      await page.setContent(SLOPPY_PHONE_SCREEN, { waitUntil: 'load' });
+      const digest = PageDigest.parse(await page.evaluate(collectDigest, 600));
+      const png = await page.screenshot({ type: 'png' });
+      const measured = runDomChecks(digest, { viewport: 'iphone-15-pro', viewportWidth: 393, route: '/', touch: true, scope: 'full' }, contract);
+      assert.equal(measured.filter((f) => f.severity === 'blocker').length, 0, 'measurement has no objection to this screen');
+      assert.ok(digest.elements.some((e) => e.tag === 'img'), 'the collector saw the picture');
 
-    const verdict = gradeAudit([...measured, ...review.findings], { rubric: review.rubric, slopScore: review.slopScore }, 85);
-    t.diagnostic(`${Math.round((Date.now() - started) / 1000)}s; archetype ${review.archetype}; slop ${review.slopScore}; grade ${verdict.grade}; score ${verdict.score}`);
-    t.diagnostic(`findings: ${review.findings.map((f) => `${f.severity} ${f.rule}${f.selector ? ` @ ${f.selector}` : ''}`).join('; ')}`);
-    t.diagnostic(`patches: ${review.patches.map((p) => `${p.action}${p.target ? ` @ ${p.target}` : ''}`).join('; ')}`);
-    t.diagnostic(`critique: ${review.critique}`);
-    assert.equal(verdict.passed, false, 'the reviewer does not pass a marketing page in a phone frame');
-    assert.ok(review.findings.some((f) => f.severity === 'blocker'), 'and says what blocks it');
-    assert.ok(review.patches.length > 0, 'with a redesign plan');
-    assert.ok(digest.elements.some((e) => e.tag === 'img'), 'the collector saw the picture');
-    const clipart = review.findings.find((f) => f.rule === 'vision/stock-clipart');
-    if (clipart) assert.equal(clipart.selector, 'main > img', 'and the reviewer could point at it, so it can be boxed on the capture');
-    assert.ok(d.daemon.store.projectTokensSince('prj_studio', 0) > 0, 'the review is metered');
-  } finally {
-    await browser.close();
-    await d.cleanup();
-  }
-});
+      await d.daemon.claude.refresh();
+      const bridge = d.daemon.vision;
+      const available = await bridge.availability();
+      if (!available.paths.includes(reviewer)) return t.skip(`${reviewer} is not available here: ${available.reason ?? 'not installed or disabled'}`);
+      assert.deepEqual(available.paths, [reviewer]);
+
+      const started = Date.now();
+      const { review, via, model } = await bridge.review({ scope: { projectId: 'prj_studio', taskId: null }, viewport: 'iphone-15-pro', route: '/', template: 'mobile-expo', folds: [png], digest, measured });
+      assert.equal(via, reviewer);
+
+      const verdict = gradeAudit([...measured, ...review.findings], { rubric: review.rubric, slopScore: review.slopScore }, 85);
+      t.diagnostic(`${model}, ${Math.round((Date.now() - started) / 1000)}s; archetype ${review.archetype}; slop ${review.slopScore}; grade ${verdict.grade}; score ${verdict.score}`);
+      t.diagnostic(`findings: ${review.findings.map((f) => `${f.severity} ${f.rule}${f.selector ? ` @ ${f.selector}` : ''}`).join('; ')}`);
+      t.diagnostic(`patches: ${review.patches.map((p) => `${p.action}${p.target ? ` @ ${p.target}` : ''}`).join('; ')}`);
+      t.diagnostic(`critique: ${review.critique}`);
+      assert.equal(verdict.passed, false, 'the reviewer does not pass a marketing page in a phone frame');
+      assert.ok(review.findings.some((f) => f.severity === 'blocker'), 'and says what blocks it');
+      assert.ok(review.patches.length > 0, 'with a redesign plan');
+      assert.ok(d.daemon.store.projectTokensSince('prj_studio', 0) > 0, 'the review is metered');
+
+      // The question a suspended task asks to learn that this reviewer is back.
+      assert.equal(await bridge.probe({ projectId: 'prj_studio', taskId: null }), reviewer);
+    } finally {
+      await browser.close();
+      await d.cleanup();
+    }
+  });
+}
 
 test('the other subscriptions as coding engines: Codex, Cursor and Antigravity change the workspace only through the daemon', { skip: enabled ? false : 'set SZ_TEST_SESSION=1 (uses the vendor CLI logins on this machine)', timeout: 15 * 60 * 1000 }, async (t) => {
   const vendor = (file: string): boolean => ['claude', 'codex', 'cursor-agent', 'agy', '/usr/bin/sandbox-exec'].includes(file);

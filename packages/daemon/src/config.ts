@@ -123,6 +123,12 @@ export const ConfigSchema = z.object({
       /** Base for the QA browser image. Default: the official Playwright image matching the installed `playwright-core`. */
       browserImage: z.string().regex(/^[\w][\w./:@-]*$/).optional(),
       vision: z.boolean().default(true),
+      /**
+       * The subscriptions a design review is offered to, in order, each through its own CLI. The first that
+       * answers reviews the screen; the next is asked only when the one before fails or is at its usage limit.
+       * A stored Anthropic API key is always tried before any of them.
+       */
+      reviewers: z.array(z.enum(['codex', 'claude-code', 'antigravity', 'cursor'])).min(1).default(['codex', 'claude-code', 'antigravity', 'cursor']),
     })
     .prefault({}),
   engines: z

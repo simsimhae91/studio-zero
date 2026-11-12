@@ -378,6 +378,16 @@ export class Store {
     this.#run('UPDATE tasks SET budget_tokens = budget_tokens + :addTokens WHERE id = :id', { id, addTokens });
   }
 
+  /** Tasks whose work is done and whose remaining checks are waiting on something outside the task. Oldest first. */
+  listSuspendedTasks(): Task[] {
+    return this.#all(`SELECT * FROM tasks WHERE state = 'suspended' ORDER BY created_at`).map(toTask);
+  }
+
+  /** Puts a suspended task back in the queue. A resume is not a retry after a crash, so the attempt count starts over. */
+  resumeTask(id: string): Task | null {
+    return this.#run(`UPDATE tasks SET state = 'queued', attempt = 0 WHERE id = :id AND state = 'suspended'`, { id }) > 0 ? this.getTask(id) : null;
+  }
+
   requestCancel(id: string): void {
     this.#run('UPDATE tasks SET cancel_requested = 1 WHERE id = :id', { id });
   }
@@ -561,7 +571,7 @@ export class Store {
     const reviewed = stored.rubric !== null && stored.rubric !== undefined;
     const legacy = {
       visionReviewed: reviewed,
-      vision: { status: reviewed ? 'reviewed' : 'failed', via: null, model: null, reviewed: 0, expected: 0, reason: reviewed ? null : 'this audit was recorded without a design review' },
+      vision: { status: reviewed ? 'reviewed' : 'failed', via: null, model: null, limited: false, reviewed: 0, expected: 0, reason: reviewed ? null : 'this audit was recorded without a design review' },
       slopScore: null,
       archetype: null,
       critique: null,
@@ -975,6 +985,10 @@ export class Store {
 
   kvGet(key: string): string | null {
     return nstr(this.#get('SELECT value FROM kv WHERE key = :key', { key })?.value);
+  }
+
+  kvDelete(key: string): void {
+    this.#run('DELETE FROM kv WHERE key = :key', { key });
   }
 
   kvSet(key: string, value: string): void {

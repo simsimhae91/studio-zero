@@ -138,15 +138,35 @@ const PRODUCT: Record<Template, string> = {
   'web-next': 'a web application',
 };
 
-/** The user turn of a review: what is being looked at, the screenshots, and the two data blocks. */
-export function visionContent(input: VisionInput): Anthropic.Beta.BetaContentBlockParam[] {
+/** The pieces of a review's user turn: what is being looked at, and the two data blocks. */
+function visionParts(input: VisionInput): { head: string; elements: string; measured: string } {
   const measured = input.measured.length === 0 ? '(none)' : input.measured.map((f) => `- [${f.severity}] ${f.rule}: ${f.message}`).join('\n');
-  return [
-    textBlock(`Product: ${PRODUCT[input.template]}. Viewport: ${input.viewport} (${input.digest.width}x${input.digest.height} CSS px). Route: ${input.route}. ${input.folds.length} screenshot(s) follow, top of page first.`),
-    ...input.folds.map(pngBlock),
-    textBlock(`Element list (id, tag, own text, size, position, font):\n${untrusted('browser-page', elementList(input.digest), { route: input.route })}`),
-    textBlock(`Already measured from the DOM (do not repeat):\n${untrusted('browser-page', measured)}`),
-  ];
+  return {
+    head: `Product: ${PRODUCT[input.template]}. Viewport: ${input.viewport} (${input.digest.width}x${input.digest.height} CSS px). Route: ${input.route}. ${input.folds.length} screenshot(s) follow, top of page first.`,
+    elements: `Element list (id, tag, own text, size, position, font):\n${untrusted('browser-page', elementList(input.digest), { route: input.route })}`,
+    measured: `Already measured from the DOM (do not repeat):\n${untrusted('browser-page', measured)}`,
+  };
+}
+
+/** The user turn of a review as content blocks, with the screenshots inline. */
+export function visionContent(input: VisionInput): Anthropic.Beta.BetaContentBlockParam[] {
+  const parts = visionParts(input);
+  return [textBlock(parts.head), ...input.folds.map(pngBlock), textBlock(parts.elements), textBlock(parts.measured)];
+}
+
+/** The same turn as one text, for a reviewer whose pictures travel beside the prompt instead of inside it. */
+export function visionText(input: VisionInput): string {
+  const parts = visionParts(input);
+  return [parts.head, parts.elements, parts.measured].join('\n\n');
+}
+
+/**
+ * The reply's shape as a JSON Schema, for a CLI that enforces one, and spelled out in the prompt for one that
+ * does not. Without the dialect line: the CLIs' validators do not carry the 2020-12 meta-schema.
+ */
+export function visionJsonSchema(): Record<string, unknown> {
+  const { $schema: _dialect, ...schema } = z.toJSONSchema(VisionReply) as Record<string, unknown>;
+  return schema;
 }
 
 /** Where each reviewer category lands in the report. The two traps are blockers whatever severity the model chose. */

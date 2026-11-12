@@ -1,7 +1,7 @@
 import { ChevronLeft, ChevronRight, ScanEye, TriangleAlert, WandSparkles } from 'lucide-react';
 import { useEffect, useId, useMemo, useState, type CSSProperties } from 'react';
 import { UNREVIEWED_SCORE_CAP, type AuditReport, type DesignGrade, type Finding, type FindingCategory, type Project, type RedesignPatch, type Task, type ViewportId } from '@studio-zero/protocol';
-import { ago, archetypeLabel, gradeLabel, redesignActionLabel, ruleTitle, severityLabel, viewportLabel, visionGap } from '../../lib/format.ts';
+import { ago, archetypeLabel, gradeLabel, redesignActionLabel, reviewerLabel, ruleTitle, severityLabel, viewportLabel, visionGap } from '../../lib/format.ts';
 import { useAction, useQuery, useStudio } from '../../lib/studio.tsx';
 import { Button, Empty, IconButton, Problem, Status } from '../../ui.tsx';
 
@@ -9,7 +9,6 @@ const rubricLabel: Record<string, string> = { hierarchy: '위계', whitespace: '
 const severityTone = { blocker: 'bad', major: 'warn', minor: 'neutral' } as const;
 const severityOrder = { blocker: 0, major: 1, minor: 2 } as const;
 const gradeTone: Record<DesignGrade, string> = { S: 'border-success text-success', A: 'border-success text-success', B: 'border-success text-success', C: 'border-warning text-warning', D: 'border-warning text-warning', F: 'border-danger text-danger' };
-const viaLabel = { api: 'API 키', session: 'Claude 구독' } as const;
 
 /** The three things a design lead's notes are about. Every finding category files under one of them. */
 const GROUPS: readonly { title: string; categories: readonly FindingCategory[] }[] = [
@@ -275,7 +274,7 @@ function Verdict({ report }: { report: AuditReport }) {
         {report.archetype ? <span className="text-sm text-fg-muted">화면 유형: {archetypeLabel[report.archetype]}</span> : null}
       </div>
       <p className="text-sm text-fg-muted">
-        {report.vision.via ? `${viaLabel[report.vision.via]}으로 화면 ${report.vision.reviewed}개를 심사했습니다. ` : ''}
+        {report.vision.via ? `${reviewerLabel[report.vision.via]}으로 화면 ${report.vision.reviewed}개를 심사했습니다. ` : ''}
         {measured}
       </p>
     </header>

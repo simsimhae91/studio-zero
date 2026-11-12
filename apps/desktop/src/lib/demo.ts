@@ -19,6 +19,11 @@ const baseTask = { projectId: 'prj_ledger', origin: 'desktop', engine: 'native-c
 const sessions: Session[] = [{ id: 'ses_refactor', projectId: 'prj_ledger', name: 'refactor/dates', createdAt: min(-241) }];
 const tasks: Task[] = [
   {
+    // Done and committed, waiting for a design reviewer whose usage limit has to lift first.
+    ...baseTask, id: 'tsk_atlas_home', projectId: 'prj_atlas', engine: 'claude-code', model: 'opus', kind: 'build', prompt: '지도 홈 화면을 모바일 키트로 다시 짜줘', state: 'suspended', phase: null, branch: 'sz/tsk_atlas_home',
+    spentTokens: 1_240_000, spentUsdMicros: 0, baseCheckpointId: null, summary: null, createdAt: min(-52), startedAt: min(-52), finishedAt: null,
+  },
+  {
     ...baseTask, id: 'tsk_detail', kind: 'build', prompt: '청구서 상세 화면에 결제 이력을 추가해줘', state: 'awaiting_approval', phase: 'execute', branch: 'sz/tsk_detail',
     spentTokens: 2_004_300, spentUsdMicros: 9_120_000, baseCheckpointId: 'ckp_b', summary: null, createdAt: min(-18), startedAt: min(-18), finishedAt: null,
   },
@@ -88,7 +93,7 @@ function fakeScreen(width: number, height: number): string {
 const audit: AuditReport = {
   id: 'aud_1', projectId: 'prj_ledger', taskId: 'tsk_detail', createdAt: min(-4), score: 66, threshold: 85, passed: false,
   visionReviewed: true,
-  vision: { status: 'reviewed', via: 'session', model: 'claude-fable-5-2', reviewed: 3, expected: 3, reason: null },
+  vision: { status: 'reviewed', via: 'codex', model: 'codex:default', limited: false, reviewed: 3, expected: 3, reason: null },
   rubric: { hierarchy: 6, whitespace: 7, typography: 8, color: 9, copy: 6, originality: 5, tactility: 5 },
   slopScore: 44,
   archetype: 'web-app',
@@ -115,9 +120,9 @@ const audit: AuditReport = {
 
 /** The other thing an audit can say: the measurements are clean and nobody looked. No grade, a capped score, and the reason. */
 const unreviewedAudit: AuditReport = {
-  id: 'aud_2', projectId: 'prj_atlas', taskId: null, createdAt: min(-40), score: 50, threshold: 85, passed: false,
+  id: 'aud_2', projectId: 'prj_atlas', taskId: 'tsk_atlas_home', createdAt: min(-40), score: 50, threshold: 85, passed: false,
   visionReviewed: false,
-  vision: { status: 'failed', via: null, model: null, reviewed: 0, expected: 2, reason: 'Claude subscription (CLI): Claude 구독의 사용 한도에 걸렸습니다.' },
+  vision: { status: 'failed', via: null, model: null, limited: true, reviewed: 0, expected: 2, reason: 'Codex subscription: You have hit your usage limit; Claude subscription: Claude 구독의 사용 한도에 걸렸습니다.' },
   rubric: null, slopScore: null, archetype: null, critique: null, grade: null, redesignPatches: [], findings: [],
   screenshots: [
     { viewport: 'iphone-15-pro', route: '/', fold: 0, artifactId: 'art_phone', width: 393, height: 659 },
@@ -265,7 +270,8 @@ const handlers: Handlers = {
   'checkpoints.list': (p) => ({ checkpoints: checkpoints.filter((c) => c.projectId === p.projectId) }),
   'audits.list': (p) => ({ audits: [audit, unreviewedAudit].filter((a) => a.projectId === p.projectId).map((a) => ({ id: a.id, taskId: a.taskId, createdAt: a.createdAt, score: a.score, passed: a.passed })) }),
   'audits.get': (p) => (p.auditId === unreviewedAudit.id ? unreviewedAudit : audit),
-  'audits.redesign': () => tasks[0]!,
+  'audits.redesign': () => tasks.find((t) => t.id === 'tsk_detail')!,
+  'tasks.resume': (p) => ({ ...tasks.find((t) => t.id === p.taskId)!, state: 'queued' }),
   'lessons.list': (p) => ({ lessons: lessons.filter((l) => p.projectId === undefined || l.projectId === p.projectId) }),
   'evals.list': (p) => ({ evals: evals.filter((e) => e.projectId === p.projectId) }),
   'kirby.proposals': (p) => ({ proposals: proposals.filter((c) => c.projectId === p.projectId) }),

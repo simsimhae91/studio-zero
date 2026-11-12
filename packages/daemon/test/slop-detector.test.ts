@@ -183,17 +183,17 @@ function fakeBrowser(digest: PageDigest): QaBrowser {
   return { use: async (_project: Project, _signal: AbortSignal | undefined, fn: (session: unknown) => Promise<void>) => fn({ browser, host: 'app', devices }) } as unknown as QaBrowser;
 }
 
-const READY: VisionAvailability = { status: 'ready', paths: ['session'], reason: null };
+const READY: VisionAvailability = { status: 'ready', paths: ['codex', 'claude-code'], reason: null };
 
 function fakeVision(availability: VisionAvailability, review: (input: VisionInput, call: number) => VisionReply | Error): { bridge: QaVisionBridge; calls: VisionInput[] } {
   const calls: VisionInput[] = [];
   const bridge = {
-    availability: () => availability,
+    availability: async () => availability,
     review: async (input: VisionInput) => {
       calls.push(input);
       const said = review(input, calls.length);
       if (said instanceof Error) throw said;
-      return { review: toScreenReview(said, input), via: 'session' as const };
+      return { review: toScreenReview(said, input), via: 'codex' as const, model: 'codex:default' };
     },
   } as unknown as QaVisionBridge;
   return { bridge, calls };
@@ -223,7 +223,7 @@ test('the 가림 screen through the whole audit: grade F, a redesign plan, and f
   assert.equal(vision.calls[0]!.template, 'mobile-expo');
 
   assert.deepEqual([report.visionReviewed, report.passed, report.grade, report.archetype], [true, false, 'F', 'marketing']);
-  assert.deepEqual(report.vision, { status: 'reviewed', via: 'session', model: 'claude-fable-5-2', reviewed: 2, expected: 2, reason: null });
+  assert.deepEqual(report.vision, { status: 'reviewed', via: 'codex', model: 'codex:default', limited: false, reviewed: 2, expected: 2, reason: null }, 'the report names who judged');
   assert.ok(report.slopScore! >= SLOP_FAIL && report.score < 85, `slop ${report.slopScore}, score ${report.score}`);
   assert.equal(report.critique, SLOP_REPLY.critique);
   assert.equal(report.rubric!.tactility, 3);
@@ -262,14 +262,15 @@ test('truth in reporting: with nobody to ask, a measured-clean screen is capped 
   assert.equal(vision.calls.length, 0);
   assert.deepEqual(report.findings, [], 'nothing measurable is wrong with it');
   assert.deepEqual([report.visionReviewed, report.score, report.passed, report.grade, report.rubric, report.slopScore], [false, 50, false, null, null, null]);
-  assert.deepEqual(report.vision, { status: 'unavailable', via: null, model: null, reviewed: 0, expected: 2, reason: unavailable.reason });
+  assert.deepEqual(report.vision, { status: 'unavailable', via: null, model: null, limited: false, reviewed: 0, expected: 2, reason: unavailable.reason });
   assert.equal(stored.visionReviewed, false);
   assert.match(String(events.find((e) => e.type === 'notice')!.message), /^Design review did not run \(no model to ask[\s\S]*The design is not verified: the audit score is capped at 50 and the audit does not pass\.$/);
   assert.deepEqual(events.find((e) => e.type === 'audit.completed'), { type: 'audit.completed', auditId: report.id, score: 50, passed: false, blockers: 0, majors: 0, minors: 0, visionReviewed: false, grade: null });
   assert.match(renderAuditFeedback(report), /Design review did not run \(no model to ask[\s\S]*The design is unverified: the score is capped at 50 and what follows is measurements only\./);
 
   // Not a pass, and not something to send an engine round after round: it has nothing to fix.
-  assert.deepEqual([visualOutcome(report, 85).passed, visualOutcome(report, 85).unverified], [false, true]);
+  // Nor something to wait for: nobody is coming back by the clock when nobody is set up.
+  assert.deepEqual([visualOutcome(report, 85).passed, visualOutcome(report, 85).unverified, visualOutcome(report, 85).waitable], [false, true, undefined]);
 });
 
 test('an unreviewed screen with a measured defect is a plain failure, and the engine is told what to fix', async () => {
@@ -284,21 +285,31 @@ test('an unreviewed screen with a measured defect is a plain failure, and the en
 
 test('a review that covers only some screens is said to be partial, and does not pass', async () => {
   const good: VisionReply = { ...SLOP_REPLY, archetype: 'mobile-app', slopScore: 5, findings: [], redesignPatches: [], rubric: { hierarchy: 9, whitespace: 9, typography: 9, color: 9, copy: 9, originality: 9, tactility: 9 } };
-  const vision = fakeVision(READY, (_input, call) => (call === 1 ? good : new VisionUnavailableError('Claude subscription (CLI): timed out', [{ path: 'session', error: 'timed out' }], false)));
+  const vision = fakeVision(READY, (_input, call) => (call === 1 ? good : new VisionUnavailableError('Claude subscription: timed out', [{ path: 'claude-code', error: 'timed out', limited: false }], false)));
   const { report, events } = await auditWith(garim, vision.bridge);
   assert.equal(vision.calls.length, 2);
   assert.deepEqual([report.visionReviewed, report.passed, report.grade, report.score], [false, false, null, 50]);
-  assert.deepEqual(report.vision, { status: 'partial', via: 'session', model: 'claude-fable-5-2', reviewed: 1, expected: 2, reason: 'Claude subscription (CLI): timed out' });
+  assert.deepEqual(report.vision, { status: 'partial', via: 'codex', model: 'codex:default', limited: false, reviewed: 1, expected: 2, reason: 'Claude subscription: timed out' });
   assert.equal(report.rubric!.hierarchy, 9, 'what was reviewed is kept, as information');
   assert.match(String(events.find((e) => e.type === 'notice')!.message), /^Design review covered 1 of 2 screens/);
 });
 
 test('a refusal that cannot go differently is not asked for again on every screen', async () => {
-  const vision = fakeVision(READY, () => new VisionUnavailableError('API key: denied by policy (budget.project-daily): project daily budget exhausted', [{ path: 'api', error: 'denied' }], true));
+  const vision = fakeVision(READY, () => new VisionUnavailableError('API key: denied by policy (budget.project-daily): project daily budget exhausted', [{ path: 'api', error: 'denied', limited: true }], true));
   const { report } = await auditWith(sampleProject(), vision.bridge);
   assert.equal(vision.calls.length, 1, 'three screens were captured; the wall was hit once');
-  assert.deepEqual([report.vision.status, report.vision.expected, report.visionReviewed], ['failed', 3, false]);
+  assert.deepEqual([report.vision.status, report.vision.expected, report.visionReviewed, report.vision.limited], ['failed', 3, false, true]);
   assert.match(report.vision.reason!, /budget\.project-daily/);
+});
+
+test('every reviewer at its usage limit: the audit is unreviewed for a reason that passes, so the task it belongs to can wait', async () => {
+  const limit = new VisionUnavailableError('Codex subscription: You\'ve hit your usage limit; Claude subscription: Claude 구독의 사용 한도에 걸렸습니다.', [{ path: 'codex', error: 'usage limit', limited: true }, { path: 'claude-code', error: '한도', limited: true }], false);
+  const vision = fakeVision(READY, () => limit);
+  const { report } = await auditWith(garim, vision.bridge);
+  assert.equal(vision.calls.length, 2, 'both screens were tried before giving up');
+  assert.deepEqual(report.vision, { status: 'failed', via: null, model: null, limited: true, reviewed: 0, expected: 2, reason: limit.message });
+  assert.deepEqual([report.score, report.passed, report.grade], [50, false, null], 'it is still not a pass while it waits');
+  assert.deepEqual([visualOutcome(report, 85).passed, visualOutcome(report, 85).unverified, visualOutcome(report, 85).waitable], [false, true, true]);
 });
 
 test('an audit recorded before coverage was tracked reads back as what it was', async () => {

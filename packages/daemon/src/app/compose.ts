@@ -16,6 +16,7 @@ import { EvalRunner } from '../harness/EvalRunner.ts';
 import { Harness } from '../harness/Harness.ts';
 import { LessonBook } from '../harness/LessonBook.ts';
 import { ReflectionAgent } from '../harness/ReflectionAgent.ts';
+import { ReviewResumer } from '../harness/ReviewResumer.ts';
 import { Toolbox } from '../harness/Toolbox.ts';
 import { KirbyEngine } from '../kirby/KirbyEngine.ts';
 import type { PdfRenderer } from '../knowledge/exportPdf.ts';
@@ -100,6 +101,8 @@ export interface Daemon {
   provisioner: WorkspaceProvisioner;
   claude: ClaudeClient;
   router: ModelRouter;
+  vision: QaVisionBridge;
+  resumer: ReviewResumer;
   pty: PtyManager;
   files: SandboxFileService;
   start(): Promise<void>;
@@ -133,13 +136,14 @@ export async function createDaemon(config: Config, log: PinoLogger, overrides: D
   const bridge = { config, sessions: bridgeSessions, store, events, policy, clock, steering, toolbox, run: overrides.run };
   const codex = new CliBridgeEngine({ id: 'codex', ...bridge });
   const antigravity = new CliBridgeEngine({ id: 'antigravity', ...bridge, acp: overrides.acp });
-  const engines = [new NativeClaudeEngine({ claude, toolbox, events, config, steering }), new CliBridgeEngine({ id: 'claude-code', ...bridge }), codex, new CliBridgeEngine({ id: 'cursor', ...bridge }), antigravity];
+  const cursor = new CliBridgeEngine({ id: 'cursor', ...bridge, acp: overrides.acp });
+  const engines = [new NativeClaudeEngine({ claude, toolbox, events, config, steering }), new CliBridgeEngine({ id: 'claude-code', ...bridge }), codex, cursor, antigravity];
   const router = new ModelRouter(config, engines);
 
   // One browser container serves both the smoke load and the visual audit.
   const qaBrowser = new QaBrowser({ config, sandboxes });
   // The design reviewer travels the same two ways as the rest of the daemon's thinking: API key, or subscription CLI.
-  const vision = new QaVisionBridge({ config, claude, log: log.child({ mod: 'vision' }) });
+  const vision = new QaVisionBridge({ config, claude, vendors: { codex, antigravity, cursor }, log: log.child({ mod: 'vision' }) });
   const auditor = new VisualAuditor({ config, store, events, browser: qaBrowser, vision, clock, log: log.child({ mod: 'audit' }) });
   const evals = new EvalRunner({ config, store, events, sandboxes, auditor, clock });
   const compiler = new CompilerGate({ sandboxes });
@@ -148,6 +152,8 @@ export async function createDaemon(config: Config, log: PinoLogger, overrides: D
   const reflection = new ReflectionAgent({ claude, store, events, lessons, evals });
   const harness = new Harness({ config, store, events, policy, sandboxes, provisioner, router, claude, evals, compiler, smoke, lessons, reflection, clock, log: log.child({ mod: 'harness' }) });
   const queue = new TaskQueue({ store, events, execute: (task, signal) => harness.run(task, signal), clock, log: log.child({ mod: 'queue' }) });
+  // Tasks suspended for want of a design reviewer are queued again when one answers.
+  const resumer = new ReviewResumer({ store, vision, queue, log: log.child({ mod: 'resumer' }) });
   const kirby = new KirbyEngine({ config, store, events, sandboxes, claude, clock, log: log.child({ mod: 'kirby' }) });
 
   const scratch = new ScratchService({ store, events, claude, calibration, clock, log: log.child({ mod: 'scratch' }) });
@@ -262,6 +268,8 @@ export async function createDaemon(config: Config, log: PinoLogger, overrides: D
     provisioner,
     claude,
     router,
+    vision,
+    resumer,
     pty,
     files,
     async start() {
@@ -272,6 +280,7 @@ export async function createDaemon(config: Config, log: PinoLogger, overrides: D
       await gateway.listen();
       kirby.start();
       queue.start();
+      resumer.start();
       // The relay is a convenience channel: if Telegram is unreachable at boot the daemon still comes up.
       await relay?.start().catch((err: unknown) => log.error({ err: errorMessage(err) }, 'telegram relay failed to start'));
       await slack?.start().catch((err: unknown) => log.error({ err: errorMessage(err) }, 'slack relay failed to start'));
@@ -281,6 +290,7 @@ export async function createDaemon(config: Config, log: PinoLogger, overrides: D
       await relay?.stop();
       await slack?.stop();
       await ntfy?.stop();
+      resumer.stop();
       await queue.stop();
       await pty.stop();
       await mcp.stop();

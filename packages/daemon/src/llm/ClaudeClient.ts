@@ -149,8 +149,12 @@ export class ClaudeClient {
 
   /** Meters a subscription-billed response: tokens count against budgets, dollars do not. */
   recordSession(scope: LlmScope, model: string, usage: { inputTokens: number; outputTokens: number }): TokenUsage {
+    return this.recordBridge(scope, `claude-code:${model}`, usage);
+  }
+
+  /** The same, for any subscription CLI the daemon asked something of in its own name. `label` is `<cli>:<model>`. */
+  recordBridge(scope: LlmScope, label: string, usage: { inputTokens: number; outputTokens: number }): TokenUsage {
     const metered = { ...usage, usdMicros: 0 };
-    const label = `claude-code:${model}`;
     this.#store.addUsage({ projectId: scope.projectId, taskId: scope.taskId, source: 'bridge', model: label, ...metered }, this.#clock());
     this.#events.emit({ projectId: scope.projectId, taskId: scope.taskId }, { type: 'usage', source: 'bridge', model: label, ...metered });
     scope.onUsage?.(metered);

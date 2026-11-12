@@ -2,17 +2,16 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { Browser, BrowserContextOptions, Page } from 'playwright-core';
 import { contract } from '@studio-zero/design';
-import type { AuditReport, Finding, Project, RedesignPatch, Template, ViewportId, VisionCoverage } from '@studio-zero/protocol';
+import type { AuditReport, Finding, Project, RedesignPatch, ReviewerId, Template, ViewportId, VisionCoverage } from '@studio-zero/protocol';
 import type { Config } from '../config.ts';
 import type { Store } from '../db/Store.ts';
 import type { EventLog } from '../events/EventLog.ts';
-import type { LlmPath } from '../llm/ClaudeClient.ts';
 import { errorMessage, newId, type Clock, type Logger } from '../util/core.ts';
 import { SLOP_PASS_MAX, UNREVIEWED_SCORE_CAP, gradeAudit, runDomChecks } from './checks.ts';
 import { PageDigest, collectDigest } from './collector.ts';
 import type { QaBrowser } from './QaBrowser.ts';
 import { VisionUnavailableError, type QaVisionBridge } from './QaVisionBridge.ts';
-import { CLIPART_RULE, RUBRIC_AXES, SLOP_FLOOR_ON_TRAP, VISION_MODEL, WEB_LAYOUT_RULE, type ScreenReview } from './vision.ts';
+import { CLIPART_RULE, RUBRIC_AXES, SLOP_FLOOR_ON_TRAP, WEB_LAYOUT_RULE, type ScreenReview } from './vision.ts';
 
 export { PLAYWRIGHT_VERSION } from './QaBrowser.ts';
 
@@ -90,11 +89,14 @@ export class VisualAuditor {
     const findings: Finding[] = [];
     const screenshots: AuditReport['screenshots'] = [];
     const reviews: ScreenReview[] = [];
-    const available = this.#vision.availability();
+    const available = await this.#vision.availability();
     /** Captured screens (viewport × route): what a complete review has to cover. */
     let screens = 0;
     let failures = 0;
-    let via: LlmPath | null = null;
+    let via: ReviewerId | null = null;
+    let model: string | null = null;
+    /** A reviewer refused for a usage or budget limit: the review comes back with time. */
+    let limited = false;
     /** Why no further review is attempted in this audit; null while reviews are still being asked for. */
     let stopped = available.status === 'ready' ? null : available.reason;
     let lastError: string | null = null;
@@ -138,16 +140,18 @@ export class VisualAuditor {
           screens += 1;
           if (stopped !== null) continue;
           try {
-            const { review, via: path } = await this.#vision.review({ scope, viewport, route, template: req.project.template, folds: light.folds, digest: light.digest, measured, signal: req.signal });
-            reviews.push(review);
-            findings.push(...review.findings);
-            via ??= path;
+            const answered = await this.#vision.review({ scope, viewport, route, template: req.project.template, folds: light.folds, digest: light.digest, measured, signal: req.signal });
+            reviews.push(answered.review);
+            findings.push(...answered.review.findings);
+            via ??= answered.via;
+            model ??= answered.model;
           } catch (err) {
             if (req.signal?.aborted) throw err;
             // A review that cannot be had does not throw the audit away: the measurements stand. It does leave
             // the audit unreviewed, which the report states and the score reflects.
             lastError = errorMessage(err);
             failures += 1;
+            if (err instanceof VisionUnavailableError && err.limited) limited = true;
             if ((err instanceof VisionUnavailableError && err.final) || failures >= MAX_REVIEW_FAILURES) stopped = lastError;
             this.#log.warn({ err: lastError, viewport, route }, 'vision review failed');
           }
@@ -160,7 +164,8 @@ export class VisualAuditor {
     const vision: VisionCoverage = {
       status: available.status !== 'ready' ? available.status : visionReviewed ? 'reviewed' : reviewed > 0 ? 'partial' : 'failed',
       via,
-      model: reviewed > 0 ? VISION_MODEL : null,
+      model,
+      limited: !visionReviewed && limited,
       reviewed,
       expected: screens,
       reason: visionReviewed ? null : (available.reason ?? lastError ?? 'no screen could be captured'),

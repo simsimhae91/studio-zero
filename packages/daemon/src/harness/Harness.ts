@@ -42,6 +42,10 @@ interface Failure {
 
 class Cancelled extends Error {}
 
+/** Where a suspended task left off: what the engine last said, and the parts of its plan the checks still read. */
+const Resume = z.object({ finalText: z.string(), plan: Plan.nullable() });
+const resumeKey = (taskId: string): string => `task.resume:${taskId}`;
+
 /** Abort reason used when the daemon is stopping, as opposed to the owner cancelling a task. */
 export class ShutdownSignal extends Error {
   constructor() {
@@ -68,6 +72,11 @@ export class ShutdownSignal extends Error {
  *
  * A `fast` task (Draft 0) is the same loop with the model-judged parts left out: no planning call before the
  * engine starts, no design gates, no reflection. Compiler, smoke load and regression commands still gate it.
+ *
+ * A task can also stop short of a verdict. When everything that could be checked passed but the design review
+ * could not be had because every reviewer is at a usage limit, the work is committed and the task is
+ * `suspended`: it holds no engine and no slot. When a reviewer answers again the task is queued, and this loop
+ * picks it up at Verify, on the same branch, without planning or executing a second time.
  *
  * Whatever happens, the workspace is left recoverable: there is a checkpoint from before the task, the work is
  * committed on its own branch, and a failed task puts the workspace back on the integration branch.
@@ -134,9 +143,11 @@ export class Harness {
     const draft = initial.track === 'fast';
     const branch = initial.branch ?? `sz/${initial.id}`;
     let task = initial;
-    let session: EngineSession | null = null;
+    // Held in an object because it is opened from inside a closure, on first use.
+    const engine: { session: EngineSession | null } = { session: null };
     let onBranch = false;
     let appliedLessons: string[] = [];
+    const resume = this.#resumeState(initial.id);
 
     const phase = (p: Phase, round: number): void => {
       task = this.#store.updateTask(task.id, { phase: p });
@@ -154,32 +165,19 @@ export class Harness {
       this.#events.emit(scope, { type: 'task.state', state: 'running', error: null });
       await this.#provisioner.ensure(project);
 
-      // ------------------------------------------------------------------ Plan
-      phase('plan', 0);
-      const route = await this.#router.route(task.kind, EngineId.nullable().catch(null).parse(task.enginePref));
-      this.#events.emit(scope, { type: 'route.decided', taskKind: task.kind, engine: route.candidate.engine, model: route.candidate.model, effort: route.candidate.effort, considered: route.considered });
-      const base = await this.#sandboxes.checkpoint(project, `before ${task.kind} ${task.id}`, task.id);
-      this.#events.emit(scope, { type: 'checkpoint.created', checkpointId: base.id, label: base.label });
-      await this.#sandboxes.startBranch(project, branch, task.baseBranch ?? INTEGRATION_BRANCH);
-      onBranch = true;
-      // The branch the engine works on may predate a kit the prompt is about to promise it.
-      await this.#provisioner.ensure(project);
-      task = this.#store.updateTask(task.id, { engine: route.candidate.engine, model: route.candidate.model, branch, baseCheckpointId: base.id });
-
-      const lessons = this.#lessons.forTask(project.id);
-      appliedLessons = lessons.ids;
-      // A draft goes straight to the engine: the planning call is a model round trip the owner would wait through.
-      const plan = !draft && (task.kind === 'build' || task.kind === 'refactor' || task.kind === 'kirby_materialize') ? await this.#plan(project, task, lessons.text, signal) : null;
-      if (plan) this.#events.emit(scope, { type: 'plan.created', summary: plan.summary, steps: plan.steps, auditRoutes: plan.auditRoutes, appliedLessonIds: lessons.ids });
-      checkCancel();
-
-      // --------------------------------------------------------------- Execute
-      phase('execute', 1);
-      const engineSession = (session = await route.engine.open({ project, task, route: route.candidate, system: codingSystemPrompt(project.template), signal, onWaiting }));
+      // The engine is routed and opened when it is first needed. A resumed task needs one only if verification
+      // finds something to repair.
+      let route: Awaited<ReturnType<ModelRouter['route']>> | null = null;
+      const routed = async (): Promise<Awaited<ReturnType<ModelRouter['route']>>> => (route ??= await this.#router.route(task.kind, EngineId.nullable().catch(null).parse(task.enginePref)));
+      const open = async (): Promise<EngineSession> => {
+        const decided = await routed();
+        return (engine.session ??= await decided.engine.open({ project, task, route: decided.candidate, system: codingSystemPrompt(project.template), signal, onWaiting }));
+      };
       // Sends a message to the engine. If the task's own budget runs out mid-way, the owner is asked whether to
       // extend it (an approval, so it reaches the phone) and the engine carries on from where it stopped.
       let extensions = 0;
       const send = async (content: string): Promise<EngineResult> => {
+        const engineSession = await open();
         let result = await engineSession.send(content);
         while (result.stopped === 'budget') {
           const spent = this.#store.getTask(task.id)?.spentTokens ?? 0;
@@ -198,17 +196,51 @@ export class Harness {
         return result;
       };
 
-      let result = await send(executeMessage(task, plan, lessons.text));
-      checkCancel();
+      let plan: Plan | null;
+      let result: EngineResult;
+      if (resume) {
+        // The work exists, committed on its branch. Go back to it; what is left is the verdict.
+        await this.#sandboxes.checkout(project, branch);
+        onBranch = true;
+        plan = resume.plan;
+        result = { finalText: resume.finalText, stopped: 'completed' };
+      } else {
+        // ---------------------------------------------------------------- Plan
+        phase('plan', 0);
+        const decided = await routed();
+        this.#events.emit(scope, { type: 'route.decided', taskKind: task.kind, engine: decided.candidate.engine, model: decided.candidate.model, effort: decided.candidate.effort, considered: decided.considered });
+        const base = await this.#sandboxes.checkpoint(project, `before ${task.kind} ${task.id}`, task.id);
+        this.#events.emit(scope, { type: 'checkpoint.created', checkpointId: base.id, label: base.label });
+        await this.#sandboxes.startBranch(project, branch, task.baseBranch ?? INTEGRATION_BRANCH);
+        onBranch = true;
+        // The branch the engine works on may predate a kit the prompt is about to promise it.
+        await this.#provisioner.ensure(project);
+        task = this.#store.updateTask(task.id, { engine: decided.candidate.engine, model: decided.candidate.model, branch, baseCheckpointId: base.id });
+
+        const lessons = this.#lessons.forTask(project.id);
+        appliedLessons = lessons.ids;
+        // A draft goes straight to the engine: the planning call is a model round trip the owner would wait through.
+        plan = !draft && (task.kind === 'build' || task.kind === 'refactor' || task.kind === 'kirby_materialize') ? await this.#plan(project, task, lessons.text, signal) : null;
+        if (plan) this.#events.emit(scope, { type: 'plan.created', summary: plan.summary, steps: plan.steps, auditRoutes: plan.auditRoutes, appliedLessonIds: lessons.ids });
+        checkCancel();
+
+        // ------------------------------------------------------------- Execute
+        phase('execute', 1);
+        await open();
+        result = await send(executeMessage(task, plan, lessons.text));
+        checkCancel();
+      }
 
       // ---------------------------------------------------------------- Verify
       const corrections = this.#config.budgets.verifyRounds;
       let unverified: string[] = [];
+      let waitingOn: string | null = null;
       for (let round = 1; ; round++) {
         phase('verify', round);
-        const checked = ideation ? { failures: await this.#verifyIdeation(project), unverified: [] } : await this.#verify(project, task, plan, signal);
+        const checked = ideation ? { failures: await this.#verifyIdeation(project), unverified: [], waitingOn: null } : await this.#verify(project, task, plan, signal);
         const failures = checked.failures;
         unverified = checked.unverified;
+        waitingOn = checked.waitingOn;
         checkCancel();
         if (failures.length === 0) break;
         if (round > corrections) throw new Error(`verification still failing after ${corrections} corrections: ${failures.map((f) => f.name).join(', ')}`);
@@ -219,6 +251,15 @@ export class Harness {
       }
 
       await this.#sandboxes.commitAll(project, commitSubject(task));
+      if (waitingOn !== null) {
+        // Nothing is known to be wrong and the one judgement still owed cannot be had today. The work stays on
+        // its branch; the task steps out of the queue's way until a reviewer is back.
+        this.#store.kvSet(resumeKey(task.id), JSON.stringify({ finalText: excerpt(result.finalText, 6000), plan } satisfies z.infer<typeof Resume>));
+        task = this.#store.updateTask(task.id, { state: 'suspended', phase: null });
+        this.#events.emit(scope, { type: 'notice', level: 'warn', message: `The design review is waiting on a usage limit (${waitingOn}). The work is committed on ${branch}; this task is suspended and resumes at verification by itself when a reviewer answers.` });
+        this.#events.emit(scope, { type: 'task.state', state: 'suspended', error: null });
+        return;
+      }
       const notes = plan && plan.openQuestions.length > 0 ? `\n\nAssumptions made: ${plan.openQuestions.join(' | ')}` : '';
       // The work passed every check that could run. What could not be checked is said, not left to be assumed.
       const caveat = unverified.length > 0 ? `\n\nNot verified: ${unverified.join(' | ')}` : '';
@@ -227,7 +268,7 @@ export class Harness {
       if (signal.aborted && signal.reason instanceof ShutdownSignal) {
         // Not a verdict on the task: leave it in flight so the queue re-queues it on the next boot.
         if (onBranch) await this.#parkBranch(project, task, 'interrupted');
-        await session?.close().catch(() => undefined);
+        await engine.session?.close().catch(() => undefined);
         return;
       }
       const cancelled = err instanceof Cancelled || signal.aborted;
@@ -235,7 +276,7 @@ export class Harness {
       if (onBranch) await this.#parkBranch(project, task, cancelled ? 'cancelled' : 'failed');
       task = this.#finish(task, cancelled ? 'cancelled' : 'failed', { error: cancelled ? 'cancelled by the owner' : errorMessage(err) });
     } finally {
-      await session?.close().catch(() => undefined);
+      await engine.session?.close().catch(() => undefined);
     }
 
     // ------------------------------------------------------- Reflect, Evolve
@@ -278,13 +319,23 @@ export class Harness {
    * ends at the first stage that fails: there is no point loading a page that does not compile, or measuring
    * the layout of one that throws on load.
    */
-  async #verify(project: Project, task: Task, plan: Plan | null, signal: AbortSignal): Promise<{ failures: Failure[]; unverified: string[] }> {
+  #resumeState(taskId: string): z.infer<typeof Resume> | null {
+    const stored = this.#store.kvGet(resumeKey(taskId));
+    if (stored === null) return null;
+    try {
+      return Resume.parse(JSON.parse(stored));
+    } catch {
+      return null; // unreadable: run the task from the start, as if it had never been suspended
+    }
+  }
+
+  async #verify(project: Project, task: Task, plan: Plan | null, signal: AbortSignal): Promise<{ failures: Failure[]; unverified: string[]; waitingOn: string | null }> {
     const scope = { projectId: project.id, taskId: task.id };
 
     const compiled = await this.#compiler.run(project, signal);
     if (compiled) {
       this.#events.emit(scope, { type: 'gate.result', gate: 'compiler', name: compiled.command, passed: compiled.passed, exitCode: compiled.exitCode, durationMs: compiled.durationMs, detail: compiled.passed ? '' : excerpt(compiled.output, 2000) });
-      if (!compiled.passed) return { failures: [{ name: 'compiler', source: 'sandbox-output', detail: compiled.output, compiler: { command: compiled.command, exitCode: compiled.exitCode } }], unverified: [] };
+      if (!compiled.passed) return { failures: [{ name: 'compiler', source: 'sandbox-output', detail: compiled.output, compiler: { command: compiled.command, exitCode: compiled.exitCode } }], unverified: [], waitingOn: null };
     }
 
     // The owner's switch for browser-backed checks is the visual eval: with it off, nothing here starts a browser.
@@ -295,7 +346,7 @@ export class Harness {
         const smoke = await this.#smoke.run(project, { extraRoutes: plan?.auditRoutes, signal });
         served = smoke.passed;
         this.#events.emit(scope, { type: 'gate.result', gate: 'smoke', name: smoke.routes.join(' '), passed: smoke.passed, exitCode: null, durationMs: smoke.durationMs, detail: excerpt(smoke.detail, 2000) });
-        if (!smoke.passed) return { failures: [{ name: 'smoke', source: 'browser-page', detail: smoke.detail }], unverified: [] };
+        if (!smoke.passed) return { failures: [{ name: 'smoke', source: 'browser-page', detail: smoke.detail }], unverified: [], waitingOn: null };
       } catch (err) {
         if (signal.aborted) throw err;
         // The browser not starting is the studio's problem, not a defect in the work: say so and carry on.
@@ -306,9 +357,13 @@ export class Harness {
 
     const outcomes = await this.#evals.runAll(project, task.id, { extraRoutes: plan?.auditRoutes, commandsOnly: task.track === 'fast', devServerRunning: served, signal });
     // An unverified check is not sent back for repair: the engine cannot produce the review that did not run.
+    const failures = outcomes.filter((o) => !o.passed && !o.unverified).map((o): Failure => ({ name: o.eval.name, source: o.eval.spec.kind === 'visual' ? 'browser-page' : 'sandbox-output', detail: o.detail }));
+    // When the review is only out of quota and nothing else is wrong, the task waits for it instead of ending unjudged.
+    const waiting = failures.length === 0 ? outcomes.find((o) => o.waitable) : undefined;
     return {
-      failures: outcomes.filter((o) => !o.passed && !o.unverified).map((o) => ({ name: o.eval.name, source: o.eval.spec.kind === 'visual' ? 'browser-page' : 'sandbox-output', detail: o.detail })),
+      failures,
       unverified: outcomes.filter((o) => o.unverified).map((o) => `${o.eval.name}: the design review did not run (${o.audit?.vision.reason ?? 'no reason recorded'}), so the design is not vouched for`),
+      waitingOn: waiting ? (waiting.audit?.vision.reason ?? 'every design reviewer is at its usage limit') : null,
     };
   }
 
@@ -332,6 +387,7 @@ export class Harness {
   }
 
   #finish(task: Task, state: Extract<TaskState, 'succeeded' | 'failed' | 'cancelled'>, patch: { summary?: string; error?: string }): Task {
+    this.#store.kvDelete(resumeKey(task.id));
     const updated = this.#store.updateTask(task.id, { state, phase: null, finishedAt: this.#clock(), ...patch });
     this.#events.emit({ projectId: task.projectId, taskId: task.id }, { type: 'task.state', state, error: patch.error ?? null });
     return updated;

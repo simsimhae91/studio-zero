@@ -134,6 +134,8 @@ export const methods = {
   'tasks.get': { params: z.object({ taskId: z.string() }), result: Task },
   'tasks.list': { params: z.object({ projectId: z.string().optional(), limit: z.number().int().min(1).max(200).optional() }), result: z.object({ tasks: z.array(Task) }) },
   'tasks.cancel': { params: z.object({ taskId: z.string() }), result: Task },
+  /** Queues a suspended task again now, without waiting for the daemon's own check that a reviewer is back. */
+  'tasks.resume': { params: z.object({ taskId: z.string() }), result: Task },
 
   'approvals.list': { params: z.object({ state: ApprovalState.optional() }), result: z.object({ approvals: z.array(Approval) }) },
   'approvals.resolve': { params: z.object({ approvalId: z.string(), decision: z.enum(['approve', 'deny']) }), result: Approval },

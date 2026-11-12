@@ -1,9 +1,10 @@
-import type { ApprovalState, DesignGrade, LessonState, Phase, ProposalState, RedesignAction, ScreenArchetype, Severity, TaskKind, TaskState, Template, ViewportId, VisionCoverage } from '@studio-zero/protocol';
+import type { ApprovalState, DesignGrade, LessonState, Phase, ProposalState, RedesignAction, ReviewerId, ScreenArchetype, Severity, TaskKind, TaskState, Template, ViewportId, VisionCoverage } from '@studio-zero/protocol';
 
 export const taskStateLabel: Record<TaskState, string> = {
   queued: '대기 중',
   running: '진행 중',
   awaiting_approval: '승인 대기',
+  suspended: '한도 복구 대기',
   succeeded: '완료',
   failed: '실패',
   cancelled: '취소됨',
@@ -38,6 +39,9 @@ export const redesignActionLabel: Record<RedesignAction, string> = {
   remove: '삭제',
 };
 
+/** Who reviewed, by the name of what the owner pays for. */
+export const reviewerLabel: Record<ReviewerId, string> = { api: 'Claude API 키', codex: 'Codex 구독', 'claude-code': 'Claude 구독', antigravity: 'Antigravity 구독', cursor: 'Cursor 구독' };
+
 /** Why nobody judged the design, in the owner's terms. The daemon's own account is shown beside it. */
 export function visionGap(vision: VisionCoverage): string {
   switch (vision.status) {
@@ -48,7 +52,7 @@ export function visionGap(vision: VisionCoverage): string {
     case 'partial':
       return `화면 ${vision.expected}개 중 ${vision.reviewed}개만 심사했습니다.`;
     case 'failed':
-      return '디자인 심사를 요청했지만 답을 받지 못했습니다.';
+      return vision.limited ? '심사를 맡길 구독이 모두 사용 한도에 걸렸습니다. 한도가 풀리면 세워 둔 작업이 자동으로 다시 심사받습니다.' : '디자인 심사를 요청했지만 답을 받지 못했습니다.';
     case 'reviewed':
       return '';
   }

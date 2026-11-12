@@ -10,6 +10,8 @@ export interface AcpRequest {
   /** MCP servers for this session only. Nothing is written to the agent's saved configuration. */
   mcpServers: { name: string; command: string; args: string[]; env: Record<string, string> }[];
   prompt: string;
+  /** Pictures sent with the prompt, as image content blocks. Only for an agent whose `promptCapabilities.image` is true. */
+  images?: { mimeType: string; data: string }[];
   signal?: AbortSignal;
   timeoutMs: number;
 }
@@ -109,7 +111,7 @@ export function acpPrompt(req: AcpRequest): Promise<AcpResult> {
     void (async () => {
       await call('initialize', { protocolVersion: 1, clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false }, clientInfo: { name: 'studio-zero', version: '0.1.0' } });
       const session = z.object({ sessionId: z.string() }).parse(await call('session/new', { cwd: req.cwd, mcpServers: req.mcpServers.map((s) => ({ name: s.name, command: s.command, args: s.args, env: Object.entries(s.env).map(([name, value]) => ({ name, value })) })) }));
-      const done = z.object({ stopReason: z.string() }).parse(await call('session/prompt', { sessionId: session.sessionId, prompt: [{ type: 'text', text: req.prompt }] }));
+      const done = z.object({ stopReason: z.string() }).parse(await call('session/prompt', { sessionId: session.sessionId, prompt: [{ type: 'text', text: req.prompt }, ...(req.images ?? []).map((image) => ({ type: 'image', mimeType: image.mimeType, data: image.data }))] }));
       finish(null, { text: text.trim(), stopReason: done.stopReason });
     })().catch((err: unknown) => finish(err instanceof Error ? err : new AcpError(String(err))));
   });

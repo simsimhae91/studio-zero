@@ -105,6 +105,7 @@ const screens: { name: string; url: string; go: (page: Page, narrow: boolean) =>
   { name: 'history', url: '/?demo', go: workspaceTab('Ledger', '시점') },
   { name: 'audit', url: '/?demo', go: workspaceTab('Ledger', '감사') },
   { name: 'audit-unreviewed', url: '/?demo', go: workspaceTab('Atlas 모바일', '감사') },
+  { name: 'task-suspended', url: '/?demo', go: openFromIndex('Atlas 모바일') },
   { name: 'proposals', url: '/?demo', go: workspaceTab('Ledger', '제안') },
   { name: 'learning', url: '/?demo', go: workspaceTab('Ledger', '학습') },
   { name: 'settings', url: '/?demo', go: async (page) => void (await page.getByRole('button', { name: '설정' }).first().click()) },

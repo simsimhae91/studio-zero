@@ -20,6 +20,11 @@ export interface EvalOutcome {
    * to the engine, which has nothing to fix.
    */
   unverified?: boolean;
+  /**
+   * Unverified for a reason that passes with time: every reviewer that could have judged it is at a usage or
+   * budget limit. The task waits for one of them instead of ending without a verdict.
+   */
+  waitable?: boolean;
   /** Human- and model-readable account of the failure (or a one-line pass note). Contains sandbox/page content. */
   detail: string;
   audit: AuditReport | null;
@@ -147,10 +152,10 @@ export class EvalRunner {
  * `unverified`: the only thing between it and a pass is the review that did not happen, and that is the
  * studio's to fix (a login, a budget), not the engine's. Any measured or reviewed defect makes it a plain failure.
  */
-export function visualOutcome(audit: AuditReport, minScore: number): Pick<EvalOutcome, 'passed' | 'unverified' | 'detail'> {
+export function visualOutcome(audit: AuditReport, minScore: number): Pick<EvalOutcome, 'passed' | 'unverified' | 'waitable' | 'detail'> {
   const passed = audit.passed && audit.score >= minScore;
   const unverified = !passed && !audit.visionReviewed && scoreAudit(audit.findings, null, minScore).passed;
-  return { passed, ...(unverified ? { unverified } : {}), detail: passed ? `score ${audit.score}/100, grade ${audit.grade}` : renderAuditFeedback(audit) };
+  return { passed, ...(unverified ? { unverified } : {}), ...(unverified && audit.vision.limited ? { waitable: true } : {}), detail: passed ? `score ${audit.score}/100, grade ${audit.grade}` : renderAuditFeedback(audit) };
 }
 
 export function renderLintFeedback(findings: readonly Finding[], limit = 40): string {

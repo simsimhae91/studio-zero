@@ -436,6 +436,14 @@ export class Studio implements PromotionHost {
     this.#d.events.emit({ projectId: task.projectId, taskId }, { type: 'steer.queued', text: message });
   }
 
+  /** Queues a suspended task again now, instead of waiting for the daemon to notice that a reviewer is back. */
+  resumeTask(taskId: string): Task {
+    const task = this.getTask(taskId);
+    if (task.state !== 'suspended') throw new ConflictError(`task is ${task.state}; only a suspended task can be resumed`);
+    this.#d.queue.resume(taskId);
+    return this.getTask(taskId);
+  }
+
   cancelTask(taskId: string): Task {
     this.getTask(taskId);
     this.#d.queue.cancel(taskId);
