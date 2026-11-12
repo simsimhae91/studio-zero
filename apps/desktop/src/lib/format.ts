@@ -113,6 +113,14 @@ export function duration(ms: number): string {
   return `${Math.floor(ms / 60_000)}분 ${Math.round((ms % 60_000) / 1000)}초`;
 }
 
+/** How long a task has been running, or ran, in whole units: `48초`, `12분 3초`, `1시간 27분`. */
+export function elapsed(ms: number): string {
+  const seconds = Math.max(0, Math.floor(ms / 1000));
+  if (seconds < 60) return `${seconds}초`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}분 ${seconds % 60}초`;
+  return `${Math.floor(seconds / 3600)}시간 ${Math.floor((seconds % 3600) / 60)}분`;
+}
+
 /** A name for something from the first line of what was written about it: short, and cut between words. */
 export function nameFrom(text: string, max = 28): string {
   const line = text.split('\n')[0]!.trim();

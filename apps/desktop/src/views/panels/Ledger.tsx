@@ -1,5 +1,5 @@
 import type { LedgerDelta, LedgerEntry, Project, Task } from '@studio-zero/protocol';
-import { duration, engineLabel, kindLabel, reviewerLabel, stamp, tokens } from '../../lib/format.ts';
+import { duration, elapsed, engineLabel, kindLabel, reviewerLabel, stamp, tokens } from '../../lib/format.ts';
 import { useQuery } from '../../lib/studio.tsx';
 import { Empty, Problem, Status } from '../../ui.tsx';
 
@@ -138,7 +138,7 @@ function Receipt({ entry, task }: { entry: LedgerEntry; task: Task | null }) {
           <Row label="모델 호출">{`${cost.modelCalls}회`}</Row>
           <Row label="토큰 (입력 / 출력)">{`${tokens(cost.inputTokens)} / ${tokens(cost.outputTokens)}`}</Row>
           <Row label="금액">{dollars(cost.usdMicros)}</Row>
-          <Row label="걸린 시간">{duration(cost.wallMs)}</Row>
+          <Row label="걸린 시간">{elapsed(cost.wallMs)}</Row>
           <Row label="계획 교차 검토">{review.plan ? reviewerLabel[review.plan] : '받지 않음'}</Row>
           <Row label="최종 인수 검수">{review.acceptance ? `${reviewerLabel[review.acceptance]}, ${review.verdict === 'patch' ? '보정 패치 1건' : '통과'}` : '받지 않음'}</Row>
         </dl>

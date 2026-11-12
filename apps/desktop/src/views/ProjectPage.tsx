@@ -3,7 +3,7 @@ import { Check, ChevronDown, FileText, FolderTree, GitFork, GitMerge, Globe, His
 import { Suspense, lazy, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { ReviewerPref, type AdvisorId, type Approval, type EngineModel, type EnginePref, type Project, type Session, type Task, type TaskKind, type TaskState, type TaskTrack } from '@studio-zero/protocol';
 import { Markdown } from '@studio-zero/ax/react';
-import { duration, engineLabel, kindLabel, phaseLabel, stamp, subscriptionLabel, taskStateLabel, templateLabel, tokens } from '../lib/format.ts';
+import { duration, elapsed, engineLabel, kindLabel, phaseLabel, stamp, subscriptionLabel, taskStateLabel, templateLabel, tokens } from '../lib/format.ts';
 import { redrawRequest, revisionRequest, type MockupNote } from '../lib/mockups.ts';
 import { advisorCommand, buildRequest, mockupName, narrate, type Item, type Mockup } from '../lib/steps.ts';
 import { errorText, useAction, useQuery, useStudio, useTaskEvents } from '../lib/studio.tsx';
@@ -704,6 +704,19 @@ function ModelMenu({ models, chosen, onPick }: { models: readonly EngineModel[];
   );
 }
 
+/**
+ * How long a running task has been at it, counted from when the daemon started it. It ticks every second, so it
+ * is kept out of what a screen reader announces.
+ */
+function Elapsed({ since }: { since: number }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+  return <span aria-live="off">, {elapsed(now - since)} 경과</span>;
+}
+
 /** Something the owner wrote: the request, or a word to a running task. */
 function Said({ meta, children, clamp = false }: { meta: string; children: string; clamp?: boolean }) {
   const long = clamp && children.length > 320;
@@ -831,7 +844,8 @@ function Passage({ task, items, pending, onShow, onCheckpoint, onFile, onBuild, 
 
       {task.state === 'running' || task.state === 'queued' ? (
         <Working>
-          {task.state === 'queued' ? '차례를 기다리는 중' : `${task.phase ? phaseLabel[task.phase] : '준비'} 중`}, 토큰 {tokens(task.spentTokens)} / {tokens(task.budgetTokens)}
+          {task.state === 'queued' ? '차례를 기다리는 중' : `${task.phase ? phaseLabel[task.phase] : '준비'} 중`}
+          {task.state === 'running' && task.startedAt !== null ? <Elapsed since={task.startedAt} /> : null}, 토큰 {tokens(task.spentTokens)} / {tokens(task.budgetTokens)}
         </Working>
       ) : null}
 
@@ -844,6 +858,7 @@ function Passage({ task, items, pending, onShow, onCheckpoint, onFile, onBuild, 
                 `토큰 ${tokens(task.spentTokens)} 사용`,
                 // 'default' is the CLI's own setting: there is no name to show for it.
                 task.engine ? `${engineLabel[task.engine] ?? task.engine}${task.model && task.model !== 'default' ? ` · ${task.model}` : ''}` : null,
+                task.startedAt !== null && task.finishedAt !== null ? `${elapsed(task.finishedAt - task.startedAt)} 걸림` : null,
               ]
                 .filter(Boolean)
                 .join(', ')}
