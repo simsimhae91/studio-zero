@@ -553,6 +553,11 @@ export class Store {
     });
   }
 
+  /** How many events of one type a task has left. */
+  countTaskEvents(taskId: string, type: string): number {
+    return num(this.#get('SELECT COUNT(*) AS n FROM events WHERE task_id = :taskId AND type = :type', { taskId, type })!.n);
+  }
+
   /** What one task's model calls came to: one row of the usage ledger per call. */
   taskUsage(taskId: string): { calls: number; inputTokens: number; outputTokens: number; usdMicros: number } {
     const r = this.#get('SELECT COUNT(*) AS calls, COALESCE(SUM(input_tokens), 0) AS i, COALESCE(SUM(output_tokens), 0) AS o, COALESCE(SUM(usd_micros), 0) AS usd FROM usage_ledger WHERE task_id = :taskId', { taskId })!;

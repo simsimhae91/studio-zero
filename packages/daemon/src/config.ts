@@ -142,6 +142,14 @@ export const ConfigSchema = z.object({
     })
     .prefault({}),
   routes: z.record(TaskKind, z.array(RouteCandidate).min(1)).default(defaultRoutes as Record<TaskKind, RouteCandidate[]>),
+  images: z
+    .object({
+      /** Whether engines may have pictures made for a product through a connected subscription's image tool. */
+      enabled: z.boolean().default(true),
+      /** How many one task may ask for. Each is a call on the owner's subscription. */
+      perTask: z.number().int().min(0).max(40).default(8),
+    })
+    .default({ enabled: true, perTask: 8 }),
   review: z
     .object({
       /**

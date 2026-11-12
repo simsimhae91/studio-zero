@@ -33,6 +33,7 @@ import { ModelRouter } from '../llm/ModelRouter.ts';
 import { ReviewDesk } from '../llm/ReviewDesk.ts';
 import { PolicyEngine } from '../policy/PolicyEngine.ts';
 import { PLAYWRIGHT_VERSION, QaBrowser } from '../qa/QaBrowser.ts';
+import { ImageDesk, sipsConvert, type ImageConvert, type ImageMaker } from '../qa/ImageDesk.ts';
 import { MockupRenderer } from '../qa/MockupRenderer.ts';
 import { QaVisionBridge } from '../qa/QaVisionBridge.ts';
 import { RefKit } from '../qa/RefKit.ts';
@@ -72,6 +73,8 @@ export interface DaemonOverrides {
   openSocket?: (url: string) => SocketLike;
   anthropic?: Anthropic;
   gatewayUpstreams?: Partial<GatewayUpstreams>;
+  /** Replaces what draws pictures for a product (the Codex CLI's image tool) and what resizes them (sips). */
+  images?: { maker?: ImageMaker | null; convert?: ImageConvert };
   /** Replaces the browser container for PDF export. */
   renderPdf?: PdfRenderer;
   /** Replaces the MCP client. */
@@ -167,6 +170,7 @@ export async function createDaemon(config: Config, log: PinoLogger, overrides: D
   const cursor = new CliBridgeEngine({ id: 'cursor', ...bridge, acp: overrides.acp });
   const engines = [new NativeClaudeEngine({ claude, toolbox, events, config, steering }), new CliBridgeEngine({ id: 'claude-code', ...bridge }), codex, cursor, antigravity];
   const router = new ModelRouter(config, engines);
+  toolbox.useImages(new ImageDesk({ sandboxes, events, claude, maker: overrides.images?.maker === undefined ? codex : overrides.images.maker, convert: overrides.images?.convert ?? sipsConvert(), clock }));
 
   // One browser container serves both the smoke load and the visual audit.
   const qaBrowser = new QaBrowser({ config, sandboxes });

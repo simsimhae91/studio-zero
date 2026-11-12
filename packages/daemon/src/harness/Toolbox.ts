@@ -7,6 +7,7 @@ import { ApprovalDeniedError, PolicyDeniedError, type PolicyEngine } from '../po
 import { SandboxError, type OrbStackManager } from '../sandbox/OrbStackManager.ts';
 import { untrusted, type UntrustedSource } from '../trust/dataBlock.ts';
 import { errorMessage, excerpt, newId } from '../util/core.ts';
+import type { ImageDesk } from '../qa/ImageDesk.ts';
 import { THEME_SEED_FILE, ThemeChoice, chosenTheme } from './themeSeed.ts';
 
 export interface ToolContext {
@@ -26,7 +27,7 @@ interface ToolDef<Schema extends z.ZodObject = z.ZodObject> {
   description: string;
   schema: Schema;
   /** The policy action this call represents. Evaluated before `run`. `null` only where `run` authorizes a more exact action itself. */
-  action: (input: z.infer<Schema>, project: Project) => Action | null;
+  action: (input: z.infer<Schema>, project: Project, taskId: string) => Action | null;
   /** Where the result comes from, as the model is told. Default: the sandbox. */
   source?: UntrustedSource;
   /** What the event stream shows for this call. Kept short; never the full file body. */
@@ -48,6 +49,7 @@ function define<Schema extends z.ZodObject>(def: ToolDef<Schema>): ToolDef {
  */
 export class Toolbox {
   readonly #sandboxes: OrbStackManager;
+  #images: Pick<ImageDesk, 'make'> | null = null;
   readonly #policy: PolicyEngine;
   readonly #events: EventLog;
   readonly #mcp: McpRegistry;
@@ -80,7 +82,7 @@ export class Toolbox {
     const started = Date.now();
     let result: { text: string; ok: boolean; exitCode: number | null };
     try {
-      const action = tool.action(parsed.data, ctx.project);
+      const action = tool.action(parsed.data, ctx.project, ctx.taskId);
       if (action) await this.#policy.authorize(actor, action, { taskId: ctx.taskId, signal: ctx.signal, onWaiting: ctx.onWaiting });
       result = await tool.run(parsed.data, ctx);
     } catch (err) {
@@ -104,7 +106,7 @@ export class Toolbox {
 
   /** Whether a tool can change the workspace. Read-only turns do not need a checkpoint. */
   mutates(name: string): boolean {
-    return name === 'bash' || name === 'write_file' || name === 'edit_file' || name === 'set_theme';
+    return name === 'bash' || name === 'write_file' || name === 'edit_file' || name === 'set_theme' || name === 'generate_image';
   }
 
   /**
@@ -120,8 +122,14 @@ export class Toolbox {
     }
   }
 
+  /** The picture desk is built after the engines, which are built after this: it is handed over once it exists. */
+  useImages(images: Pick<ImageDesk, 'make'>): void {
+    this.#images = images;
+  }
+
   #buildTools(): ToolDef[] {
     const sandboxes = this.#sandboxes;
+    const images = (): Pick<ImageDesk, 'make'> | null => this.#images;
     const mcp = this.#mcp;
     return [
       define({
@@ -186,6 +194,30 @@ export class Toolbox {
           await sandboxes.writeFile(ctx.project, THEME_SEED_FILE, theme.json);
           await sandboxes.writeFile(ctx.project, '.studio-zero/theme.css', theme.css);
           return { text: theme.report, ok: true, exitCode: null };
+        },
+      }),
+      define({
+        name: 'generate_image',
+        description:
+          'Have one picture made for the product and saved into the workspace: a photograph or an illustration of what the product is about (the food, the place, the object, a character or a scene of a game). It is made by an image model on the owner\'s subscription and each one costs them, so ask for the few pictures the design depends on and describe each fully: subject, setting, light, angle, style, what must not be in it. Not for icons, logos, charts, screenshots of interfaces, or text. The picture is saved at the path you give (.jpg for photographs, .png when it needs transparency), no larger than 1600px on its long side.',
+        schema: z.object({
+          description: z.string().min(20).max(1500).describe('What to draw, in full: subject, setting, light, angle, style, and what to leave out.'),
+          path: z.string().regex(/^[A-Za-z0-9_][A-Za-z0-9_./-]{0,180}\.(png|jpe?g)$/).refine((p) => !p.includes('..'), 'no ".." in the path').describe('Where to save it, relative to /workspace, ending in .jpg, .jpeg or .png.'),
+          shape: z.enum(['landscape', 'portrait', 'square']).describe('The proportions of the picture.'),
+          purpose: z.string().min(10).max(200).describe('One sentence: where in the product this picture goes and what it is there to do.'),
+        }),
+        action: (input, project, taskId) => ({ kind: 'image.generate', projectId: project.id, taskId, path: input.path }),
+        summarize: (input) => `${input.path}: ${input.description.slice(0, 120)}`,
+        run: async (input, ctx) => {
+          const desk = images();
+          if (!desk) return { text: 'No image generator is connected. Design without generated pictures.', ok: false, exitCode: null };
+          try {
+            const made = await desk.make({ project: ctx.project, taskId: ctx.taskId, ...(ctx.signal ? { signal: ctx.signal } : {}) }, input);
+            return { text: `saved ${made.path} (${made.width}x${made.height}, ${Math.round(made.bytes / 1024)} KB). Give it real alt text, its width and height, and lazy loading below the first screen.`, ok: true, exitCode: null };
+          } catch (err) {
+            if (ctx.signal?.aborted) throw err;
+            return { text: `The picture was not made: ${errorMessage(err)}. Design without it, or ask once more with a different description.`, ok: false, exitCode: null };
+          }
         },
       }),
       define({

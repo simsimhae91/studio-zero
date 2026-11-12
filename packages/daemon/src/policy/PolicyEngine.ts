@@ -159,6 +159,17 @@ const rules: Rule[] = [
     },
   },
   {
+    // A picture costs a call on the owner's subscription, so a task has an allowance and no more.
+    id: 'image.within-task-allowance',
+    evaluate: (_actor, action, { store, config }) => {
+      if (action.kind !== 'image.generate') return undefined;
+      if (!config.images.enabled) return deny('image generation is switched off in the configuration');
+      if (action.taskId === null) return allow('a picture the owner asked for');
+      const made = store.countTaskEvents(action.taskId, 'image.generated');
+      return made >= config.images.perTask ? deny(`this task has had its ${config.images.perTask} pictures; design with what there is`) : allow(`picture ${made + 1} of ${config.images.perTask} for this task`);
+    },
+  },
+  {
     // A reference is a page someone else controls. Only a public https page is opened, only in the QA browser
     // container, and only because the owner named it: an agent cannot point the studio's browser anywhere.
     id: 'reference.public-pages-only',

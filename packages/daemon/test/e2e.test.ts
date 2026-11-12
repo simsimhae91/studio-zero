@@ -191,7 +191,7 @@ test('one task, end to end: plan → execute → audit fails → repair → audi
     const system = (turn1.system as Anthropic.Beta.BetaTextBlockParam[])[0]!.text;
     assert.equal(system, codingSystemPrompt('web-vite-react'), 'the system prompt is the constant; nothing from the task or workspace is in it');
     assert.ok(!model.recorded.stream.some((p) => JSON.stringify(p.system).includes('미결제')), 'the request never enters the system role');
-    assert.deepEqual((turn1.tools as Anthropic.Beta.BetaTool[]).map((x) => [x.name, x.eager_input_streaming]), [['bash', true], ['read_file', true], ['write_file', true], ['set_theme', true], ['edit_file', true], ['find_tools', true], ['use_tool', true]]);
+    assert.deepEqual((turn1.tools as Anthropic.Beta.BetaTool[]).map((x) => [x.name, x.eager_input_streaming]), [['bash', true], ['read_file', true], ['write_file', true], ['set_theme', true], ['generate_image', true], ['edit_file', true], ['find_tools', true], ['use_tool', true]]);
     assert.deepEqual([turn1.model, turn1.output_config?.effort, turn1.fallbacks, turn1.betas], ['claude-opus-5-5', 'high', 'default', ['server-side-fallback-2026-07-01']]);
     assert.match(String(turn1.messages[0]!.content), /미결제 청구서 화면을 만들어줘[\s\S]*Plan drafted for this request/);
 

@@ -81,6 +81,31 @@ test('mock-ups on a real engine: pages in a sandbox are drawn in the QA browser 
   }
 });
 
+// Spends one picture of the owner's Codex subscription, so it asks for both switches.
+const skipImage = (process.env.SZ_TEST_ENGINE !== '1' || process.env.SZ_TEST_SESSION !== '1') && 'set SZ_TEST_ENGINE=1 and SZ_TEST_SESSION=1 to run (needs OrbStack and a logged-in Codex CLI; makes one picture on that subscription)';
+
+test('a picture on a real engine: the Codex CLI draws it, sips brings it to size, and it lands in the sandbox with its reason', { skip: skipImage }, async () => {
+  const home = tempDir('sz-image-');
+  const config = testConfig(home.dir, { listen: { port: await freePort() }, gateway: { port: await freePort() }, engines: { claudeCode: { enabled: false } }, runtime: { memoryMb: 1024 }, selfHosting: { enabled: false } });
+  const daemon = await createDaemon(config, quietLog, { securityRun: fakeSecurity().run });
+  const { studio, sandboxes, toolbox, store } = daemon;
+  const project = studio.createProject({ type: 'owner', via: 'desktop' }, { name: 'Picture test', slug: `it-${randomBytes(4).toString('hex')}`, template: 'web-vite-react' });
+  try {
+    await studio.settle();
+    const task = await studio.submitTask({ type: 'owner', via: 'desktop' }, { projectId: project.id, kind: 'build', prompt: 'picture test' }, 'desktop');
+    const out = await toolbox.call({ project, taskId: task.id }, 'generate_image', { description: 'A single green pear standing on a plain light grey table, soft daylight from the left, photographed straight on, nothing else in the frame.', path: 'public/images/pear.jpg', shape: 'square', purpose: 'A test picture: checks that a generated image reaches the workspace.' });
+    assert.equal(out.isError, false, out.content);
+    assert.match(out.content, /saved public\/images\/pear\.jpg \(\d+x\d+, \d+ KB\)/);
+    const head = (await sandboxes.exec(project, 'head -c 3 public/images/pear.jpg | od -An -tx1 && wc -c < public/images/pear.jpg && cat .studio-zero/images.json', { timeoutSec: 20 })).stdout;
+    assert.match(head.replace(/\s+/g, ' '), /^ ?ff d8 ff \d+ \[ \{ "path": "public\/images\/pear\.jpg"/, 'a JPEG, and a line in the image log');
+    assert.ok(store.getTask(task.id)!.spentTokens > 0, 'metered against the task');
+  } finally {
+    await sandboxes.destroy(project, { deleteWorkspace: true }).catch(() => undefined);
+    await daemon.stop().catch(() => undefined);
+    home.cleanup();
+  }
+});
+
 test('self-hosting on a real engine: this repository installs and type-checks in its sandbox, and a change comes back as a feature branch', { skip }, async () => {
   const repo = findRepoRoot();
   assert.ok(repo, 'this test runs from a checkout of the repository');

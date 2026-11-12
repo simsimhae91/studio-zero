@@ -319,6 +319,11 @@ export function narrate(events: readonly EventEnvelope[]): Item[] {
         closeWork();
         items.push({ kind: 'mockups', at: e.at, options: b.options });
         break;
+      case 'image.generated':
+        closeWork();
+        // The purpose is the engine's own sentence: shown as text beside the path.
+        pushStep({ kind: 'write', state: 'done', title: '이미지 생성', detail: b.path, at: e.at, lines: [{ text: b.purpose, mono: false, tone: 'plain', meta: `${b.width}×${b.height}, ${Math.round(b.bytes / 1024)}KB, ${duration(b.durationMs)}`, output: '' }], notes: [], audit: null });
+        break;
       case 'ledger.recorded':
         items.push({ kind: 'note', at: e.at, text: b.proof === '' ? '장부에 기록했습니다.' : `장부에 기록했습니다. 직전 작업 대비 ${b.proof}` });
         break;

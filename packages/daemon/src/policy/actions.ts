@@ -30,6 +30,8 @@ export const Action = z.discriminatedUnion('kind', [
   // Opening a page the owner named as a design reference. It is opened inside the QA browser container, never
   // on this Mac, and only a public https page is ever opened: `url` is checked again by the rule.
   z.object({ kind: z.literal('reference.capture'), projectId: z.string(), url: z.string() }),
+  // A picture for the product, made by a subscription's image tool on the host and written into the workspace.
+  z.object({ kind: z.literal('image.generate'), projectId: z.string(), taskId: z.string().nullable(), path: z.string() }),
   // Holding this Mac awake (or letting it sleep again).
   z.object({ kind: z.literal('power.set'), mode: z.enum(['off', 'system', 'display']) }),
   // Copying a finished Core task's branch out of its sandbox into the studio's own checkout, as a new feature
@@ -115,6 +117,8 @@ export function describeAction(action: Action): string {
       return `프로젝트 ${action.projectId}의 샌드박스에서 터미널 열기`;
     case 'advisor.ask':
       return `${action.advisor === 'codex' ? 'Codex' : 'Gemini'}에게 의견 묻기`;
+    case 'image.generate':
+      return `제품에 쓸 이미지 생성 (${action.path.slice(0, 120)})`;
     case 'reference.capture':
       return `레퍼런스 페이지 ${action.url.slice(0, 120)}을(를) QA 브라우저 컨테이너에서 열어 측정`;
     case 'power.set':

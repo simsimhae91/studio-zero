@@ -280,7 +280,7 @@ export class OrbStackManager {
     return { content: truncated ? res.stdout.slice(0, maxBytes) : res.stdout, truncated };
   }
 
-  async writeFile(project: Project, path: string, content: string): Promise<void> {
+  async writeFile(project: Project, path: string, content: string | Uint8Array): Promise<void> {
     const target = resolveInWorkspace(path);
     const res = await this.exec(project, `mkdir -p -- ${shq(posix.dirname(target))} && cat > ${shq(target)}`, { stdin: content, timeoutSec: 30 });
     if (res.exitCode !== 0) throw new SandboxError(`cannot write ${path}`, lastLine(res.stderr));

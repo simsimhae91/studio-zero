@@ -147,6 +147,8 @@ export const EventBody = z.discriminatedUnion('type', [
     type: z.literal('mockups.rendered'),
     options: z.array(z.object({ file: z.string(), title: z.string(), idea: z.string(), artifactId: z.string(), width: z.number(), height: z.number() })),
   }),
+  /** A picture made for the product by a subscription's image tool and written into the workspace. `purpose` is the engine's own sentence. */
+  z.object({ type: z.literal('image.generated'), path: z.string(), purpose: z.string(), width: z.number().int(), height: z.number().int(), bytes: z.number().int(), durationMs: z.number() }),
   z.object({ type: z.literal('ledger.recorded'), entryId: z.string(), proof: z.string() }),
   z.object({ type: z.literal('power.changed'), mode: PowerMode }),
   z.object({ type: z.literal('quota.changed'), subscription: ReviewerPref, state: z.enum(['ok', 'limited']), resetsAt: z.number().int().nullable() }),
