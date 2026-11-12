@@ -1,4 +1,4 @@
-import { formatOklch, solveForContrast, type Oklch } from './color.ts';
+import { contrastRatio, formatOklch, oklchToRgb, solveForContrast, toSrgbGamut, type Oklch } from './color.ts';
 import { contract as defaultContract, displayFaces, lineHeightFor, typeStepNames, type DesignContract, type DisplayFace } from './contract.ts';
 
 /** What makes one project's skin different from another's. Everything else is derived. */
@@ -12,6 +12,13 @@ export interface ThemeSeed {
   corners: Corners;
   /** The face titles are set in. Left out: the body face. */
   display?: DisplayFace;
+  /**
+   * How light the brand colour is, 0.3 (deep) – 0.92 (pale). The brand is a fill, not a text colour, so it may be
+   * as bright as the subject asks: the text that sits on it is solved. Left out: as dark as the accent.
+   */
+  lightness?: number;
+  /** The hue the neutrals lean toward. Left out: the brand's. Warm paper under a cold brand is a choice. */
+  neutralHue?: number;
 }
 
 export type Corners = 'sharp' | 'soft' | 'round';
@@ -33,6 +40,9 @@ export const colorTokens = [
   'fg-muted',
   'accent',
   'on-accent',
+  'brand',
+  'on-brand',
+  'brand-soft',
   'danger',
   'success',
   'warning',
@@ -49,17 +59,44 @@ export interface Theme {
 /** Headroom over the WCAG thresholds so rounding to 8-bit sRGB can never drop a token below the line. */
 const MARGIN = 0.25;
 
+/**
+ * A colour to fill with, and the text that sits on it.
+ *
+ * One token cannot be both the colour of small text on paper and the colour of a button: the first has to be
+ * dark, and every hue is dull when it is dark. So the product's own colour is a fill. The text on it is the
+ * near-black or the near-white, whichever the fill carries at AAA; a mid-lightness fill carries neither, and is
+ * moved by the least it takes (lighter or darker) until it does. What comes back always holds its text.
+ */
+function fillAndText(want: Oklch, ink: Oklch, paper: Oklch, target: number): { fill: Oklch; on: Oklch } {
+  const inkRgb = oklchToRgb(ink);
+  const paperRgb = oklchToRgb(paper);
+  for (let step = 0; step <= 140; step++) {
+    for (const l of step === 0 ? [want.l] : [want.l + step * 0.005, want.l - step * 0.005]) {
+      if (l < 0.2 || l > 0.97) continue;
+      const fill = toSrgbGamut({ ...want, l });
+      const rgb = oklchToRgb(fill);
+      if (contrastRatio(inkRgb, rgb) >= target) return { fill, on: ink };
+      if (contrastRatio(paperRgb, rgb) >= target) return { fill, on: paper };
+    }
+  }
+  throw new Error(`no fill near lightness ${want.l.toFixed(2)} carries text at ${target}:1`);
+}
+
 function palette(seed: ThemeSeed, mode: 'light' | 'dark', c: DesignContract): Palette {
-  const neutral = (l: number): Oklch => ({ l, c: seed.neutralChroma, h: seed.hue });
+  const neutral = (l: number): Oklch => ({ l, c: seed.neutralChroma, h: seed.neutralHue ?? seed.hue });
   const light = mode === 'light';
   const bg = neutral(light ? 0.985 : 0.165);
   const surface = neutral(light ? 0.998 : 0.205);
   const sunken = neutral(light ? 0.962 : 0.135);
+  // A wash of the brand, for a region that should read as the product's own without shouting.
+  const soft = toSrgbGamut({ l: light ? 0.94 : 0.26, c: Math.min(0.05, seed.chroma * 0.35), h: seed.hue });
   // Text must clear the bar on whichever background is hardest for it: the darkest one in light mode,
-  // the lightest one in dark mode.
-  const hardest = light ? sunken : surface;
+  // the lightest one in dark mode. The brand wash is one of them.
+  const hardest = light ? (soft.l < sunken.l ? soft : sunken) : soft.l > surface.l ? soft : surface;
   const text = (hue: number, chroma: number): Oklch => solveForContrast({ against: hardest, hue, chroma, target: c.contrast.text + MARGIN, darker: light });
   const accent = text(seed.hue, seed.chroma);
+  // The brand is the same colour in both schemes: it is the product's, not the page's.
+  const brand = fillAndText({ l: seed.lightness ?? text(seed.hue, seed.chroma).l, c: seed.chroma, h: seed.hue }, neutral(0.13), neutral(0.995), c.contrast.text + MARGIN);
   return {
     bg,
     surface,
@@ -72,6 +109,9 @@ function palette(seed: ThemeSeed, mode: 'light' | 'dark', c: DesignContract): Pa
     // Text on a solid accent fill. The accent already clears AAA against the page backgrounds, and this
     // token is further from the accent than any of them.
     'on-accent': neutral(light ? 0.995 : 0.13),
+    brand: brand.fill,
+    'on-brand': brand.on,
+    'brand-soft': soft,
     danger: text(27, 0.17),
     success: text(152, 0.13),
     warning: text(75, 0.13),
@@ -96,7 +136,10 @@ export function seedFromName(name: string): ThemeSeed {
   // The top bits of this hash barely move between similar names, so the face is picked from a second mix of it.
   const mixed = Math.imul(hash ^ (hash >>> 15), 2246822507) >>> 0;
   const display = displayFaces[(mixed >>> 13) % displayFaces.length]!;
-  return { hue, chroma: 0.11 + ((hash >>> 9) % 7) * 0.01, neutralChroma: 0.004 + ((hash >>> 13) % 4) * 0.003, corners, display };
+  // A name says nothing about a product, so this is a placeholder until someone chooses from the subject. It is
+  // still spread over deep and bright brands, so two placeholders do not look like the same product.
+  const lightness = 0.4 + ((mixed >>> 5) % 5) * 0.1;
+  return { hue, chroma: 0.11 + ((hash >>> 9) % 7) * 0.01, neutralChroma: 0.004 + ((hash >>> 13) % 4) * 0.003, corners, display, lightness };
 }
 
 const px = (n: number): string => `${n / 16}rem`;
@@ -126,7 +169,7 @@ export function renderThemeCss(theme: Theme, c: DesignContract = defaultContract
     .join('\n');
 
   return `/* Generated by @studio-zero/design from the design contract. Edit the seed, not this file. */
-/* seed: hue ${theme.seed.hue}, chroma ${theme.seed.chroma}, neutral chroma ${theme.seed.neutralChroma}, ${theme.seed.corners} corners, ${face === 'sans' ? 'titles in the body face' : `titles in ${c.fonts.display[face].join(' + ')}`} */
+/* seed: hue ${theme.seed.hue}, chroma ${theme.seed.chroma},${theme.seed.lightness === undefined ? '' : ` brand lightness ${theme.seed.lightness},`} neutral chroma ${theme.seed.neutralChroma}${theme.seed.neutralHue === undefined ? '' : ` toward hue ${theme.seed.neutralHue}`}, ${theme.seed.corners} corners, ${face === 'sans' ? 'titles in the body face' : `titles in ${c.fonts.display[face].join(' + ')}`} */
 
 :root {
   color-scheme: light dark;
@@ -157,7 +200,8 @@ ${vars(theme.light, '  ')}
 }
 
 @theme inline {
-  /* Semantic colours only. Text tokens are solved to WCAG AAA (${c.contrast.text}:1) on every background token. */
+  /* Semantic colours only. Text tokens are solved to WCAG AAA (${c.contrast.text}:1) on every background token.
+     brand is a fill (the product's own colour, as bright as it needs to be) and on-brand the text it carries. */
   --color-*: initial;
 ${colorTokens.map((t) => `  --color-${t}: var(--sz-${t});`).join('\n')}
 

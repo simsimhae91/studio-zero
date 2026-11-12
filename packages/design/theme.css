@@ -7,14 +7,17 @@
   --sz-surface: oklch(99.80% 0.0033 168.0);
   --sz-sunken: oklch(96.20% 0.0080 168.0);
   --sz-border: oklch(90.00% 0.0080 168.0);
-  --sz-control-border: oklch(62.06% 0.0080 168.0);
+  --sz-control-border: oklch(60.75% 0.0080 168.0);
   --sz-fg: oklch(20.00% 0.0080 168.0);
-  --sz-fg-muted: oklch(43.00% 0.0080 168.0);
-  --sz-accent: oklch(42.04% 0.0852 168.0);
+  --sz-fg-muted: oklch(41.77% 0.0080 168.0);
+  --sz-accent: oklch(40.84% 0.0828 168.0);
   --sz-on-accent: oklch(99.50% 0.0074 168.0);
-  --sz-danger: oklch(45.16% 0.1700 27.0);
-  --sz-success: oklch(41.88% 0.1102 152.0);
-  --sz-warning: oklch(43.49% 0.0918 75.0);
+  --sz-brand: oklch(40.84% 0.0828 168.0);
+  --sz-on-brand: oklch(99.50% 0.0074 168.0);
+  --sz-brand-soft: oklch(94.00% 0.0420 168.0);
+  --sz-danger: oklch(43.94% 0.1700 27.0);
+  --sz-success: oklch(40.69% 0.1071 152.0);
+  --sz-warning: oklch(42.25% 0.0892 75.0);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -23,14 +26,17 @@
     --sz-surface: oklch(20.50% 0.0080 168.0);
     --sz-sunken: oklch(13.50% 0.0080 168.0);
     --sz-border: oklch(29.00% 0.0080 168.0);
-    --sz-control-border: oklch(51.94% 0.0080 168.0);
+    --sz-control-border: oklch(55.63% 0.0080 168.0);
     --sz-fg: oklch(96.00% 0.0080 168.0);
-    --sz-fg-muted: oklch(72.07% 0.0080 168.0);
-    --sz-accent: oklch(70.67% 0.1200 168.0);
+    --sz-fg-muted: oklch(76.40% 0.0080 168.0);
+    --sz-accent: oklch(75.01% 0.1200 168.0);
     --sz-on-accent: oklch(13.00% 0.0080 168.0);
-    --sz-danger: oklch(74.01% 0.1586 27.0);
-    --sz-success: oklch(70.70% 0.1300 152.0);
-    --sz-warning: oklch(72.68% 0.1300 75.0);
+    --sz-brand: oklch(75.01% 0.1200 168.0);
+    --sz-on-brand: oklch(13.00% 0.0080 168.0);
+    --sz-brand-soft: oklch(26.00% 0.0420 168.0);
+    --sz-danger: oklch(77.98% 0.1289 27.0);
+    --sz-success: oklch(75.04% 0.1300 152.0);
+    --sz-warning: oklch(77.00% 0.1300 75.0);
   }
 }
 
@@ -39,14 +45,17 @@
   --sz-surface: oklch(20.50% 0.0080 168.0);
   --sz-sunken: oklch(13.50% 0.0080 168.0);
   --sz-border: oklch(29.00% 0.0080 168.0);
-  --sz-control-border: oklch(51.94% 0.0080 168.0);
+  --sz-control-border: oklch(55.63% 0.0080 168.0);
   --sz-fg: oklch(96.00% 0.0080 168.0);
-  --sz-fg-muted: oklch(72.07% 0.0080 168.0);
-  --sz-accent: oklch(70.67% 0.1200 168.0);
+  --sz-fg-muted: oklch(76.40% 0.0080 168.0);
+  --sz-accent: oklch(75.01% 0.1200 168.0);
   --sz-on-accent: oklch(13.00% 0.0080 168.0);
-  --sz-danger: oklch(74.01% 0.1586 27.0);
-  --sz-success: oklch(70.70% 0.1300 152.0);
-  --sz-warning: oklch(72.68% 0.1300 75.0);
+  --sz-brand: oklch(75.01% 0.1200 168.0);
+  --sz-on-brand: oklch(13.00% 0.0080 168.0);
+  --sz-brand-soft: oklch(26.00% 0.0420 168.0);
+  --sz-danger: oklch(77.98% 0.1289 27.0);
+  --sz-success: oklch(75.04% 0.1300 152.0);
+  --sz-warning: oklch(77.00% 0.1300 75.0);
 }
 
 /* Scoped palettes: put one on any element to set that subtree in the other scheme (an ink side rail beside a
@@ -57,14 +66,17 @@
   --sz-surface: oklch(20.50% 0.0080 168.0);
   --sz-sunken: oklch(13.50% 0.0080 168.0);
   --sz-border: oklch(29.00% 0.0080 168.0);
-  --sz-control-border: oklch(51.94% 0.0080 168.0);
+  --sz-control-border: oklch(55.63% 0.0080 168.0);
   --sz-fg: oklch(96.00% 0.0080 168.0);
-  --sz-fg-muted: oklch(72.07% 0.0080 168.0);
-  --sz-accent: oklch(70.67% 0.1200 168.0);
+  --sz-fg-muted: oklch(76.40% 0.0080 168.0);
+  --sz-accent: oklch(75.01% 0.1200 168.0);
   --sz-on-accent: oklch(13.00% 0.0080 168.0);
-  --sz-danger: oklch(74.01% 0.1586 27.0);
-  --sz-success: oklch(70.70% 0.1300 152.0);
-  --sz-warning: oklch(72.68% 0.1300 75.0);
+  --sz-brand: oklch(75.01% 0.1200 168.0);
+  --sz-on-brand: oklch(13.00% 0.0080 168.0);
+  --sz-brand-soft: oklch(26.00% 0.0420 168.0);
+  --sz-danger: oklch(77.98% 0.1289 27.0);
+  --sz-success: oklch(75.04% 0.1300 152.0);
+  --sz-warning: oklch(77.00% 0.1300 75.0);
   color: var(--sz-fg);
 }
 .theme-light {
@@ -73,19 +85,23 @@
   --sz-surface: oklch(99.80% 0.0033 168.0);
   --sz-sunken: oklch(96.20% 0.0080 168.0);
   --sz-border: oklch(90.00% 0.0080 168.0);
-  --sz-control-border: oklch(62.06% 0.0080 168.0);
+  --sz-control-border: oklch(60.75% 0.0080 168.0);
   --sz-fg: oklch(20.00% 0.0080 168.0);
-  --sz-fg-muted: oklch(43.00% 0.0080 168.0);
-  --sz-accent: oklch(42.04% 0.0852 168.0);
+  --sz-fg-muted: oklch(41.77% 0.0080 168.0);
+  --sz-accent: oklch(40.84% 0.0828 168.0);
   --sz-on-accent: oklch(99.50% 0.0074 168.0);
-  --sz-danger: oklch(45.16% 0.1700 27.0);
-  --sz-success: oklch(41.88% 0.1102 152.0);
-  --sz-warning: oklch(43.49% 0.0918 75.0);
+  --sz-brand: oklch(40.84% 0.0828 168.0);
+  --sz-on-brand: oklch(99.50% 0.0074 168.0);
+  --sz-brand-soft: oklch(94.00% 0.0420 168.0);
+  --sz-danger: oklch(43.94% 0.1700 27.0);
+  --sz-success: oklch(40.69% 0.1071 152.0);
+  --sz-warning: oklch(42.25% 0.0892 75.0);
   color: var(--sz-fg);
 }
 
 @theme inline {
-  /* Semantic colours only. Text tokens are solved to WCAG AAA (7:1) on every background token. */
+  /* Semantic colours only. Text tokens are solved to WCAG AAA (7:1) on every background token.
+     brand is a fill (the product's own colour, as bright as it needs to be) and on-brand the text it carries. */
   --color-*: initial;
   --color-bg: var(--sz-bg);
   --color-surface: var(--sz-surface);
@@ -96,6 +112,9 @@
   --color-fg-muted: var(--sz-fg-muted);
   --color-accent: var(--sz-accent);
   --color-on-accent: var(--sz-on-accent);
+  --color-brand: var(--sz-brand);
+  --color-on-brand: var(--sz-on-brand);
+  --color-brand-soft: var(--sz-brand-soft);
   --color-danger: var(--sz-danger);
   --color-success: var(--sz-success);
   --color-warning: var(--sz-warning);

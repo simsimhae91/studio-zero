@@ -1,4 +1,4 @@
-import { createTheme, renderThemeCss, seedFromName } from '@studio-zero/design';
+import { THEME_SEED_FILE, placeholderTheme } from './themeSeed.ts';
 import type { Project, SandboxInfo } from '@studio-zero/protocol';
 import { EXTERNAL_ENV_FILE, type ExternalApis } from '../app/ExternalApis.ts';
 import type { OrbStackManager } from '../sandbox/OrbStackManager.ts';
@@ -52,7 +52,10 @@ export class WorkspaceProvisioner {
       const added: string[] = [];
       if (!has.has('theme')) {
         // An existing theme is never overwritten: after the first commit it belongs to the project.
-        await this.#sandboxes.writeFile(project, THEME_FILE, renderThemeCss(createTheme(seedFromName(project.slug))));
+        // A placeholder, and it says so: the first design task replaces it with a choice made from the subject.
+        const theme = placeholderTheme(project.slug);
+        await this.#sandboxes.writeFile(project, THEME_FILE, theme.css);
+        await this.#sandboxes.writeFile(project, THEME_SEED_FILE, theme.json);
         await this.#sandboxes.writeFile(project, PROJECT_FILE, `${JSON.stringify(defaultProjectFile(project.template), null, 2)}\n`);
         added.push('theme', 'project file');
       }

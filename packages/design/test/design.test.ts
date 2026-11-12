@@ -242,3 +242,32 @@ test('Korean copy lint leaves specific copy alone', () => {
   // The same wording on every card is one thing to fix, not one per card.
   assert.equal(lintInterfaceText([t('cta', '시작하기'), t('cta', '시작하기'), t('cta', '시작하기')]).length, 1);
 });
+
+test('the brand is a fill of any lightness that always carries its text, and the wash is one more background text holds on', () => {
+  for (let hue = 0; hue < 360; hue += 20) {
+    for (const chroma of [0.08, 0.16, 0.26]) {
+      for (const lightness of [0.3, 0.45, 0.55, 0.62, 0.7, 0.82, 0.92]) {
+        const theme = createTheme({ hue, chroma, neutralChroma: 0.02, corners: 'soft', lightness, neutralHue: (hue + 180) % 360 });
+        for (const mode of ['light', 'dark'] as const) {
+          const p = theme[mode];
+          const at = `${mode} hue ${hue} chroma ${chroma} lightness ${lightness}`;
+          assert.ok(ratio(p, 'on-brand', 'brand') >= contract.contrast.text, `${at}: on-brand on brand = ${ratio(p, 'on-brand', 'brand').toFixed(2)}`);
+          for (const token of TEXT_TOKENS) assert.ok(ratio(p, token, 'brand-soft') >= contract.contrast.text, `${at}: ${token} on brand-soft = ${ratio(p, token, 'brand-soft').toFixed(2)}`);
+          // A fill that cannot carry text at the asked lightness is moved, and not far.
+          assert.ok(Math.abs(p.brand.l - lightness) <= 0.17, `${at}: brand moved from ${lightness} to ${p.brand.l.toFixed(2)}`);
+        }
+        assert.deepEqual(theme.light.brand, theme.dark.brand, 'the brand is the product\'s colour: the same in both schemes');
+      }
+    }
+  }
+  // A bright brand stays bright and takes dark text; a deep one takes light text. That is the point of it.
+  const bright = createTheme({ hue: 60, chroma: 0.16, neutralChroma: 0.01, corners: 'round', lightness: 0.82 }).light;
+  assert.ok(bright.brand.l >= 0.8 && bright['on-brand'].l < 0.3);
+  const deep = createTheme({ hue: 260, chroma: 0.16, neutralChroma: 0.01, corners: 'sharp', lightness: 0.32 }).light;
+  assert.ok(deep.brand.l <= 0.34 && deep['on-brand'].l > 0.9);
+  // The neutrals may lean somewhere the brand does not.
+  assert.equal(createTheme({ hue: 250, chroma: 0.16, neutralChroma: 0.02, corners: 'soft', neutralHue: 80 }).light.bg.h, 80);
+  // A seed from before there was a brand keeps the look it had: the brand is its accent.
+  const old = createTheme({ hue: 168, chroma: 0.12, neutralChroma: 0.008, corners: 'soft' }).light;
+  assert.deepEqual([old.brand.l, old.brand.h], [old.accent.l, old.accent.h]);
+});
