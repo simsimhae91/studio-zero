@@ -12,6 +12,7 @@ import { resolveDockerBin } from './dockerBin.ts';
 import {
   assertBranchName,
   checkpointScript,
+  treeScript,
   commitAllScript,
   diffScript,
   initWorkspaceScript,
@@ -344,6 +345,14 @@ export class OrbStackManager {
     const row: CheckpointRow = { id, projectId: project.id, taskId, label, commit: match[1]!, headSha: match[2]!, branch: match[3]!, createdAt: this.#clock() };
     this.#store.insertCheckpoint(row);
     return toCheckpoint(row);
+  }
+
+  /** What the workspace holds right now, as a tree id (see `treeScript`): equal ids mean no file differs. */
+  async workspaceTree(project: Project): Promise<string> {
+    const res = await this.exec(project, treeScript({ workspace: WORKSPACE_DIR }), { timeoutSec: 120 });
+    const tree = res.stdout.trim();
+    if (res.exitCode !== 0 || !/^[0-9a-f]{40,64}$/.test(tree)) throw new SandboxError('could not read the workspace tree', lastLine(res.stderr) || res.stdout);
+    return tree;
   }
 
   /** Restores a checkpoint after first checkpointing the present, so the rollback can itself be rolled back. */

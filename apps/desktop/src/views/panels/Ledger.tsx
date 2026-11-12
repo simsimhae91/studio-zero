@@ -1,4 +1,4 @@
-import type { LedgerDelta, LedgerEntry, Project, Task } from '@studio-zero/protocol';
+import type { AcceptanceVerdict, LedgerDelta, LedgerEntry, Project, Task } from '@studio-zero/protocol';
 import { duration, elapsed, engineLabel, kindLabel, reviewerLabel, stamp, tokens } from '../../lib/format.ts';
 import { useQuery } from '../../lib/studio.tsx';
 import { Empty, Problem, Status } from '../../ui.tsx';
@@ -6,6 +6,8 @@ import { Empty, Problem, Status } from '../../ui.tsx';
 const pct = (share: number | null): string => (share === null ? '재지 않음' : `${Math.round(share * 100)}%`);
 const size = (bytes: number | null): string => (bytes === null ? '재지 않음' : bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)}MB` : `${Math.round(bytes / 1024)}KB`);
 const dollars = (micros: number): string => (micros === 0 ? '구독' : `$${(micros / 1_000_000).toFixed(2)}`);
+/** How acceptance ended. A patch that landed and verified is a finished task; one that did not is still owed. */
+const verdictLabel: Record<AcceptanceVerdict, string> = { pass: '통과', patched: '보정 패치 1건 반영', patch: '보정 패치 1건, 반영 안 됨' };
 
 /**
  * The project's ledger: one receipt per finished task, newest first, and above them how the judged score and
@@ -88,11 +90,11 @@ function Delta({ delta }: { delta: LedgerDelta }) {
   );
 }
 
-function Row({ label, children }: { label: string; children: string }) {
+function Row({ label, children, tone }: { label: string; children: string; tone?: 'warn' }) {
   return (
     <div className="flex items-baseline justify-between gap-4 border-t border-border py-1">
       <dt className="text-sm text-fg-muted">{label}</dt>
-      <dd className="text-right text-sm font-medium">{children}</dd>
+      <dd className={`text-right text-sm font-medium ${tone === 'warn' ? 'text-warning' : ''}`}>{children}</dd>
     </div>
   );
 }
@@ -140,7 +142,9 @@ function Receipt({ entry, task }: { entry: LedgerEntry; task: Task | null }) {
           <Row label="금액">{dollars(cost.usdMicros)}</Row>
           <Row label="걸린 시간">{elapsed(cost.wallMs)}</Row>
           <Row label="계획 교차 검토">{review.plan ? reviewerLabel[review.plan] : '받지 않음'}</Row>
-          <Row label="최종 인수 검수">{review.acceptance ? `${reviewerLabel[review.acceptance]}, ${review.verdict === 'patch' ? '보정 패치 1건' : '통과'}` : '받지 않음'}</Row>
+          <Row label="최종 인수 검수" tone={review.acceptance && review.verdict === 'patch' ? 'warn' : undefined}>
+            {review.acceptance ? `${reviewerLabel[review.acceptance]}, ${review.verdict ? verdictLabel[review.verdict] : '판정 없음'}` : '받지 않음'}
+          </Row>
         </dl>
       </div>
     </li>

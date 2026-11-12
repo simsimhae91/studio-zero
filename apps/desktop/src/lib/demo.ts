@@ -328,7 +328,7 @@ const ledger: LedgerEntry[] = [
     id: 'led_3', taskId: 'tsk_list', createdAt: min(-81),
     code: { compilerErrors: 0, firstCompilerErrors: 3, verifyRounds: 2, checksPassed: 2, checksFailed: [], buildMs: 9800, bundleBytes: 188_600 },
     design: { grade: 'S', score: 96, slopScore: 8, livingVisual: true, contrastAaa: 1, touchTargets: 1, textSlop: 0 },
-    review: { plan: 'codex', acceptance: 'codex', verdict: 'patch' },
+    review: { plan: 'codex', acceptance: 'codex', verdict: 'patched' },
     delta: [
       { metric: '타입 에러', before: '3', after: '0', better: true },
       { metric: '디자인 등급', before: 'B', after: 'S', better: true },

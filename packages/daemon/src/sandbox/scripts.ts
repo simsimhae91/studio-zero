@@ -50,6 +50,22 @@ printf '%s %s %s\\n' "$commit" "\${head:-none}" "$branch"`;
 }
 
 /**
+ * The working tree's content as one git tree id: tracked, modified and untracked files, ignored ones left out,
+ * exactly what a checkpoint would capture. Nothing is written but loose objects: no ref, no commit, and the
+ * user's index is not touched. Two calls print the same id when, and only when, no file differs between them.
+ */
+export function treeScript(p: { workspace: string }): string {
+  return `set -eu
+cd ${shq(p.workspace)}
+gitdir=$(git rev-parse --git-dir)
+export GIT_INDEX_FILE="$gitdir/sz-index.$$"
+trap 'rm -f "$GIT_INDEX_FILE"' EXIT
+if [ -f "$gitdir/index" ]; then cp "$gitdir/index" "$GIT_INDEX_FILE"; fi
+git add -A .
+git write-tree`;
+}
+
+/**
  * Restores the working tree to a checkpoint exactly: the branch pointer goes back to where it was, files changed
  * since are reverted, files created since are removed, and what was uncommitted at checkpoint time is
  * uncommitted again. Ignored files are not touched.

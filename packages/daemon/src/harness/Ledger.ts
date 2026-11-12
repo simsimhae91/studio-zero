@@ -1,6 +1,6 @@
 import { appendFile, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { AuditReport, DesignGrade, LedgerDelta, LedgerEntry, Project, ReviewerId, Task } from '@studio-zero/protocol';
+import type { AcceptanceVerdict, AuditReport, DesignGrade, LedgerDelta, LedgerEntry, Project, ReviewerId, Task } from '@studio-zero/protocol';
 import type { Config } from '../config.ts';
 import type { Store } from '../db/Store.ts';
 import type { EventLog } from '../events/EventLog.ts';
@@ -22,7 +22,8 @@ export interface RunRecord {
   build: { ms: number; bytes: number | null } | null;
   planReviewer: ReviewerId | null;
   acceptanceReviewer: ReviewerId | null;
-  verdict: 'pass' | 'patch' | null;
+  /** How acceptance ended. `patched` only once the harness has seen the patch land (see `AcceptanceVerdict`). */
+  verdict: AcceptanceVerdict | null;
 }
 
 export const emptyRun = (): RunRecord => ({ rounds: 0, firstCompilerErrors: null, compilerErrors: null, checksPassed: 0, checksFailed: [], audit: null, build: null, planReviewer: null, acceptanceReviewer: null, verdict: null });

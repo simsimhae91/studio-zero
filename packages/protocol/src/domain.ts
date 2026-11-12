@@ -379,6 +379,18 @@ export const LedgerDelta = z.object({
 export type LedgerDelta = z.infer<typeof LedgerDelta>;
 
 /**
+ * How the one acceptance review of a task ended.
+ *
+ * `pass`: accepted as it was. `patch`: one corrective patch was issued and is not known to have landed (the
+ * engine changed nothing in answer to it, or the work no longer verified afterwards). `patched`: the patch was
+ * issued, the engine changed the workspace in answer, and the work then passed every check again. The last is
+ * the daemon's own observation, like every figure beside it: a reviewer's patch that was only argued with does
+ * not become `patched`.
+ */
+export const AcceptanceVerdict = z.enum(['pass', 'patch', 'patched']);
+export type AcceptanceVerdict = z.infer<typeof AcceptanceVerdict>;
+
+/**
  * The receipt of one finished task: what its code, its design and its cost measured, and how that compares
  * with the task before it. Every number is taken by the daemon from its own checks and its own usage rows;
  * none is reported by the engine whose work it describes.
@@ -429,7 +441,7 @@ export const LedgerEntry = z.object({
     /** Who red-teamed the plan and who accepted the result; null when that cross-check did not run. */
     plan: ReviewerId.nullable(),
     acceptance: ReviewerId.nullable(),
-    verdict: z.enum(['pass', 'patch']).nullable(),
+    verdict: AcceptanceVerdict.nullable(),
   }),
   delta: z.array(LedgerDelta),
   /** The deltas as one line, written by code: "타입 에러 3→0, 디자인 등급 B→S". Empty for a project's first entry. */

@@ -137,6 +137,8 @@ interface Rig {
   model: ReturnType<typeof scripted>;
   asked: { path: string; system: string; parts: readonly (string | Uint8Array)[] }[];
   run: (prompt: string) => Promise<Task>;
+  /** Queues a suspended task again and runs it, as the resumer does when a reviewer is back. */
+  resume: (taskId: string) => Promise<Task>;
   bodies: (taskId: string) => EventEnvelope['body'][];
 }
 
@@ -176,6 +178,13 @@ async function rig(p: { turns: Block[][]; plans: unknown[]; compiler: (CompilerO
       assert.ok(claimed);
       await harness.run(claimed, new AbortController().signal);
       return store.getTask(claimed.id)!;
+    },
+    resume: async (taskId) => {
+      assert.ok(store.resumeTask(taskId), 'the task was suspended');
+      const claimed = store.claimNextTask(Date.now());
+      assert.equal(claimed?.id, taskId);
+      await harness.run(claimed!, new AbortController().signal);
+      return store.getTask(taskId)!;
     },
     bodies: (taskId) => events.history({ taskId }, 0, 1000).map((e) => e.body),
   };
@@ -281,7 +290,7 @@ test('the sandwich: table committed before code, one red team, one acceptance wi
     const [first] = r.d.daemon.studio.listLedger(project.id, 5) as [LedgerEntry];
     assert.deepEqual(first.code, { compilerErrors: 0, firstCompilerErrors: 3, verifyRounds: 3, checksPassed: 1, checksFailed: [], buildMs: 1200, bundleBytes: 307200 });
     assert.deepEqual(first.design, { grade: 'S', score: 96, slopScore: 8, livingVisual: true, contrastAaa: 0.95, touchTargets: 1, textSlop: 0 });
-    assert.deepEqual(first.review, { plan: 'codex', acceptance: 'codex', verdict: 'patch' });
+    assert.deepEqual(first.review, { plan: 'codex', acceptance: 'codex', verdict: 'patched' }, 'the reviewer said patch; the engine changed the workspace in answer and it verified again');
     assert.deepEqual([first.outcome, first.cost.modelCalls, first.cost.inputTokens, first.delta, first.proof], ['succeeded', 7, 7000, [], ''], 'six engine turns and the plan; the first entry has nothing to compare with');
     assert.equal(of(bodies, 'ledger.recorded').length, 1);
     assert.deepEqual(of(bodies, 'gate.result').filter((g) => g.gate === 'build').map((g) => [g.name, g.passed]), [['npm run --silent build', true]]);
@@ -326,6 +335,69 @@ test('a cross-check that cannot be had is said and skipped: the task still stand
     assert.deepEqual(reviews.map((v) => [v.stage, v.reviewer, v.verdict, v.reason]), [['plan', null, null, 'codex: usage limit reached'], ['acceptance', null, null, 'codex: usage limit reached']]);
     assert.ok(!lastUser(r.model.sent[0]!).includes('red-teamed'), 'no critique was invented for the builder');
     assert.deepEqual(r.d.daemon.studio.listLedger(project.id, 1)[0]!.review, { plan: null, acceptance: null, verdict: null });
+  } finally {
+    await r.d.cleanup();
+  }
+});
+
+test('the receipt says patched only for a patch that landed: argued with, or broken afterwards, it stays a patch', async () => {
+  const critique: PlanCritique = { verdict: '이대로 만드세요.', defaults: [], gaps: [], blandness: [] };
+  const acceptance: Acceptance = { verdict: 'patch', summary: '버튼 문구가 범용입니다.', unmet: [], copy: [], patch: '첫 화면 버튼 문구를 "내 병 용량 고르기"로 바꾸세요.' };
+  const clean = (): EvalOutcome[] => [{ eval: visual, passed: true, detail: 'score 96/100, grade S', audit: audit('S', 0) }];
+  const built: Block[][] = [[use('tu_1', 'write_file', { path: 'src/App.tsx', content: 'export const price = 2000;\n' })], [say('계산대를 만들었습니다.')]];
+
+  // The engine answers the patch with words only. The work was clean before and is clean after: nothing landed.
+  const argued = await rig({ plans: [{ ...PLAN, anchor: ANCHOR }], turns: [...built, [say('그 문구는 요청에 있던 그대로라 남겨 둡니다.')]], compiler: [compiled(true), compiled(true)], rounds: [clean(), clean()], critique, acceptance });
+  try {
+    const task = await argued.run('리필 스테이션 계산기를 만들어줘');
+    assert.equal(task.state, 'succeeded', task.error ?? '');
+    assert.deepEqual(of(argued.bodies(task.id), 'task.phase').map((p) => `${p.phase}:${p.round}`), ['plan:0', 'execute:1', 'verify:1', 'execute:2', 'verify:2', 'reflect:0'], 'the patch was sent and the work was verified again');
+    const [receipt] = argued.d.daemon.studio.listLedger(project.id, 1) as [LedgerEntry];
+    assert.deepEqual([receipt.outcome, receipt.review], ['succeeded', { plan: 'codex', acceptance: 'codex', verdict: 'patch' }], 'an unchanged workspace is not a patched one, whatever the engine said');
+  } finally {
+    await argued.d.cleanup();
+  }
+
+  // The engine acts on the patch and breaks the build doing it: the patch was issued, and it did not land clean.
+  const broke = await rig({
+    plans: [{ ...PLAN, anchor: ANCHOR }],
+    turns: [...built, [use('tu_2', 'write_file', { path: 'src/cta.ts', content: 'export const cta: number = "내 병 용량 고르기";\n' })], [say('버튼 문구를 바꿨습니다.')], [say('타입 오류를 고치지 못했습니다.')]],
+    compiler: [compiled(true), compiled(false, THREE_ERRORS), compiled(false, THREE_ERRORS)],
+    rounds: [clean()],
+    critique, acceptance, verifyRounds: 1,
+  });
+  try {
+    const task = await broke.run('리필 스테이션 계산기를 만들어줘');
+    assert.equal(task.state, 'failed');
+    assert.match(task.error ?? '', /verification still failing/);
+    const [receipt] = broke.d.daemon.studio.listLedger(project.id, 1) as [LedgerEntry];
+    assert.deepEqual([receipt.outcome, receipt.review.verdict, receipt.code.compilerErrors], ['failed', 'patch', 3]);
+  } finally {
+    await broke.d.cleanup();
+  }
+});
+
+test('a task that waited out a usage limit keeps who reviewed it: the receipt of the resumed run names both', async () => {
+  const waiting: EvalOutcome = { eval: visual, passed: false, unverified: true, waitable: true, detail: 'Design review did not run', audit: { vision: { reason: 'Codex subscription: usage limit', limited: true } } as AuditReport };
+  const r = await rig({
+    plans: [{ ...PLAN, anchor: ANCHOR }],
+    turns: [[use('tu_1', 'write_file', { path: 'src/App.tsx', content: 'export const price = 2000;\n' })], [say('계산대를 만들었습니다.')]],
+    compiler: [compiled(true), compiled(true)],
+    rounds: [[waiting], [{ eval: visual, passed: true, detail: 'score 96/100, grade S', audit: audit('S', 0) }]],
+    critique: { verdict: '이대로 만드세요.', defaults: [], gaps: [], blandness: [] },
+    acceptance: { verdict: 'pass', summary: '약속대로입니다.', unmet: [], copy: [], patch: null },
+  });
+  try {
+    const suspended = await r.run('리필 스테이션 계산기를 만들어줘');
+    assert.equal(suspended.state, 'suspended', suspended.error ?? '');
+    assert.deepEqual(of(r.bodies(suspended.id), 'review.completed').map((v) => v.stage), ['plan'], 'acceptance waits for the design review it reads');
+    assert.equal(r.d.daemon.studio.listLedger(project.id, 1).length, 0, 'no receipt before a verdict');
+
+    const done = await r.resume(suspended.id);
+    assert.equal(done.state, 'succeeded', done.error ?? '');
+    assert.deepEqual(r.asked.map((a) => a.system), [PLAN_REDTEAM_PROMPT, ACCEPTANCE_PROMPT], 'the plan is not red-teamed a second time');
+    const [receipt] = r.d.daemon.studio.listLedger(project.id, 1) as [LedgerEntry];
+    assert.deepEqual(receipt.review, { plan: 'codex', acceptance: 'codex', verdict: 'pass' }, 'the plan review happened before the wait and is still on the receipt');
   } finally {
     await r.d.cleanup();
   }

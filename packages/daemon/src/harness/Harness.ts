@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { z } from 'zod';
-import { Effort, ReviewerPref, type AuditReport, type Phase, type Project, type Task, type TaskState } from '@studio-zero/protocol';
+import { AcceptanceVerdict, Effort, ReviewerId, ReviewerPref, type AuditReport, type Phase, type Project, type Task, type TaskState } from '@studio-zero/protocol';
 import { EngineId, type Config } from '../config.ts';
 import type { Store } from '../db/Store.ts';
 import type { EventLog } from '../events/EventLog.ts';
@@ -56,10 +56,16 @@ interface Failure {
 class Cancelled extends Error {}
 
 /**
- * Where a suspended task left off: what the engine last said, the parts of its plan the checks still read, and
- * whether its one acceptance review has already been spent.
+ * Where a suspended task left off: what the engine last said, the parts of its plan the checks still read,
+ * whether its one acceptance review has already been spent, and who reviewed it with what result. The last is
+ * for the receipt: a task that waited out a usage limit is still the task those reviewers looked at.
  */
-const Resume = z.object({ finalText: z.string(), plan: Plan.partial({ anchor: true }).nullable(), accepted: z.boolean().default(false) });
+const Resume = z.object({
+  finalText: z.string(),
+  plan: Plan.partial({ anchor: true }).nullable(),
+  accepted: z.boolean().default(false),
+  review: z.object({ plan: ReviewerId.nullable().catch(null), acceptance: ReviewerId.nullable().catch(null), verdict: AcceptanceVerdict.nullable().catch(null) }).nullable().default(null),
+});
 const resumeKey = (taskId: string): string => `task.resume:${taskId}`;
 
 /** Abort reason used when the daemon is stopping, as opposed to the owner cancelling a task. */
@@ -87,7 +93,8 @@ export class ShutdownSignal extends Error {
  *            A round stops at the first stage that fails, and the engine gets up to `verifyRounds` corrections.
  *            The engine's own claim of success is never the gate.
  *            When every check has passed, the other vendor's model looks once more: it accepts the result or
- *            sends it back with a single corrective patch, which is verified like any other change.
+ *            sends it back with a single corrective patch, which is verified like any other change. The
+ *            receipt says `patched` only when the engine changed the workspace in answer and it verified again.
  *   Reflect  a judge model reads the trace and proposes lessons and regression checks.
  *   Evolve   code decides which proposals are kept; the lesson files are re-rendered.
  *
@@ -196,6 +203,7 @@ export class Harness {
     const crossChecked = initial.kind === 'build' && !draft && this.#config.review.sandwich;
     const reviewerPref = ReviewerPref.nullable().catch(null).parse(initial.reviewerPref);
     const record = emptyRun();
+    if (resume?.review) Object.assign(record, { planReviewer: resume.review.plan, acceptanceReviewer: resume.review.acceptance, verdict: resume.review.verdict });
     let anchor: AnchorTable | null = null;
     let accepted = resume?.accepted ?? false;
 
@@ -354,10 +362,17 @@ export class Harness {
         record.verdict = checked.result?.verdict ?? null;
         checkCancel();
         if (checked.result?.verdict === 'patch') {
+          // Whether the patch landed is observed, not assumed: the engine is free to argue with a point instead
+          // of acting on it, and work that was clean before the patch is still clean if it does nothing.
+          const tree = (): Promise<string | null> => this.#sandboxes.workspaceTree(project).catch(() => null);
+          const issuedOn = await tree();
           phase('execute', round + 1);
           result = await send(patchMessage(checked.result));
           checkCancel();
+          const answeredWith = await tree();
           await verifyUntilClean();
+          // Past this line the patched work has passed every check again. Until then, and if nothing changed, the verdict stays `patch`.
+          if (issuedOn !== null && answeredWith !== null && issuedOn !== answeredWith) record.verdict = 'patched';
         }
       }
 
@@ -365,7 +380,7 @@ export class Harness {
       if (waitingOn !== null) {
         // Nothing is known to be wrong and the one judgement still owed cannot be had today. The work stays on
         // its branch; the task steps out of the queue's way until a reviewer is back.
-        this.#store.kvSet(resumeKey(task.id), JSON.stringify({ finalText: excerpt(result.finalText, 6000), plan: plan ? { ...plan, anchor: null } : null, accepted } satisfies z.infer<typeof Resume>));
+        this.#store.kvSet(resumeKey(task.id), JSON.stringify({ finalText: excerpt(result.finalText, 6000), plan: plan ? { ...plan, anchor: null } : null, accepted, review: { plan: record.planReviewer, acceptance: record.acceptanceReviewer, verdict: record.verdict } } satisfies z.infer<typeof Resume>));
         task = this.#store.updateTask(task.id, { state: 'suspended', phase: null });
         this.#events.emit(scope, { type: 'notice', level: 'warn', message: `The design review is waiting on a usage limit (${waitingOn}). The work is committed on ${branch}; this task is suspended and resumes at verification by itself when a reviewer answers.` });
         this.#events.emit(scope, { type: 'task.state', state: 'suspended', error: null });
