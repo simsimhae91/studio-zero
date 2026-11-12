@@ -156,12 +156,12 @@ export function Modal({ open, onOpenChange, title, description, children }: { op
 }
 
 /** A short list of things to do to whatever the trigger sits on. */
-export function Menu({ trigger, children, align = 'end' }: { trigger: ReactElement; children: ReactNode; align?: 'start' | 'end' }) {
+export function Menu({ trigger, children, align = 'end', open, onOpenChange }: { trigger: ReactElement; children: ReactNode; align?: 'start' | 'end'; open?: boolean; onOpenChange?: (open: boolean) => void }) {
   return (
-    <Dropdown.Root>
+    <Dropdown.Root open={open} onOpenChange={onOpenChange}>
       <Dropdown.Trigger asChild>{trigger}</Dropdown.Trigger>
       <Dropdown.Portal>
-        <Dropdown.Content align={align} sideOffset={4} className="z-10 flex min-w-48 flex-col rounded-md border border-border bg-surface p-1 text-fg shadow-md">
+        <Dropdown.Content align={align} sideOffset={4} className="z-10 flex max-h-(--radix-dropdown-menu-content-available-height) min-w-48 flex-col overflow-y-auto rounded-md border border-border bg-surface p-1 text-fg shadow-md">
           {children}
         </Dropdown.Content>
       </Dropdown.Portal>

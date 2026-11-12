@@ -76,6 +76,16 @@ export const SandboxInfo = z.object({
 });
 export type SandboxInfo = z.infer<typeof SandboxInfo>;
 
+/**
+ * A model as the engine that runs it names it: an alias (`opus`), a full id (`claude-fable-5-2`), or a vendor's
+ * own variant (`gpt-5.6-sol`, `opus[1m]`). It ends up as one argument to a vendor's CLI, so it is a closed
+ * alphabet that cannot begin like an option.
+ */
+export const ModelId = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:[\]=,-]{0,99}$/);
+/** One model an engine can be asked to run. `label` is the vendor's own name for it: shown as text. */
+export const EngineModel = z.object({ id: ModelId, label: z.string().max(80) });
+export type EngineModel = z.infer<typeof EngineModel>;
+
 export const Task = z.object({
   id: z.string(),
   projectId: z.string(),
@@ -95,6 +105,8 @@ export const Task = z.object({
   baseBranch: z.string().nullable(),
   /** The engine the owner asked for, if they picked one instead of leaving it to the routing table. */
   enginePref: z.string().nullable(),
+  /** The model the owner asked that engine to run, if they picked one instead of the engine's usual one. */
+  modelPref: z.string().nullable(),
   /** The session (task stream) this task belongs to; null for the project's default stream. */
   sessionId: z.string().nullable(),
   /** The subscription the owner chose for this task's two cross-checks, instead of the one paired with the engine. */

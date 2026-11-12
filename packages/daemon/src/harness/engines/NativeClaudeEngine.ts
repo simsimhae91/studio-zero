@@ -1,4 +1,5 @@
 import type Anthropic from '@anthropic-ai/sdk';
+import type { EngineModel } from '@studio-zero/protocol';
 import { steeringNote, type SteeringQueue } from '../../ax/Steering.ts';
 import type { Config } from '../../config.ts';
 import type { EventLog } from '../../events/EventLog.ts';
@@ -6,6 +7,14 @@ import { ModelRefusedError, fallbackParams, type ClaudeClient } from '../../llm/
 import { PolicyDeniedError } from '../../policy/PolicyEngine.ts';
 import type { Toolbox } from '../Toolbox.ts';
 import { EngineError, type Engine, type EngineResult, type EngineRun, type EngineSession } from './Engine.ts';
+
+/** The models this loop can be pointed at: the current one of each tier, which are the ones `ClaudeClient` can price. */
+const MODELS: EngineModel[] = [
+  { id: 'claude-fable-5-2', label: 'Claude Fable 5.2' },
+  { id: 'claude-opus-5-5', label: 'Claude Opus 5.5' },
+  { id: 'claude-sonnet-5-5', label: 'Claude Sonnet 5.5' },
+  { id: 'claude-haiku-5-5', label: 'Claude Haiku 5.5' },
+];
 
 /**
  * Coding loop on the Claude Messages API, run inside the daemon. The model's only tools are the Toolbox, so
@@ -36,6 +45,10 @@ export class NativeClaudeEngine implements Engine {
 
   async availability(): Promise<{ available: boolean; reason: string }> {
     return this.#claude.hasApiKey() ? { available: true, reason: 'Anthropic API key present in vault' } : { available: false, reason: 'no Anthropic API key in vault' };
+  }
+
+  async models(): Promise<EngineModel[]> {
+    return MODELS;
   }
 
   async open(run: EngineRun): Promise<EngineSession> {

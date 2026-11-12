@@ -1,4 +1,4 @@
-import type { Project, Task } from '@studio-zero/protocol';
+import type { EngineModel, Project, Task } from '@studio-zero/protocol';
 import type { EngineId, RouteCandidate } from '../../config.ts';
 
 export interface EngineRun {
@@ -29,6 +29,12 @@ export interface Engine {
   readonly id: EngineId;
   /** Cheap, side-effect-free check used by the router. `reason` explains either outcome. */
   availability(): Promise<{ available: boolean; reason: string }>;
+  /**
+   * The models the owner can pick from on this engine. A menu, not a gate: what a model id means is the
+   * vendor's to say, so the list is the vendor's own and a pick outside it is still handed over as asked.
+   * Empty when the list could not be read.
+   */
+  models(): Promise<EngineModel[]>;
   open(run: EngineRun): Promise<EngineSession>;
 }
 

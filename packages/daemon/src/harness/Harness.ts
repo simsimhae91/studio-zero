@@ -218,7 +218,7 @@ export class Harness {
       // The engine is routed and opened when it is first needed. A resumed task needs one only if verification
       // finds something to repair.
       let route: Awaited<ReturnType<ModelRouter['route']>> | null = null;
-      const routed = async (): Promise<Awaited<ReturnType<ModelRouter['route']>>> => (route ??= await this.#router.route(task.kind, EngineId.nullable().catch(null).parse(task.enginePref)));
+      const routed = async (): Promise<Awaited<ReturnType<ModelRouter['route']>>> => (route ??= await this.#router.route(task.kind, EngineId.nullable().catch(null).parse(task.enginePref), task.modelPref));
       const open = async (): Promise<EngineSession> => {
         const decided = await routed();
         return (engine.session ??= await decided.engine.open({ project, task, route: decided.candidate, system: codingSystemPrompt(project.template), signal, onWaiting }));

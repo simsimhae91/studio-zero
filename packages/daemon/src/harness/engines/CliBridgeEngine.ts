@@ -2,6 +2,7 @@ import { chmod, mkdir, mkdtemp, readFile, readdir, realpath, rm, stat, writeFile
 import { homedir, tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { z } from 'zod';
+import { ModelId, type EngineModel } from '@studio-zero/protocol';
 import { steeringNote, type SteeringQueue } from '../../ax/Steering.ts';
 import type { BridgeSessions } from '../../bridge/BridgeSessions.ts';
 import { acpPrompt, type AcpRequest, type AcpResult } from '../../bridge/acp.ts';
@@ -57,7 +58,37 @@ interface Launch {
   /** Commands to run first, in the same confinement (for a CLI that must be told to accept its MCP server). */
   before?: string[][];
   /** Set when the CLI is driven over the Agent Client Protocol instead of a one-shot print mode. */
-  acp?: { mcpServers: AcpRequest['mcpServers']; images?: AcpRequest['images'] };
+  acp?: { mcpServers: AcpRequest['mcpServers']; images?: AcpRequest['images']; model?: string };
+}
+
+/**
+ * Where a vendor's list of models comes from: a command of its own CLI, asked as the owner's login, or, for a
+ * CLI that has no such command, the names it documents.
+ */
+type Catalog = readonly EngineModel[] | { args: string[]; parse: (stdout: string) => { id: string; label: string }[] };
+
+/** Lines of `<id><separator><label>`, as two of the CLIs print their lists. Anything else on the output is not a model. */
+const listedLines = (stdout: string, separator: string): { id: string; label: string }[] =>
+  stdout.split('\n').flatMap((line) => {
+    const at = line.indexOf(separator);
+    return at > 0 ? [{ id: line.slice(0, at).trim(), label: line.slice(at + separator.length) }] : [];
+  });
+
+/**
+ * A vendor's list as a menu: ids that can be handed back to its CLI as one argument, and labels as plain text
+ * (no invisible characters, no note about which one the CLI itself is set to).
+ */
+function menu(listed: { id: string; label: string }[]): EngineModel[] {
+  const seen = new Set<string>();
+  const out: EngineModel[] = [];
+  for (const entry of listed) {
+    if (out.length === 500) break;
+    if (!ModelId.safeParse(entry.id).success || seen.has(entry.id)) continue;
+    seen.add(entry.id);
+    const label = entry.label.replace(/[\p{Cc}\p{Cf}]/gu, '').replace(/\s*\((?:current|default)(?:, (?:current|default))*\)\s*$/, '').replace(/\s+/g, ' ').trim();
+    out.push({ id: entry.id, label: (label || entry.id).slice(0, 80) });
+  }
+  return out;
 }
 
 const acpImages = (inv: Invocation): AcpRequest['images'] => (inv.images ?? []).map((image) => ({ mimeType: 'image/png', data: image.data }));
@@ -77,6 +108,7 @@ interface VendorAdapter {
   systemInPrompt: boolean;
   /** True when a question to this CLI can carry pictures (see `ask`). */
   vision: boolean;
+  catalog: Catalog;
   launch: (inv: Invocation, prompt: string) => Promise<Launch>;
   parse: (stdout: string, inv: Invocation) => Promise<Parsed>;
   /** Removes what a run left in the CLI's own state folder. */
@@ -104,6 +136,14 @@ const claudeCode: VendorAdapter = {
   systemInPrompt: false,
   // The daemon's own Claude calls, pictures included, go through `SessionBrain`, which sends them inline.
   vision: false,
+  // The CLI has no command that lists models. These are its aliases for the newest model of each tier
+  // (`--model` in `claude --help`), so the list does not go stale when a tier gets a new model.
+  catalog: [
+    { id: 'fable', label: 'Claude Fable' },
+    { id: 'opus', label: 'Claude Opus' },
+    { id: 'sonnet', label: 'Claude Sonnet' },
+    { id: 'haiku', label: 'Claude Haiku' },
+  ],
   launch: async (inv, prompt) => {
     const mcpConfig = join(inv.scratch, 'mcp.json');
     await writeFile(
@@ -152,6 +192,15 @@ const codex: VendorAdapter = {
   jailed: false,
   systemInPrompt: true,
   vision: true,
+  // The catalog this CLI version can run on this login, as JSON. Entries it marks hidden are its own internals
+  // (a review model, a reserve). Checked against codex-cli 0.153.4.
+  catalog: {
+    args: ['debug', 'models'],
+    parse: (stdout) => {
+      const parsed = z.object({ models: z.array(z.object({ slug: z.string(), display_name: z.string().optional(), visibility: z.string().optional() })) }).safeParse(safeJson(stdout));
+      return parsed.success ? parsed.data.models.filter((m) => m.visibility === undefined || m.visibility === 'list').map((m) => ({ id: m.slug, label: m.display_name ?? m.slug })) : [];
+    },
+  },
   launch: async (inv, prompt) => ({ file: inv.bin, stdin: prompt, args: [
     'exec',
     '--json', '--ephemeral', '--ignore-user-config', '--ignore-rules', '--skip-git-repo-check',
@@ -204,6 +253,9 @@ const cursor: VendorAdapter = {
   jailed: true,
   systemInPrompt: true,
   vision: true,
+  // `cursor-agent models` prints `<id> - <name>` per line. `auto` is what a task runs on when no model is chosen.
+  // Checked against cursor-agent 2026.11.11.
+  catalog: { args: ['models'], parse: (stdout) => listedLines(stdout, ' - ').filter((m) => m.id !== 'auto') },
   launch: async (inv, prompt) => {
     const launcher = which(inv.bin, cliEnv());
     if (!launcher) throw new EngineError(`${inv.bin} is not installed`);
@@ -253,6 +305,8 @@ const antigravity: VendorAdapter = {
   jailed: true,
   systemInPrompt: true,
   vision: true,
+  // `agy models` prints `<id><tab><name>` per line: the ids an ACP session accepts. Checked against agy 1.5.6.
+  catalog: { args: ['models'], parse: (stdout) => listedLines(stdout, '\t') },
   launch: async (inv) => {
     const bin = which(inv.bin, cliEnv());
     if (!bin) throw new EngineError(`${inv.bin} is not installed`);
@@ -261,7 +315,7 @@ const antigravity: VendorAdapter = {
       file: bin,
       args: ['acp'],
       // The same session carries pictures when there are any (`promptCapabilities.image`, checked against agy 1.5.6).
-      acp: { mcpServers: [{ name: MCP_SERVER, ...shimServer(inv.bridgeUrl, inv.tokenFile) }], images: acpImages(inv) },
+      acp: { mcpServers: [{ name: MCP_SERVER, ...shimServer(inv.bridgeUrl, inv.tokenFile) }], images: acpImages(inv), ...(inv.model === 'default' ? {} : { model: inv.model }) },
       jail: { own: [state], exec: [bin], hide: [join(state, 'config', 'mcp_config.json'), join(state, 'config', 'mcp_config.json.bak')] },
     };
   },
@@ -306,6 +360,7 @@ export class CliBridgeEngine implements Engine {
   readonly #acp: (req: AcpRequest) => Promise<AcpResult>;
   readonly #quota: SubscriptionWatch | null;
   #probe: { at: number; available: boolean; reason: string } | null = null;
+  #listed: { until: number; models: EngineModel[] } | null = null;
 
   constructor(deps: { id: BridgeEngineId; config: Config; sessions: BridgeSessions; store: Store; events: EventLog; policy: PolicyEngine; clock: Clock; steering: SteeringQueue; toolbox: Toolbox; run?: CommandRunner; acp?: (req: AcpRequest) => Promise<AcpResult>; quota?: SubscriptionWatch }) {
     this.id = deps.id;
@@ -339,6 +394,25 @@ export class CliBridgeEngine implements Engine {
     }
     this.#probe = { at: this.#clock(), ...result };
     return result;
+  }
+
+  /**
+   * Asked of the CLI itself, outside any task and with no model in the loop, the way `--version` is. The answer
+   * is kept for ten minutes; a list that could not be read is asked for again after one.
+   */
+  async models(): Promise<EngineModel[]> {
+    const catalog = this.#adapter.catalog;
+    if (!('args' in catalog)) return [...catalog];
+    if (this.#listed && this.#clock() < this.#listed.until) return this.#listed.models;
+    let models: EngineModel[] = [];
+    try {
+      const res = await this.#run(this.#bin, catalog.args, { timeoutMs: 30_000, env: cliEnv() });
+      if (res.exitCode === 0) models = menu(catalog.parse(res.stdout));
+    } catch {
+      // Not installed: nothing to offer.
+    }
+    this.#listed = { until: this.#clock() + (models.length > 0 ? 10 * 60_000 : 60_000), models };
+    return models;
   }
 
   async open(run: EngineRun): Promise<EngineSession> {
@@ -517,7 +591,7 @@ export class CliBridgeEngine implements Engine {
     const command = confined(launch.file, launch.args);
     if (launch.acp) {
       const images = launch.acp.images ?? [];
-      const answer = await this.#acp({ file: command.file, args: command.args, env, cwd: inv.scratch, mcpServers: launch.acp.mcpServers, prompt, ...(images.length > 0 ? { images } : {}), signal, timeoutMs });
+      const answer = await this.#acp({ file: command.file, args: command.args, env, cwd: inv.scratch, mcpServers: launch.acp.mcpServers, prompt, ...(images.length > 0 ? { images } : {}), ...(launch.acp.model === undefined ? {} : { model: launch.acp.model }), signal, timeoutMs });
       // The protocol reports no token counts. Budgets still need a number, so one is estimated from the
       // text that crossed the wire (about four characters a token) and a flat figure per picture; what the
       // agent read through tools is not in it.

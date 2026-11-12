@@ -6,6 +6,7 @@ import type {
   AxResponse,
   Calibration,
   DocumentKind,
+  EngineModel,
   KnowledgeJob,
   McpServerInfo,
   PromotionResult,
@@ -44,7 +45,7 @@ import type {
 import { CORE_PROJECT_ID, PROTOCOL_VERSION } from '@studio-zero/protocol';
 import type { ConfidenceCalibration } from '../ax/Calibration.ts';
 import type { SteeringQueue } from '../ax/Steering.ts';
-import type { Config } from '../config.ts';
+import type { Config, EngineId } from '../config.ts';
 import type { Store } from '../db/Store.ts';
 import type { EventLog } from '../events/EventLog.ts';
 import type { WorkspaceProvisioner } from '../harness/bootstrap.ts';
@@ -168,6 +169,10 @@ export class Studio implements PromotionHost {
     };
   }
 
+  engineModels(engine: EngineId): Promise<EngineModel[]> {
+    return this.#d.router.models(engine);
+  }
+
   // -------------------------------------------------------------- projects
 
   #newProject(p: { name: string; slug: string; template: Template }): Project {
@@ -237,7 +242,7 @@ export class Studio implements PromotionHost {
    * template that fits unless one was given, and its first task: a working draft (`fast`), or the product
    * definition documents first (`deep`).
    */
-  async igniteProject(actor: Actor, p: { idea: string; track: 'fast' | 'deep'; template?: Template; engine?: string }, origin: Origin): Promise<{ project: Project; task: Task }> {
+  async igniteProject(actor: Actor, p: { idea: string; track: 'fast' | 'deep'; template?: Template; engine?: EngineId }, origin: Origin): Promise<{ project: Project; task: Task }> {
     const identity = await this.#d.namer.name(p.idea, p.template);
     let slug = identity.slug;
     for (let n = 2; this.#d.store.getProjectBySlug(slug); n++) slug = `${identity.slug.slice(0, 36).replace(/-+$/, '')}-${n}`;
@@ -424,8 +429,10 @@ export class Studio implements PromotionHost {
 
   // ----------------------------------------------------------------- tasks
 
-  async submitTask(actor: Actor, p: { projectId: string; kind: TaskKind; prompt: string; budgetTokens?: number; branch?: string; baseBranch?: string; engine?: string; sessionId?: string; track?: TaskTrack; reviewer?: ReviewerPref; references?: string[] }, origin: Origin): Promise<Task> {
+  async submitTask(actor: Actor, p: { projectId: string; kind: TaskKind; prompt: string; budgetTokens?: number; branch?: string; baseBranch?: string; engine?: EngineId; model?: string; sessionId?: string; track?: TaskTrack; reviewer?: ReviewerPref; references?: string[] }, origin: Origin): Promise<Task> {
     this.getProject(p.projectId);
+    // A model is named the way its engine names it, so it cannot be chosen while the engine is left to the routing table.
+    if (p.model !== undefined && p.engine === undefined) throw new ConflictError('a model is chosen together with the engine that runs it: name the engine as well');
     // A reference is refused here, before the task exists, so a mistyped address is not found out mid-build.
     const references = (p.references ?? []).map((raw) => {
       const parsed = parseReferenceUrl(raw);
@@ -442,7 +449,7 @@ export class Studio implements PromotionHost {
     }
     const budgetTokens = p.budgetTokens ?? this.#d.config.budgets.taskTokens;
     await this.#d.policy.authorize(actor, { kind: 'task.submit', projectId: p.projectId, taskKind: p.kind, budgetTokens });
-    const task = this.#d.store.insertTask({ id: newId('tsk'), projectId: p.projectId, kind: p.kind, prompt: p.prompt, origin, budgetTokens, branch: p.branch ?? null, baseBranch: p.baseBranch ?? null, enginePref: p.engine ?? null, sessionId: p.sessionId ?? null, track: p.track ?? 'full', reviewerPref: p.reviewer ?? null, references, createdAt: this.#d.clock() });
+    const task = this.#d.store.insertTask({ id: newId('tsk'), projectId: p.projectId, kind: p.kind, prompt: p.prompt, origin, budgetTokens, branch: p.branch ?? null, baseBranch: p.baseBranch ?? null, enginePref: p.engine ?? null, modelPref: p.model ?? null, sessionId: p.sessionId ?? null, track: p.track ?? 'full', reviewerPref: p.reviewer ?? null, references, createdAt: this.#d.clock() });
     this.#d.events.emit({ projectId: task.projectId, taskId: task.id }, { type: 'task.state', state: 'queued', error: null });
     this.#d.queue.pump();
     return task;

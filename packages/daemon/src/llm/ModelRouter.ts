@@ -1,4 +1,4 @@
-import type { ReviewerPref, TaskKind } from '@studio-zero/protocol';
+import type { EngineModel, ReviewerPref, TaskKind } from '@studio-zero/protocol';
 import { UnavailableError } from '../app/errors.ts';
 import type { Config, EngineId, RouteCandidate } from '../config.ts';
 import type { Engine } from '../harness/engines/Engine.ts';
@@ -47,16 +47,18 @@ export class ModelRouter {
 
   /**
    * `pref` is the owner's own choice of engine for this task. It is honoured or refused, never substituted:
-   * someone who asked for Codex should not find out afterwards that something else did the work.
+   * someone who asked for Codex should not find out afterwards that something else did the work. `model` is
+   * their choice of model on that engine, and goes with it: a model id means nothing without the engine it names.
    */
-  async route(kind: TaskKind, pref: EngineId | null = null): Promise<RouteDecision> {
+  async route(kind: TaskKind, pref: EngineId | null = null, model: string | null = null): Promise<RouteDecision> {
     if (pref) {
       const engine = this.#engines.get(pref);
       const status = engine ? await engine.availability() : { available: false, reason: 'engine not registered' };
       if (!engine || !status.available) throw new UnavailableError(`the engine chosen for this task is not available: ${pref} (${status.reason})`);
       const listed = this.#config.routes[kind].find((c) => c.engine === pref);
       // 'default' leaves the model to the CLI's own configuration; the API loop needs a concrete one.
-      const candidate: RouteCandidate = listed ?? { engine: pref, model: pref === 'native-claude' ? 'claude-opus-5-5' : 'default', effort: 'high' };
+      const usual: RouteCandidate = listed ?? { engine: pref, model: pref === 'native-claude' ? 'claude-opus-5-5' : 'default', effort: 'high' };
+      const candidate: RouteCandidate = model === null ? usual : { ...usual, model };
       return { engine, candidate, considered: [{ engine: pref, ...status }] };
     }
     const considered: RouteDecision['considered'] = [];
@@ -95,6 +97,12 @@ export class ModelRouter {
       if (last.available) return last;
     }
     return last;
+  }
+
+  /** What the owner can choose from on one engine. Nothing for an engine that cannot run a task now. */
+  async models(id: EngineId): Promise<EngineModel[]> {
+    const engine = this.#engines.get(id);
+    return engine && (await engine.availability()).available ? engine.models() : [];
   }
 
   async status(): Promise<{ id: string; available: boolean; reason: string }[]> {

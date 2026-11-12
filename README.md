@@ -39,7 +39,7 @@ pnpm sz task ledger build "미결제 청구서 화면을 만들어줘"
 
 목록 맨 위의 **Studio Zero Core**는 이 저장소 자신이다. 거기에 일을 시키면 샌드박스 안의 복제본에서 고치고 테스트한 뒤, 이 체크아웃에 `feature/` 브랜치로만 내놓는다. 읽어 보고 앱에서 머지한다.
 
-**모델은 둘 중 하나면 된다.** Claude Code에 로그인되어 있으면(`claude`를 한 번 실행) API 키 없이 구독으로 돈다. 계획·검증·작업 노트 같은 스튜디오 자체의 생각도 그 구독으로 한다. API 키를 쓰려면 `pnpm sz vault set provider/anthropic/api-key`(숨김 입력, macOS Keychain에 저장). Codex, Cursor, Antigravity CLI가 로그인되어 있으면 작업을 시작할 때 엔진으로 고를 수 있다. `pnpm sz status`가 지금 어느 쪽으로 도는지 보여 준다.
+**모델은 둘 중 하나면 된다.** Claude Code에 로그인되어 있으면(`claude`를 한 번 실행) API 키 없이 구독으로 돈다. 계획·검증·작업 노트 같은 스튜디오 자체의 생각도 그 구독으로 한다. API 키를 쓰려면 `pnpm sz vault set provider/anthropic/api-key`(숨김 입력, macOS Keychain에 저장). Codex, Cursor, Antigravity CLI가 로그인되어 있으면 작업을 시작할 때 엔진으로 고를 수 있다. 엔진을 고르면 그 옆에서 모델도 고른다: 목록은 그 CLI가 지금 로그인으로 쓸 수 있다고 답한 것이고, 고르지 않으면 엔진이 평소 쓰는 모델로 돈다. `pnpm sz status`가 지금 어느 쪽으로 도는지 보여 준다.
 
 Blender, Unity, Aseprite 같은 이 Mac의 도구는 앱의 설정 → 외부 도구 → MCP 서버 추가에서 실행 명령으로 연결한다.
 

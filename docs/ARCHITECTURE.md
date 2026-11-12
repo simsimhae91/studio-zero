@@ -235,6 +235,18 @@ sequenceDiagram
 
 모든 종류에 Claude Code 브릿지가 대안으로 들어 있어서 API 키 없이도 길이 끊기지 않는다. 소유자가 작업을 시작할 때 엔진을 직접 고를 수도 있다(`tasks.submit`의 `engine`). 고른 엔진을 쓸 수 없으면 다른 것으로 바꾸지 않고 실패한다. Cursor와 Antigravity는 라우팅 표에 없고 소유자가 고를 때만 쓰인다.
 
+**모델 고르기.** 엔진을 고른 작업에는 그 엔진이 돌릴 모델도 붙일 수 있다(`tasks.submit`의 `model`). 모델 이름은 엔진마다 뜻이 달라서 엔진 없이 모델만 고를 수는 없고, 표의 그 엔진 항목에서 모델만 바뀐다(effort는 그대로). 고를 수 있는 목록(`engines.models`)은 데몬이 정해 두지 않고 그 회사의 CLI에 묻는다. 묻는 것은 작업 밖에서, 모델이 끼지 않는 명령 하나다.
+
+| 엔진 | 목록의 출처 | 모델을 넘기는 방법 |
+|---|---|---|
+| Claude API (네이티브 루프) | 코드의 네 모델(가격표가 있는 것) | 요청의 `model` |
+| Claude Code | CLI에 목록 명령이 없다. 등급별 최신 모델의 별칭 `fable` · `opus` · `sonnet` · `haiku` | `--model` |
+| Codex | `codex debug models` (JSON, 숨김 표시된 내부용 모델 제외) | `--model` |
+| Cursor | `cursor-agent models` (`<id> - <이름>`, `auto` 제외) | `--model` |
+| Antigravity | `agy models` (`<id><탭><이름>`) | ACP `session/set_model` |
+
+목록은 10분간 기억하고, 읽지 못했으면 비어 있다가 1분 뒤 다시 묻는다. 목록은 메뉴이지 관문이 아니다: 그 모델을 돌릴 수 있는지는 그 회사가 정하고, 없는 모델이면 그 차례가 실패한다(다른 모델로 바꿔 돌리지 않는다). 데몬이 직접 막는 것은 모양뿐이다. 모델 이름은 CLI의 인자 하나가 되므로 닫힌 문자 집합이고 `-`로 시작할 수 없다(`ModelId`). 계획·검증·교차 검토에 쓰는 모델은 이 선택과 무관하게 그대로다.
+
 ### 4.1 구독으로 쓰기
 
 API 키는 선택 사항이다. 금고에 Anthropic 키가 없으면 데몬은 구독 모드로 돈다(`system.status`의 `brain: session`).
@@ -266,7 +278,7 @@ API 키는 선택 사항이다. 금고에 Anthropic 키가 없으면 데몬은 �
 
 ## 5. 프로토콜
 
-`packages/protocol/src/rpc.ts`의 테이블 하나가 서버 검증, 클라이언트 타입, 이 문서의 근거다. 메서드 78개, 이벤트 42종.
+`packages/protocol/src/rpc.ts`의 테이블 하나가 서버 검증, 클라이언트 타입, 이 문서의 근거다. 메서드 79개, 이벤트 42종.
 
 - 연결: `ws://127.0.0.1:49200/v1/ws`. 첫 프레임은 `{t:"hello", protocol, token, client}`. 5초 안에 오지 않거나 토큰이 틀리면 닫는다.
 - 프레임: 클라이언트 `hello | req | sub | unsub | terminal.data`, 서버 `ready | res | err | evt | sub_closed | terminal.output | terminal.exit`.

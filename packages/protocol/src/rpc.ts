@@ -6,6 +6,7 @@ import {
   AuditReport,
   Checkpoint,
   CredentialMeta,
+  EngineModel,
   Eval,
   ExternalApi,
   FileEntry,
@@ -13,6 +14,7 @@ import {
   LedgerEntry,
   LessonState,
   McpServerInfo,
+  ModelId,
   PowerMode,
   PowerState,
   Project,
@@ -41,6 +43,7 @@ const empty = z.object({});
 const McpServerId = z.string().regex(/^[a-z][a-z0-9-]{1,30}$/);
 /** Which engine runs a task, when the owner chooses instead of the routing table. */
 export const EnginePref = z.enum(['native-claude', 'claude-code', 'codex', 'cursor', 'antigravity']);
+export type EnginePref = z.infer<typeof EnginePref>;
 /** A path inside the project's workspace, relative to /workspace. The daemon confines it again. */
 const WorkspacePath = z.string().min(1).max(1024);
 /** A page to take design principles from. Checked again by the daemon before anything opens it. */
@@ -63,6 +66,12 @@ export const methods = {
       brain: z.enum(['api', 'session', 'none']),
     }),
   },
+
+  /**
+   * The models an engine can be asked to run, as the vendor's own tooling lists them for this login. Empty for an
+   * engine that is not available, or whose list could not be read: the task can still be left to the usual model.
+   */
+  'engines.models': { params: z.object({ engine: EnginePref }), result: z.object({ models: z.array(EngineModel) }) },
 
   'projects.create': { params: z.object({ name: z.string().min(1).max(80), slug: Slug, template: Template }), result: Project },
   /**
@@ -131,6 +140,11 @@ export const methods = {
       baseBranch: z.string().min(1).max(120).optional(),
       /** Run on this engine. Left out, the routing table picks; chosen and unavailable, the task fails instead of quietly using another. */
       engine: EnginePref.optional(),
+      /**
+       * Have that engine run this model. Only together with `engine`: a model is named the way its engine names it.
+       * Left out, the engine runs the one the routing table lists for it. The vendor decides whether it can be run.
+       */
+      model: ModelId.optional(),
       /** The session (task stream) to file this task under. Left out: the project's default stream. */
       sessionId: z.string().optional(),
       /** Left out: `full`. */

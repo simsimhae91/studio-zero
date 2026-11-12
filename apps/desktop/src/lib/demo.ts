@@ -18,7 +18,7 @@ const projects: Project[] = [
   { id: 'prj_tide', slug: 'tide', name: 'Tide 정산', template: 'web-vite-react', createdAt: min(-70) },
 ];
 
-const baseTask = { projectId: 'prj_ledger', origin: 'desktop', engine: 'native-claude', model: 'claude-opus-5-5', budgetTokens: 2_000_000, error: null, baseBranch: null, enginePref: null, sessionId: null, reviewerPref: null, references: [] as string[], track: 'full' } as const;
+const baseTask = { projectId: 'prj_ledger', origin: 'desktop', engine: 'native-claude', model: 'claude-opus-5-5', budgetTokens: 2_000_000, error: null, baseBranch: null, enginePref: null, modelPref: null, sessionId: null, reviewerPref: null, references: [] as string[], track: 'full' } as const;
 const sessions: Session[] = [{ id: 'ses_refactor', projectId: 'prj_ledger', name: 'refactor/dates', createdAt: min(-241) }];
 const tasks: Task[] = [
   {
@@ -358,6 +358,17 @@ const quota: SubscriptionQuota[] = [
 
 type Handlers = { [M in MethodName]?: (params: ParamsOf<M>) => ResultOf<M> };
 
+const demoModels: Record<string, { id: string; label: string }[]> = {
+  'native-claude': [{ id: 'claude-fable-5-2', label: 'Claude Fable 5.2' }, { id: 'claude-opus-5-5', label: 'Claude Opus 5.5' }, { id: 'claude-sonnet-5-5', label: 'Claude Sonnet 5.5' }, { id: 'claude-haiku-5-5', label: 'Claude Haiku 5.5' }],
+  'claude-code': [{ id: 'fable', label: 'Claude Fable' }, { id: 'opus', label: 'Claude Opus' }, { id: 'sonnet', label: 'Claude Sonnet' }, { id: 'haiku', label: 'Claude Haiku' }],
+  codex: [{ id: 'gpt-6-astra', label: 'GPT-6-Astra' }, { id: 'gpt-5.6-sol', label: 'GPT-5.6-Sol' }, { id: 'gpt-5.6-terra', label: 'GPT-5.6-Terra' }, { id: 'gpt-5.6-luna', label: 'GPT-5.6-Luna' }],
+  cursor: [
+    ['composer-2.5', 'Composer 2.5'], ['composer-2.5-fast', 'Composer 2.5 Fast'], ['gpt-5.3-codex', 'Codex 5.3'], ['gpt-5.3-codex-high', 'Codex 5.3 High'], ['gpt-5.2', 'GPT-5.2'],
+    ['gpt-5.6-sol-high', 'GPT-5.6 Sol 1M High'], ['gpt-5.6-luna-high', 'GPT-5.6 Luna 1M High'], ['claude-opus-5-5-medium', 'Claude Opus 5.5 1M'], ['claude-opus-5-5-high', 'Claude Opus 5.5 1M High'],
+    ['claude-sonnet-5-thinking-high', 'Claude Sonnet 5 1M Thinking'], ['claude-fable-5-thinking-high', 'Claude Fable 5 1M Thinking (NO ZDR)'], ['grok-4.7-medium', 'Grok 4.7 Medium'], ['grok-4.7-high', 'Grok 4.7 High'], ['cursor-grok-4.6-high', 'Grok 4.6'],
+  ].map(([id, label]) => ({ id: id!, label: label! })),
+};
+
 const handlers: Handlers = {
   'system.status': () => ({
     version: '0.1.0', protocol: 1, uptimeSec: 86_400, runtime: { context: 'orbstack', reachable: true, detail: '29.8.2 linux/arm64' }, relays: [{ id: 'telegram', state: 'connected' }, { id: 'slack', state: 'disabled' }, { id: 'ntfy', state: 'disabled' }], queue: { queued: 0, running: 1 },
@@ -370,6 +381,7 @@ const handlers: Handlers = {
     ],
     brain: 'api',
   }),
+  'engines.models': (p) => ({ models: demoModels[p.engine] ?? [] }),
   'projects.list': () => ({ projects, live: [{ projectId: 'prj_core', sandbox: 'running', busy: false }, { projectId: 'prj_ledger', sandbox: 'running', busy: true }, { projectId: 'prj_atlas', sandbox: 'stopped', busy: false }, { projectId: 'prj_tide', sandbox: 'stopped', busy: false }] }),
   'ledger.list': (p) => ({ entries: ledger.filter((e) => e.projectId === p.projectId) }),
   'external.list': (p) => ({ apis: p.projectId === 'prj_ledger' ? [{ projectId: 'prj_ledger', name: 'tosspay', origin: 'https://api.tosspayments.com', variables: ['SECRET_KEY'], createdAt: min(-200) }] : [] }),

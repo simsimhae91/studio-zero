@@ -10,6 +10,8 @@ export interface AcpRequest {
   /** MCP servers for this session only. Nothing is written to the agent's saved configuration. */
   mcpServers: { name: string; command: string; args: string[]; env: Record<string, string> }[];
   prompt: string;
+  /** The model this session runs, by the agent's own id for it. Left out: whatever the agent is set to. */
+  model?: string;
   /** Pictures sent with the prompt, as image content blocks. Only for an agent whose `promptCapabilities.image` is true. */
   images?: { mimeType: string; data: string }[];
   signal?: AbortSignal;
@@ -34,7 +36,9 @@ const Permission = z.object({ options: z.array(z.object({ optionId: z.string(), 
 
 /**
  * One prompt to an agent CLI over the Agent Client Protocol (JSON-RPC, one message per line, on stdio):
- * initialize → session/new (with this session's MCP servers) → session/prompt → collect the reply → stop the process.
+ * initialize → session/new (with this session's MCP servers) → session/set_model (when one was chosen) →
+ * session/prompt → collect the reply → stop the process. A model the agent does not accept fails the prompt:
+ * the work is not done on another one.
  *
  * This client offers the agent nothing of its own: no file system and no terminal capability. When the agent asks
  * for permission to use a tool it is granted, because what a tool can reach is not decided here; it is decided
@@ -111,6 +115,8 @@ export function acpPrompt(req: AcpRequest): Promise<AcpResult> {
     void (async () => {
       await call('initialize', { protocolVersion: 1, clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false }, clientInfo: { name: 'studio-zero', version: '0.1.0' } });
       const session = z.object({ sessionId: z.string() }).parse(await call('session/new', { cwd: req.cwd, mcpServers: req.mcpServers.map((s) => ({ name: s.name, command: s.command, args: s.args, env: Object.entries(s.env).map(([name, value]) => ({ name, value })) })) }));
+      // Checked against `agy acp` 1.5.6, whose `session/new` lists the same ids as `agy models`.
+      if (req.model !== undefined) await call('session/set_model', { sessionId: session.sessionId, modelId: req.model });
       const done = z.object({ stopReason: z.string() }).parse(await call('session/prompt', { sessionId: session.sessionId, prompt: [{ type: 'text', text: req.prompt }, ...(req.images ?? []).map((image) => ({ type: 'image', mimeType: image.mimeType, data: image.data }))] }));
       finish(null, { text: text.trim(), stopReason: done.stopReason });
     })().catch((err: unknown) => finish(err instanceof Error ? err : new AcpError(String(err))));

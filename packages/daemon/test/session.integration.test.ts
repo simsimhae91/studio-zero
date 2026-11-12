@@ -196,3 +196,43 @@ test('the other subscriptions as coding engines: Codex, Cursor and Antigravity c
     await d.cleanup();
   }
 });
+
+test('a chosen model, for real: each CLI lists its own, runs the one picked, and refuses one it does not have', { skip: enabled ? false : 'set SZ_TEST_SESSION=1 (uses the vendor CLI logins on this machine)', timeout: 15 * 60 * 1000 }, async (t) => {
+  const vendor = (file: string): boolean => ['claude', 'codex', 'cursor-agent', 'agy', '/usr/bin/sandbox-exec'].includes(file);
+  const port = await freePort();
+  const d = await testDaemon({ listen: { port }, engines: { claudeCode: { enabled: true } } }, {}, (docker) => (file, args, opts) => (vendor(file) ? runCommand(file, args, opts) : docker(file, args, opts)));
+  await d.daemon.start();
+  const { store, router } = d.daemon;
+  try {
+    const project = sampleProject();
+    store.insertProject(project);
+    await d.daemon.provisioner.ensure(project);
+    const only = process.env.SZ_TEST_MODEL_ENGINE;
+    for (const id of ['claude-code', 'codex', 'cursor', 'antigravity'] as const) {
+      await t.test(id, { skip: only !== undefined && only !== id }, async (st) => {
+        const available = (await router.status()).find((e) => e.id === id)!;
+        if (!available.available) return st.skip(available.reason);
+        const models = await router.models(id);
+        assert.ok(models.length > 0, 'the CLI listed its models');
+        // The smallest thing on the list: this is a one-word round.
+        const pick = models.find((m) => /haiku|luna|flash-low|composer/i.test(m.id)) ?? models.at(-1)!;
+        st.diagnostic(`${id}: ${models.length} models; running ${pick.id} (${pick.label})`);
+        const round = async (model: string): Promise<string> => {
+          const task = store.insertTask({ id: `tsk_${id}_${model.replace(/\W/g, '_')}`, projectId: project.id, kind: 'build', prompt: 'x', origin: 'desktop', budgetTokens: 2_000_000, branch: null, enginePref: id, modelPref: model, createdAt: Date.now() });
+          const route = await router.route('build', id, task.modelPref);
+          assert.equal(route.candidate.model, model);
+          const session = await route.engine.open({ project, task, route: { ...route.candidate, effort: 'low' }, system: 'You answer in one word.', signal: new AbortController().signal, onWaiting: () => undefined });
+          try {
+            return (await session.send('Reply with the single word: ready. Use no tools.')).finalText;
+          } finally {
+            await session.close();
+          }
+        };
+        assert.match(await round(pick.id), /ready/i);
+        await assert.rejects(round('sz-no-such-model'), 'a model the vendor does not have is refused, not swapped for another');
+      });
+    }
+  } finally {
+    await d.cleanup();
+  }
+});

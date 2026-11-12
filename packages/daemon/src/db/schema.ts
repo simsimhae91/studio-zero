@@ -385,6 +385,10 @@ const migrations: string[] = [
   `
   ALTER TABLE usage_ledger ADD COLUMN cached_tokens INTEGER NOT NULL DEFAULT 0;
   `,
+  // 10: a model the owner picked for a task, on the engine they picked.
+  `
+  ALTER TABLE tasks ADD COLUMN model_pref TEXT;
+  `,
 ];
 
 export function migrate(db: DatabaseSync): void {
