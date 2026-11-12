@@ -1,4 +1,4 @@
-import type { Approval, AuditReport, AxBlock, Checkpoint, Eval, EventBody, EventEnvelope, KnowledgeJob, Lesson, MethodName, ParamsOf, Project, ProposalCard, ResultOf, SandboxInfo, ScratchEntry, Scratchpad, Task } from '@studio-zero/protocol';
+import type { Approval, AuditReport, AxBlock, Checkpoint, Eval, EventBody, EventEnvelope, FileEntry, KnowledgeJob, Lesson, MethodName, ParamsOf, Project, ProposalCard, ResultOf, SandboxInfo, ScratchEntry, Scratchpad, Session, Task } from '@studio-zero/protocol';
 import { matchesFilter } from '@studio-zero/protocol';
 import type { Backend } from './backend.ts';
 
@@ -15,7 +15,8 @@ const projects: Project[] = [
   { id: 'prj_atlas', slug: 'atlas', name: 'Atlas 모바일', template: 'mobile-expo', createdAt: min(-300) },
 ];
 
-const baseTask = { projectId: 'prj_ledger', origin: 'desktop', engine: 'native-claude', model: 'claude-opus-5-5', budgetTokens: 2_000_000, error: null, baseBranch: null, enginePref: null } as const;
+const baseTask = { projectId: 'prj_ledger', origin: 'desktop', engine: 'native-claude', model: 'claude-opus-5-5', budgetTokens: 2_000_000, error: null, baseBranch: null, enginePref: null, sessionId: null, track: 'full' } as const;
+const sessions: Session[] = [{ id: 'ses_refactor', projectId: 'prj_ledger', name: 'refactor/dates', createdAt: min(-241) }];
 const tasks: Task[] = [
   {
     ...baseTask, id: 'tsk_detail', kind: 'build', prompt: '청구서 상세 화면에 결제 이력을 추가해줘', state: 'awaiting_approval', phase: 'execute', branch: 'sz/tsk_detail',
@@ -26,8 +27,8 @@ const tasks: Task[] = [
     spentTokens: 412_800, spentUsdMicros: 1_890_000, baseCheckpointId: 'ckp_a', summary: '미결제 청구서 목록을 만들었습니다. 고객별로 묶고, 가장 오래된 건이 맨 위에 옵니다. 금액은 원화 기준으로 가정했습니다.', createdAt: min(-95), startedAt: min(-95), finishedAt: min(-81),
   },
   {
-    ...baseTask, id: 'tsk_refactor', kind: 'refactor', prompt: '날짜 포맷 함수를 한 곳으로 모아줘', engine: 'claude-code', model: 'opus', state: 'failed', phase: null, branch: 'sz/tsk_refactor',
-    spentTokens: 96_200, spentUsdMicros: 0, baseCheckpointId: 'ckp_0', summary: null, error: 'verification still failing after 3 rounds: typecheck', createdAt: min(-240), startedAt: min(-240), finishedAt: min(-231),
+    ...baseTask, id: 'tsk_refactor', kind: 'refactor', prompt: '날짜 포맷 함수를 한 곳으로 모아줘', engine: 'claude-code', model: 'opus', state: 'failed', phase: null, branch: 'sz/tsk_refactor', sessionId: 'ses_refactor',
+    spentTokens: 96_200, spentUsdMicros: 0, baseCheckpointId: 'ckp_0', summary: null, error: 'verification still failing after 3 corrections: compiler', createdAt: min(-240), startedAt: min(-240), finishedAt: min(-231),
   },
 ];
 
@@ -55,9 +56,12 @@ const bodies: EventBody[] = [
   { type: 'tool.result', callId: 'call_4', ok: true, exitCode: null, durationMs: 52, preview: 'edited src/data/payments.ts (1 replacement)' },
   { type: 'tool.call', callId: 'call_5', tool: 'bash', input: 'pnpm typecheck && pnpm build' },
   { type: 'tool.result', callId: 'call_5', ok: true, exitCode: 0, durationMs: 9830, preview: 'dist/assets/index-B2kq.js  184.20 kB' },
+  { type: 'tool.call', callId: 'call_5b', tool: 'bash', input: 'pnpm add @tanstack/react-query zustand@^5' },
+  { type: 'tool.result', callId: 'call_5b', ok: true, exitCode: 0, durationMs: 6120, preview: '+ @tanstack/react-query 5.90.2\n+ zustand 5.0.8' },
   { type: 'agent.text', text: '결제 이력 섹션을 추가했습니다.' },
   { type: 'task.phase', phase: 'verify', round: 1 },
-  { type: 'eval.result', evalId: 'evl_tc', name: 'typecheck', passed: true, durationMs: 4100, detail: 'exit 0 in 4100ms' },
+  { type: 'gate.result', gate: 'compiler', name: 'npm run --silent typecheck', passed: true, exitCode: 0, durationMs: 4100, detail: '' },
+  { type: 'gate.result', gate: 'smoke', name: '/ /invoices/1', passed: true, exitCode: null, durationMs: 2300, detail: '2 routes loaded without errors' },
   { type: 'eval.result', evalId: 'evl_lint', name: 'slop-lint', passed: true, durationMs: 60, detail: '0 minor findings' },
   { type: 'audit.completed', auditId: 'aud_1', score: 71.4, passed: false, blockers: 1, majors: 2, minors: 1 },
   { type: 'eval.result', evalId: 'evl_vis', name: 'visual-audit', passed: false, durationMs: 14200, detail: 'Visual audit score 71.4/100, required 85 with no blockers.' },
@@ -66,6 +70,7 @@ const bodies: EventBody[] = [
   { type: 'tool.call', callId: 'call_6', tool: 'edit_file', input: 'src/routes/InvoiceDetail.tsx' },
   { type: 'tool.result', callId: 'call_6', ok: true, exitCode: null, durationMs: 47, preview: 'edited src/routes/InvoiceDetail.tsx (1 replacement)' },
   { type: 'steer.delivered', count: 1 },
+  { type: 'advisor.answered', advisor: 'codex', question: '결제 이력처럼 서버에서 오는 목록은 Zustand에 두는 게 맞을까, TanStack Query가 맞을까?', ok: true, answer: 'TanStack Query를 권합니다.\n\n결제 이력은 서버가 원본인 데이터라서 캐시, 재검증, 로딩 상태가 필요합니다. Zustand에는 필터나 선택한 행처럼 화면에만 있는 상태를 두세요. 목록이 한 화면에서만 쓰이고 새로 고침이 필요 없다면 이 판단은 뒤집힙니다.', durationMs: 18_400 },
   { type: 'checkpoint.created', checkpointId: 'ckp_t2', label: '7턴: edit_file src/routes/InvoiceDetail.tsx' },
   { type: 'policy.decision', actionKind: 'llm.request', actor: 'agent:tsk_detail', effect: 'deny', rule: 'budget.task', reason: 'task budget exhausted (2004300/2000000 tokens)' },
   { type: 'approval.requested', approvalId: 'apr_budget', actionKind: 'task.extend-budget', summary: approvals[0]!.summary, expiresAt: min(59) },
@@ -188,6 +193,25 @@ const capexEntries: ScratchEntry[] = [
 ];
 const capexJob: KnowledgeJob = { id: 'job_capex', kind: 'research', title: '이번 분기 AI 인프라 투자 규모', state: 'succeeded', origin: 'telegram', scratchId: 'scr_capex', error: null, spentTokens: 184_000, createdAt: min(-200), finishedAt: min(-190) };
 
+/** A small workspace for the file explorer: what a Vite project looks like after a couple of tasks. */
+const fileBodies: Record<string, string> = {
+  'package.json': '{\n  "name": "ledger",\n  "private": true,\n  "type": "module",\n  "scripts": {\n    "dev": "vite",\n    "build": "tsc -b && vite build",\n    "typecheck": "tsc --noEmit"\n  },\n  "dependencies": {\n    "react": "^19.3.1",\n    "react-dom": "^19.3.1",\n    "zustand": "^5.0.8"\n  }\n}\n',
+  'README.md': '# Ledger\n\n미결제 청구서를 한 화면에서 보고 다시 보내는 앱입니다.\n',
+  'tsconfig.json': '{\n  "compilerOptions": {\n    "strict": true,\n    "jsx": "react-jsx"\n  },\n  "include": ["src"]\n}\n',
+  '.studio-zero/project.json': '{\n  "dev": { "command": "pnpm dev --host 0.0.0.0 --port 5173", "port": 5173 },\n  "routes": ["/", "/invoices/1"]\n}\n',
+  'src/main.tsx': "import { StrictMode } from 'react';\nimport { createRoot } from 'react-dom/client';\nimport { App } from './App.tsx';\nimport './index.css';\n\ncreateRoot(document.getElementById('root')!).render(\n  <StrictMode>\n    <App />\n  </StrictMode>,\n);\n",
+  'src/App.tsx': "import { useState } from 'react';\nimport { invoices, type Invoice } from './data/invoices.ts';\n\n// Unpaid invoices, oldest first.\nexport function App() {\n  const [selected, setSelected] = useState<Invoice | null>(null);\n  const unpaid = invoices.filter((invoice) => invoice.paidAt === null);\n  return (\n    <main className=\"flex flex-col gap-6 p-6\">\n      <h1 className=\"text-3xl font-semibold\">미결제 청구서 {unpaid.length}건</h1>\n      <ul>\n        {unpaid.map((invoice) => (\n          <li key={invoice.id} onClick={() => setSelected(invoice)}>\n            {invoice.customer}: {invoice.amount.toLocaleString('ko')}원\n          </li>\n        ))}\n      </ul>\n      {selected ? <p>{selected.customer}</p> : null}\n    </main>\n  );\n}\n",
+  'src/index.css': '@import "tailwindcss";\n@import "../.studio-zero/theme.css";\n\nbody {\n  margin: 0;\n}\n',
+  'src/data/invoices.ts': "export interface Invoice {\n  id: string;\n  customer: string;\n  amount: number;\n  paidAt: string | null;\n}\n\nexport const invoices: Invoice[] = [\n  { id: 'inv_1', customer: 'Northwind Trading', amount: 1_240_000, paidAt: null },\n  { id: 'inv_2', customer: '한빛설비', amount: 380_000, paidAt: '2026-10-31' },\n];\n",
+  'src/data/payments.ts': "export interface Payment {\n  invoiceId: string;\n  paidAt: string;\n  amount: number;\n}\n\nexport const payments: Payment[] = [{ invoiceId: 'inv_2', paidAt: '2026-10-31', amount: 380_000 }];\n",
+};
+const fileDirs = ['.studio-zero', 'src', 'src/data'];
+const parentOf = (path: string): string => (path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '.');
+const fileEntries: FileEntry[] = [
+  ...fileDirs.map((path): FileEntry => ({ path, name: path.slice(path.lastIndexOf('/') + 1), type: 'directory', size: 0, mtime: min(-60) })),
+  ...Object.entries(fileBodies).map(([path, body]): FileEntry => ({ path, name: path.slice(path.lastIndexOf('/') + 1), type: 'file', size: new TextEncoder().encode(body).length, mtime: min(-12) })),
+].sort((a, b) => (a.type === b.type ? a.name.localeCompare(b.name) : a.type === 'directory' ? -1 : 1));
+
 type Handlers = { [M in MethodName]?: (params: ParamsOf<M>) => ResultOf<M> };
 
 const handlers: Handlers = {
@@ -202,7 +226,13 @@ const handlers: Handlers = {
     ],
     brain: 'api',
   }),
-  'projects.list': () => ({ projects }),
+  'projects.list': () => ({ projects, live: [{ projectId: 'prj_ledger', sandbox: 'running', busy: true }, { projectId: 'prj_atlas', sandbox: 'stopped', busy: false }] }),
+  'sessions.list': (p) => ({ sessions: sessions.filter((s) => s.projectId === p.projectId) }),
+  'files.list': (p) => ({ entries: p.projectId === 'prj_ledger' ? fileEntries.filter((e) => parentOf(e.path) === (p.path ?? '.')) : [], truncated: false }),
+  'files.read': (p) => {
+    const content = fileBodies[p.path] ?? '';
+    return { content, encoding: 'utf-8', size: new TextEncoder().encode(content).length, truncated: false, binary: false };
+  },
   'sandbox.info': (p) => sandbox(p.projectId),
   'preview.start': () => ({ containerPort: 5173, localhost: 'http://localhost:32775', orbLocal: 'http://sz-ledger.orb.local:5173' }),
   'tasks.list': (p) => ({ tasks: tasks.filter((t) => p.projectId === undefined || t.projectId === p.projectId) }),
@@ -251,6 +281,36 @@ export function demoBackend(): Backend {
     subscribe: (filter, onEvent, sinceSeq) => {
       if (sinceSeq !== 'now') queueMicrotask(() => events.filter((e) => matchesFilter(e, filter)).forEach(onEvent));
       return () => undefined;
+    },
+    // A shell that only echoes: enough to show the terminal, and honest about not running anything.
+    openTerminal: async (_params, handlers) => {
+      const prompt = '\x1b[32mnode@ledger\x1b[0m:\x1b[34m/workspace\x1b[0m$ ';
+      let line = '';
+      let open = true;
+      queueMicrotask(() => handlers.onOutput(`데모 터미널입니다. 데몬에 연결하면 샌드박스의 실제 셸이 열립니다.\r\n${prompt}`));
+      return {
+        id: 'trm_demo',
+        write: (data) => {
+          if (!open) return;
+          for (const ch of data) {
+            if (ch === '\r') {
+              handlers.onOutput(`\r\n${line.trim() ? `${line.trim().split(' ')[0]}: 데모에서는 명령을 실행하지 않습니다\r\n` : ''}${prompt}`);
+              line = '';
+            } else if (ch === '\x7f') {
+              if (line !== '') handlers.onOutput('\b \b');
+              line = line.slice(0, -1);
+            } else if (ch >= ' ') {
+              line += ch;
+              handlers.onOutput(ch);
+            }
+          }
+        },
+        resize: async () => undefined,
+        kill: async () => {
+          if (open) handlers.onExit(null, 'killed');
+          open = false;
+        },
+      };
     },
     artifactUrl: async (id) => (id === 'art_tablet' ? fakeScreen(834, 1194) : id === 'art_desktop' ? fakeScreen(1440, 900) : fakeScreen(393, 659)),
     close: () => undefined,

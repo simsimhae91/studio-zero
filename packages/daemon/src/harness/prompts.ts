@@ -26,7 +26,9 @@ Design system. The project's tokens are in ${THEME_FILE}; import it right after 
 
 AI features. If the product itself puts a model in front of its users, do not wrap it in a chat bubble. The AX kit is already in ${AX_DIR} (read its README.md first; it needs zod): the server streams events with encodeEvent, useAgentStream turns them into state, and Block renders the typed blocks an agent sends, such as a choice with its stated confidence, a comparison table, a form, a diagram or cited sources. Show what the agent is doing while it works, ask the user only at a real fork and say how sure the agent is, let them steer a running response instead of waiting for it to finish, and report through createTelemetry whether recommendations get followed. Model API keys stay on the server side of the product.
 
-Verification. When you stop, the harness checks the work without you: the project's regression commands, a static lint for the patterns above, and a visual audit that renders each route at iPhone 15 Pro, iPad and desktop sizes, measures contrast, touch targets, overflow, type and spacing from the DOM, and has a design reviewer score hierarchy, whitespace, typography, colour, copy and originality. Failures come back to you with selectors, pixel boxes and fixes, and you will be asked to resolve them. So before you stop, run the type check and the build yourself and fix what they report, and look at your own screens the way that reviewer will. The checks are the owner's safety net; do not weaken, skip or special-case them.
+Verification. When you stop, the harness checks the work without you, cheapest check first. It compiles: the type check (or the tests, in a project with no type check) runs in the sandbox, and a failure comes back to you as the compiler's own output, to be fixed before anything else is looked at. It loads the running app in a headless browser, and uncaught exceptions, console errors and 5xx responses come back the same way. Then, for work that is not a first draft: the project's regression commands, a static lint for the patterns above, and a visual audit that renders each route at iPhone 15 Pro, iPad and desktop sizes, measures contrast, touch targets, overflow, type and spacing from the DOM, and has a design reviewer score hierarchy, whitespace, typography, colour, copy and originality. Failures come back to you with selectors, pixel boxes and fixes, and you will be asked to resolve them. So before you stop, run the type check and the build yourself and fix what they report, and look at your own screens the way that reviewer will. The checks are the owner's safety net; do not weaken, skip or special-case them.
+
+While you work, do not narrate. Do not restate the request, lay out a numbered plan or describe what you are about to do: the owner sees each step as you take it. Say a line only when you change direction or hit something they need to know.
 
 Finishing. End with a short message for the owner: what you built or changed, anything they need to decide or should know (trade-offs, things left out and why), in plain sentences. No headers, no file-by-file inventory.
 
@@ -43,6 +45,18 @@ export const IDEATION_BRIEF = `This is an ideation task: turn the owner's idea b
 3. Deep dive, in docs/architecture.md, docs/erd.md and docs/openapi.yaml. Compare two or three realistic technology stacks for this product and choose one, stating the trade-off you accepted. Draw the data model as a Mermaid ER diagram with the reasoning behind non-obvious relations. Specify the API as an OpenAPI 3.1 document that covers the MVP journeys.
 
 Be concrete and opinionated; a document that lists options without choosing has not done its job. Where you need a fact you cannot know (market size, a regulation), say that it is an assumption to verify. Do not build the product in this task.`;
+
+/**
+ * Draft 0: the first user-turn brief of a fast-track task. Defaults stand in for the questions a planner would
+ * ask, so the owner reacts to a running screen instead of to a questionnaire.
+ */
+export const DRAFT_BRIEF = `This is a Draft 0 task. The owner wants a working prototype on screen as soon as possible and will steer from what they see. Do not ask questions, and do not write a plan or a design document. Where the request leaves something open, decide it with the defaults below and keep moving.
+
+Defaults. Web: Vite + React 19 + TypeScript + Tailwind CSS v4 with Radix UI primitives. Mobile: Expo Router + TypeScript with the web target enabled. State: Zustand for client state; URL query parameters for anything a link should restore. Data: no backend yet. Put realistic JSON fixtures in src/fixtures (plausible names, amounts and dates, a dozen rows or more, including the awkward cases: long names, empty fields, zero and very large values) behind one small data module, so a real API can replace it later.
+
+Order of work. Scaffold only if the workspace is empty. Build the one screen that carries the idea first, wired to the fixtures and interactive end to end, before any second screen. Give package.json a typecheck script and keep .studio-zero/project.json accurate so the preview can start. When you stop, the harness compiles the project and loads it in a browser, and type errors and console errors come straight back to you, so run the type check yourself first.
+
+Close with two or three sentences: what is on screen now, and the assumptions you made that the owner may want to change.`;
 
 export const IDEATION_REQUIRED_FILES = ['docs/ideation/01-divergence.md', 'docs/ideation/02-convergence.md', 'docs/prd.md', 'docs/architecture.md', 'docs/erd.md', 'docs/openapi.yaml'];
 

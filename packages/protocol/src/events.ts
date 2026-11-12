@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { ScratchState } from './ax.ts';
-import { ApprovalState, LessonState, Origin, Phase, ProposalState, SandboxState, TaskKind, TaskState } from './domain.ts';
+import { AdvisorId, ApprovalState, LessonState, Origin, Phase, ProposalState, SandboxState, TaskKind, TaskState } from './domain.ts';
 
 /**
  * Every state change in the daemon is an append-only event with a monotonically increasing `seq`.
@@ -55,6 +55,20 @@ export const EventBody = z.discriminatedUnion('type', [
     durationMs: z.number().int(),
     detail: z.string(),
   }),
+  /**
+   * A built-in execution gate ran: the compiler (type check or tests) or the headless smoke load. Unlike an
+   * eval these are not rows the owner manages; `detail` is raw tool or browser output and is rendered as text.
+   */
+  z.object({
+    type: z.literal('gate.result'),
+    gate: z.enum(['compiler', 'smoke']),
+    /** What ran: the command line for the compiler gate, the routes for the smoke gate. */
+    name: z.string(),
+    passed: z.boolean(),
+    exitCode: z.number().int().nullable(),
+    durationMs: z.number().int(),
+    detail: z.string(),
+  }),
   z.object({
     type: z.literal('audit.completed'),
     auditId: z.string(),
@@ -93,6 +107,9 @@ export const EventBody = z.discriminatedUnion('type', [
   /** The agent is working on a scratchpad turn (true) or has finished it (false). */
   z.object({ type: z.literal('scratch.thinking'), scratchId: z.string(), active: z.boolean(), error: z.string().nullable() }),
   z.object({ type: z.literal('knowledge.state'), jobId: z.string(), state: z.enum(['running', 'succeeded', 'failed']), step: z.string().nullable() }),
+  z.object({ type: z.literal('project.changed'), name: z.string() }),
+  /** An owner asked another vendor's model one question. `answer` is that model's raw reply: rendered as text, never interpreted. */
+  z.object({ type: z.literal('advisor.answered'), advisor: AdvisorId, question: z.string(), ok: z.boolean(), answer: z.string(), durationMs: z.number().int() }),
   z.object({ type: z.literal('notice'), level: z.enum(['info', 'warn', 'error']), message: z.string() }),
 ]);
 export type EventBody = z.infer<typeof EventBody>;

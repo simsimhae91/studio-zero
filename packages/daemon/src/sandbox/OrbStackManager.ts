@@ -201,6 +201,31 @@ export class OrbStackManager {
     });
   }
 
+  /**
+   * Which sandboxes exist and whether they are running, by container name, from a single engine call.
+   * A project whose container was never created (or was removed) is simply not in the map.
+   */
+  async states(): Promise<Map<string, 'running' | 'stopped'>> {
+    const res = await this.#docker(['ps', '--all', '--filter', 'label=studio-zero.role=sandbox', '--format', '{{.Names}}\t{{.State}}'], { timeoutMs: 8_000 });
+    if (res.exitCode !== 0) throw new SandboxError('container runtime is not reachable', lastLine(res.stderr));
+    const states = new Map<string, 'running' | 'stopped'>();
+    for (const line of res.stdout.split('\n')) {
+      const [name, state] = line.trim().split('\t');
+      if (name) states.set(name, state === 'running' ? 'running' : 'stopped');
+    }
+    return states;
+  }
+
+  /**
+   * Where the container engine's API listens, e.g. `unix:///Users/me/.orbstack/run/docker.sock`. The interactive
+   * terminal speaks to it directly, because a pseudo-terminal cannot be had through the `docker` command line
+   * without one on this side.
+   */
+  async engineEndpoint(): Promise<string> {
+    const flags = await this.#globalFlags();
+    return flags[flags.indexOf('--host') + 1]!;
+  }
+
   async info(project: Project): Promise<SandboxInfo> {
     const names = sandboxNames(project.slug);
     const state = await this.#containerState(names.container);
@@ -437,11 +462,15 @@ export class OrbStackManager {
   // ------------------------------------------------------------- internals
 
   async #docker(args: string[], opts: Parameters<CommandRunner>[2] = {}): Promise<RunResult> {
+    return this.#run(this.#dockerBin, [...(await this.#globalFlags()), ...args], { timeoutMs: 120_000, ...opts });
+  }
+
+  #globalFlags(): Promise<string[]> {
     this.#globals ??= this.#resolveGlobals().catch((err: unknown) => {
       this.#globals = null; // not cached: the engine may simply not be running yet
       throw err;
     });
-    return this.#run(this.#dockerBin, [...(await this.#globals), ...args], { timeoutMs: 120_000, ...opts });
+    return this.#globals;
   }
 
   /**

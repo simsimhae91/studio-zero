@@ -14,10 +14,11 @@ import type { Toolbox } from '../harness/Toolbox.ts';
 import { ModelRefusedError } from '../llm/ClaudeClient.ts';
 import { ApprovalDeniedError, PolicyDeniedError } from '../policy/PolicyEngine.ts';
 import { SandboxError } from '../sandbox/OrbStackManager.ts';
-import { errorMessage, safeEqual, type Secret } from '../util/core.ts';
+import type { PtyManager } from '../sandbox/PtyManager.ts';
+import { errorMessage, newId, safeEqual, type Secret } from '../util/core.ts';
 import { trackSockets } from '../util/sockets.ts';
 import { VaultError } from '../vault/KeychainVault.ts';
-import type { Handlers } from './handlers.ts';
+import type { ClientConnection, Handlers } from './handlers.ts';
 
 const HELLO_TIMEOUT_MS = 5_000;
 const MAX_SUBSCRIPTIONS = 32;
@@ -25,6 +26,8 @@ const REPLAY_PAGE = 500;
 const REPLAY_LIMIT = 10_000;
 /** A subscriber this far behind is dropped and told to resubscribe, so one slow client cannot grow the heap. */
 const MAX_BUFFERED_BYTES = 8 * 1024 * 1024;
+/** A terminal stops reading from its shell while this much of its output is still waiting to leave the socket. */
+const TERMINAL_HIGH_WATER_BYTES = 1024 * 1024;
 const LOOPBACK_HOSTS = ['localhost', '127.0.0.1', '[::1]'];
 
 export interface DaemonServerDeps {
@@ -34,6 +37,8 @@ export interface DaemonServerDeps {
   store: Store;
   toolbox: Toolbox;
   bridgeSessions: BridgeSessions;
+  /** Keystrokes go straight to the terminal that the connection owns; everything else about terminals is an RPC. */
+  terminals: PtyManager;
   clientToken: Secret;
   version: string;
   log: PinoLogger;
@@ -43,7 +48,7 @@ export interface DaemonServerDeps {
  * The control plane: one Fastify instance on loopback (default 127.0.0.1:49200).
  *
  *   GET  /healthz             liveness, unauthenticated, reveals nothing
- *   GET  /v1/ws               WebSocket RPC + event streaming for owner clients
+ *   GET  /v1/ws               WebSocket RPC, event streaming and interactive terminals for owner clients
  *   GET  /v1/artifacts/:id    screenshots, bearer-authenticated
  *   *    /v1/bridge/*         tool endpoint for the MCP shim of bridged CLIs, task-scoped bearer token
  *
@@ -163,6 +168,14 @@ export class DaemonServer {
       if (socket.readyState === socket.OPEN) socket.send(JSON.stringify(frame));
     };
     const helloTimer = setTimeout(() => socket.close(CloseCode.helloTimeout, 'hello timeout'), HELLO_TIMEOUT_MS);
+    const conn: ClientConnection = {
+      id: newId('con'),
+      terminals: {
+        output: (terminalId, data) => send({ t: 'terminal.output', terminalId, data }),
+        exit: (terminalId, exitCode, reason) => send({ t: 'terminal.exit', terminalId, exitCode, reason }),
+        congested: () => socket.readyState === socket.OPEN && socket.bufferedAmount > TERMINAL_HIGH_WATER_BYTES,
+      },
+    };
 
     const deliver = (subId: string, event: EventEnvelope): void => {
       if (socket.bufferedAmount > MAX_BUFFERED_BYTES) {
@@ -197,8 +210,10 @@ export class DaemonServer {
       switch (frame.t) {
         case 'hello':
           return;
+        case 'terminal.data':
+          return this.#d.terminals.write(conn.id, frame.terminalId, frame.data);
         case 'req':
-          void this.#dispatch(frame.method, frame.params).then(
+          void this.#dispatch(frame.method, frame.params, conn).then(
             (result) => send({ t: 'res', id: frame.id, result }),
             (err: unknown) => send({ t: 'err', id: frame.id, error: this.#toRpcError(frame.method, err) }),
           );
@@ -229,18 +244,19 @@ export class DaemonServer {
       clearTimeout(helloTimer);
       unsubscribeLive?.();
       subs.clear();
+      void this.#d.terminals.closeOwner(conn.id);
     });
     socket.on('error', () => socket.terminate());
   }
 
-  async #dispatch(method: string, rawParams: unknown): Promise<unknown> {
+  async #dispatch(method: string, rawParams: unknown, conn: ClientConnection): Promise<unknown> {
     if (!isMethodName(method)) throw new UnknownMethodError(method);
     const contract = methods[method];
     const params = contract.params.safeParse(rawParams ?? {});
     if (!params.success) throw new InvalidParamsError(z.prettifyError(params.error));
-    const handler = this.#d.handlers[method] as (p: unknown) => unknown;
+    const handler = this.#d.handlers[method] as (p: unknown, conn: ClientConnection) => unknown;
     // Results are validated too: a handler bug surfaces here as `internal`, not as a malformed frame on a client.
-    return contract.result.parse(await handler(params.data));
+    return contract.result.parse(await handler(params.data, conn));
   }
 
   #toRpcError(method: string, err: unknown): { code: RpcErrorCode; message: string } {

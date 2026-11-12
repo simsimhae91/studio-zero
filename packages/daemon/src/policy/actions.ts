@@ -22,6 +22,10 @@ export const Action = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('sandbox.exec'), projectId: z.string(), command: z.string() }),
   z.object({ kind: z.literal('sandbox.write'), projectId: z.string(), path: z.string() }),
   z.object({ kind: z.literal('sandbox.lifecycle'), projectId: z.string(), op: z.enum(['start', 'stop', 'recreate']) }),
+  // An interactive shell in the project's container, for the owner. Contained exactly as `sandbox.exec` is.
+  z.object({ kind: z.literal('sandbox.terminal'), projectId: z.string() }),
+  // One question to another vendor's model through its subscription CLI: it spends the owner's quota there.
+  z.object({ kind: z.literal('advisor.ask'), projectId: z.string(), advisor: z.enum(['codex', 'gemini']) }),
 
   z.object({ kind: z.literal('checkpoint.rollback'), projectId: z.string(), checkpointId: z.string() }),
   z.object({ kind: z.literal('git.merge'), projectId: z.string(), branch: z.string(), into: z.string() }),
@@ -90,6 +94,10 @@ export function describeAction(action: Action): string {
       return `샌드박스에 파일 쓰기: ${action.path}`;
     case 'sandbox.lifecycle':
       return `샌드박스 ${action.op}`;
+    case 'sandbox.terminal':
+      return `프로젝트 ${action.projectId}의 샌드박스에서 터미널 열기`;
+    case 'advisor.ask':
+      return `${action.advisor === 'codex' ? 'Codex' : 'Gemini'}에게 의견 묻기`;
     case 'checkpoint.rollback':
       return `워크스페이스를 체크포인트 ${action.checkpointId}(으)로 되돌리기`;
     case 'git.merge':

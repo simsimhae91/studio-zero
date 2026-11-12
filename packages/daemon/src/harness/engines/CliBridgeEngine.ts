@@ -338,30 +338,9 @@ export class CliBridgeEngine implements Engine {
         const steer = this.#steering.drain(run.task.id);
         if (steer.length > 0) this.#events.emit(scope, { type: 'steer.delivered', count: steer.length });
         const prompt = [this.#adapter.systemInPrompt ? system : '', previous ? `Your previous round ended with:\n${previous}` : '', userContent, steer.length > 0 ? steeringNote(steer) : ''].filter(Boolean).join('\n\n');
-        const launch = await this.#adapter.launch(inv, prompt);
-        // A jailed CLI gets the scratch folder as its temp directory too: it is one of the few places it may write.
-        const profile = launch.jail ? jailProfile(scratch, launch.jail) : null;
-        const confined = (file: string, args: readonly string[]): { file: string; args: readonly string[] } => (profile ? jailed(profile, file, args) : { file, args });
-        const env = { ...cliEnv(), ...launch.env, ...(launch.jail ? { TMPDIR: scratch } : {}) };
-        const timeoutMs = 60 * 60 * 1000;
         let parsed: Parsed;
         try {
-          for (const step of launch.before ?? []) {
-            const pre = confined(launch.file, step);
-            const done = await this.#run(pre.file, pre.args, { cwd: scratch, env, timeoutMs: 60_000, signal: run.signal });
-            if (done.exitCode !== 0) throw new EngineError(`${this.id} could not be set up: ${excerpt(done.stderr || done.stdout, 400)}`);
-          }
-          const command = confined(launch.file, launch.args);
-          if (launch.acp) {
-            const answer = await this.#acp({ file: command.file, args: command.args, env, cwd: scratch, mcpServers: launch.acp.mcpServers, prompt, signal: run.signal, timeoutMs });
-            // The protocol reports no token counts. Budgets still need a number, so one is estimated from the
-            // text that crossed the wire (about four characters a token); what the agent read through tools is not in it.
-            parsed = { text: answer.text, inputTokens: Math.ceil(prompt.length / 4), outputTokens: Math.ceil(answer.text.length / 4) };
-          } else {
-            const res = await this.#run(command.file, command.args, { stdin: launch.stdin, cwd: scratch, env, timeoutMs, maxOutputBytes: 32 * 1024 * 1024, signal: run.signal });
-            if (res.exitCode !== 0) throw new EngineError(`${this.id} exited ${res.exitCode}: ${excerpt(res.stderr || res.stdout, 600)}`);
-            parsed = await this.#adapter.parse(res.stdout, inv);
-          }
+          parsed = await this.#round(inv, prompt, 60 * 60 * 1000, run.signal);
         } catch (err) {
           if (run.signal.aborted) return { finalText: previous, stopped: 'cancelled' };
           throw err;
@@ -380,6 +359,61 @@ export class CliBridgeEngine implements Engine {
         await rm(scratch, { recursive: true, force: true });
       },
     };
+  }
+
+  /**
+   * One question, one answer: the CLI as an advisor rather than as an engine. It runs under the same lockdown
+   * as a task round, and the tool server it is pointed at offers nothing, so it can read and change nothing,
+   * neither on this machine nor in any sandbox. No state is kept between questions.
+   */
+  async ask(req: { system: string; question: string; signal?: AbortSignal; timeoutMs?: number }): Promise<{ text: string; inputTokens: number; outputTokens: number }> {
+    const scratch = await realpath(await mkdtemp(join(tmpdir(), 'sz-advisor-')));
+    await chmod(scratch, 0o700);
+    const token = this.#sessions.create({ definitions: () => [], call: async () => ({ content: 'There are no tools in this session.', isError: true }) }, 30 * 60 * 1000);
+    const system = `${req.system}\n\nYou have no tools in this session: answer from what you know and from the question itself.`;
+    const inv: Invocation = {
+      bin: this.#bin,
+      scratch,
+      shim: SHIM_PATH,
+      bridgeUrl: `http://127.0.0.1:${this.#config.listen.port}/v1/bridge`,
+      tokenFile: join(scratch, 'token'),
+      system,
+      lastMessageFile: join(scratch, 'last-message.txt'),
+      model: 'default',
+      effort: 'medium',
+    };
+    try {
+      await writeFile(inv.tokenFile, token, { mode: 0o600 });
+      return await this.#round(inv, [this.#adapter.systemInPrompt ? system : '', req.question].filter(Boolean).join('\n\n'), req.timeoutMs ?? 10 * 60 * 1000, req.signal);
+    } finally {
+      this.#sessions.revoke(token);
+      await this.#adapter.cleanup?.(inv).catch(() => undefined);
+      await rm(scratch, { recursive: true, force: true });
+    }
+  }
+
+  /** Starts the CLI once with `prompt` and reads its answer. The confinement is the adapter's, whoever is asking. */
+  async #round(inv: Invocation, prompt: string, timeoutMs: number, signal: AbortSignal | undefined): Promise<Parsed> {
+    const launch = await this.#adapter.launch(inv, prompt);
+    // A jailed CLI gets the scratch folder as its temp directory too: it is one of the few places it may write.
+    const profile = launch.jail ? jailProfile(inv.scratch, launch.jail) : null;
+    const confined = (file: string, args: readonly string[]): { file: string; args: readonly string[] } => (profile ? jailed(profile, file, args) : { file, args });
+    const env = { ...cliEnv(), ...launch.env, ...(launch.jail ? { TMPDIR: inv.scratch } : {}) };
+    for (const step of launch.before ?? []) {
+      const pre = confined(launch.file, step);
+      const done = await this.#run(pre.file, pre.args, { cwd: inv.scratch, env, timeoutMs: 60_000, signal });
+      if (done.exitCode !== 0) throw new EngineError(`${this.id} could not be set up: ${excerpt(done.stderr || done.stdout, 400)}`);
+    }
+    const command = confined(launch.file, launch.args);
+    if (launch.acp) {
+      const answer = await this.#acp({ file: command.file, args: command.args, env, cwd: inv.scratch, mcpServers: launch.acp.mcpServers, prompt, signal, timeoutMs });
+      // The protocol reports no token counts. Budgets still need a number, so one is estimated from the
+      // text that crossed the wire (about four characters a token); what the agent read through tools is not in it.
+      return { text: answer.text, inputTokens: Math.ceil(prompt.length / 4), outputTokens: Math.ceil(answer.text.length / 4) };
+    }
+    const res = await this.#run(command.file, command.args, { stdin: launch.stdin, cwd: inv.scratch, env, timeoutMs, maxOutputBytes: 32 * 1024 * 1024, signal });
+    if (res.exitCode !== 0) throw new EngineError(`${this.id} exited ${res.exitCode}: ${excerpt(res.stderr || res.stdout, 600)}`);
+    return this.#adapter.parse(res.stdout, inv);
   }
 }
 

@@ -2,10 +2,18 @@ import type { z } from 'zod';
 import type { MethodName, ResultOf, methods } from '@studio-zero/protocol';
 import type { Studio } from '../app/Studio.ts';
 import type { Actor } from '../policy/actions.ts';
+import type { TerminalSink } from '../sandbox/PtyManager.ts';
 import { Secret } from '../util/core.ts';
 
+/** The connection a request arrived on. Only what is bound to a connection needs it: today, terminals. */
+export interface ClientConnection {
+  /** Unique per socket. Terminals are owned by it and die with it. */
+  id: string;
+  terminals: TerminalSink;
+}
+
 /** Handler signature per method: validated params in, a value matching the result schema out. */
-export type Handlers = { [M in MethodName]: (params: z.output<(typeof methods)[M]['params']>) => ResultOf<M> | Promise<ResultOf<M>> };
+export type Handlers = { [M in MethodName]: (params: z.output<(typeof methods)[M]['params']>, conn: ClientConnection) => ResultOf<M> | Promise<ResultOf<M>> };
 
 /** Everything arriving on the authenticated control socket acts as the owner at the desk. */
 const OWNER: Actor = { type: 'owner', via: 'desktop' };
@@ -16,11 +24,35 @@ export function createHandlers(studio: Studio): Handlers {
     'system.status': () => studio.status(),
 
     'projects.create': (p) => studio.createProject(OWNER, p),
-    'projects.list': () => ({ projects: studio.listProjects() }),
+    'projects.list': () => studio.projectsOverview(),
+    'projects.rename': (p) => studio.renameProject(OWNER, p.projectId, p.name),
+    'projects.ignite': (p) => studio.igniteProject(OWNER, p, 'desktop'),
     'projects.delete': async (p) => {
       await studio.deleteProject(OWNER, p.projectId, p.deleteWorkspace);
       return { deleted: true as const };
     },
+
+    'sessions.list': (p) => ({ sessions: studio.listSessions(p.projectId) }),
+    'sessions.create': (p) => studio.createSession(p.projectId, p.name),
+    'sessions.rename': (p) => studio.renameSession(p.sessionId, p.name),
+    'sessions.delete': (p) => {
+      studio.deleteSession(p.sessionId);
+      return { deleted: true as const };
+    },
+
+    'files.list': (p) => studio.listFiles(p.projectId, p.path, p.depth),
+    'files.read': (p) => studio.readFile(p.projectId, p.path),
+    'files.write': async (p) => {
+      await studio.writeFile(OWNER, p.projectId, p.path, p.content);
+      return { written: true };
+    },
+
+    'terminal.spawn': async (p, conn) => ({ terminalId: await studio.spawnTerminal(OWNER, p.projectId, { cols: p.cols, rows: p.rows }, conn.id, conn.terminals) }),
+    'terminal.resize': async (p, conn) => {
+      await studio.resizeTerminal(conn.id, p.terminalId, p.cols, p.rows);
+      return { resized: true as const };
+    },
+    'terminal.kill': async (p, conn) => ({ killed: await studio.killTerminal(conn.id, p.terminalId) }),
 
     'sandbox.info': (p) => studio.sandboxInfo(p.projectId),
     'sandbox.start': (p) => studio.sandboxLifecycle(OWNER, p.projectId, 'start'),
@@ -88,6 +120,7 @@ export function createHandlers(studio: Studio): Handlers {
     'knowledge.get': (p) => studio.getKnowledge(p.jobId),
     'documents.export': async (p) => ({ artifactId: await studio.exportDocument(p.jobId) }),
     'ax.calibration': () => studio.calibration(),
+    'advisor.ask': (p) => studio.askAdvisor(OWNER, p),
 
     'mcp.list': () => ({ servers: studio.mcpList() }),
     'mcp.add': (p) => studio.mcpAdd(OWNER, p),

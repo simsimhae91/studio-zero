@@ -1,20 +1,25 @@
 import { z } from 'zod';
 import {
+  AdvisorId,
   Approval,
   ApprovalState,
   AuditReport,
   Checkpoint,
   CredentialMeta,
   Eval,
+  FileEntry,
   Lesson,
   LessonState,
   McpServerInfo,
   Project,
   ProposalCard,
   SandboxInfo,
+  SandboxState,
+  Session,
   Slug,
   Task,
   TaskKind,
+  TaskTrack,
   Template,
 } from './domain.ts';
 import { AxResponse, Calibration, DocumentKind, KnowledgeJob, PromotionResult, Readiness, ResearchReport, ScratchEntry, ScratchMode, ScratchMove, Scratchpad, TextFinding } from './ax.ts';
@@ -29,6 +34,10 @@ const empty = z.object({});
 const McpServerId = z.string().regex(/^[a-z][a-z0-9-]{1,30}$/);
 /** Which engine runs a task, when the owner chooses instead of the routing table. */
 export const EnginePref = z.enum(['native-claude', 'claude-code', 'codex', 'cursor', 'antigravity']);
+/** A path inside the project's workspace, relative to /workspace. The daemon confines it again. */
+const WorkspacePath = z.string().min(1).max(1024);
+const TerminalId = z.string().min(1).max(64);
+const TerminalSize = { cols: z.number().int().min(2).max(500), rows: z.number().int().min(1).max(300) };
 
 export const methods = {
   'system.status': {
@@ -47,9 +56,30 @@ export const methods = {
   },
 
   'projects.create': { params: z.object({ name: z.string().min(1).max(80), slug: Slug, template: Template }), result: Project },
-  'projects.list': { params: empty, result: z.object({ projects: z.array(Project) }) },
+  /**
+   * `live` says, per project, whether its sandbox is running and whether a task is using it right now. It is
+   * read from the container engine in one call; when the engine cannot be reached every sandbox reads `absent`.
+   */
+  'projects.list': { params: empty, result: z.object({ projects: z.array(Project), live: z.array(z.object({ projectId: z.string(), sandbox: SandboxState, busy: z.boolean() })) }) },
+  /** Changes the display name. The slug (and with it the container and volume names) stays as it was. */
+  'projects.rename': { params: z.object({ projectId: z.string(), name: Project.shape.name }), result: Project },
+  /**
+   * From an idea to a running task in one call, without questions. The daemon names the project (a short title
+   * and slug distilled from the idea), picks a template unless one is given, creates it and starts the first task:
+   * `fast` builds a working draft straight away; `deep` writes the PRD, data model and API specification first.
+   */
+  'projects.ignite': {
+    params: z.object({ idea: z.string().min(1).max(20_000), track: z.enum(['fast', 'deep']), template: Template.optional(), engine: EnginePref.optional() }),
+    result: z.object({ project: Project, task: Task }),
+  },
   /** Removes the sandbox and the project's records. The workspace volume is kept unless `deleteWorkspace` is set. */
   'projects.delete': { params: z.object({ projectId: z.string(), deleteWorkspace: z.boolean() }), result: z.object({ deleted: z.literal(true) }) },
+
+  'sessions.list': { params: z.object({ projectId: z.string() }), result: z.object({ sessions: z.array(Session) }) },
+  'sessions.create': { params: z.object({ projectId: z.string(), name: Session.shape.name }), result: Session },
+  'sessions.rename': { params: z.object({ sessionId: z.string(), name: Session.shape.name }), result: Session },
+  /** Removes the session. Its tasks are kept and move to the project's default stream. */
+  'sessions.delete': { params: z.object({ sessionId: z.string() }), result: z.object({ deleted: z.literal(true) }) },
 
   'sandbox.info': { params: z.object({ projectId: z.string() }), result: SandboxInfo },
   'sandbox.start': { params: z.object({ projectId: z.string() }), result: SandboxInfo },
@@ -57,7 +87,28 @@ export const methods = {
   /** Throws away the container filesystem (installed packages, caches) and recreates it from the image. The workspace volume is kept. */
   'sandbox.recreate': { params: z.object({ projectId: z.string() }), result: SandboxInfo },
 
-  /** Starts the project's dev server in its sandbox (as described in `.studio-zero/project.json`) and waits until it answers. */
+  // The workspace as files. Listings follow .gitignore and always leave out .git, node_modules and build output.
+  'files.list': {
+    params: z.object({ projectId: z.string(), path: WorkspacePath.optional(), depth: z.number().int().min(1).max(6).optional() }),
+    result: z.object({ entries: z.array(FileEntry), truncated: z.boolean() }),
+  },
+  /** Text files only. `binary` is set (and `content` empty) for anything else; `truncated` when the file is larger than the read limit. */
+  'files.read': {
+    params: z.object({ projectId: z.string(), path: WorkspacePath }),
+    result: z.object({ content: z.string(), encoding: z.literal('utf-8'), size: z.number().int(), truncated: z.boolean(), binary: z.boolean() }),
+  },
+  'files.write': { params: z.object({ projectId: z.string(), path: WorkspacePath, content: z.string().max(400_000) }), result: z.object({ written: z.boolean() }) },
+
+  /**
+   * An interactive shell in the project's sandbox, on a real pseudo-terminal. The terminal belongs to the
+   * connection that opened it: its output arrives as `terminal.output` frames on that socket, keystrokes go
+   * back as `terminal.data` frames, and it is killed when the socket closes.
+   */
+  'terminal.spawn': { params: z.object({ projectId: z.string(), ...TerminalSize }), result: z.object({ terminalId: TerminalId }) },
+  'terminal.resize': { params: z.object({ terminalId: TerminalId, ...TerminalSize }), result: z.object({ resized: z.literal(true) }) },
+  'terminal.kill': { params: z.object({ terminalId: TerminalId }), result: z.object({ killed: z.boolean() }) },
+
+  /** Starts the project's dev server in its sandbox (as described in `.studio-zero/project.json`) and waits until it answers. A server that is already answering is left running. */
   'preview.start': { params: z.object({ projectId: z.string() }), result: z.object({ containerPort: z.number().int(), localhost: z.string(), orbLocal: z.string() }) },
   'preview.stop': { params: z.object({ projectId: z.string() }), result: z.object({ stopped: z.literal(true) }) },
 
@@ -71,6 +122,10 @@ export const methods = {
       baseBranch: z.string().min(1).max(120).optional(),
       /** Run on this engine. Left out, the routing table picks; chosen and unavailable, the task fails instead of quietly using another. */
       engine: EnginePref.optional(),
+      /** The session (task stream) to file this task under. Left out: the project's default stream. */
+      sessionId: z.string().optional(),
+      /** Left out: `full`. */
+      track: TaskTrack.optional(),
     }),
     result: Task,
   },
@@ -144,6 +199,15 @@ export const methods = {
 
   'ax.calibration': { params: empty, result: Calibration },
 
+  /**
+   * A second opinion: one question to another vendor's model through its subscription CLI. Single pass, no tools,
+   * no memory of earlier questions. The answer also lands in the event stream as `advisor.answered`.
+   */
+  'advisor.ask': {
+    params: z.object({ projectId: z.string(), taskId: z.string().optional(), advisor: AdvisorId, question: z.string().min(1).max(8000) }),
+    result: z.object({ advisor: AdvisorId, answer: z.string(), durationMs: z.number().int() }),
+  },
+
   // External tool servers (MCP). Configured by the owner; used by agents through the daemon, one approved tool at a time.
   'mcp.list': { params: empty, result: z.object({ servers: z.array(McpServerInfo) }) },
   'mcp.add': {
@@ -203,8 +267,10 @@ const HelloFrame = z.object({ t: z.literal('hello'), protocol: z.number().int(),
 const ReqFrame = z.object({ t: z.literal('req'), id: z.string().max(64), method: z.string().max(64), params: z.unknown() });
 const SubFrame = z.object({ t: z.literal('sub'), id: z.string().max(64), filter: EventFilter, sinceSeq: z.number().int().min(0).optional() });
 const UnsubFrame = z.object({ t: z.literal('unsub'), id: z.string().max(64) });
+/** Keystrokes (and pasted text) for a terminal this connection opened. Not acknowledged; a frame for an unknown terminal is dropped. */
+const TerminalDataFrame = z.object({ t: z.literal('terminal.data'), terminalId: TerminalId, data: z.string().max(256 * 1024) });
 
-export const ClientFrame = z.discriminatedUnion('t', [HelloFrame, ReqFrame, SubFrame, UnsubFrame]);
+export const ClientFrame = z.discriminatedUnion('t', [HelloFrame, ReqFrame, SubFrame, UnsubFrame, TerminalDataFrame]);
 export type ClientFrame = z.infer<typeof ClientFrame>;
 
 export const ServerFrame = z.discriminatedUnion('t', [
@@ -214,6 +280,10 @@ export const ServerFrame = z.discriminatedUnion('t', [
   z.object({ t: z.literal('evt'), sub: z.string(), event: EventEnvelope }),
   /** The subscription was dropped (slow consumer). Resubscribe with `sinceSeq` = last seen seq. */
   z.object({ t: z.literal('sub_closed'), sub: z.string(), reason: z.string() }),
+  /** Raw terminal output (ANSI sequences included), decoded as UTF-8. */
+  z.object({ t: z.literal('terminal.output'), terminalId: z.string(), data: z.string() }),
+  /** The terminal's shell ended, or the terminal was killed. No further frames follow for this id. */
+  z.object({ t: z.literal('terminal.exit'), terminalId: z.string(), exitCode: z.number().int().nullable(), reason: z.string() }),
 ]);
 export type ServerFrame = z.infer<typeof ServerFrame>;
 

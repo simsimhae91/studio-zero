@@ -73,7 +73,7 @@ export function ScratchPage({ scratchId, onOpen, onChanged }: { scratchId: strin
   return (
     <>
       <div ref={scroll} className="pane-scroll min-h-0 flex-1">
-        <article className={`page flex flex-col ${open ? 'pb-48' : 'pb-16'}`}>
+        <article className="page flex flex-col pb-16">
           <TitlebarSpace />
           <header className="flex flex-col gap-4 border-b border-border px-4 pb-8 pt-10 md:px-10">
             <div className="flex flex-wrap items-center gap-x-6 gap-y-2">

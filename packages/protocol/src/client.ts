@@ -21,6 +21,25 @@ export interface RpcClientOptions {
   onLinkChange?: (state: 'connected' | 'reconnecting' | 'closed') => void;
 }
 
+export interface TerminalHandlers {
+  /** Raw terminal output, in order. */
+  onOutput: (data: string) => void;
+  /** The shell ended, the terminal was killed, or the connection that owned it dropped (`exitCode` null). Called once. */
+  onExit: (exitCode: number | null, reason: string) => void;
+}
+
+/** One interactive terminal. It lives as long as this connection: a reconnect does not bring it back. */
+export interface TerminalHandle {
+  readonly id: string;
+  write(data: string): void;
+  resize(cols: number, rows: number): Promise<void>;
+  kill(): Promise<void>;
+}
+
+type TerminalFrame = Extract<ServerFrame, { t: 'terminal.output' | 'terminal.exit' }>;
+/** Largest `terminal.data` payload sent in one frame; a big paste is split. */
+const TERMINAL_CHUNK = 32 * 1024;
+
 interface Pending {
   resolve: (value: unknown) => void;
   reject: (err: Error) => void;
@@ -52,6 +71,10 @@ export class RpcClient {
   readonly #subs = new Map<string, Subscription>();
   /** Highest sequence number seen from the daemon, from `ready` frames and events. */
   #head: number | null = null;
+  readonly #terminals = new Map<string, TerminalHandlers>();
+  /** Terminal frames that arrived before the `terminal.spawn` call that names their terminal had returned. */
+  readonly #early = new Map<string, TerminalFrame[]>();
+  #spawning = 0;
 
   constructor(opts: RpcClientOptions) {
     this.#opts = opts;
@@ -86,6 +109,36 @@ export class RpcClient {
     );
     return () => {
       if (this.#subs.delete(id) && this.#ws?.readyState === WebSocket.OPEN) this.#send({ t: 'unsub', id });
+    };
+  }
+
+  /**
+   * Opens an interactive shell in a project's sandbox. Output that the daemon sends before the spawn call has
+   * returned is held and delivered first, so the shell's first prompt is never lost.
+   */
+  async openTerminal(params: ParamsOf<'terminal.spawn'>, handlers: TerminalHandlers): Promise<TerminalHandle> {
+    this.#spawning += 1;
+    let id: string;
+    try {
+      id = (await this.call('terminal.spawn', params)).terminalId;
+      this.#terminals.set(id, handlers);
+      for (const frame of this.#early.get(id) ?? []) this.#deliverTerminal(frame);
+    } finally {
+      this.#spawning -= 1;
+      if (this.#spawning === 0) this.#early.clear();
+    }
+    return {
+      id,
+      write: (data) => {
+        if (!this.#terminals.has(id)) return;
+        for (let i = 0; i < data.length; i += TERMINAL_CHUNK) this.#send({ t: 'terminal.data', terminalId: id, data: data.slice(i, i + TERMINAL_CHUNK) });
+      },
+      resize: async (cols, rows) => {
+        if (this.#terminals.has(id)) await this.call('terminal.resize', { terminalId: id, cols, rows });
+      },
+      kill: async () => {
+        if (this.#terminals.has(id)) await this.call('terminal.kill', { terminalId: id });
+      },
     };
   }
 
@@ -146,6 +199,11 @@ export class RpcClient {
           case 'sub_closed':
             if (this.#subs.has(frame.sub)) this.#sendSub(frame.sub);
             break;
+          case 'terminal.output':
+          case 'terminal.exit':
+            if (this.#terminals.has(frame.terminalId)) this.#deliverTerminal(frame);
+            else if (this.#spawning > 0) this.#early.set(frame.terminalId, [...(this.#early.get(frame.terminalId) ?? []), frame]);
+            break;
         }
       });
 
@@ -153,6 +211,8 @@ export class RpcClient {
         this.#ws = null;
         this.#ready = null;
         this.#failPending(`connection closed (${ev.code})`);
+        // Terminals belong to the connection: the daemon has already killed them.
+        for (const id of [...this.#terminals.keys()]) this.#deliverTerminal({ t: 'terminal.exit', terminalId: id, exitCode: null, reason: 'disconnected' });
         // 44xx codes are the daemon rejecting us (bad token, protocol mismatch): retrying cannot help.
         const fatal = ev.code >= 4400 && ev.code < 4500;
         if (!settled) reject(new RpcCallError(fatal ? 'unauthorized' : 'disconnected', `connection failed (${ev.code}) ${ev.reason}`));
@@ -168,6 +228,14 @@ export class RpcClient {
         }, delay);
       });
     });
+  }
+
+  #deliverTerminal(frame: TerminalFrame): void {
+    const handlers = this.#terminals.get(frame.terminalId);
+    if (!handlers) return;
+    if (frame.t === 'terminal.output') return handlers.onOutput(frame.data);
+    this.#terminals.delete(frame.terminalId);
+    handlers.onExit(frame.exitCode, frame.reason);
   }
 
   #sendSub(id: string): void {

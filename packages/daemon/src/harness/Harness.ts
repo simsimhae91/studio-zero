@@ -6,14 +6,16 @@ import type { EventLog } from '../events/EventLog.ts';
 import { textBlock, type ClaudeClient } from '../llm/ClaudeClient.ts';
 import type { ModelRouter } from '../llm/ModelRouter.ts';
 import { ApprovalDeniedError, type PolicyEngine } from '../policy/PolicyEngine.ts';
+import type { SmokeRunner } from '../qa/SmokeTester.ts';
 import type { OrbStackManager } from '../sandbox/OrbStackManager.ts';
-import { untrusted } from '../trust/dataBlock.ts';
+import { untrusted, type UntrustedSource } from '../trust/dataBlock.ts';
 import { errorMessage, excerpt, type Clock, type Logger } from '../util/core.ts';
 import type { WorkspaceProvisioner } from './bootstrap.ts';
-import type { EvalOutcome, EvalRunner } from './EvalRunner.ts';
+import type { CompilerGate } from './CompilerGate.ts';
+import type { EvalRunner } from './EvalRunner.ts';
 import type { EngineResult, EngineSession } from './engines/Engine.ts';
 import type { LessonBook } from './LessonBook.ts';
-import { IDEATION_BRIEF, IDEATION_REQUIRED_FILES, PLANNER_SYSTEM_PROMPT, codingSystemPrompt } from './prompts.ts';
+import { DRAFT_BRIEF, IDEATION_BRIEF, IDEATION_REQUIRED_FILES, PLANNER_SYSTEM_PROMPT, codingSystemPrompt } from './prompts.ts';
 import type { ReflectionAgent } from './ReflectionAgent.ts';
 
 export const INTEGRATION_BRANCH = 'main';
@@ -29,6 +31,15 @@ const Plan = z.object({
 });
 type Plan = z.infer<typeof Plan>;
 
+/** One thing a verification round found wrong. `detail` is tool or page output: it reaches the engine inside a data block. */
+interface Failure {
+  name: string;
+  source: UntrustedSource;
+  detail: string;
+  /** Set for the compiler gate, whose feedback names the command and its exit code. */
+  compiler?: { command: string; exitCode: number };
+}
+
 class Cancelled extends Error {}
 
 /** Abort reason used when the daemon is stopping, as opposed to the owner cancelling a task. */
@@ -40,14 +51,23 @@ export class ShutdownSignal extends Error {
 }
 
 /**
- * One task, end to end: Plan → Execute → Verify → Reflect → Evolve.
+ * One task, end to end: Plan → Execute → Verify → Reflect → Evolve. One engine does the work; what decides
+ * whether it is done is execution, not a second model's opinion of the first.
  *
  *   Plan     route to an engine (table lookup), checkpoint the workspace, branch, load lessons, draft a plan.
  *   Execute  the engine works in the sandbox through the Toolbox.
- *   Verify   the daemon runs the project's evals itself. Failures go back to the engine with selectors, boxes
- *            and fixes, for up to `verifyRounds` rounds. The engine's own claim of success is never the gate.
+ *   Verify   the daemon checks the work itself, cheapest and least arguable first:
+ *              1. the compiler gate: the type check (or tests) in the sandbox; a failure goes back verbatim;
+ *              2. the smoke gate: the running app in a headless browser, listening for exceptions, console
+ *                 errors and 5xx responses;
+ *              3. the project's evals: regression commands, then the design gates (slop lint, visual audit).
+ *            A round stops at the first stage that fails, and the engine gets up to `verifyRounds` corrections.
+ *            The engine's own claim of success is never the gate.
  *   Reflect  a judge model reads the trace and proposes lessons and regression checks.
  *   Evolve   code decides which proposals are kept; the lesson files are re-rendered.
+ *
+ * A `fast` task (Draft 0) is the same loop with the model-judged parts left out: no planning call before the
+ * engine starts, no design gates, no reflection. Compiler, smoke load and regression commands still gate it.
  *
  * Whatever happens, the workspace is left recoverable: there is a checkpoint from before the task, the work is
  * committed on its own branch, and a failed task puts the workspace back on the integration branch.
@@ -62,6 +82,8 @@ export class Harness {
   readonly #router: ModelRouter;
   readonly #claude: ClaudeClient;
   readonly #evals: EvalRunner;
+  readonly #compiler: CompilerGate;
+  readonly #smoke: SmokeRunner;
   readonly #lessons: LessonBook;
   readonly #reflection: ReflectionAgent;
   readonly #clock: Clock;
@@ -77,6 +99,8 @@ export class Harness {
     router: ModelRouter;
     claude: ClaudeClient;
     evals: EvalRunner;
+    compiler: CompilerGate;
+    smoke: SmokeRunner;
     lessons: LessonBook;
     reflection: ReflectionAgent;
     clock: Clock;
@@ -91,6 +115,8 @@ export class Harness {
     this.#router = deps.router;
     this.#claude = deps.claude;
     this.#evals = deps.evals;
+    this.#compiler = deps.compiler;
+    this.#smoke = deps.smoke;
     this.#lessons = deps.lessons;
     this.#reflection = deps.reflection;
     this.#clock = deps.clock;
@@ -105,6 +131,7 @@ export class Harness {
     }
     const scope = { projectId: project.id, taskId: initial.id };
     const ideation = initial.kind === 'ideate';
+    const draft = initial.track === 'fast';
     const branch = initial.branch ?? `sz/${initial.id}`;
     let task = initial;
     let session: EngineSession | null = null;
@@ -139,7 +166,8 @@ export class Harness {
 
       const lessons = this.#lessons.forTask(project.id);
       appliedLessons = lessons.ids;
-      const plan = task.kind === 'build' || task.kind === 'refactor' || task.kind === 'kirby_materialize' ? await this.#plan(project, task, lessons.text, signal) : null;
+      // A draft goes straight to the engine: the planning call is a model round trip the owner would wait through.
+      const plan = !draft && (task.kind === 'build' || task.kind === 'refactor' || task.kind === 'kirby_materialize') ? await this.#plan(project, task, lessons.text, signal) : null;
       if (plan) this.#events.emit(scope, { type: 'plan.created', summary: plan.summary, steps: plan.steps, auditRoutes: plan.auditRoutes, appliedLessonIds: lessons.ids });
       checkCancel();
 
@@ -172,18 +200,18 @@ export class Harness {
       checkCancel();
 
       // ---------------------------------------------------------------- Verify
-      let failures: EvalOutcome[] = [];
+      const corrections = this.#config.budgets.verifyRounds;
       for (let round = 1; ; round++) {
         phase('verify', round);
-        failures = (ideation ? await this.#verifyIdeation(project) : await this.#evals.runAll(project, task.id, { extraRoutes: plan?.auditRoutes, signal })).filter((o) => !o.passed);
+        const failures = ideation ? await this.#verifyIdeation(project) : await this.#verify(project, task, plan, signal);
         checkCancel();
-        if (failures.length === 0 || round >= this.#config.budgets.verifyRounds) break;
+        if (failures.length === 0) break;
+        if (round > corrections) throw new Error(`verification still failing after ${corrections} corrections: ${failures.map((f) => f.name).join(', ')}`);
 
         phase('execute', round + 1);
         result = await send(repairMessage(failures));
         checkCancel();
       }
-      if (failures.length > 0) throw new Error(`verification still failing after ${this.#config.budgets.verifyRounds} rounds: ${failures.map((f) => f.eval.name).join(', ')}`);
 
       await this.#sandboxes.commitAll(project, commitSubject(task));
       const notes = plan && plan.openQuestions.length > 0 ? `\n\nAssumptions made: ${plan.openQuestions.join(' | ')}` : '';
@@ -204,7 +232,7 @@ export class Harness {
     }
 
     // ------------------------------------------------------- Reflect, Evolve
-    if (task.state !== 'cancelled' && !ideation && this.#claude.isConfigured()) {
+    if (task.state !== 'cancelled' && !ideation && !draft && this.#claude.isConfigured()) {
       this.#store.updateTask(task.id, { phase: 'reflect' });
       this.#events.emit(scope, { type: 'task.phase', phase: 'reflect', round: 0 });
       try {
@@ -238,13 +266,47 @@ export class Harness {
     return { ...plan, steps: plan.steps.slice(0, 20), auditRoutes: plan.auditRoutes.filter((r) => /^\/[\w\-./~%]*$/.test(r) && r.length <= 200).slice(0, 6), openQuestions: plan.openQuestions.slice(0, 6) };
   }
 
+  /**
+   * One verification round. Stages run in order of cost and of how little there is to argue about, and the round
+   * ends at the first stage that fails: there is no point loading a page that does not compile, or measuring
+   * the layout of one that throws on load.
+   */
+  async #verify(project: Project, task: Task, plan: Plan | null, signal: AbortSignal): Promise<Failure[]> {
+    const scope = { projectId: project.id, taskId: task.id };
+
+    const compiled = await this.#compiler.run(project, signal);
+    if (compiled) {
+      this.#events.emit(scope, { type: 'gate.result', gate: 'compiler', name: compiled.command, passed: compiled.passed, exitCode: compiled.exitCode, durationMs: compiled.durationMs, detail: compiled.passed ? '' : excerpt(compiled.output, 2000) });
+      if (!compiled.passed) return [{ name: 'compiler', source: 'sandbox-output', detail: compiled.output, compiler: { command: compiled.command, exitCode: compiled.exitCode } }];
+    }
+
+    // The owner's switch for browser-backed checks is the visual eval: with it off, nothing here starts a browser.
+    const browser = this.#evals.usesBrowser(project.id);
+    let served = false;
+    if (browser) {
+      try {
+        const smoke = await this.#smoke.run(project, { extraRoutes: plan?.auditRoutes, signal });
+        served = smoke.passed;
+        this.#events.emit(scope, { type: 'gate.result', gate: 'smoke', name: smoke.routes.join(' '), passed: smoke.passed, exitCode: null, durationMs: smoke.durationMs, detail: excerpt(smoke.detail, 2000) });
+        if (!smoke.passed) return [{ name: 'smoke', source: 'browser-page', detail: smoke.detail }];
+      } catch (err) {
+        if (signal.aborted) throw err;
+        // The browser not starting is the studio's problem, not a defect in the work: say so and carry on.
+        this.#log.warn({ taskId: task.id, err: errorMessage(err) }, 'smoke gate could not run');
+        this.#events.emit(scope, { type: 'notice', level: 'warn', message: `Smoke test skipped: ${errorMessage(err)}` });
+      }
+    }
+
+    const outcomes = await this.#evals.runAll(project, task.id, { extraRoutes: plan?.auditRoutes, commandsOnly: task.track === 'fast', devServerRunning: served, signal });
+    return outcomes.filter((o) => !o.passed).map((o) => ({ name: o.eval.name, source: o.eval.spec.kind === 'visual' ? 'browser-page' : 'sandbox-output', detail: o.detail }));
+  }
+
   /** Ideation produces documents, not screens: the check is that each required document exists and has substance. */
-  async #verifyIdeation(project: Project): Promise<EvalOutcome[]> {
+  async #verifyIdeation(project: Project): Promise<Failure[]> {
     const script = IDEATION_REQUIRED_FILES.map((f) => `[ "$(wc -c < '${f}' 2>/dev/null || echo 0)" -ge 400 ] || echo '${f}'`).join('\n');
     const res = await this.#sandboxes.exec(project, script, { timeoutSec: 30 });
     const missing = res.stdout.trim().split('\n').filter(Boolean);
-    const ev = { id: 'ideation-documents', projectId: project.id, name: 'ideation-documents', spec: { kind: 'command' as const, command: 'required documents exist', timeoutSec: 30 }, enabled: true, originTaskId: null, createdAt: this.#clock() };
-    return [{ eval: ev, passed: missing.length === 0, audit: null, detail: missing.length === 0 ? 'all documents present' : `Missing or nearly empty: ${missing.join(', ')}` }];
+    return missing.length === 0 ? [] : [{ name: 'ideation-documents', source: 'sandbox-output', detail: `Missing or nearly empty: ${missing.join(', ')}` }];
   }
 
   /** Keep the unfinished work on its branch for inspection and put the workspace back on the integration branch. */
@@ -266,14 +328,21 @@ export class Harness {
 }
 
 function executeMessage(task: Task, plan: Plan | null, lessonText: string): string {
-  const parts = [task.kind === 'ideate' ? IDEATION_BRIEF : '', `The owner's request:\n${task.prompt}`];
+  const parts = [task.kind === 'ideate' ? IDEATION_BRIEF : '', task.track === 'fast' && task.kind !== 'ideate' ? DRAFT_BRIEF : '', `The owner's request:\n${task.prompt}`];
   if (plan) parts.push(`Plan drafted for this request (follow it unless the code shows it is wrong; say so if you deviate):\n${plan.summary}\n${plan.steps.map((s, i) => `${i + 1}. ${s}`).join('\n')}`);
   if (lessonText) parts.push(lessonText);
   return parts.filter(Boolean).join('\n\n');
 }
 
-function repairMessage(failures: readonly EvalOutcome[]): string {
-  const blocks = failures.map((f) => `Check "${f.eval.name}" failed:\n${untrusted(f.eval.spec.kind === 'visual' ? 'browser-page' : 'sandbox-output', excerpt(f.detail, 12_000), { check: f.eval.name })}`);
+/**
+ * What the engine is told after a failed round. A compiler failure keeps its own frame (the command and the exit
+ * code are the daemon's; the output inside is the tool's, fenced as data like any other sandbox output).
+ */
+export function repairMessage(failures: readonly Failure[]): string {
+  const blocks = failures.map((f) => {
+    const data = untrusted(f.source, excerpt(f.detail, 12_000), { check: f.name });
+    return f.compiler ? `<compiler_error exit_code="${f.compiler.exitCode}" command="${f.compiler.command}">\n${data}\n</compiler_error>\nFix this compilation error immediately.` : `Check "${f.name}" failed:\n${data}`;
+  });
   return `The harness verified your work and it did not pass. Fix the cause of every failure below in the code, then stop so it can be verified again. The checks themselves are not yours to change.\n\n${blocks.join('\n\n')}`;
 }
 

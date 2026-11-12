@@ -325,6 +325,20 @@ const migrations: string[] = [
   ALTER TABLE mcp_servers ADD COLUMN args_json TEXT NOT NULL DEFAULT '[]';
   ALTER TABLE mcp_servers ADD COLUMN token_env TEXT;
   `,
+
+  // 5: sessions (named task streams inside a project), and how much of the loop a task runs.
+  `
+  CREATE TABLE sessions (
+    id          TEXT PRIMARY KEY,
+    project_id  TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    name        TEXT NOT NULL,
+    created_at  INTEGER NOT NULL
+  ) STRICT;
+  CREATE INDEX sessions_by_project ON sessions(project_id, created_at);
+  -- A deleted session leaves its tasks behind, in the project's default stream.
+  ALTER TABLE tasks ADD COLUMN session_id TEXT REFERENCES sessions(id) ON DELETE SET NULL;
+  ALTER TABLE tasks ADD COLUMN track TEXT NOT NULL DEFAULT 'full';
+  `,
 ];
 
 export function migrate(db: DatabaseSync): void {

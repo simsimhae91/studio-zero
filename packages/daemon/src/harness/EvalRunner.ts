@@ -7,6 +7,7 @@ import { renderAuditFeedback, type VisualAuditor } from '../qa/VisualAuditor.ts'
 import { extractorScript, parseExtraction } from '../sandbox/extract.ts';
 import type { OrbStackManager } from '../sandbox/OrbStackManager.ts';
 import { errorMessage, excerpt, newId, type Clock } from '../util/core.ts';
+import { ensureDevServer } from './devServer.ts';
 import { readProjectFile } from './projectFile.ts';
 
 export interface EvalOutcome {
@@ -60,10 +61,22 @@ export class EvalRunner {
     return this.#store.insertEvalIfAbsent({ id: newId('evl'), projectId, name, spec, enabled: true, originTaskId, createdAt: this.#clock() });
   }
 
-  /** Runs every enabled eval. `extraRoutes` are audited in addition to the project's own (e.g. routes a plan added). */
-  async runAll(project: Project, taskId: string | null, opts: { extraRoutes?: string[]; skipVisual?: boolean; signal?: AbortSignal } = {}): Promise<EvalOutcome[]> {
+  /**
+   * Whether this project's checks may use the browser. The visual eval is the owner's switch for that: with it
+   * off, nothing in a verification round starts the browser container, the smoke load included.
+   */
+  usesBrowser(projectId: string): boolean {
+    return this.#store.listEvals(projectId).some((e) => e.enabled && e.spec.kind === 'visual');
+  }
+
+  /**
+   * Runs every enabled eval. `extraRoutes` are audited in addition to the project's own (e.g. routes a plan
+   * added). `commandsOnly` leaves out the design gates (slop lint, visual audit). `devServerRunning` says a
+   * check earlier in this round already started the dev server on the current code, so it is not restarted.
+   */
+  async runAll(project: Project, taskId: string | null, opts: { extraRoutes?: string[]; commandsOnly?: boolean; devServerRunning?: boolean; signal?: AbortSignal } = {}): Promise<EvalOutcome[]> {
     const outcomes: EvalOutcome[] = [];
-    const evals = this.#store.listEvals(project.id).filter((e) => e.enabled && !(opts.skipVisual && e.spec.kind !== 'command'));
+    const evals = this.#store.listEvals(project.id).filter((e) => e.enabled && !(opts.commandsOnly && e.spec.kind !== 'command'));
     // Cheap checks first: there is no point starting a browser for a build that does not compile.
     const order = { command: 0, 'slop-lint': 1, visual: 2 } as const;
     for (const ev of evals.sort((a, b) => order[a.spec.kind] - order[b.spec.kind])) {
@@ -85,7 +98,7 @@ export class EvalRunner {
     return outcomes;
   }
 
-  async #run(project: Project, taskId: string | null, ev: Eval, opts: { extraRoutes?: string[]; signal?: AbortSignal }): Promise<EvalOutcome> {
+  async #run(project: Project, taskId: string | null, ev: Eval, opts: { extraRoutes?: string[]; devServerRunning?: boolean; signal?: AbortSignal }): Promise<EvalOutcome> {
     const spec = ev.spec;
     switch (spec.kind) {
       case 'command': {
@@ -102,10 +115,9 @@ export class EvalRunner {
       case 'visual': {
         const file = await readProjectFile(this.#sandboxes, project, this.#config);
         const routes = [...new Set([...spec.routes, ...file.routes, ...(opts.extraRoutes ?? [])])].slice(0, 8);
-        await this.#sandboxes.startProcess(project, 'dev', file.dev.command);
-        if (!(await this.#sandboxes.waitForHttp(project, file.dev.port, '/', 90))) {
-          const log = await this.#sandboxes.processLog(project, 'dev');
-          return { eval: ev, passed: false, audit: null, detail: `The dev server (\`${file.dev.command}\`) did not answer on port ${file.dev.port} within 90s.\n${excerpt(log, 4000)}` };
+        const server = await ensureDevServer(this.#sandboxes, project, file, { reuse: opts.devServerRunning === true });
+        if (!server.ready) {
+          return { eval: ev, passed: false, audit: null, detail: `The dev server (\`${file.dev.command}\`) did not answer on port ${file.dev.port} within 90s.\n${excerpt(server.log, 4000)}` };
         }
         const audit = await this.#auditor.audit({ project, taskId, port: file.dev.port, routes, signal: opts.signal });
         const passed = audit.passed && audit.score >= spec.minScore;

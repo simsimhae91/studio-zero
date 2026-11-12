@@ -23,6 +23,15 @@ export type Origin = z.infer<typeof Origin>;
 export const Template = z.enum(['web-vite-react', 'web-next', 'mobile-expo']);
 export type Template = z.infer<typeof Template>;
 
+/**
+ * How much of the loop a task runs.
+ * - `fast` (Draft 0): no separate planning call, then the execution gates only: the compiler, a headless smoke
+ *   load of the running app, and the project's regression commands. No design gates, no reflection.
+ * - `full`: planning, the execution gates, the design gates (slop lint, visual audit) and reflection.
+ */
+export const TaskTrack = z.enum(['fast', 'full']);
+export type TaskTrack = z.infer<typeof TaskTrack>;
+
 export const Project = z.object({
   id: z.string(),
   slug: Slug,
@@ -32,7 +41,17 @@ export const Project = z.object({
 });
 export type Project = z.infer<typeof Project>;
 
+/** A named stream of tasks inside a project (a feature, a fix, a scratch line of work). Tasks still run one at a time per project: the workspace is one working tree. */
+export const Session = z.object({
+  id: z.string(),
+  projectId: z.string(),
+  name: z.string().min(1).max(60),
+  createdAt: z.number().int(),
+});
+export type Session = z.infer<typeof Session>;
+
 export const SandboxState = z.enum(['absent', 'running', 'stopped']);
+export type SandboxState = z.infer<typeof SandboxState>;
 export const SandboxInfo = z.object({
   projectId: z.string(),
   state: SandboxState,
@@ -62,6 +81,9 @@ export const Task = z.object({
   baseBranch: z.string().nullable(),
   /** The engine the owner asked for, if they picked one instead of leaving it to the routing table. */
   enginePref: z.string().nullable(),
+  /** The session (task stream) this task belongs to; null for the project's default stream. */
+  sessionId: z.string().nullable(),
+  track: TaskTrack,
   summary: z.string().nullable(),
   error: z.string().nullable(),
   createdAt: z.number().int(),
@@ -98,6 +120,22 @@ export const Checkpoint = z.object({
   createdAt: z.number().int(),
 });
 export type Checkpoint = z.infer<typeof Checkpoint>;
+
+// ------------------------------------------------------------- workspace files
+
+/** One entry of a workspace listing. `path` is relative to /workspace; `mtime` is epoch milliseconds. */
+export const FileEntry = z.object({
+  path: z.string().min(1).max(1024),
+  name: z.string().min(1).max(255),
+  type: z.enum(['file', 'directory']),
+  size: z.number().int().min(0),
+  mtime: z.number().int().min(0),
+});
+export type FileEntry = z.infer<typeof FileEntry>;
+
+/** A second opinion can be asked of these subscription CLIs: Codex, and Gemini through Antigravity's `agy`. */
+export const AdvisorId = z.enum(['codex', 'gemini']);
+export type AdvisorId = z.infer<typeof AdvisorId>;
 
 // ------------------------------------------------------------ tool servers
 

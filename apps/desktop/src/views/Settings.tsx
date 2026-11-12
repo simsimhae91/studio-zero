@@ -1,8 +1,9 @@
 import { KeyRound, Unplug } from 'lucide-react';
-import { useState, type FormEvent } from 'react';
+import { useMemo, useState, type FormEvent } from 'react';
 import type { McpServerInfo } from '@studio-zero/protocol';
 import { engineLabel, slugify } from '../lib/format.ts';
 import { forgetToken } from '../lib/platform.ts';
+import { MONO_FONTS, THEME_PRESETS, fontInstalled, setPrefs, usePrefs } from '../lib/prefs.ts';
 import { useAction, useQuery, useStudio } from '../lib/studio.tsx';
 import { Button, Field, Problem, Segmented, Sheet, Status, inputClass } from '../ui.tsx';
 
@@ -52,6 +53,8 @@ export function Settings({ open, onOpenChange, onDisconnect }: { open: boolean; 
   return (
     <Sheet open={open} onOpenChange={onOpenChange} title="설정">
       <div className="flex flex-col gap-10 p-6">
+      <Appearance />
+
       <section className="flex flex-col gap-3">
         <h3 className="text-lg font-semibold">데몬</h3>
         {status.error ? <Problem>{status.error}</Problem> : null}
@@ -175,6 +178,49 @@ export function Settings({ open, onOpenChange, onDisconnect }: { open: boolean; 
       </section>
       </div>
     </Sheet>
+  );
+}
+
+/** How the studio looks on this device: the theme, and the face code is set in. Kept in this window's storage, not on the daemon. */
+function Appearance() {
+  const prefs = usePrefs();
+  // Faces that do not ship with the app are only there if this machine has them.
+  const missing = useMemo(() => new Set(MONO_FONTS.filter((f) => !f.bundled && !fontInstalled(f.probe)).map((f) => f.id)), []);
+  return (
+    <section className="flex flex-col gap-4">
+      <div className="flex flex-col gap-1">
+        <h3 className="text-lg font-semibold">화면</h3>
+        <p className="text-base text-fg-muted">테마와 코드 서체는 이 기기에만 저장됩니다. 어느 테마든 글자와 배경의 대비는 같은 기준으로 맞춰져 있습니다.</p>
+      </div>
+      <div role="radiogroup" aria-label="테마" className="flex flex-col border-b border-border">
+        {THEME_PRESETS.map((preset) => (
+          <button key={preset.id} type="button" role="radio" aria-checked={prefs.theme === preset.id} onClick={() => setPrefs({ theme: preset.id })} className={`flex min-h-11 items-center justify-between gap-4 border-l-4 border-t border-t-border px-4 py-2 text-left ${prefs.theme === preset.id ? 'border-l-accent bg-sunken' : 'border-l-transparent'}`}>
+            <span className="flex flex-col">
+              <span className="text-base font-medium">{preset.label}</span>
+              <span className="text-sm text-fg-muted">{preset.note}</span>
+            </span>
+            {preset.id === 'system' ? null : (
+              <span className={`preset-${preset.id} flex shrink-0 overflow-hidden rounded-md border border-border`} aria-hidden>
+                <span className="size-6 bg-bg" />
+                <span className="size-6 bg-surface" />
+                <span className="size-6 bg-fg" />
+                <span className="size-6 bg-accent" />
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+      <div role="radiogroup" aria-label="코드 서체" className="flex flex-col border-b border-border">
+        {MONO_FONTS.map((font) => (
+          <button key={font.id} type="button" role="radio" aria-checked={prefs.mono === font.id} onClick={() => setPrefs({ mono: font.id })} className={`flex min-h-11 flex-wrap items-center justify-between gap-x-4 border-l-4 border-t border-t-border px-4 py-2 text-left ${prefs.mono === font.id ? 'border-l-accent bg-sunken' : 'border-l-transparent'}`}>
+            <span className="text-base font-medium">{font.label}</span>
+            <span className="text-sm text-fg-muted">{missing.has(font.id) ? '이 기기에 설치되어 있지 않아 Geist Mono로 표시됩니다' : font.bundled ? '앱에 포함' : '이 기기에 설치됨'}</span>
+          </button>
+        ))}
+      </div>
+      {/* Set in the chosen face: what the file viewer and the terminal will look like. */}
+      <pre className="overflow-x-auto rounded-md border border-border bg-sunken p-4 font-mono text-sm">{'const total = items.reduce((sum, item) => sum + item.price, 0);\n// 0O 1lI |!  =>  !==  가나다라 한글 정렬'}</pre>
+    </section>
   );
 }
 

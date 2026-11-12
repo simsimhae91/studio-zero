@@ -1,4 +1,4 @@
-import { DEFAULT_DAEMON_PORT, RpcClient, type EventEnvelope, type EventFilter, type MethodName, type ParamsOf, type ResultOf } from '@studio-zero/protocol';
+import { DEFAULT_DAEMON_PORT, RpcClient, type EventEnvelope, type EventFilter, type MethodName, type ParamsOf, type ResultOf, type TerminalHandle, type TerminalHandlers } from '@studio-zero/protocol';
 
 export type LinkState = 'connected' | 'reconnecting' | 'closed';
 
@@ -9,6 +9,8 @@ export interface Backend {
   readonly host: string;
   call<M extends MethodName>(method: M, params: ParamsOf<M>): Promise<ResultOf<M>>;
   subscribe(filter: EventFilter, onEvent: (e: EventEnvelope) => void, sinceSeq?: number | 'now'): () => void;
+  /** An interactive shell in a project's sandbox. It lasts as long as the connection it was opened on. */
+  openTerminal(params: ParamsOf<'terminal.spawn'>, handlers: TerminalHandlers): Promise<TerminalHandle>;
   /** A URL an <img> can load for a stored screenshot. */
   artifactUrl(artifactId: string): Promise<string>;
   close(): void;
@@ -42,6 +44,7 @@ export async function connectDaemon(address: string, token: string, onLink: (sta
     host,
     call: (method, params) => client.call(method, params),
     subscribe: (filter, onEvent, sinceSeq) => client.subscribe(filter, onEvent, sinceSeq),
+    openTerminal: (params, handlers) => client.openTerminal(params, handlers),
     artifactUrl: (id) => {
       // The artifact route wants a bearer token, which an <img> cannot send: fetch it and hand back a blob URL.
       let url = images.get(id);

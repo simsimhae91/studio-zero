@@ -81,6 +81,7 @@ export function localDocker(workspace: string): { run: CommandRunner; calls: Cal
       return ok();
     }
     if (command === 'port') return ok('5173/tcp -> 127.0.0.1:55173\n3000/tcp -> 127.0.0.1:55300\n');
+    if (command === 'ps') return ok([...containers].map((name) => `${name}\trunning\n`).join(''));
     if (command === 'rm') {
       containers.delete(args.at(-1)!);
       return ok();

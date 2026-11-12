@@ -2,7 +2,11 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App.tsx';
 import { inTauri } from './lib/platform.ts';
+import { applyPrefs } from './lib/prefs.ts';
 import './styles/app.css';
+
+// Before the first paint, so the window never flashes in another theme.
+applyPrefs();
 
 // The desktop window draws its title bar over the content (tauri.conf.json: titleBarStyle Overlay), so panes
 // that touch the top leave room for the traffic lights. Phones get the same room from the safe-area inset.

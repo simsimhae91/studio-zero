@@ -4,7 +4,8 @@ Studio Zero는 생각을 정리하고, 조사하고, 문서를 쓰고, 앱을 �
 이 문서는 저장소에 실제로 있는 코드를 기준으로 쓴 설계서다. 구현되지 않은 것과 검증되지 않은 것은 §17, §18에 따로 적었다.
 
 - 코드: `packages/protocol` (계약), `packages/design` (디자인 계약·테마·UI 린트·문장 린트), `packages/ax` (AX 키트: 블록 어휘·이벤트 스트림·렌더러·텔레메트리), `packages/daemon` (코어 데몬), `apps/desktop` (Tauri 2 클라이언트)
-- 규모: 소스 111개 파일 약 17,000줄, 테스트 70개
+- 규모: 소스 135개 파일 약 21,900줄
+- 테스트: `pnpm test` 100개 (그중 5개는 옵트인)
 - 런타임: Node.js 24 (개발은 TypeScript를 그대로 실행, 상시 가동은 `pnpm build`의 esbuild 번들), SQLite(`node:sqlite`), Fastify 5
 
 ## 1. 컨테이너 다이어그램 (C4 Level 2)
@@ -22,7 +23,8 @@ flowchart LR
       server["DaemonServer<br/>127.0.0.1:49200<br/>WebSocket RPC + 이벤트"]
       studio["Studio<br/>애플리케이션 계층"]
       policy["PolicyEngine<br/>규칙 테이블 + 승인"]
-      queue["TaskQueue + Harness<br/>Plan→Execute→Verify→Reflect→Evolve"]
+      queue["TaskQueue + Harness<br/>Plan→Execute→Verify→Reflect→Evolve<br/>검증: 컴파일 → 스모크 → eval"]
+      ide["작업공간 서비스<br/>SandboxFileService · PtyManager"]
       router["ModelRouter<br/>라우팅 테이블"]
       gateway["LlmGateway<br/>127.0.0.1:49201"]
       relay["RelayCore<br/>+ Telegram · Slack · ntfy 어댑터"]
@@ -49,6 +51,8 @@ flowchart LR
   tools["MCP 서버<br/>원격: GitHub · Stripe …<br/>이 Mac: Blender · Unity · Aseprite …"]
 
   desktop & cli -- "ws + 토큰" --> server
+  studio --> ide
+  ide -- "파일: docker exec / 터미널: 엔진 API의 TTY exec" --> sandbox
   phone <--> chat
   relay -- "HTTPS / WSS (outbound only)" --> chat
   server --> studio
@@ -86,7 +90,7 @@ flowchart LR
 
 | 원칙 | 코드에서 강제되는 방식 | 파일 | 검증하는 테스트 |
 |---|---|---|---|
-| **Policy lives in the server** | 모든 부수효과는 타입이 있는 `Action`(22종)이다. 19개 규칙의 순서 있는 테이블이 `allow / deny / require_approval`을 결정하고, 일치하는 규칙이 없으면 거부한다. 규칙은 모델을 호출하지 않는다. 승인은 액션의 SHA-256 해시에 묶이고 1회용이며 만료된다. 승인 문구도 액션 필드에서 코드가 만든다. | `policy/actions.ts`, `policy/PolicyEngine.ts` | `vault-policy.test.ts` |
+| **Policy lives in the server** | 모든 부수효과는 타입이 있는 `Action`(24종)이다. 20개 규칙의 순서 있는 테이블이 `allow / deny / require_approval`을 결정하고, 일치하는 규칙이 없으면 거부한다. 규칙은 모델을 호출하지 않는다. 승인은 액션의 SHA-256 해시에 묶이고 1회용이며 만료된다. 승인 문구도 액션 필드에서 코드가 만든다. | `policy/actions.ts`, `policy/PolicyEngine.ts` | `vault-policy.test.ts` |
 | **토큰 예산** | 모델 요청 전에 항상 `llm.request` 규칙(태스크 예산, 프로젝트 24시간 예산)을 평가한다. 데몬 자체 호출, 게이트웨이 경유 호출, CLI 브릿지 호출 모두 같은 규칙을 탄다. | `llm/ClaudeClient.ts`, `llm/LlmGateway.ts` | `vault-policy.test.ts`, `relay-gateway.test.ts` |
 | **Untrusted by default** | 비신뢰 텍스트는 `untrusted()`로 감싼다(블록마다 96비트 난수 ID, 내용은 자기 블록을 닫을 수 없음). 시스템 프롬프트는 전부 상수이며 동적 내용을 이어 붙이는 코드 경로가 없다. | `trust/dataBlock.ts`, `harness/prompts.ts` | `vault-policy.test.ts`, `e2e.test.ts` |
 | **Keys stay out of the sandbox** | 컨테이너 환경변수는 `OrbStackManager`가 타입 있는 입력으로만 조립한다. 샌드박스에는 프로바이더 키 대신 샌드박스 전용 토큰과 게이트웨이 주소가 들어간다. 게이트웨이가 호스트에서 토큰을 실제 키로 바꾼다. DB에는 토큰의 해시만 있다. 외부 도구 서버의 토큰도 같다: 호출은 데몬이 호스트에서 하고, 토큰은 Keychain에서 그 서버로 가는 요청 헤더로만 나간다. | `sandbox/OrbStackManager.ts`, `llm/LlmGateway.ts`, `vault/KeychainVault.ts`, `mcp/McpRegistry.ts` | `sandbox.test.ts`, `relay-gateway.test.ts`, `mcp.test.ts`, `engine.integration.test.ts` |
@@ -118,6 +122,9 @@ sequenceDiagram
     H->>X: 파일을 바꾼 턴이면 체크포인트
     O-->>E: (있으면) 조타 메시지가 도구 결과와 함께 전달
   end
+  H->>X: 컴파일 게이트 (타입 검사 또는 테스트)
+  H->>E: (실패 시) 컴파일러 출력 그대로 → 다시 실행
+  H->>Q: 스모크 게이트: 경로를 열어 예외 · console.error · 5xx 수집
   H->>X: 회귀 명령, 슬롭 린트
   H->>Q: 3개 뷰포트 렌더 · 캡처 · DOM 측정
   Q-->>H: 측정값 + 스크린샷
@@ -164,7 +171,12 @@ sequenceDiagram
 | `Toolbox` | `harness/Toolbox.ts` | 도구 6개: 샌드박스용 `bash`, `read_file`, `write_file`, `edit_file`과 외부 도구용 `find_tools`, `use_tool`. 스키마 검증 → 정책 → 샌드박스 또는 MCP 클라이언트 → 결과를 데이터 블록으로. 파일을 바꾼 턴마다 체크포인트를 남긴다. |
 | `WorkspaceProvisioner` | `harness/bootstrap.ts`, `harness/axKit.ts` | 샌드박스를 띄우고 프로젝트 고유 테마, 런타임 설명 파일, AX 키트(§12)를 첫 커밋으로 넣는다. 이미 있으면 덮어쓰지 않는다. |
 | `Harness`, `TaskQueue` | `harness/Harness.ts`, `queue/TaskQueue.ts` | §8. 큐는 SQLite 위에 있고 재시작 후 중단된 태스크를 한 번 다시 넣는다. 프로젝트당 동시 1건. |
+| `CompilerGate`, `SmokeTester` | `harness/CompilerGate.ts`, `qa/SmokeTester.ts` | §8. 검증의 앞 두 단계. 모델을 쓰지 않는다. |
+| `QaBrowser` | `qa/QaBrowser.ts` | 스모크 게이트와 시각 감사가 함께 쓰는 브라우저 컨테이너 한 개. 쓸 때만 프로젝트 네트워크에 붙고 10분 쉬면 내려간다. |
 | `VisualAuditor`, `EvalRunner` | `qa/`, `harness/EvalRunner.ts` | §7. |
+| `SandboxFileService` | `sandbox/SandboxFileService.ts` | 소유자용 파일 탐색: 목록, 읽기, 쓰기. 전부 컨테이너 안 `/workspace` 볼륨에서 한다(호스트 마운트 없음). 목록은 한 단계씩 읽어 `git check-ignore`로 거르고 `.git`, `node_modules`, 빌드 산출물은 항상 뺀다. 스크립트 출력은 다른 샌드박스 출력처럼 줄 단위로 다시 검증한다. 워크스페이스 밖을 가리키는 링크는 따라가지 않는다. |
+| `PtyManager` | `sandbox/PtyManager.ts` | 대화형 터미널. 컨테이너 엔진 API로 TTY가 붙은 exec를 만들고(`docker exec -it`가 내부에서 하는 세 호출) 그 연결을 원시 스트림으로 올려 제어 소켓과 잇는다. 네이티브 의존성이 없다. 터미널은 연 연결의 것이고 연결이 끊기면 함께 끝난다. 스트림을 닫는 것만으로는 exec된 셸이 끝나지 않으므로, 셸이 시작할 때 남긴 pid로 컨테이너 안에서 끝낸다. 클라이언트가 못 따라오면 셸 읽기를 멈춘다. |
+| `ProjectNamer` | `app/ProjectNamer.ts` | 아이디어 한 단락을 2~4단어 제목과 슬러그로 줄인다(작은 모델 한 번). 모델이 없거나 12초 안에 답이 없으면 첫 구절로 이름을 정한다: 시작이 이름 짓기를 기다리지 않는다. |
 | `LessonBook`, `ReflectionAgent` | `harness/` | §8. |
 | `KirbyEngine` | `kirby/` | §9. |
 | `ScratchService`, `PromotionWorkflow` | `scratch/` | §10. |
@@ -215,10 +227,11 @@ API 키는 선택 사항이다. 금고에 Anthropic 키가 없으면 데몬은 �
 
 ## 5. 프로토콜
 
-`packages/protocol/src/rpc.ts`의 테이블 하나가 서버 검증, 클라이언트 타입, 이 문서의 근거다. 메서드 54개, 이벤트 29종.
+`packages/protocol/src/rpc.ts`의 테이블 하나가 서버 검증, 클라이언트 타입, 이 문서의 근거다. 메서드 67개, 이벤트 32종.
 
 - 연결: `ws://127.0.0.1:49200/v1/ws`. 첫 프레임은 `{t:"hello", protocol, token, client}`. 5초 안에 오지 않거나 토큰이 틀리면 닫는다.
-- 프레임: 클라이언트 `hello | req | sub | unsub`, 서버 `ready | res | err | evt | sub_closed`.
+- 프레임: 클라이언트 `hello | req | sub | unsub | terminal.data`, 서버 `ready | res | err | evt | sub_closed | terminal.output | terminal.exit`.
+- 터미널은 RPC와 프레임을 나눠 쓴다. 열기·크기 변경·종료는 메서드(`terminal.spawn` · `terminal.resize` · `terminal.kill`)이고, 키 입력과 출력은 응답이 없는 프레임으로 같은 소켓을 오간다. 터미널 id는 연 연결에만 유효하다: 같은 토큰을 가진 다른 연결도 그 터미널에 쓰거나 끌 수 없다.
 - 요청과 응답 모두 zod로 검증한다. 핸들러 버그는 깨진 프레임이 아니라 `internal` 오류가 된다.
 - 이벤트는 추가 전용이고 `seq`가 단조 증가한다. `sub`에 `sinceSeq`를 주면 그 이후를 재생한 뒤 실시간으로 넘어간다(누락·중복 없음). 터널이 끊겨도 클라이언트는 마지막 `seq`로 다시 구독한다.
 - 오류 코드: `unauthorized · invalid_params · unknown_method · not_found · conflict · policy_denied · approval_denied · unavailable · internal`
@@ -229,12 +242,12 @@ API 키는 선택 사항이다. 금고에 Anthropic 키가 없으면 데몬은 �
 
 ## 6. 데이터베이스
 
-`~/.studio-zero/studio-zero.db`, WAL, `STRICT` 테이블 26개(`db/schema.ts`). 마이그레이션은 전진 전용이다(현재 4단계).
+`~/.studio-zero/studio-zero.db`, WAL, `STRICT` 테이블 27개(`db/schema.ts`). 마이그레이션은 전진 전용이다(현재 5단계).
 
 | 영역 | 테이블 |
 |---|---|
 | 프로젝트 | `projects`, `sandboxes`(게이트웨이 토큰은 해시만) |
-| 실행 | `tasks`, `events`(추가 전용 트레이스), `usage_ledger` |
+| 실행 | `tasks`(세션과 트랙 포함), `sessions`(프로젝트 안의 이름 붙은 작업 흐름), `events`(추가 전용 트레이스), `usage_ledger` |
 | 정책 | `approvals`, `policy_decisions`(허용 포함 전부) |
 | 복구 | `checkpoints` |
 | 품질 | `audits`, `artifacts`, `evals`, `eval_runs` |
@@ -298,15 +311,37 @@ dev 서버 기동(샌드박스) → QA 브라우저 컨테이너를 프로젝트
 
 ## 8. 하네스 루프와 자기 개선
 
-`Harness.run()` (`harness/Harness.ts`):
+`Harness.run()` (`harness/Harness.ts`). 일은 엔진 하나가 하고, 끝났는지는 실행 결과가 정한다. 모델이 다른 모델의 작업을 두고 토론하는 단계는 없다.
 
 | 단계 | 하는 일 |
 |---|---|
 | **Plan** | 라우팅 → 워크스페이스 체크포인트 → 태스크 브랜치 → 활성 교훈 로드 → Fable 5.2가 계획(구조화 출력) 작성. 계획이 제안한 감사 경로는 단순 앱 경로만 남긴다. |
 | **Execute** | 엔진이 Toolbox로 작업한다. 매 턴 전에 예산 규칙, 매 응답 후 사용량 기록. 예산을 다 쓰면 소유자에게 증액 승인을 묻는다(최대 2회, 에이전트는 스스로 올릴 수 없음). |
-| **Verify** | 데몬이 프로젝트의 eval을 직접 실행한다: 회귀 명령 → 슬롭 린트 → 시각 감사. 실패 내용을 데이터 블록으로 엔진에 돌려준다. 최대 `verifyRounds`(기본 3)회. |
+| **Verify** | 데몬이 직접 확인한다. 싸고 이견이 없는 것부터, 실패한 단계에서 그 회차를 끝낸다. 실패 내용은 데이터 블록으로 엔진에 돌아가고, 엔진은 최대 `verifyRounds`(기본 3)번 고칠 수 있다. |
 | **Reflect** | 판정 모델이 번호 붙은 트레이스를 읽고 원인, 교훈, 회귀 체크를 제안한다. |
 | **Evolve** | 코드가 채택을 결정하고 `project_rules.md`, `system_heuristics.json`을 다시 쓴다. |
+
+**검증의 세 단계.**
+
+| 단계 | 하는 일 | 엔진에 돌아가는 것 |
+|---|---|---|
+| 1. 컴파일 게이트 (`CompilerGate`) | 샌드박스에서 타입 검사를 돌린다. `package.json`에 `typecheck` 스크립트가 있으면 그것, 없고 `tsconfig.json`과 설치된 `tsc`가 있으면 `tsc --noEmit`, 둘 다 없으면 `test` 스크립트. 아무것도 없으면 건너뛴다. 워크스페이스에서 읽는 것은 "있다/없다"뿐이고 명령줄은 데몬 코드에 적혀 있다. | `<compiler_error exit_code="2" command="…">` 안에 컴파일러 출력 그대로(데이터 블록으로 감싼다) + "Fix this compilation error immediately." |
+| 2. 스모크 게이트 (`SmokeTester`) | dev 서버를 띄우고 QA 브라우저로 각 경로를 연다. 잡지 못한 예외, `console.error`, 5xx 응답, 열리지 않는 페이지를 모은다. 없는 파비콘 같은 리소스 404는 세지 않는다. 깨끗하면 바로 통과. | 브라우저가 보고한 내용 그대로 |
+| 3. eval (`EvalRunner`) | 회귀 명령 → 슬롭 린트 → 시각 감사 (§7.4) | 셀렉터, 픽셀 박스, 수정안 |
+
+게이트 결과는 `gate.result` 이벤트로 남는다. 브라우저를 쓰는 검사의 스위치는 프로젝트의 시각 감사 eval이다: 소유자가 그것을 끄면 스모크 게이트도 브라우저를 띄우지 않는다. 브라우저 컨테이너가 뜨지 않는 것은 작업물의 결함이 아니므로 스모크는 경고를 남기고 건너뛴다.
+
+**두 가지 트랙** (`tasks.submit`의 `track`, 기본 `full`).
+
+| | `fast` (Draft 0) | `full` |
+|---|---|---|
+| 계획 호출 | 없음. 첫 턴에 기본값 지침(`DRAFT_BRIEF`)이 들어간다: 묻지 말 것, 스택·상태·예시 데이터의 기본값, 화면 하나를 끝까지. | 있음 |
+| 검증 | 컴파일 → 스모크 → 회귀 명령 | 컴파일 → 스모크 → 회귀 명령 → 슬롭 린트 → 시각 감사 |
+| 회고 | 없음 | 있음 |
+
+`fast`는 모델이 판정하는 부분(계획 호출, 비전 리뷰, 회고)을 뺀 같은 루프다. 실행으로 확인하는 게이트는 그대로 남는다.
+
+**다른 모델의 의견** (`advisor.ask`). 루프의 일부가 아니다. 소유자가 입력창에 `/ask-codex 질문`이나 `/ask-gemini 질문`을 적었을 때만, 그 CLI에 질문 하나를 보내 답 하나를 받는다(Gemini는 Antigravity의 `agy`로 간다). 태스크와 같은 잠금 아래에서 돌고, 연결된 도구 서버가 내놓는 도구가 0개라서 읽을 수도 바꿀 수도 없다. 상태도, 재질문도 없다. 답은 `advisor.answered` 이벤트로 남고 화면에서는 접힌 카드로 보인다. 에이전트와 하네스는 이 액션을 쓸 수 없다(정책).
 
 실패하거나 취소되어도 작업은 브랜치에 커밋된 채 남고 워크스페이스는 통합 브랜치로 돌아간다. 데몬 종료로 중단된 태스크는 다음 기동 때 한 번 다시 실행된다.
 
@@ -454,15 +489,17 @@ compile  남은 사실에 번호 붙은 출처를 달아 문서 컴파일러로 
 
 `apps/desktop`. Vite + React 19 + Tailwind 4, 셸은 Tauri 2(Rust). 데몬과는 `RpcClient` 하나로 말하고, 로컬에서는 Rust 쪽 명령이 Keychain에서 클라이언트 토큰을 읽어 준다.
 
-화면은 패널 묶음이 아니라 **작업 노트 한 장**이다.
+프로젝트는 **작업대**다: 왼쪽에 에이전트와의 대화, 오른쪽에 만들어지는 것.
 
-- 왼쪽 잉크색 레일: 작업 노트와 프로젝트 목록, 승인 대기 표시.
-- 가운데 종이: 처음 화면은 빈 종이와 네 가지 시작 방식(생각 정리, 조사, 문서, 바로 만들기). 노트와 프로젝트는 위에서 아래로 읽는 한 쪽이고, 왼쪽 여백에 누가 언제 썼는지가 적힌다. 소유자가 쓴 것과 결정한 것은 어디서나 왼쪽 강조선으로 표시된다.
-- 프로젝트 쪽에서는 태스크 하나가 한 단락이다: 요청, 계획, 접힌 작업 단계, 검증, 결과. 감사 증거, 프리뷰, 터미널은 그것을 만든 단락에서 열린다.
-- 오른쪽 시점 레일: 체크포인트가 점으로 찍히고, 누르면 되돌리기와 갈라 시작하기가 나온다.
-- 아래에 떠 있는 입력창: 실행 중이면 조타, 아니면 다음 태스크.
+- 레일: 프로젝트와 작업 노트 목록. 레일과 작업대는 같은 테마의 한 단계 차이 색을 쓴다. 프로젝트 행에는 샌드박스 상태 점(실행 중이면 초록, 태스크가 쓰는 중이면 깜박임), 종류 아이콘, 이름, 그리고 메뉴(이름 변경, 샌드박스 재기동, 프로젝트 삭제)가 있다. 삭제는 무엇이 사라지는지 적힌 확인 창을 거친다.
+- 처음 화면: 빈 종이 한 장과 시작 방식. 기본은 **바로 만들기**다: 아이디어를 적으면 `projects.ignite`가 이름과 슬러그를 짓고(§4 `ProjectNamer`), 스택을 고르고, 질문 없이 첫 `fast` 태스크를 시작한다. **설계부터**는 PRD·데이터 모델·API 명세를 먼저 쓰는 `ideate` 태스크이고, 끝나면 문서 링크와 승인 버튼이 달린 결정 카드가 나온다. 생각 정리·조사·문서는 그대로 고를 수 있다.
+- 왼쪽 창: 세션 탭(프로젝트 안의 이름 붙은 작업 흐름. 세션마다 스크롤 위치와 쓰던 글이 남는다), 태스크 흐름, 아래에 붙은 입력창. 입력창은 레이아웃의 일부라서 위 내용을 가리지 않는다.
+- 태스크 흐름은 **단계 목록**이다(`lib/steps.ts`, `ActionStepper`): "프로젝트 스캐폴드 (Expo / TypeScript)", "의존성 설치 (skia, image-picker)", "파일 3개 작성", "검증 2회차 통과"처럼 한 줄에 한 일. 문구는 실제로 실행된 도구 호출과 게이트 결과에서 코드가 만든다. 에이전트가 작업 도중에 한 말은 그 단계의 메모로 접히고, 한 회차의 마지막 말만 따로 보인다. 명령 전체와 실패 출력은 단계를 펼치면 나온다.
+- 오른쪽 창: 프리뷰(모바일 프로젝트는 iPhone 15 Pro 틀 안에 실제 포인트 크기로, 웹은 창 크기로. 모바일·태블릿·데스크톱 전환), 파일(트리 + 줄 번호와 구문 색이 있는 뷰어, 편집 가능), 터미널(샌드박스 안의 실제 셸), 시점(체크포인트 되돌리기와 갈라 시작하기), 그리고 감사·제안·학습. 한 번 연 탭은 살려 두므로 터미널의 셸이 탭을 옮겨도 유지된다. 프리뷰는 보여 줄 것이 있고 작업이 진행 중이 아닐 때 스스로 켜지고, 태스크가 끝나면 새로 고친다.
+- 좁은 창에서는 두 창 가운데 하나만 보이고 프로젝트 바에서 전환한다.
+- 설정의 "화면": 테마 프리셋 4종(같은 테마 생성기의 시드라서 대비 기준이 그대로다)과 코드 서체. 이 기기에만 저장된다.
 
-이 화면도 스튜디오가 만드는 앱과 같은 검사를 받는다: `apps/desktop/scripts/audit.ts`가 15개 화면 × 3개 뷰포트 × 라이트·다크를 실제 Chrome으로 그려 데몬의 DOM 검사를 돌린다(현재 블로커 0, 주요 0).
+이 화면도 스튜디오가 만드는 앱과 같은 검사를 받는다: `apps/desktop/scripts/audit.ts`가 22개 화면 × 3개 뷰포트 × 라이트·다크를 실제 Chrome으로 그려 데몬의 DOM 검사를 돌린다(현재 블로커 0, 주요 0).
 
 ## 15. 배포
 
@@ -528,7 +565,7 @@ pnpm sz task ledger build "미결제 청구서 화면을 만들어줘"
 
 ## 17. 검증 현황
 
-`pnpm typecheck`와 `pnpm test`가 통과한다: 70개 가운데 67개 통과, 3개는 옵트인이라 기본 실행에서 건너뛴다(실제 Keychain, 실제 컨테이너 엔진, 실제 구독 CLI). 헤드리스 Chrome이 필요한 테스트는 Chrome이 없으면 건너뛴다. 옵트인 `SZ_TEST_ENGINE=1`은 이 Mac의 OrbStack에서 9개 하위 테스트가 모두 통과했다.
+`pnpm typecheck`와 `pnpm test`가 통과한다: 100개 가운데 95개 통과, 5개는 옵트인이라 기본 실행에서 건너뛴다(실제 Keychain, 실제 컨테이너 엔진 2개, 실제 구독 CLI 2개). 헤드리스 Chrome이 필요한 테스트는 Chrome이 없으면 건너뛴다. 옵트인 `SZ_TEST_ENGINE=1`은 이 Mac의 OrbStack에서 9개 하위 테스트가 모두 통과했다.
 
 | 검증됨 | 방법 |
 |---|---|
@@ -557,7 +594,16 @@ pnpm sz task ledger build "미결제 청구서 화면을 만들어줘"
 | ACP 클라이언트 | 가짜 에이전트 프로세스 + 실제 `agy acp` |
 | Kirby 전체 파이프라인 | 스크립트된 모델 + 로컬 저장소 픽스처 |
 | 실제 컨테이너 엔진: 격리 설정(uid 1000, 권한 0, no-new-privileges), 샌드박스→게이트웨이 키 교체, 제어 소켓 차단, dev 서버와 프리뷰 URL, 볼륨 체크포인트·롤백, 재생성, QA 브라우저 컨테이너로 시각 감사, Kirby 실제 clone | OrbStack 2.2.5 (`SZ_TEST_ENGINE=1`) |
-| 클라이언트 화면 | 15개 화면 × 3개 뷰포트 × 라이트·다크를 Chrome으로 렌더해 DOM 검사: 블로커 0, 주요 0. 슬롭 린트 0건. |
+| 클라이언트 화면 | 22개 화면 × 3개 뷰포트 × 라이트·다크를 Chrome으로 렌더해 DOM 검사: 블로커 0, 주요 0. 슬롭 린트 0건. |
+| 단계 목록: 도구 호출이 스캐폴드·설치·파일 작성·검사로 묶이는 것, 도중의 말이 메모로 접히는 것, 검증 회차 | 단위 테스트 (`apps/desktop/test/steps.test.ts`) |
+| 컴파일 게이트: 오류 출력이 `<compiler_error>`로 엔진에 돌아가 고쳐지는 루프, 수정 횟수 상한, 명령이 워크스페이스의 글에서 만들어지지 않는 것 | 스크립트된 모델 + 컨테이너 에뮬레이터 |
+| 스모크 게이트: 잡지 못한 예외, `console.error`, 5xx는 잡고 리소스 404는 세지 않는 것 | 실제 헤드리스 Chrome |
+| `fast` 트랙: 계획·회고 호출이 없고 디자인 게이트가 돌지 않는 것 | 스크립트된 모델 (구조화 호출 0회 확인) |
+| 파일 탐색: `.gitignore`와 고정 제외 목록, 단계별 목록, 바이너리·초과 크기 표시, 워크스페이스 밖 링크 거부, `.git` 쓰기 거부 | 실제 git + 컨테이너 에뮬레이터 |
+| 대화형 터미널: 소유권(다른 연결은 쓰지도 끄지도 못함), 잘린 다바이트 문자, 느린 클라이언트에서 읽기 멈춤, 연결이 끊기면 정리 | 가짜 TTY + 실제 WebSocket |
+| 엔진 API의 TTY exec (생성 → 업그레이드 → 크기 변경 → 종료 코드) | 같은 응답을 하는 가짜 엔진 (루프백 TCP) |
+| **실제 컨테이너 엔진의 작업공간 (`SZ_TEST_ENGINE=1`)**: 엔진 소켓으로 연 실제 TTY(`/dev/pts/0`, uid 1000, `stty size`가 크기 변경을 따름, Ctrl+C가 130으로 끝냄, ANSI 통과), 종료 시 셸과 백그라운드 작업 정리, 연결이 끊기면 셸이 남지 않는 것, 실제 볼륨의 파일 목록·읽기·쓰기, 실제 `npm run typecheck` | OrbStack 2.2.5 |
+| 프로젝트 이름 짓기와 점화, 세션, 다른 모델의 의견(도구 0개인 것까지) | 스크립트된 모델, 가짜 CLI |
 | Tauri 앱 | 빌드, 실행, 데몬에 `desktop/0.1.0`으로 접속하는 것까지 |
 | LaunchAgent: 등록, launchd 아래에서 기동, OrbStack 접근, Keychain에서 클라이언트 토큰 읽기, 벤더 CLI 탐지, `kickstart -k` 재시작 때 정상 종료(종료 코드 0)와 클라이언트 재접속 | 이 MacBook에서 실제 등록 상태로 확인 |
 | `security` CLI 플래그와 종료 코드 44 | 실제 CLI (읽기 전용) |
@@ -574,6 +620,9 @@ pnpm sz task ledger build "미결제 청구서 화면을 만들어줘"
 
 | 검증되지 않음 | 이유 |
 |---|---|
+| Draft 0가 실제로 걸리는 시간 | 실제 모델로 `fast` 태스크를 끝까지 돌려 본 적이 없다. 계획 호출과 디자인 게이트, 회고를 뺀 만큼 짧아지지만, 스캐폴드와 의존성 설치가 있는 첫 태스크가 몇 초 안에 끝난다고 볼 근거는 없다. |
+| Tauri 창 안의 터미널 복사·붙여넣기, 터미널 안의 링크 열기 | 브라우저(Chrome)에서 그린 화면만 감사했다. WebKit 웹뷰에서의 클립보드와 새 창 동작은 확인하지 않았다. |
+| Codex·Antigravity에 실제로 묻기 | `advisor.ask`는 가짜 CLI로만 확인했다. 실제 호출은 구독 할당량을 쓴다. |
 | 실제 모델로 끝까지 도는 빌드 태스크 (계획 → 구현 → 회귀·시각 감사 → 수정 → 회고) | 구독 경로의 조각들(위 표)은 실제로 확인했지만, 앱 하나를 처음부터 만드는 전체 루프를 실제 모델로 돌린 적은 없다. 비전 감사, 문서 작성 루프, 조사 전체 파이프라인도 실제 모델로는 아직이다. |
 | API 키 경로의 실제 호출 | 유효한 키로 호출한 적 없음. 소유자의 첫 시도는 키가 거부되어(401) 끝났다. |
 | 벤더 CLI의 다른 버전 | 플래그와 출력 형태는 이 Mac에 설치된 버전(Claude Code 2.1.322, codex-cli 0.153.4, cursor-agent 2026.11.11, agy 1.5.6)에서 확인한 것이다. |
@@ -602,6 +651,11 @@ pnpm sz task ledger build "미결제 청구서 화면을 만들어줘"
 | Kirby: 예상 성능 개선치 | 추정과 실측을 분리 표시, 정적 지표만 | 런타임 성능을 근거 없이 수치화하지 않음 |
 | Kirby: 자동 병합 | 소유자 승인 후 병합 | 브리프의 "유저 승인 후"와 같음. 승인 없는 병합 경로는 없음. |
 | PostgreSQL (nod) | SQLite | 단일 노드, 상주 메모리 절감 |
+| 터미널에 `node-pty` | 컨테이너 엔진 API의 TTY exec | 셸은 컨테이너 안에 있어야 하고, 엔진이 이미 TTY를 만들어 준다. 네이티브 모듈이 없어 번들이 그대로 돈다. |
+| 탭과 버튼의 이모지, `indigo-600` 같은 기본 팔레트 클래스 | 아이콘 세트, 그리고 테마 시드(아연색 중립 + 인디고 강조) | 이 화면도 자기 디자인 계약으로 검사받는다: 이모지 아이콘과 기본 팔레트 클래스는 린트와 감사에서 주요 결함이다 (§7.3) |
+| 테마 프리셋의 원본 팔레트 그대로 | 같은 생성기의 시드 | 글자 토큰을 대비 기준에 맞춰 풀기 때문에 색을 그대로 옮기지 않는다. 이름은 닮은 방향을 가리킨다. |
+| 프리뷰 30초 이내 | 주장하지 않음 | 줄인 것은 모델 왕복 횟수다. 걸리는 시간은 재지 않았다 (§17) |
+| 3자 토론 제거 | 제거할 것이 없었음 | 하네스에는 처음부터 엔진 하나와 결정론적 검증뿐이었다. 작업 노트의 "반대 검토"는 소유자가 고를 때만 도는 기법이라 그대로 뒀다. 대신 검증 앞에 컴파일·스모크 게이트를 넣고, 모델이 판정하는 부분을 뺀 `fast` 트랙을 더했다. |
 
 만들지 않은 것:
 
@@ -613,6 +667,8 @@ pnpm sz task ledger build "미결제 청구서 화면을 만들어줘"
 - **스킬 레지스트리.** 재사용 지식은 교훈(§8)뿐이다. 이름 붙은 스킬을 찾아 불러오는 구조는 없다.
 - **PDF 안의 Mermaid 렌더링.** PDF는 스크립트를 끄고 인쇄하므로 다이어그램이 소스로 나온다. 클라이언트의 `Flow`도 순서도만 그리고 나머지 종류는 소스로 보여 준다.
 - **모바일 앱 빌드.** 같은 클라이언트 코드가 폰 폭에서 동작하지만 iOS·Android 패키지는 만들지 않았다.
+- **세션별 동시 실행.** 세션은 태스크를 묶는 이름이다. 워크스페이스가 작업 트리 하나라서 프로젝트당 태스크는 여전히 한 번에 하나만 돈다.
+- **파일 뷰어의 검색, 탭 여러 개, 저장 시 포맷.** 뷰어는 한 번에 파일 하나를 열고, 편집은 통째로 저장한다.
 - **원격 프리뷰 프록시.** 프리뷰는 호스트 루프백에 공개된다. 원격에서는 해당 포트를 `tailscale serve`로 직접 열어야 한다.
 - **WebKit 렌더링 감사.** Chromium 기기 에뮬레이션만 쓰므로 iOS Safari 고유 버그는 잡지 못한다. Expo 앱은 웹 타깃으로 감사한다.
 - **JS/TS 외 언어의 Kirby 분석.**

@@ -1,6 +1,7 @@
 import * as Dialog from '@radix-ui/react-dialog';
+import * as Dropdown from '@radix-ui/react-dropdown-menu';
 import { LoaderCircle, X } from 'lucide-react';
-import type { ButtonHTMLAttributes, ReactNode } from 'react';
+import type { ButtonHTMLAttributes, ReactElement, ReactNode } from 'react';
 
 /** See `.titlebar-space` in app.css. Place it as the first child of a pane that reaches the top of the window. */
 export function TitlebarSpace() {
@@ -89,11 +90,11 @@ export function Field({ label, hint, children }: { label: string; hint?: string;
 export const inputClass = 'min-h-11 w-full rounded-md border border-control-border bg-surface px-3 text-base text-fg placeholder:text-fg-muted';
 
 /** A few mutually exclusive options, all visible. Used where a native select would hide two or three choices behind a click. */
-export function Segmented<T extends string>({ label, value, options, onChange, disabled }: { label: string; value: T; options: readonly { id: T; label: string }[]; onChange: (value: T) => void; disabled?: boolean }) {
+export function Segmented<T extends string>({ label, value, options, onChange, disabled, compact = false }: { label: string; value: T; options: readonly { id: T; label: string }[]; onChange: (value: T) => void; disabled?: boolean; compact?: boolean }) {
   return (
     <div role="radiogroup" aria-label={label} className="flex flex-wrap gap-1">
       {options.map((o) => (
-        <button key={o.id} type="button" role="radio" aria-checked={value === o.id} disabled={disabled} onClick={() => onChange(o.id)} className={`min-h-11 min-w-11 rounded-md px-4 text-sm font-medium disabled:opacity-60 ${value === o.id ? 'bg-fg text-bg' : 'text-fg-muted hover:bg-sunken'}`}>
+        <button key={o.id} type="button" role="radio" aria-checked={value === o.id} disabled={disabled} onClick={() => onChange(o.id)} className={`rounded-md text-sm font-medium disabled:opacity-60 ${compact ? 'min-h-9 pointer-coarse:min-h-11 px-3' : 'min-h-11 min-w-11 px-4'} ${value === o.id ? 'bg-fg text-bg' : 'text-fg-muted hover:bg-sunken'}`}>
           {o.label}
         </button>
       ))}
@@ -125,4 +126,49 @@ export function Sheet({ open, onOpenChange, title, description, wide = false, ch
       </Dialog.Portal>
     </Dialog.Root>
   );
+}
+
+/** A question that needs an answer before anything else happens: a name to give, a deletion to confirm. */
+export function Modal({ open, onOpenChange, title, description, children }: { open: boolean; onOpenChange: (open: boolean) => void; title: string; description?: string; children: ReactNode }) {
+  return (
+    <Dialog.Root open={open} onOpenChange={onOpenChange}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 bg-sunken opacity-80" />
+        <Dialog.Content className="fixed inset-x-4 top-1/2 mx-auto flex max-h-full max-w-md -translate-y-1/2 flex-col gap-4 overflow-y-auto rounded-lg border border-border bg-surface p-6 text-fg shadow-md">
+          <div className="flex flex-col gap-2">
+            <Dialog.Title className="text-lg font-semibold">{title}</Dialog.Title>
+            {description ? <Dialog.Description className="text-base text-fg-muted">{description}</Dialog.Description> : null}
+          </div>
+          {children}
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
+  );
+}
+
+/** A short list of things to do to whatever the trigger sits on. */
+export function Menu({ trigger, children, align = 'end' }: { trigger: ReactElement; children: ReactNode; align?: 'start' | 'end' }) {
+  return (
+    <Dropdown.Root>
+      <Dropdown.Trigger asChild>{trigger}</Dropdown.Trigger>
+      <Dropdown.Portal>
+        <Dropdown.Content align={align} sideOffset={4} className="z-10 flex min-w-48 flex-col rounded-md border border-border bg-surface p-1 text-fg shadow-md">
+          {children}
+        </Dropdown.Content>
+      </Dropdown.Portal>
+    </Dropdown.Root>
+  );
+}
+
+export function MenuItem({ onSelect, icon, danger = false, disabled = false, children }: { onSelect: () => void; icon?: ReactNode; danger?: boolean; disabled?: boolean; children: ReactNode }) {
+  return (
+    <Dropdown.Item onSelect={onSelect} disabled={disabled} className={`flex min-h-11 cursor-default select-none items-center gap-3 rounded-sm px-3 text-sm font-medium outline-hidden data-[disabled]:opacity-60 data-[highlighted]:bg-sunken ${danger ? 'text-danger' : 'text-fg'}`}>
+      {icon}
+      {children}
+    </Dropdown.Item>
+  );
+}
+
+export function MenuSeparator() {
+  return <Dropdown.Separator className="my-1 border-t border-border" />;
 }

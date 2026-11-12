@@ -131,6 +131,15 @@ const rules: Rule[] = [
     },
   },
   {
+    // A shell someone types into. The container holds it as it holds every command, but it is the owner's
+    // hands, at the desk: not something an agent opens for itself, and not something to drive from a chat app.
+    id: 'sandbox.terminal-local-owner-only',
+    evaluate: (actor, action) => {
+      if (action.kind !== 'sandbox.terminal') return undefined;
+      return actor.type === 'owner' && actor.via === 'desktop' ? allow('owner on the control socket; the shell runs inside the project container') : deny('terminals can only be opened from an authenticated desktop client');
+    },
+  },
+  {
     id: 'task.submit',
     evaluate: (actor, action) => {
       if (action.kind !== 'task.submit') return undefined;
@@ -139,10 +148,10 @@ const rules: Rule[] = [
   },
   {
     // Things only the owner starts, from any of their channels: redirecting a task, branching history,
-    // turning a scratchpad into a project, starting research or a document.
+    // turning a scratchpad into a project, starting research or a document, asking another model's opinion.
     id: 'owner-initiated',
     evaluate: (actor, action) => {
-      if (action.kind !== 'task.steer' && action.kind !== 'checkpoint.fork' && action.kind !== 'scratch.promote' && action.kind !== 'knowledge.run') return undefined;
+      if (action.kind !== 'task.steer' && action.kind !== 'checkpoint.fork' && action.kind !== 'scratch.promote' && action.kind !== 'knowledge.run' && action.kind !== 'advisor.ask') return undefined;
       return actor.type === 'owner' ? allow('owner-initiated') : deny(`only the owner can ${action.kind}`);
     },
   },

@@ -28,9 +28,11 @@ import {
   type Phase,
   type Project,
   type ProposalState,
+  type Session,
   type Task,
   type TaskKind,
   type TaskState,
+  type TaskTrack,
   type Template,
 } from '@studio-zero/protocol';
 import { migrate } from './schema.ts';
@@ -203,6 +205,40 @@ export class Store {
     this.#run('DELETE FROM projects WHERE id = :id', { id });
   }
 
+  renameProject(id: string, name: string): Project | null {
+    this.#run('UPDATE projects SET name = :name WHERE id = :id', { id, name });
+    return this.getProject(id);
+  }
+
+  // ------------------------------------------------------------- sessions
+
+  insertSession(s: Session): void {
+    this.#run('INSERT INTO sessions (id, project_id, name, created_at) VALUES (:id, :projectId, :name, :createdAt)', { ...s });
+  }
+
+  getSession(id: string): Session | null {
+    const r = this.#get('SELECT * FROM sessions WHERE id = :id', { id });
+    return r ? toSession(r) : null;
+  }
+
+  listSessions(projectId: string): Session[] {
+    return this.#all('SELECT * FROM sessions WHERE project_id = :projectId ORDER BY created_at, id', { projectId }).map(toSession);
+  }
+
+  renameSession(id: string, name: string): Session | null {
+    this.#run('UPDATE sessions SET name = :name WHERE id = :id', { id, name });
+    return this.getSession(id);
+  }
+
+  deleteSession(id: string): void {
+    this.#run('DELETE FROM sessions WHERE id = :id', { id });
+  }
+
+  /** Projects with a task that holds their workspace right now. */
+  busyProjectIds(): Set<string> {
+    return new Set(this.#all(`SELECT DISTINCT project_id FROM tasks WHERE state IN ('running', 'awaiting_approval')`).map((r) => str(r.project_id)));
+  }
+
   /** Projects the owner made. The studio's own budget scope (see `STUDIO_PROJECT_ID`) is not one of them. */
   listProjects(): Project[] {
     return this.#all('SELECT * FROM projects WHERE id <> :studio ORDER BY created_at', { studio: STUDIO_PROJECT_ID }).map(toProject);
@@ -236,11 +272,11 @@ export class Store {
 
   // ---------------------------------------------------------------- tasks
 
-  insertTask(t: { id: string; projectId: string; kind: TaskKind; prompt: string; origin: Origin; budgetTokens: number; branch: string | null; baseBranch?: string | null; enginePref?: string | null; createdAt: number }): Task {
+  insertTask(t: { id: string; projectId: string; kind: TaskKind; prompt: string; origin: Origin; budgetTokens: number; branch: string | null; baseBranch?: string | null; enginePref?: string | null; sessionId?: string | null; track?: TaskTrack; createdAt: number }): Task {
     this.#run(
-      `INSERT INTO tasks (id, project_id, kind, prompt, origin, state, branch, base_branch, engine_pref, budget_tokens, created_at)
-       VALUES (:id, :projectId, :kind, :prompt, :origin, 'queued', :branch, :baseBranch, :enginePref, :budgetTokens, :createdAt)`,
-      { ...t, baseBranch: t.baseBranch ?? null, enginePref: t.enginePref ?? null },
+      `INSERT INTO tasks (id, project_id, kind, prompt, origin, state, branch, base_branch, engine_pref, session_id, track, budget_tokens, created_at)
+       VALUES (:id, :projectId, :kind, :prompt, :origin, 'queued', :branch, :baseBranch, :enginePref, :sessionId, :track, :budgetTokens, :createdAt)`,
+      { ...t, baseBranch: t.baseBranch ?? null, enginePref: t.enginePref ?? null, sessionId: t.sessionId ?? null, track: t.track ?? 'full' },
     );
     return this.getTask(t.id)!;
   }
@@ -961,6 +997,10 @@ function toKnowledge(r: Row): KnowledgeRow {
   };
 }
 
+function toSession(r: Row): Session {
+  return { id: str(r.id), projectId: str(r.project_id), name: str(r.name), createdAt: num(r.created_at) };
+}
+
 function toProject(r: Row): Project {
   return { id: str(r.id), slug: str(r.slug), name: str(r.name), template: str(r.template) as Template, createdAt: num(r.created_at) };
 }
@@ -994,6 +1034,8 @@ function toTask(r: Row): Task {
     baseCheckpointId: nstr(r.base_checkpoint_id),
     baseBranch: nstr(r.base_branch),
     enginePref: nstr(r.engine_pref),
+    sessionId: nstr(r.session_id),
+    track: str(r.track) as TaskTrack,
     summary: nstr(r.summary),
     error: nstr(r.error),
     createdAt: num(r.created_at),

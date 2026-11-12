@@ -1,22 +1,19 @@
 import { mkdir, writeFile } from 'node:fs/promises';
-import { createRequire } from 'node:module';
 import { join } from 'node:path';
-import type { Browser, BrowserContextOptions, BrowserType, Page } from 'playwright-core';
+import type { Browser, BrowserContextOptions, Page } from 'playwright-core';
 import { contract } from '@studio-zero/design';
 import type { AuditReport, Finding, Project, ViewportId } from '@studio-zero/protocol';
-import { UnavailableError } from '../app/errors.ts';
 import type { Config } from '../config.ts';
 import type { Store } from '../db/Store.ts';
 import type { EventLog } from '../events/EventLog.ts';
 import type { ClaudeClient } from '../llm/ClaudeClient.ts';
-import type { OrbStackManager } from '../sandbox/OrbStackManager.ts';
-import { errorMessage, newId, sleep, type Clock, type Logger } from '../util/core.ts';
+import { errorMessage, newId, type Clock, type Logger } from '../util/core.ts';
 import { runDomChecks, scoreAudit } from './checks.ts';
 import { PageDigest, collectDigest } from './collector.ts';
+import type { QaBrowser } from './QaBrowser.ts';
 import { RUBRIC_AXES, reviewWithVision } from './vision.ts';
 
-/** Client and server must be the same Playwright version, so the server image is derived from the installed client. */
-export const PLAYWRIGHT_VERSION = (createRequire(import.meta.url)('playwright-core/package.json') as { version: string }).version;
+export { PLAYWRIGHT_VERSION } from './QaBrowser.ts';
 
 interface ViewportSpec {
   context: BrowserContextOptions;
@@ -34,8 +31,6 @@ function viewportSpecs(devices: typeof import('playwright-core').devices): Recor
     'desktop-1440': { context: { viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 }, touch: false },
   };
 }
-
-const IDLE_STOP_MS = 10 * 60 * 1000;
 
 export interface AuditRequest {
   project: Project;
@@ -56,17 +51,16 @@ export class VisualAuditor {
   readonly #config: Config;
   readonly #store: Store;
   readonly #events: EventLog;
-  readonly #sandboxes: OrbStackManager;
+  readonly #browser: QaBrowser;
   readonly #claude: ClaudeClient;
   readonly #clock: Clock;
   readonly #log: Logger;
-  #idleTimer: NodeJS.Timeout | null = null;
 
-  constructor(deps: { config: Config; store: Store; events: EventLog; sandboxes: OrbStackManager; claude: ClaudeClient; clock: Clock; log: Logger }) {
+  constructor(deps: { config: Config; store: Store; events: EventLog; browser: QaBrowser; claude: ClaudeClient; clock: Clock; log: Logger }) {
     this.#config = deps.config;
     this.#store = deps.store;
     this.#events = deps.events;
-    this.#sandboxes = deps.sandboxes;
+    this.#browser = deps.browser;
     this.#claude = deps.claude;
     this.#clock = deps.clock;
     this.#log = deps.log;
@@ -75,22 +69,14 @@ export class VisualAuditor {
   async audit(req: AuditRequest): Promise<AuditReport> {
     const auditId = newId('aud');
     const scope = { projectId: req.project.id, taskId: req.taskId };
-    if (this.#idleTimer) clearTimeout(this.#idleTimer);
-
-    // Loaded on first audit, not at boot: the Playwright client is the heaviest module the daemon has (about
-    // 57 MB resident), and a daemon that is only relaying approvals should not carry it.
-    const { chromium, devices } = await import('playwright-core');
-    const viewports = viewportSpecs(devices);
-    const endpoint = await this.#sandboxes.ensureQaBrowser(PLAYWRIGHT_VERSION, this.#config.audit.browserImage);
-    const host = await this.#sandboxes.attachQaBrowser(req.project);
-    const browser = await this.#connect(chromium, endpoint, req.signal);
 
     const findings: Finding[] = [];
     const screenshots: AuditReport['screenshots'] = [];
     const rubrics: Record<string, number>[] = [];
     const useVision = this.#config.audit.vision && this.#claude.isConfigured();
 
-    try {
+    await this.#browser.use(req.project, req.signal, async ({ browser, host, devices }) => {
+      const viewports = viewportSpecs(devices);
       for (const viewport of this.#config.audit.viewports) {
         const spec = viewports[viewport];
         for (const [routeIndex, route] of req.routes.entries()) {
@@ -137,13 +123,7 @@ export class VisualAuditor {
           }
         }
       }
-    } finally {
-      await browser.close().catch(() => undefined);
-      await this.#sandboxes.detachQaBrowser(req.project).catch(() => undefined);
-      // The browser container is the one heavy thing the daemon runs; give its memory back when audits pause.
-      this.#idleTimer = setTimeout(() => void this.#sandboxes.stopQaBrowser().catch(() => undefined), IDLE_STOP_MS);
-      this.#idleTimer.unref();
-    }
+    });
 
     const rubric = rubrics.length === 0 ? null : Object.fromEntries(RUBRIC_AXES.map((axis) => [axis, Number((rubrics.reduce((sum, r) => sum + (r[axis] ?? 0), 0) / rubrics.length).toFixed(1))]));
     const result = scoreAudit(findings, rubric, this.#config.audit.threshold);
@@ -162,21 +142,6 @@ export class VisualAuditor {
     this.#store.insertAudit(report);
     this.#events.emit(scope, { type: 'audit.completed', auditId, score: result.score, passed: result.passed, blockers: result.blockers, majors: result.majors, minors: result.minors });
     return report;
-  }
-
-  async #connect(chromium: BrowserType, endpoint: string, signal: AbortSignal | undefined): Promise<Browser> {
-    // On a cold start the container first fetches the Playwright package, so the socket can take a while to open.
-    const deadline = Date.now() + 180_000;
-    let lastError = 'not attempted';
-    while (Date.now() < deadline) {
-      try {
-        return await chromium.connect(endpoint, { timeout: 10_000 });
-      } catch (err) {
-        lastError = errorMessage(err).split('\n')[0] ?? '';
-        await sleep(2000, signal);
-      }
-    }
-    throw new UnavailableError(`QA browser did not become ready: ${lastError}`);
   }
 
   async #capture(browser: Browser, spec: ViewportSpec, scheme: 'light' | 'dark', url: string, screenshots: boolean): Promise<{ digest: PageDigest | null; folds: Buffer[]; error: string }> {

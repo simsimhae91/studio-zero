@@ -137,6 +137,32 @@ kill -KILL -- "-$pid" 2>/dev/null || true
 rm -f "$pidfile"`;
 }
 
+/**
+ * The command an interactive terminal starts with: it records its own pid, like `startProcessScript`, and then
+ * becomes a login shell. Run on a pseudo-terminal, that shell is a session leader, so `stopTerminalScript` can
+ * end it and everything it started.
+ */
+export function terminalShellScript(name: string): string {
+  if (!/^[a-z][a-z0-9-]{0,30}$/.test(name)) throw new Error('invalid process name');
+  return `mkdir -p /tmp/sz
+echo $$ > /tmp/sz/${name}.pid
+if command -v bash >/dev/null 2>&1; then exec bash -l; fi
+exec sh -l`;
+}
+
+/** Hangs up a terminal's shell (which passes the hangup on to its jobs), then kills whatever is left of its process group. */
+export function stopTerminalScript(name: string): string {
+  if (!/^[a-z][a-z0-9-]{0,30}$/.test(name)) throw new Error('invalid process name');
+  return `pidfile=/tmp/sz/${name}.pid
+[ -f "$pidfile" ] || exit 0
+pid=$(cat "$pidfile")
+kill -HUP "$pid" 2>/dev/null || true
+for _ in 1 2 3 4 5; do kill -0 "$pid" 2>/dev/null || break; sleep 0.2; done
+kill -KILL -- "-$pid" 2>/dev/null || true
+kill -KILL "$pid" 2>/dev/null || true
+rm -f "$pidfile"`;
+}
+
 /** Polls a URL from inside the container until it answers with a non-5xx status. Exit 0 = ready. */
 export function waitHttpScript(p: { url: string; timeoutSec: number }): string {
   return `for _ in $(seq 1 ${Math.max(1, Math.floor(p.timeoutSec * 2))}); do

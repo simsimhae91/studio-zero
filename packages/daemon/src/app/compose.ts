@@ -11,6 +11,7 @@ import { EventLog } from '../events/EventLog.ts';
 import { CliBridgeEngine } from '../harness/engines/CliBridgeEngine.ts';
 import { NativeClaudeEngine } from '../harness/engines/NativeClaudeEngine.ts';
 import { WorkspaceProvisioner } from '../harness/bootstrap.ts';
+import { CompilerGate } from '../harness/CompilerGate.ts';
 import { EvalRunner } from '../harness/EvalRunner.ts';
 import { Harness } from '../harness/Harness.ts';
 import { LessonBook } from '../harness/LessonBook.ts';
@@ -25,7 +26,9 @@ import { SessionBrain } from '../llm/SessionBrain.ts';
 import { LlmGateway, type GatewayUpstreams } from '../llm/LlmGateway.ts';
 import { ModelRouter } from '../llm/ModelRouter.ts';
 import { PolicyEngine } from '../policy/PolicyEngine.ts';
-import { PLAYWRIGHT_VERSION, VisualAuditor } from '../qa/VisualAuditor.ts';
+import { PLAYWRIGHT_VERSION, QaBrowser } from '../qa/QaBrowser.ts';
+import { SmokeTester, type SmokeRunner } from '../qa/SmokeTester.ts';
+import { VisualAuditor } from '../qa/VisualAuditor.ts';
 import { TaskQueue } from '../queue/TaskQueue.ts';
 import { NtfyRelay } from '../relay/NtfyRelay.ts';
 import { SlackRelay, type SocketLike } from '../relay/SlackRelay.ts';
@@ -33,12 +36,15 @@ import { TelegramApi } from '../relay/telegramApi.ts';
 import { TelegramRelay } from '../relay/TelegramRelay.ts';
 import { openAiTranscriber } from '../relay/transcribe.ts';
 import { OrbStackManager } from '../sandbox/OrbStackManager.ts';
+import { PtyManager, type PtyOpen } from '../sandbox/PtyManager.ts';
+import { SandboxFileService } from '../sandbox/SandboxFileService.ts';
 import { ScratchService } from '../scratch/ScratchService.ts';
 import { DaemonServer } from '../server/DaemonServer.ts';
 import { createHandlers } from '../server/handlers.ts';
 import { Secret, errorMessage, systemClock, type Clock } from '../util/core.ts';
 import type { CommandRunner } from '../util/run.ts';
 import { CredentialIds, KeychainVault } from '../vault/KeychainVault.ts';
+import { ProjectNamer } from './ProjectNamer.ts';
 import { Studio } from './Studio.ts';
 
 export const VERSION = '0.1.0';
@@ -62,6 +68,10 @@ export interface DaemonOverrides {
   checkKey?: KeyCheck;
   /** Replaces the ACP conversation with an agent CLI. */
   acp?: (req: AcpRequest) => Promise<AcpResult>;
+  /** Replaces the engine API connection behind interactive terminals. */
+  ptyOpen?: PtyOpen;
+  /** Replaces the headless-browser smoke load. */
+  smoke?: SmokeRunner;
 }
 
 export interface Daemon {
@@ -89,6 +99,8 @@ export interface Daemon {
   provisioner: WorkspaceProvisioner;
   claude: ClaudeClient;
   router: ModelRouter;
+  pty: PtyManager;
+  files: SandboxFileService;
   start(): Promise<void>;
   stop(): Promise<void>;
 }
@@ -117,20 +129,21 @@ export async function createDaemon(config: Config, log: PinoLogger, overrides: D
   const steering = new SteeringQueue();
   const calibration = new ConfidenceCalibration(store, clock);
 
-  const engines = [
-    new NativeClaudeEngine({ claude, toolbox, events, config, steering }),
-    new CliBridgeEngine({ id: 'claude-code', config, sessions: bridgeSessions, store, events, policy, clock, steering, toolbox, run: overrides.run }),
-    new CliBridgeEngine({ id: 'codex', config, sessions: bridgeSessions, store, events, policy, clock, steering, toolbox, run: overrides.run }),
-    new CliBridgeEngine({ id: 'cursor', config, sessions: bridgeSessions, store, events, policy, clock, steering, toolbox, run: overrides.run }),
-    new CliBridgeEngine({ id: 'antigravity', config, sessions: bridgeSessions, store, events, policy, clock, steering, toolbox, run: overrides.run, acp: overrides.acp }),
-  ];
+  const bridge = { config, sessions: bridgeSessions, store, events, policy, clock, steering, toolbox, run: overrides.run };
+  const codex = new CliBridgeEngine({ id: 'codex', ...bridge });
+  const antigravity = new CliBridgeEngine({ id: 'antigravity', ...bridge, acp: overrides.acp });
+  const engines = [new NativeClaudeEngine({ claude, toolbox, events, config, steering }), new CliBridgeEngine({ id: 'claude-code', ...bridge }), codex, new CliBridgeEngine({ id: 'cursor', ...bridge }), antigravity];
   const router = new ModelRouter(config, engines);
 
-  const auditor = new VisualAuditor({ config, store, events, sandboxes, claude, clock, log: log.child({ mod: 'audit' }) });
+  // One browser container serves both the smoke load and the visual audit.
+  const qaBrowser = new QaBrowser({ config, sandboxes });
+  const auditor = new VisualAuditor({ config, store, events, browser: qaBrowser, claude, clock, log: log.child({ mod: 'audit' }) });
   const evals = new EvalRunner({ config, store, events, sandboxes, auditor, clock });
+  const compiler = new CompilerGate({ sandboxes });
+  const smoke = overrides.smoke ?? new SmokeTester({ config, sandboxes, browser: qaBrowser });
   const lessons = new LessonBook({ store, events, policy, config, clock });
   const reflection = new ReflectionAgent({ claude, store, events, lessons, evals });
-  const harness = new Harness({ config, store, events, policy, sandboxes, provisioner, router, claude, evals, lessons, reflection, clock, log: log.child({ mod: 'harness' }) });
+  const harness = new Harness({ config, store, events, policy, sandboxes, provisioner, router, claude, evals, compiler, smoke, lessons, reflection, clock, log: log.child({ mod: 'harness' }) });
   const queue = new TaskQueue({ store, events, execute: (task, signal) => harness.run(task, signal), clock, log: log.child({ mod: 'queue' }) });
   const kirby = new KirbyEngine({ config, store, events, sandboxes, claude, clock, log: log.child({ mod: 'kirby' }) });
 
@@ -170,7 +183,12 @@ export async function createDaemon(config: Config, log: PinoLogger, overrides: D
     { id: 'slack', state: slack?.state ?? 'disabled' },
     { id: 'ntfy', state: ntfy?.state ?? 'disabled' },
   ];
-  const studio = new Studio({ config, store, events, policy, sandboxes, provisioner, queue, vault, claude, router, auditor, evals, lessons, kirby, scratch, knowledge, calibration, steering, mcp, relayStates, clock, log: log.child({ mod: 'studio' }), version: VERSION });
+  const files = new SandboxFileService({ sandboxes });
+  const pty = new PtyManager({ sandboxes, log: log.child({ mod: 'pty' }), open: overrides.ptyOpen });
+  const namer = new ProjectNamer({ claude, log: log.child({ mod: 'namer' }) });
+  // "Gemini" is reached through Antigravity's CLI, the Google agent this daemon already knows how to confine.
+  const advisors = { codex, gemini: antigravity };
+  const studio = new Studio({ config, store, events, policy, sandboxes, provisioner, queue, vault, claude, router, auditor, evals, lessons, kirby, scratch, knowledge, calibration, steering, mcp, files, pty, namer, advisors, relayStates, clock, log: log.child({ mod: 'studio' }), version: VERSION });
 
   // The token every owner client presents. Created on first boot and kept in the Keychain, where the desktop
   // client on this Mac reads it directly; a second machine is paired by copying it once (`sz token`).
@@ -181,7 +199,7 @@ export async function createDaemon(config: Config, log: PinoLogger, overrides: D
     store.upsertCredential(CredentialIds.clientToken, clock());
   }
 
-  const server = new DaemonServer({ config, handlers: createHandlers(studio), events, store, toolbox, bridgeSessions, clientToken, version: VERSION, log });
+  const server = new DaemonServer({ config, handlers: createHandlers(studio), events, store, toolbox, bridgeSessions, terminals: pty, clientToken, version: VERSION, log });
   const gateway = new LlmGateway({ config, store, events, policy, vault, clock, log: log.child({ mod: 'gateway' }), upstreams: overrides.gatewayUpstreams });
 
   if (config.telegram.enabled) {
@@ -241,6 +259,8 @@ export async function createDaemon(config: Config, log: PinoLogger, overrides: D
     provisioner,
     claude,
     router,
+    pty,
+    files,
     async start() {
       policy.start();
       await claude.refresh();
@@ -259,6 +279,7 @@ export async function createDaemon(config: Config, log: PinoLogger, overrides: D
       await slack?.stop();
       await ntfy?.stop();
       await queue.stop();
+      await pty.stop();
       await mcp.stop();
       await Promise.race([Promise.all([scratch.idle(), knowledge.idle()]), new Promise((resolve) => setTimeout(resolve, 5000).unref())]);
       await studio.settle();
