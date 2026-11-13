@@ -1,0 +1,272 @@
+{
+ "file": "/Users/hosoo/project/conclave/.design-lab/runs/handbook4/quote/b/ws/docs/mockups/b.html",
+ "template": "web-vite-react",
+ "desktop": {
+  "title": "계산 테이프 견적서",
+  "headline": {
+   "text": "899,310",
+   "px": 72,
+   "lines": 1,
+   "weight": 800
+  },
+  "seed": "{\"hue\":112,\"chroma\":0.2,\"lightness\":0.75,\"neutral_hue\":245,\"neutral_chroma\":0.005,\"corners\":\"round\",\"face\":\"suit\",\"source\":\"계산 테이프의 합계에 긋는 형광펜의 연두와, 감열지의 푸르스름한 흰색에서 왔다: 이 화면은 서류가 아니라 내 몫을 셈하는 기계다.\"}",
+  "tokens": {
+   "--sz-brand": [
+    177,
+    183,
+    0
+   ],
+   "--sz-brand-soft": [
+    235,
+    239,
+    201
+   ],
+   "--sz-accent": [
+    77,
+    80,
+    0
+   ],
+   "--sz-bg": [
+    247,
+    251,
+    253
+   ],
+   "--sz-surface": [
+    254,
+    254,
+    255
+   ],
+   "--sz-fg": [
+    20,
+    22,
+    24
+   ],
+   "--sz-brand-2": null,
+   "--sz-second": [
+    106,
+    62,
+    165
+   ]
+  },
+  "viewport": {
+   "vw": 1440,
+   "vh": 900
+  },
+  "screensLong": 1,
+  "type": {
+   "families": [
+    [
+     "SUIT Variable",
+     525
+    ]
+   ],
+   "sizesFirstScreen": [
+    [
+     12,
+     26
+    ],
+    [
+     14,
+     226
+    ],
+    [
+     16,
+     174
+    ],
+    [
+     18,
+     53
+    ],
+    [
+     24,
+     8
+    ],
+    [
+     30,
+     31
+    ],
+    [
+     72,
+     7
+    ]
+   ],
+   "distinctSizes": 7,
+   "distinctSizesFirstScreen": 7,
+   "microSharePct": 5,
+   "microSharePctFirstScreen": 5,
+   "sentencesAtMicro": [],
+   "bodySharePct": 43.2,
+   "largestPx": 72,
+   "figuresAtLargest": [
+    "899,310"
+   ],
+   "heavyWeightSharePct": 47,
+   "turnedText": [],
+   "stackedText": [],
+   "endAlignedText": [],
+   "monoOutsideCode": []
+  },
+  "layout": {
+   "controlsFirstScreen": 9,
+   "cards": 3,
+   "cardsFirstScreen": 3,
+   "halfEmptyCards": [],
+   "nestedCards": 0,
+   "saidTwice": [
+    "김서윤 x2",
+    "입금될 금액 x2",
+    "899,310 x2",
+    "견적 금액 x2",
+    "930,000 x3",
+    "30,690 x2"
+   ],
+   "figuresTwice": [
+    "20 x2",
+    "899,310 x2",
+    "930,000 x3",
+    "30,690 x2",
+    "11 x2"
+   ]
+  },
+  "colour": {
+   "saturatedPct": 1.7,
+   "darkPct": 1.9,
+   "brandPct": 1.4,
+   "secondPct": 0,
+   "blankLeftPct": 82.5,
+   "blankRightPct": 54.3
+  }
+ },
+ "phone": {
+  "title": "계산 테이프 견적서",
+  "headline": {
+   "text": "899,310",
+   "px": 60,
+   "lines": 1,
+   "weight": 800
+  },
+  "seed": "{\"hue\":112,\"chroma\":0.2,\"lightness\":0.75,\"neutral_hue\":245,\"neutral_chroma\":0.005,\"corners\":\"round\",\"face\":\"suit\",\"source\":\"계산 테이프의 합계에 긋는 형광펜의 연두와, 감열지의 푸르스름한 흰색에서 왔다: 이 화면은 서류가 아니라 내 몫을 셈하는 기계다.\"}",
+  "tokens": {
+   "--sz-brand": [
+    177,
+    183,
+    0
+   ],
+   "--sz-brand-soft": [
+    235,
+    239,
+    201
+   ],
+   "--sz-accent": [
+    77,
+    80,
+    0
+   ],
+   "--sz-bg": [
+    247,
+    251,
+    253
+   ],
+   "--sz-surface": [
+    254,
+    254,
+    255
+   ],
+   "--sz-fg": [
+    20,
+    22,
+    24
+   ],
+   "--sz-brand-2": null,
+   "--sz-second": [
+    106,
+    62,
+    165
+   ]
+  },
+  "viewport": {
+   "vw": 393,
+   "vh": 852
+  },
+  "screensLong": 1.6,
+  "type": {
+   "families": [
+    [
+     "SUIT Variable",
+     517
+    ]
+   ],
+   "sizesFirstScreen": [
+    [
+     12,
+     26
+    ],
+    [
+     14,
+     132
+    ],
+    [
+     16,
+     115
+    ],
+    [
+     18,
+     19
+    ],
+    [
+     20,
+     30
+    ],
+    [
+     24,
+     8
+    ],
+    [
+     30,
+     1
+    ],
+    [
+     60,
+     7
+    ]
+   ],
+   "distinctSizes": 8,
+   "distinctSizesFirstScreen": 8,
+   "microSharePct": 5,
+   "microSharePctFirstScreen": 7.7,
+   "sentencesAtMicro": [],
+   "bodySharePct": 43.9,
+   "largestPx": 60,
+   "figuresAtLargest": [
+    "899,310"
+   ],
+   "heavyWeightSharePct": 46.2,
+   "turnedText": [],
+   "stackedText": [],
+   "endAlignedText": [],
+   "monoOutsideCode": []
+  },
+  "layout": {
+   "controlsFirstScreen": 9,
+   "cards": 3,
+   "cardsFirstScreen": 3,
+   "halfEmptyCards": [],
+   "nestedCards": 0,
+   "saidTwice": [
+    "견적 금액 x2",
+    "930,000 x3"
+   ],
+   "figuresTwice": [
+    "930,000 x3"
+   ]
+  },
+  "colour": {
+   "saturatedPct": 6,
+   "darkPct": 5.3,
+   "brandPct": 5.1,
+   "secondPct": 0.1,
+   "blankLeftPct": 47.5,
+   "blankRightPct": 52.5
+  }
+ }
+}

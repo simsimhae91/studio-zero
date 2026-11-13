@@ -1,0 +1,128 @@
+{
+ "file": "/Users/hosoo/project/conclave/.design-lab/runs/handbook4/dues/b/ws/docs/mockups/b.html",
+ "template": "mobile-expo",
+ "phone": {
+  "title": "영수증 꽂이 장부",
+  "headline": {
+   "text": "26,600",
+   "px": 36,
+   "lines": 1,
+   "weight": 800
+  },
+  "seed": "{\"hue\":122,\"chroma\":0.2,\"lightness\":0.75,\"neutral_hue\":265,\"neutral_chroma\":0.005,\"corners\":\"round\",\"face\":\"suit\",\"source\":\"총무가 영수증 합계에 긋는 형광펜과 새벽 러닝 때 입는 형광 연두 바람막이에서 색이 왔고, 감열지 영수증의 고정폭 글씨가 제목 글꼴을, 손에 쥐고 찍는 영수증 사진과 형광펜 끝의 둥근 획이 둥근 모서리를 정한다.\"}",
+  "tokens": {
+   "--sz-brand": [
+    155,
+    191,
+    0
+   ],
+   "--sz-brand-soft": [
+    229,
+    241,
+    204
+   ],
+   "--sz-accent": [
+    66,
+    83,
+    0
+   ],
+   "--sz-bg": [
+    248,
+    250,
+    254
+   ],
+   "--sz-surface": [
+    254,
+    254,
+    255
+   ],
+   "--sz-fg": [
+    21,
+    22,
+    24
+   ],
+   "--sz-brand-2": null,
+   "--sz-second": [
+    106,
+    62,
+    165
+   ]
+  },
+  "viewport": {
+   "vw": 393,
+   "vh": 852
+  },
+  "screensLong": 1.2,
+  "type": {
+   "families": [
+    [
+     "SUIT Variable",
+     112
+    ]
+   ],
+   "sizesFirstScreen": [
+    [
+     12,
+     5
+    ],
+    [
+     14,
+     18
+    ],
+    [
+     16,
+     56
+    ],
+    [
+     18,
+     13
+    ],
+    [
+     20,
+     6
+    ],
+    [
+     36,
+     12
+    ]
+   ],
+   "distinctSizes": 6,
+   "distinctSizesFirstScreen": 6,
+   "microSharePct": 4.5,
+   "microSharePctFirstScreen": 4.5,
+   "sentencesAtMicro": [],
+   "bodySharePct": 63.4,
+   "largestPx": 36,
+   "figuresAtLargest": [
+    "26,600",
+    "26,600"
+   ],
+   "heavyWeightSharePct": 43.8,
+   "turnedText": [],
+   "stackedText": [],
+   "endAlignedText": [],
+   "monoOutsideCode": []
+  },
+  "layout": {
+   "controlsFirstScreen": 7,
+   "cards": 3,
+   "cardsFirstScreen": 3,
+   "halfEmptyCards": [],
+   "nestedCards": 0,
+   "saidTwice": [
+    "26,600 x2"
+   ],
+   "figuresTwice": [
+    "26,600 x3"
+   ]
+  },
+  "colour": {
+   "saturatedPct": 31,
+   "darkPct": 3.3,
+   "brandPct": 27.4,
+   "secondPct": 0,
+   "blankLeftPct": 35.7,
+   "blankRightPct": 36.3
+  }
+ }
+}
