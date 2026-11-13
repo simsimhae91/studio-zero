@@ -1,0 +1,6868 @@
+[
+ {
+  "id": "aud_q1xk104pag7wrct52wxr",
+  "taskId": "tsk_nga1ecvxx4tkchte33ab",
+  "at": "2026-11-13T14:45:28+09:00",
+  "score": 59.0,
+  "passed": false,
+  "report": {
+   "id": "aud_q1xk104pag7wrct52wxr",
+   "projectId": "prj_4vdh6gb4krv0r2v6w30j",
+   "taskId": "tsk_nga1ecvxx4tkchte33ab",
+   "createdAt": 1794548728598,
+   "score": 59,
+   "threshold": 85,
+   "passed": false,
+   "visionReviewed": true,
+   "vision": {
+    "status": "reviewed",
+    "via": "codex",
+    "model": "codex:default",
+    "limited": false,
+    "reviewed": 3,
+    "expected": 3,
+    "reason": null
+   },
+   "rubric": {
+    "hierarchy": 5.3,
+    "whitespace": 4.3,
+    "typography": 6,
+    "color": 7.7,
+    "copy": 6,
+    "originality": 8,
+    "tactility": 6.7
+   },
+   "slopScore": 27,
+   "archetype": "mobile-app",
+   "critique": "전광판을 닮은 기록판과 절제된 녹색은 이 제품만의 방향이 있지만, 숫자 줄바꿈과 과도한 승부 강조 때문에 오늘 할 일을 한눈에 읽기 어렵습니다. 점수 비교와 기록 행동이 자연스럽게 이어지는 모바일 화면이어야 합니다. 가장 먼저 14일 기록판을 오늘의 두 사람 점수 중심으로 재구성하세요.",
+   "grade": "D",
+   "redesignPatches": [
+    {
+     "viewport": "iphone-15-pro",
+     "route": "docs/mockups/a.html",
+     "target": null,
+     "bbox": null,
+     "action": "restructure",
+     "instruction": "HTML 본문을 상단 일차·남은 시간, 압축한 줄다리기와 두 사람의 점수, 오늘 기록 목록, 상대 활동 details, 일차별 기록 details 순으로 구성하세요. 상대의 말풍선·활동 카드·응원은 상대 활동 details 안에 함께 넣으세요. CSS의 과도한 빈 공간을 줄여 첫 화면에서 내 기록 상태와 다음 행동이 보이도록 하고, 고정된 하단 기록 버튼에 가려지지 않게 본문 끝 여백을 확보하세요."
+    },
+    {
+     "viewport": "iphone-15-pro",
+     "route": "docs/mockups/a.html",
+     "target": null,
+     "bbox": null,
+     "action": "remove",
+     "instruction": "오트밀파의 480점 위에서 활동 카드까지 내려오는 세로선과 원형 끝점을 만드는 마크업 또는 CSS 가상 요소를 삭제하세요. 상대 활동의 소속은 같은 영역 안의 제목과 정렬로 표현하세요."
+    },
+    {
+     "viewport": "iphone-15-pro",
+     "route": "docs/mockups/a.html",
+     "target": null,
+     "bbox": null,
+     "action": "restructure",
+     "instruction": "오늘 기록 목록에서 공통 빈 원을 제거하고 항목의 실제 행동에 맞게 마크업을 나누세요. 체중·아침에는 이름이 명확한 기록 링크와 대응하는 페이지 내 입력 영역을 두고, 점심에는 이용 가능 시각을 표시하세요. 걸음에는 progress와 ‘건강 앱 · 07:00 동기화’를 사용하고, 저녁 설명은 ‘저녁 식사를 기록해요’로 교체하세요. 버튼 표면·상태 문구·진행 막대는 페이지의 기존 색상 custom properties를 사용해 구분하세요."
+    },
+    {
+     "viewport": "iphone-15-pro",
+     "route": "docs/mockups/b.html",
+     "target": null,
+     "bbox": null,
+     "action": "restructure",
+     "instruction": "페이지 순서를 상단 일차 제목, 두 참가자의 누적 점수 비교, 오늘의 기록, 접힌 기간별 기록으로 바꾸세요. 점수 차이는 비교 영역의 보조 문장으로 낮추고, 체중·식사·걸음 상태를 오늘의 기록 안에 모으세요. 하단 고정 행동 영역을 고려한 스크롤 여백을 페이지 CSS에 확보하세요."
+    },
+    {
+     "viewport": "iphone-15-pro",
+     "route": "docs/mockups/b.html",
+     "target": "main > section.board.night:nth-of-type(1) > div.grid:nth-of-type(1) > div.c.e:nth-of-type(32)",
+     "bbox": {
+      "x": 20,
+      "y": 192,
+      "w": 19.203125,
+      "h": 48
+     },
+     "action": "restructure",
+     "instruction": "날짜별 점수 영역을 참가자별 행과 날짜별 열이 있는 HTML 표로 교체하세요. 이름과 합계를 명확히 분리하고 날짜 영역만 가로 스크롤되게 구성하세요. 모든 점수에 줄바꿈 금지와 동일 폭 숫자를 적용하고 현재 날짜 헤더에 ‘오늘’을 함께 표시하세요."
+    },
+    {
+     "viewport": "iphone-15-pro",
+     "route": "docs/mockups/b.html",
+     "target": "#ih",
+     "bbox": {
+      "x": 12,
+      "y": 396.796875,
+      "w": 47.8125,
+      "h": 30
+     },
+     "action": "rewrite_copy",
+     "instruction": "‘6회’를 ‘오늘의 기록’으로 교체하세요. 제목은 자체 CSS에서 18px/650으로 설정하고, 같은 섹션에 ‘오늘 4점 · 최대 100점’을 표시하세요."
+    },
+    {
+     "viewport": "iphone-15-pro",
+     "route": "docs/mockups/b.html",
+     "target": "main > section.inning:nth-of-type(2) > div.tiles:nth-of-type(2) > button.tile.tw:nth-of-type(1)",
+     "bbox": {
+      "x": 12,
+      "y": 438.796875,
+      "w": 368.984375,
+      "h": 104
+     },
+     "action": "restructure",
+     "instruction": "체중 버튼을 제목 ‘체중 기록’, 상태 ‘아직 기록하지 않았어요’, 점수 ‘0/40점’, 보조 설명 ‘기록 10점 · 추세 30점’으로 구성하세요. 빈 사각형을 삭제하고 불필요한 내부 공백을 줄이며 버튼의 눌림·포커스 상태를 자체 CSS로 추가하세요."
+    },
+    {
+     "viewport": "iphone-15-pro",
+     "route": "docs/mockups/b.html",
+     "target": "section.board.night:nth-of-type(1) > div.grid:nth-of-type(1) > div.sub:nth-of-type(47) > span.bub.in:nth-of-type(2)",
+     "bbox": {
+      "x": 248.984375,
+      "y": 244,
+      "w": 120,
+      "h": 28
+     },
+     "action": "restyle",
+     "instruction": "테두리로 둘러싼 상태 상자를 일반 활동 문구로 바꾸세요. 상대 이름 아래에 ‘06:41 · 먼저 쟀어요’를 보조 텍스트 색상으로 배치해 실제 행동 버튼과 구별하세요."
+    },
+    {
+     "viewport": "iphone-15-pro",
+     "route": "docs/mockups/b.html",
+     "target": "main > section.board.night:nth-of-type(1) > div.gapline:nth-of-type(2) > p.odds:nth-of-type(4)",
+     "bbox": {
+      "x": 244,
+      "y": 322.609375,
+      "w": 125,
+      "h": 26.390625
+     },
+     "action": "restructure",
+     "instruction": "예상 비율을 주 비교 영역에서 제거하고 페이지 아래 ‘매칭 정보’ HTML details로 옮기세요. 펼친 내용에는 실제 데이터 의미에 맞는 지표명과 참가자별 값을 명시하세요."
+    },
+    {
+     "viewport": "iphone-15-pro",
+     "route": "docs/mockups/c.html",
+     "target": null,
+     "bbox": null,
+     "action": "restructure",
+     "instruction": "시간당 고정 높이로 이어지는 시간축을 내용 높이에 맞는 기록 목록으로 교체하세요. ‘현재 07:12’, 최근 상대 기록, 내 체중 기록 행동을 먼저 보여주고, 이후 빈 시간은 점심·저녁 구간 행으로 축약하세요. 양쪽 비교 구조와 현재 시각 표시는 유지하고, 축약 구간에는 끊김 표시를 넣으세요."
+    },
+    {
+     "viewport": "iphone-15-pro",
+     "route": "docs/mockups/c.html",
+     "target": null,
+     "bbox": null,
+     "action": "restructure",
+     "instruction": "상단은 날짜, 누적 점수 비교, ‘체중 기록하면 +40점’ 안내 순서로 구성하세요. ‘64점 뒤져요’는 점수 비교의 보조 문장으로 배치하고, 항목별 배점과 걸음 상세는 기본 HTML details 요소의 ‘오늘 점수 내역’으로 합치세요. 기존 하단 기록 버튼은 유지하세요."
+    },
+    {
+     "viewport": "iphone-15-pro",
+     "route": "docs/mockups/c.html",
+     "target": null,
+     "bbox": null,
+     "action": "restructure",
+     "instruction": "기록 목록에 ‘나 / 시간 / 오트밀파’ 세 열 머리글을 추가하세요. 페이지 CSS에서 머리글을 스크롤 영역 상단에 sticky로 고정하고 배경색과 하단 경계선을 지정하세요. 각 기록의 마크업에도 작성자를 넣어 열 위치와 별개로 소유자가 전달되게 하세요."
+    },
+    {
+     "viewport": "iphone-15-pro",
+     "route": "docs/mockups/c.html",
+     "target": "section.tl > div.day > div.midnight:nth-of-type(16) > p",
+     "bbox": {
+      "x": 56.5,
+      "y": 1451.390625,
+      "w": 280,
+      "h": 22.390625
+     },
+     "action": "rewrite_copy",
+     "instruction": "실제 집계 규칙을 기준으로 오늘 점수의 예상·확정 상태를 통일하세요. 예상치라면 상단은 ‘오늘 예상 4점’, 정산 안내는 ‘걸음 점수는 자정에 확정돼요’로 쓰고 점수 내역 가까이 옮기세요. 같은 체중 기록에 +34와 +40이 표시되는 이유도 해당 기록과 점수 내역에 명시하세요."
+    }
+   ],
+   "findings": [
+    {
+     "rule": "vision/hierarchy",
+     "category": "hierarchy",
+     "severity": "major",
+     "source": "vlm",
+     "viewport": "iphone-15-pro",
+     "route": "docs/mockups/a.html",
+     "message": "첫 화면에서 가장 강조되는 것은 64점 열세와 상대의 기록입니다. 내 점수 아래는 비어 있는데 상대 말풍선·활동 카드·응원이 세로 공간을 차지하고, 내 오늘 기록 목록은 다음 화면으로 밀립니다. 한눈에 다음 행동을 알려줘야 한다는 실용성 기준에 못 미칩니다.",
+     "selector": null,
+     "bbox": null,
+     "fix": "페이지 본문을 승부 현황, 내 오늘 기록, 상대 활동 순으로 재배치하세요. 줄다리기 그림과 양쪽 점수는 하나의 짧은 영역으로 묶고, 상대 활동은 기본적으로 접힌 details 안에 넣으세요. 기존 하단 체중 기록 버튼은 유지하되 본문에 하단 고정 영역만큼 여백을 확보하세요.",
+     "file": null,
+     "line": null
+    },
+    {
+     "rule": "vision/spacing",
+     "category": "spacing",
+     "severity": "major",
+     "source": "vlm",
+     "viewport": "iphone-15-pro",
+     "route": "docs/mockups/a.html",
+     "message": "상대 활동 카드로 내려오는 세로 연결선이 ‘480’ 숫자를 관통합니다. 점수와 활동을 연결하려는 장식이 핵심 정보의 읽기를 방해해 마감이 덜 된 인상을 줍니다.",
+     "selector": null,
+     "bbox": null,
+     "fix": "해당 연결선과 끝점의 장식 요소 또는 가상 요소를 제거하세요. 상대 이름·점수·최근 기록을 같은 문서 흐름의 묶음으로 배치하고, 관계는 정렬과 간격으로 표현하세요.",
+     "file": null,
+     "line": null
+    },
+    {
+     "rule": "vision/tactility",
+     "category": "tactility",
+     "severity": "major",
+     "source": "vlm",
+     "viewport": "iphone-15-pro",
+     "route": "docs/mockups/a.html",
+     "message": "오늘 기록 목록의 빈 원은 체크박스처럼 보이지만 체중·식사 기록, 아직 시간이 되지 않은 점심, 자동 집계되는 걸음이 거의 같은 형태입니다. 직접 눌러 기록하는 항목과 기다리거나 확인하는 항목의 차이가 드러나지 않습니다.",
+     "selector": null,
+     "bbox": null,
+     "fix": "수동 기록 항목에는 ‘체중 기록’, ‘아침 기록’처럼 목적이 드러나는 링크나 버튼을 두고, 스크립트 없이 확인할 수 있는 페이지 내 입력 영역 또는 details로 연결하세요. 점심은 ‘11:00부터 기록 가능’이라는 상태 문구로 구분하고, 걸음은 빈 원을 없애 progress와 동기화 시각만 표시하세요. 상태 구분을 색상에만 맡기지 마세요.",
+     "file": null,
+     "line": null
+    },
+    {
+     "rule": "vision/copy",
+     "category": "copy",
+     "severity": "minor",
+     "source": "vlm",
+     "viewport": "iphone-15-pro",
+     "route": "docs/mockups/a.html",
+     "message": "오늘 저녁 항목의 설명이 ‘3일차에 놓친 끼니’라서 오늘 기록 안내인지 과거 누락분을 보충하는 기능인지 모호합니다. 현재 행동 목록에 과거의 실패를 끼워 넣어 정보의 시점도 섞입니다.",
+     "selector": "li:nth-of-type(4) > label.row.r-d > span.row-t:nth-of-type(2) > span.todo-t:nth-of-type(1)",
+     "bbox": {
+      "x": 77,
+      "y": 938.203125,
+      "w": 219,
+      "h": 21
+     },
+     "fix": "오늘 저녁 설명을 ‘저녁 식사를 기록해요’로 바꾸세요. 3일차 누락 정보는 일차별 기록을 펼쳤을 때 해당 날짜 아래에만 표시하세요.",
+     "file": null,
+     "line": null
+    },
+    {
+     "rule": "vision/responsive",
+     "category": "responsive",
+     "severity": "major",
+     "source": "vlm",
+     "viewport": "iphone-15-pro",
+     "route": "docs/mockups/b.html",
+     "message": "상대 기록의 90·86·88·92·42가 두 줄로 갈라져 자릿수가 세로로 쌓입니다. 같은 기록판 안에서도 82는 한 줄이라 점수 비교 방식이 무너집니다.",
+     "selector": "main > section.board.night:nth-of-type(1) > div.grid:nth-of-type(1) > div.c.e:nth-of-type(32)",
+     "bbox": {
+      "x": 20,
+      "y": 192,
+      "w": 19.203125,
+      "h": 48
+     },
+     "fix": "기록판의 HTML을 참가자 이름이 행 앞에 오는 표로 구성하고, 숫자 셀에 white-space: nowrap과 font-variant-numeric: tabular-nums를 적용하세요. 14개 열을 화면에 강제로 압축하지 말고 날짜별 기록 영역만 가로 스크롤되도록 하며 오늘 열이 처음부터 보이게 배치하세요.",
+     "file": null,
+     "line": null
+    },
+    {
+     "rule": "vision/hierarchy",
+     "category": "hierarchy",
+     "severity": "major",
+     "source": "vlm",
+     "viewport": "iphone-15-pro",
+     "route": "docs/mockups/b.html",
+     "message": "첫 화면은 전체 기간 기록과 ‘64점 뒤져요’가 지배하고, 오늘의 식사·걸음 기록은 아래로 밀립니다. ‘지금 무엇을 기록하면 되는가’보다 패배 상태가 먼저 읽혀 실용적인 첫 화면이라는 기준을 놓칩니다.",
+     "selector": null,
+     "bbox": null,
+     "fix": "상단 비교 영역을 두 사람의 이름·누적 점수·점수 차이로 압축하세요. 바로 아래에 ‘오늘 4점 · 최대 100점’과 체중·식사·걸음 상태를 배치하고, 날짜별 기록은 HTML details의 ‘14일 기록 보기’ 안으로 옮기세요. 기존 하단 기록 버튼은 유지하세요.",
+     "file": null,
+     "line": null
+    },
+    {
+     "rule": "vision/typography",
+     "category": "typography",
+     "severity": "major",
+     "source": "vlm",
+     "viewport": "iphone-15-pro",
+     "route": "docs/mockups/b.html",
+     "message": "내용이 불명확한 ‘6회’가 30px/750으로, 화면 제목 ‘6일차’의 18px/650보다 강하게 강조됩니다. 같은 진행 상황을 일차와 회차로 다르게 부르면서 의미가 약한 표제가 더 높은 위계를 차지합니다.",
+     "selector": "#ih",
+     "bbox": {
+      "x": 12,
+      "y": 396.796875,
+      "w": 47.8125,
+      "h": 30
+     },
+     "fix": "e43을 ‘오늘의 기록’으로 바꾸고 페이지 CSS에서 18px/650의 섹션 제목으로 설정하세요. 진행 일차는 상단 제목에서만 표시하고, 오늘 획득 점수를 해당 섹션의 대표 수치로 두세요.",
+     "file": null,
+     "line": null
+    },
+    {
+     "rule": "vision/tactility",
+     "category": "tactility",
+     "severity": "major",
+     "source": "vlm",
+     "viewport": "iphone-15-pro",
+     "route": "docs/mockups/b.html",
+     "message": "체중 영역은 실제로 버튼이지만 큰 빈 공간과 설명 없는 네 개의 빈 사각형 때문에 입력 가능한 기록 카드인지, 점수 현황인지 불분명합니다. 빈 사각형은 체크박스처럼 보여 별도 조작도 기대하게 합니다.",
+     "selector": "main > section.inning:nth-of-type(2) > div.tiles:nth-of-type(2) > button.tile.tw:nth-of-type(1)",
+     "bbox": {
+      "x": 12,
+      "y": 438.796875,
+      "w": 368.984375,
+      "h": 104
+     },
+     "fix": "버튼 내부를 ‘체중 기록’ 제목, ‘아직 기록하지 않았어요’ 상태, ‘0/40점’으로 재구성하세요. 의미 없는 빈 사각형은 삭제하고, 점수 규칙은 아래 보조 문장으로 묶으세요. 자체 CSS에 눌림·키보드 포커스 상태를 정의하고 내용에 맞게 카드 높이를 줄이세요.",
+     "file": null,
+     "line": null
+    },
+    {
+     "rule": "vision/tactility",
+     "category": "tactility",
+     "severity": "minor",
+     "source": "vlm",
+     "viewport": "iphone-15-pro",
+     "route": "docs/mockups/b.html",
+     "message": "‘먼저 쟀어요 · 06:41’은 span으로 된 상태 문구인데 테두리와 독립된 면이 있어 버튼처럼 보입니다. 실제 행동인 ‘응원 보내기’와 상태 표시의 시각적 문법이 겹칩니다.",
+     "selector": "section.board.night:nth-of-type(1) > div.grid:nth-of-type(1) > div.sub:nth-of-type(47) > span.bub.in:nth-of-type(2)",
+     "bbox": {
+      "x": 248.984375,
+      "y": 244,
+      "w": 120,
+      "h": 28
+     },
+     "fix": "e39의 테두리와 버튼형 배경을 없애고 상대 이름 아래에 ‘06:41 · 먼저 쟀어요’라는 활동 문구로 배치하세요. 페이지의 보조 텍스트 색상 변수를 사용해 실제 버튼보다 낮은 위계로 표현하세요.",
+     "file": null,
+     "line": null
+    },
+    {
+     "rule": "vision/copy",
+     "category": "copy",
+     "severity": "minor",
+     "source": "vlm",
+     "viewport": "iphone-15-pro",
+     "route": "docs/mockups/b.html",
+     "message": "‘매칭 때 예상 51 : 49’는 승률인지 예상 점수인지 설명하지 않고, 어느 숫자가 누구의 것인지도 알 수 없습니다. 현재 점수 옆에서 해석해야 할 지표만 늘립니다.",
+     "selector": "main > section.board.night:nth-of-type(1) > div.gapline:nth-of-type(2) > p.odds:nth-of-type(4)",
+     "bbox": {
+      "x": 244,
+      "y": 322.609375,
+      "w": 125,
+      "h": 26.390625
+     },
+     "fix": "첫 화면에서 이 문구를 빼고 ‘매칭 정보’ details 안으로 옮기세요. 승률을 뜻하는 데이터라면 ‘시작 전 예상 승률 · 서윤 51%, 오트밀파 49%’처럼 지표와 대상을 명시하세요.",
+     "file": null,
+     "line": null
+    },
+    {
+     "rule": "vision/spacing",
+     "category": "spacing",
+     "severity": "major",
+     "source": "vlm",
+     "viewport": "iphone-15-pro",
+     "route": "docs/mockups/c.html",
+     "message": "두 번째 화면 대부분이 점심·저녁 사이의 빈 시간이고, 세 번째 화면까지 내려가야 정산 설명이 나옵니다. 실제 기록보다 시간 눈금이 더 많은 공간을 차지해 다음 행동을 찾는 데 불필요한 스크롤이 생깁니다.",
+     "selector": null,
+     "bbox": null,
+     "fix": "페이지의 시간축을 기록 단위의 행으로 바꾸고 행 높이는 내용에 맞추세요. 현재 시각 주변의 기록은 펼치되, 기록 없는 구간은 ‘11–16시 · 점심’처럼 하나의 구간 행으로 압축하세요. 시간 간격을 생략한 곳에는 축의 끊김 표시를 넣고, 정산 설명은 마지막 활동 바로 아래에 배치하세요.",
+     "file": null,
+     "line": null
+    },
+    {
+     "rule": "vision/hierarchy",
+     "category": "hierarchy",
+     "severity": "major",
+     "source": "vlm",
+     "viewport": "iphone-15-pro",
+     "route": "docs/mockups/c.html",
+     "message": "누적 점수, 오늘 점수, 걸음 수, 점수 차이, 남은 점수, 항목별 배점이 기록 영역보다 먼저 연속으로 등장합니다. 같은 상황을 여러 방식으로 설명하면서 첫 화면의 핵심인 ‘지금 무엇을 기록할까’가 뒤로 밀립니다.",
+     "selector": null,
+     "bbox": null,
+     "fix": "상단 마크업을 날짜 행, 양쪽 점수 비교, 다음 행동 안내의 세 묶음으로 정리하세요. 점수 차이는 비교 영역 안의 보조 문장으로 내리고, 다음 행동 안내에는 ‘체중 기록하면 +40점’을 표시하세요. 다섯 항목의 상세 배점은 기본 HTML details 요소의 ‘오늘 점수 내역’ 안으로 옮겨 스크립트 없이도 확인할 수 있게 하세요.",
+     "file": null,
+     "line": null
+    },
+    {
+     "rule": "vision/hierarchy",
+     "category": "hierarchy",
+     "severity": "major",
+     "source": "vlm",
+     "viewport": "iphone-15-pro",
+     "route": "docs/mockups/c.html",
+     "message": "시간축의 왼쪽이 나, 오른쪽이 오트밀파라는 설명은 상단 점수 영역에만 있습니다. 아래로 스크롤하면 동일한 ‘점심’, ‘저녁’ 카드 두 개가 누구의 상태인지 위치를 기억해야 알 수 있어, 비교 화면의 핵심 관계가 사라집니다.",
+     "selector": null,
+     "bbox": null,
+     "fix": "시간축 바로 위에 ‘나 / 시간 / 오트밀파’ 열 머리글을 추가하고 스크롤 중에도 유지되도록 페이지 CSS에 sticky 위치와 불투명 배경을 지정하세요. 기록 카드의 마크업과 읽기 순서에도 작성자를 포함해 좌우 위치만으로 소유자를 전달하지 않도록 하세요.",
+     "file": null,
+     "line": null
+    },
+    {
+     "rule": "vision/copy",
+     "category": "copy",
+     "severity": "major",
+     "source": "vlm",
+     "viewport": "iphone-15-pro",
+     "route": "docs/mockups/c.html",
+     "message": "화면에는 오늘 걸음 점수 4점이 이미 반영돼 있지만, 맨 아래에서는 자정에 걸음까지 합쳐 점수가 정해진다고 설명합니다. 상대의 체중 기록은 +34점이고 내 기록 버튼은 +40점인데 그 차이의 근거도 보이지 않아, 경쟁의 기준을 첫 화면에서 이해하기 어렵습니다.",
+     "selector": "section.tl > div.day > div.midnight:nth-of-type(16) > p",
+     "bbox": {
+      "x": 56.5,
+      "y": 1451.390625,
+      "w": 280,
+      "h": 22.390625
+     },
+     "fix": "실시간 점수가 예상치라면 상단에 ‘오늘 예상 4점’으로 표시하고 정산 문구는 ‘걸음 점수는 자정에 확정돼요’로 바꾸세요. 체중 점수가 달라지는 실제 규칙은 +34점 기록 옆의 짧은 설명과 ‘오늘 점수 내역’의 기본 HTML details 요소에 명시하세요. 확정치라면 예상치 표현 대신 실제 집계 방식에 맞춰 문구와 표시값을 통일하세요.",
+     "file": null,
+     "line": null
+    }
+   ],
+   "screenshots": [
+    {
+     "viewport": "iphone-15-pro",
+     "route": "docs/mockups/a.html",
+     "fold": 0,
+     "artifactId": "art_p72mgj0d4cdy9zh58j9x",
+     "width": 393,
+     "height": 659
+    },
+    {
+     "viewport": "iphone-15-pro",
+     "route": "docs/mockups/a.html",
+     "fold": 1,
+     "artifactId": "art_q139abyfmp0ms9h4nxqh",
+     "width": 393,
+     "height": 505
+    },
+    {
+     "viewport": "iphone-15-pro",
+     "route": "docs/mockups/b.html",
+     "fold": 0,
+     "artifactId": "art_7cq6z5ngdecdw4bdcgne",
+     "width": 393,
+     "height": 659
+    },
+    {
+     "viewport": "iphone-15-pro",
+     "route": "docs/mockups/b.html",
+     "fold": 1,
+     "artifactId": "art_j27vrkg3zg4cfkax2zhg",
+     "width": 393,
+     "height": 292
+    },
+    {
+     "viewport": "iphone-15-pro",
+     "route": "docs/mockups/c.html",
+     "fold": 0,
+     "artifactId": "art_1kjxmvrcjww0c4gaka3n",
+     "width": 393,
+     "height": 659
+    },
+    {
+     "viewport": "iphone-15-pro",
+     "route": "docs/mockups/c.html",
+     "fold": 1,
+     "artifactId": "art_jdgptyxh1gkws7sedef7",
+     "width": 393,
+     "height": 659
+    },
+    {
+     "viewport": "iphone-15-pro",
+     "route": "docs/mockups/c.html",
+     "fold": 2,
+     "artifactId": "art_0c9gnasv59t9k9q8eb6r",
+     "width": 393,
+     "height": 361
+    },
+    {
+     "viewport": "ipad-pro-11",
+     "route": "docs/mockups/a.html",
+     "fold": 0,
+     "artifactId": "art_mts3yfzcvj5nxp5757nx",
+     "width": 834,
+     "height": 1194
+    },
+    {
+     "viewport": "ipad-pro-11",
+     "route": "docs/mockups/b.html",
+     "fold": 0,
+     "artifactId": "art_a78mkpkgvfg1nyq19vw8",
+     "width": 834,
+     "height": 1194
+    },
+    {
+     "viewport": "ipad-pro-11",
+     "route": "docs/mockups/c.html",
+     "fold": 0,
+     "artifactId": "art_k2ym0zqkke09sqwpw4z9",
+     "width": 834,
+     "height": 1194
+    },
+    {
+     "viewport": "ipad-pro-11",
+     "route": "docs/mockups/c.html",
+     "fold": 1,
+     "artifactId": "art_2dn5rj0y10qx3d871gcz",
+     "width": 834,
+     "height": 615
+    }
+   ],
+   "copy": {
+    "texts": [
+     {
+      "route": "docs/mockups/a.html",
+      "role": "title",
+      "text": "6일차 · 14일 중"
+     },
+     {
+      "route": "docs/mockups/a.html",
+      "role": "body",
+      "text": "오늘 16시간 48분 남음"
+     },
+     {
+      "route": "docs/mockups/a.html",
+      "role": "label",
+      "text": "점 뒤져요"
+     },
+     {
+      "route": "docs/mockups/a.html",
+      "role": "title",
+      "text": "서윤"
+     },
+     {
+      "route": "docs/mockups/a.html",
+      "role": "title",
+      "text": "오트밀파"
+     },
+     {
+      "route": "docs/mockups/a.html",
+      "role": "label",
+      "text": "나"
+     },
+     {
+      "route": "docs/mockups/a.html",
+      "role": "title",
+      "text": "480"
+     },
+     {
+      "route": "docs/mockups/a.html",
+      "role": "label",
+      "text": "점"
+     },
+     {
+      "route": "docs/mockups/a.html",
+      "role": "label",
+      "text": "점"
+     },
+     {
+      "route": "docs/mockups/a.html",
+      "role": "body",
+      "text": "오늘 점"
+     },
+     {
+      "route": "docs/mockups/a.html",
+      "role": "body",
+      "text": "오늘 42점"
+     },
+     {
+      "route": "docs/mockups/a.html",
+      "role": "label",
+      "text": "먼저 쟀어요"
+     },
+     {
+      "route": "docs/mockups/a.html",
+      "role": "label",
+      "text": "06:41"
+     },
+     {
+      "route": "docs/mockups/a.html",
+      "role": "body",
+      "text": "06:40 체중 기록"
+     },
+     {
+      "route": "docs/mockups/a.html",
+      "role": "body",
+      "text": "체중"
+     },
+     {
+      "route": "docs/mockups/a.html",
+      "role": "body",
+      "text": "아침"
+     },
+     {
+      "route": "docs/mockups/a.html",
+      "role": "body",
+      "text": "점심"
+     },
+     {
+      "route": "docs/mockups/a.html",
+      "role": "body",
+      "text": "저녁"
+     },
+     {
+      "route": "docs/mockups/a.html",
+      "role": "body",
+      "text": "걸음 29%"
+     },
+     {
+      "route": "docs/mockups/a.html",
+      "role": "label",
+      "text": "응원 보내기 · 2회 남음"
+     },
+     {
+      "route": "docs/mockups/a.html",
+      "role": "label",
+      "text": "14일"
+     },
+     {
+      "route": "docs/mockups/a.html",
+      "role": "label",
+      "text": "6일차"
+     },
+     {
+      "route": "docs/mockups/a.html",
+      "role": "label",
+      "text": "체중 기록"
+     },
+     {
+      "route": "docs/mockups/a.html",
+      "role": "label",
+      "text": "1"
+     },
+     {
+      "route": "docs/mockups/a.html",
+      "role": "label",
+      "text": "2"
+     },
+     {
+      "route": "docs/mockups/a.html",
+      "role": "label",
+      "text": "3"
+     },
+     {
+      "route": "docs/mockups/a.html",
+      "role": "label",
+      "text": "4"
+     },
+     {
+      "route": "docs/mockups/a.html",
+      "role": "label",
+      "text": "5"
+     },
+     {
+      "route": "docs/mockups/a.html",
+      "role": "label",
+      "text": "6"
+     },
+     {
+      "route": "docs/mockups/a.html",
+      "role": "label",
+      "text": "일차"
+     },
+     {
+      "route": "docs/mockups/a.html",
+      "role": "label",
+      "text": "서윤"
+     },
+     {
+      "route": "docs/mockups/a.html",
+      "role": "label",
+      "text": "88"
+     },
+     {
+      "route": "docs/mockups/a.html",
+      "role": "label",
+      "text": "84"
+     },
+     {
+      "route": "docs/mockups/a.html",
+      "role": "label",
+      "text": "67"
+     },
+     {
+      "route": "docs/mockups/a.html",
+      "role": "label",
+      "text": "91"
+     },
+     {
+      "route": "docs/mockups/a.html",
+      "role": "label",
+      "text": "82"
+     },
+     {
+      "route": "docs/mockups/a.html",
+      "role": "cta",
+      "text": "점수는 이렇게 매겨요"
+     },
+     {
+      "route": "docs/mockups/a.html",
+      "role": "title",
+      "text": "오늘 아직 점 남았어요"
+     },
+     {
+      "route": "docs/mockups/a.html",
+      "role": "label",
+      "text": "오트밀파"
+     },
+     {
+      "route": "docs/mockups/a.html",
+      "role": "label",
+      "text": "90"
+     },
+     {
+      "route": "docs/mockups/a.html",
+      "role": "label",
+      "text": "86"
+     },
+     {
+      "route": "docs/mockups/a.html",
+      "role": "label",
+      "text": "88"
+     },
+     {
+      "route": "docs/mockups/a.html",
+      "role": "label",
+      "text": "92"
+     },
+     {
+      "route": "docs/mockups/a.html",
+      "role": "label",
+      "text": "82"
+     },
+     {
+      "route": "docs/mockups/a.html",
+      "role": "label",
+      "text": "42"
+     },
+     {
+      "route": "docs/mockups/a.html",
+      "role": "body",
+      "text": "3일차 저녁을 놓친 날 21점 벌어졌어요. 5일차는 82 : 82였어요."
+     },
+     {
+      "route": "docs/mockups/a.html",
+      "role": "label",
+      "text": "체중"
+     },
+     {
+      "route": "docs/mockups/a.html",
+      "role": "label",
+      "text": "먼저"
+     },
+     {
+      "route": "docs/mockups/a.html",
+      "role": "label",
+      "text": "/ 40"
+     },
+     {
+      "route": "docs/mockups/a.html",
+      "role": "label",
+      "text": "0"
+     },
+     {
+      "route": "docs/mockups/a.html",
+      "role": "body",
+      "text": "기록 10 + 추세 최대 30"
+     },
+     {
+      "route": "docs/mockups/a.html",
+      "role": "label",
+      "text": "아침"
+     },
+     {
+      "route": "docs/mockups/a.html",
+      "role": "label",
+      "text": "지금"
+     },
+     {
+      "route": "docs/mockups/a.html",
+      "role": "label",
+      "text": "/ 10"
+     },
+     {
+      "route": "docs/mockups/a.html",
+      "role": "label",
+      "text": "0"
+     },
+     {
+      "route": "docs/mockups/a.html",
+      "role": "label",
+      "text": "사진 한 장이나 한 줄"
+     },
+     {
+      "route": "docs/mockups/a.html",
+      "role": "label",
+      "text": "점심"
+     },
+     {
+      "route": "docs/mockups/a.html",
+      "role": "label",
+      "text": "/ 10"
+     },
+     {
+      "route": "docs/mockups/a.html",
+      "role": "label",
+      "text": "0"
+     },
+     {
+      "route": "docs/mockups/a.html",
+      "role": "body",
+      "text": "11:00부터 점심으로 잡혀요"
+     },
+     {
+      "route": "docs/mockups/a.html",
+      "role": "label",
+      "text": "저녁"
+     },
+     {
+      "route": "docs/mockups/a.html",
+      "role": "label",
+      "text": "/ 10"
+     },
+     {
+      "route": "docs/mockups/a.html",
+      "role": "label",
+      "text": "0"
+     },
+     {
+      "route": "docs/mockups/a.html",
+      "role": "label",
+      "text": "3일차에 놓친 끼니"
+     },
+     {
+      "route": "docs/mockups/a.html",
+      "role": "label",
+      "text": "걸음"
+     },
+     {
+      "route": "docs/mockups/a.html",
+      "role": "label",
+      "text": "/ 30"
+     },
+     {
+      "route": "docs/mockups/a.html",
+      "role": "label",
+      "text": "4"
+     },
+     {
+      "route": "docs/mockups/a.html",
+      "role": "body",
+      "text": "1,240 / 8,500보 · 건강 앱 07:00"
+     },
+     {
+      "route": "docs/mockups/b.html",
+      "role": "title",
+      "text": "6일차"
+     },
+     {
+      "route": "docs/mockups/b.html",
+      "role": "label",
+      "text": "· 14일 중"
+     },
+     {
+      "route": "docs/mockups/b.html",
+      "role": "label",
+      "text": "6"
+     },
+     {
+      "route": "docs/mockups/b.html",
+      "role": "label",
+      "text": "1"
+     },
+     {
+      "route": "docs/mockups/b.html",
+      "role": "label",
+      "text": "2"
+     },
+     {
+      "route": "docs/mockups/b.html",
+      "role": "label",
+      "text": "3"
+     },
+     {
+      "route": "docs/mockups/b.html",
+      "role": "label",
+      "text": "4"
+     },
+     {
+      "route": "docs/mockups/b.html",
+      "role": "label",
+      "text": "5"
+     },
+     {
+      "route": "docs/mockups/b.html",
+      "role": "label",
+      "text": "7"
+     },
+     {
+      "route": "docs/mockups/b.html",
+      "role": "label",
+      "text": "8"
+     },
+     {
+      "route": "docs/mockups/b.html",
+      "role": "label",
+      "text": "9"
+     },
+     {
+      "route": "docs/mockups/b.html",
+      "role": "label",
+      "text": "10"
+     },
+     {
+      "route": "docs/mockups/b.html",
+      "role": "label",
+      "text": "11"
+     },
+     {
+      "route": "docs/mockups/b.html",
+      "role": "label",
+      "text": "12"
+     },
+     {
+      "route": "docs/mockups/b.html",
+      "role": "label",
+      "text": "13"
+     },
+     {
+      "route": "docs/mockups/b.html",
+      "role": "label",
+      "text": "14"
+     },
+     {
+      "route": "docs/mockups/b.html",
+      "role": "label",
+      "text": "합계"
+     },
+     {
+      "route": "docs/mockups/b.html",
+      "role": "label",
+      "text": "88"
+     },
+     {
+      "route": "docs/mockups/b.html",
+      "role": "label",
+      "text": "84"
+     },
+     {
+      "route": "docs/mockups/b.html",
+      "role": "label",
+      "text": "67"
+     },
+     {
+      "route": "docs/mockups/b.html",
+      "role": "label",
+      "text": "91"
+     },
+     {
+      "route": "docs/mockups/b.html",
+      "role": "label",
+      "text": "82"
+     },
+     {
+      "route": "docs/mockups/b.html",
+      "role": "label",
+      "text": "서윤"
+     },
+     {
+      "route": "docs/mockups/b.html",
+      "role": "body",
+      "text": "오늘 점 · 걸음 1,240보"
+     },
+     {
+      "route": "docs/mockups/b.html",
+      "role": "label",
+      "text": "90"
+     },
+     {
+      "route": "docs/mockups/b.html",
+      "role": "label",
+      "text": "86"
+     },
+     {
+      "route": "docs/mockups/b.html",
+      "role": "label",
+      "text": "88"
+     },
+     {
+      "route": "docs/mockups/b.html",
+      "role": "label",
+      "text": "92"
+     },
+     {
+      "route": "docs/mockups/b.html",
+      "role": "label",
+      "text": "82"
+     },
+     {
+      "route": "docs/mockups/b.html",
+      "role": "label",
+      "text": "42"
+     },
+     {
+      "route": "docs/mockups/b.html",
+      "role": "label",
+      "text": "오트밀파"
+     },
+     {
+      "route": "docs/mockups/b.html",
+      "role": "title",
+      "text": "480"
+     },
+     {
+      "route": "docs/mockups/b.html",
+      "role": "label",
+      "text": "먼저 쟀어요 · 06:41"
+     },
+     {
+      "route": "docs/mockups/b.html",
+      "role": "body",
+      "text": "06:40 체중 기록 · 걸음 29%"
+     },
+     {
+      "route": "docs/mockups/b.html",
+      "role": "title",
+      "text": "점 뒤져요"
+     },
+     {
+      "route": "docs/mockups/b.html",
+      "role": "body",
+      "text": "매칭 때 예상 51 : 49"
+     },
+     {
+      "route": "docs/mockups/b.html",
+      "role": "body",
+      "text": "오늘 아직 점 남았어요"
+     },
+     {
+      "route": "docs/mockups/b.html",
+      "role": "title",
+      "text": "6회"
+     },
+     {
+      "route": "docs/mockups/b.html",
+      "role": "label",
+      "text": "자정까지 16시간 48분"
+     },
+     {
+      "route": "docs/mockups/b.html",
+      "role": "title",
+      "text": "0"
+     },
+     {
+      "route": "docs/mockups/b.html",
+      "role": "label",
+      "text": "체중"
+     },
+     {
+      "route": "docs/mockups/b.html",
+      "role": "label",
+      "text": "/40"
+     },
+     {
+      "route": "docs/mockups/b.html",
+      "role": "label",
+      "text": "기록 10 · 추세 30"
+     },
+     {
+      "route": "docs/mockups/b.html",
+      "role": "label",
+      "text": "아침"
+     },
+     {
+      "route": "docs/mockups/b.html",
+      "role": "label",
+      "text": "점심"
+     },
+     {
+      "route": "docs/mockups/b.html",
+      "role": "label",
+      "text": "저녁"
+     },
+     {
+      "route": "docs/mockups/b.html",
+      "role": "cta",
+      "text": "체중 기록"
+     },
+     {
+      "route": "docs/mockups/b.html",
+      "role": "cta",
+      "text": "응원 보내기 · 2회 남음"
+     },
+     {
+      "route": "docs/mockups/b.html",
+      "role": "title",
+      "text": "0"
+     },
+     {
+      "route": "docs/mockups/b.html",
+      "role": "title",
+      "text": "0"
+     },
+     {
+      "route": "docs/mockups/b.html",
+      "role": "title",
+      "text": "0"
+     },
+     {
+      "route": "docs/mockups/b.html",
+      "role": "label",
+      "text": "/10"
+     },
+     {
+      "route": "docs/mockups/b.html",
+      "role": "label",
+      "text": "/10"
+     },
+     {
+      "route": "docs/mockups/b.html",
+      "role": "label",
+      "text": "/10"
+     },
+     {
+      "route": "docs/mockups/b.html",
+      "role": "title",
+      "text": "4"
+     },
+     {
+      "route": "docs/mockups/b.html",
+      "role": "label",
+      "text": "/30"
+     },
+     {
+      "route": "docs/mockups/b.html",
+      "role": "label",
+      "text": "걸음"
+     },
+     {
+      "route": "docs/mockups/b.html",
+      "role": "label",
+      "text": "1,240 / 8,500보"
+     },
+     {
+      "route": "docs/mockups/b.html",
+      "role": "label",
+      "text": "07:00 건강 앱"
+     },
+     {
+      "route": "docs/mockups/b.html",
+      "role": "cta",
+      "text": "점수는 이렇게 매겨요"
+     },
+     {
+      "route": "docs/mockups/c.html",
+      "role": "title",
+      "text": "6일차"
+     },
+     {
+      "route": "docs/mockups/c.html",
+      "role": "body",
+      "text": "14일 중 · 자정까지 16시간 48분"
+     },
+     {
+      "route": "docs/mockups/c.html",
+      "role": "title",
+      "text": "416"
+     },
+     {
+      "route": "docs/mockups/c.html",
+      "role": "title",
+      "text": "480"
+     },
+     {
+      "route": "docs/mockups/c.html",
+      "role": "title",
+      "text": ":"
+     },
+     {
+      "route": "docs/mockups/c.html",
+      "role": "body",
+      "text": "· 오늘 점"
+     },
+     {
+      "route": "docs/mockups/c.html",
+      "role": "body",
+      "text": "· 오늘 42점"
+     },
+     {
+      "route": "docs/mockups/c.html",
+      "role": "label",
+      "text": "나"
+     },
+     {
+      "route": "docs/mockups/c.html",
+      "role": "label",
+      "text": "4"
+     },
+     {
+      "route": "docs/mockups/c.html",
+      "role": "label",
+      "text": "오트밀파"
+     },
+     {
+      "route": "docs/mockups/c.html",
+      "role": "body",
+      "text": "걸음 1,240 / 8,500"
+     },
+     {
+      "route": "docs/mockups/c.html",
+      "role": "label",
+      "text": "걸음 29%"
+     },
+     {
+      "route": "docs/mockups/c.html",
+      "role": "title",
+      "text": "64점 뒤져요"
+     },
+     {
+      "route": "docs/mockups/c.html",
+      "role": "label",
+      "text": "오늘 아직 점 남았어요"
+     },
+     {
+      "route": "docs/mockups/c.html",
+      "role": "label",
+      "text": "96"
+     },
+     {
+      "route": "docs/mockups/c.html",
+      "role": "label",
+      "text": "체중"
+     },
+     {
+      "route": "docs/mockups/c.html",
+      "role": "label",
+      "text": "아침"
+     },
+     {
+      "route": "docs/mockups/c.html",
+      "role": "label",
+      "text": "점심"
+     },
+     {
+      "route": "docs/mockups/c.html",
+      "role": "label",
+      "text": "저녁"
+     },
+     {
+      "route": "docs/mockups/c.html",
+      "role": "label",
+      "text": "걸음"
+     },
+     {
+      "route": "docs/mockups/c.html",
+      "role": "label",
+      "text": "0/10"
+     },
+     {
+      "route": "docs/mockups/c.html",
+      "role": "label",
+      "text": "0/10"
+     },
+     {
+      "route": "docs/mockups/c.html",
+      "role": "label",
+      "text": "4/30"
+     },
+     {
+      "route": "docs/mockups/c.html",
+      "role": "label",
+      "text": "0/40"
+     },
+     {
+      "route": "docs/mockups/c.html",
+      "role": "label",
+      "text": "0/10"
+     },
+     {
+      "route": "docs/mockups/c.html",
+      "role": "body",
+      "text": "00–06 잠"
+     },
+     {
+      "route": "docs/mockups/c.html",
+      "role": "label",
+      "text": "06"
+     },
+     {
+      "route": "docs/mockups/c.html",
+      "role": "title",
+      "text": "+34"
+     },
+     {
+      "route": "docs/mockups/c.html",
+      "role": "label",
+      "text": "체중"
+     },
+     {
+      "route": "docs/mockups/c.html",
+      "role": "label",
+      "text": "06:40"
+     },
+     {
+      "route": "docs/mockups/c.html",
+      "role": "label",
+      "text": "먼저 쟀어요"
+     },
+     {
+      "route": "docs/mockups/c.html",
+      "role": "label",
+      "text": "06:41"
+     },
+     {
+      "route": "docs/mockups/c.html",
+      "role": "label",
+      "text": "07"
+     },
+     {
+      "route": "docs/mockups/c.html",
+      "role": "label",
+      "text": "07:12"
+     },
+     {
+      "route": "docs/mockups/c.html",
+      "role": "label",
+      "text": "체중"
+     },
+     {
+      "route": "docs/mockups/c.html",
+      "role": "label",
+      "text": "0 / 40"
+     },
+     {
+      "route": "docs/mockups/c.html",
+      "role": "label",
+      "text": "08"
+     },
+     {
+      "route": "docs/mockups/c.html",
+      "role": "label",
+      "text": "09"
+     },
+     {
+      "route": "docs/mockups/c.html",
+      "role": "cta",
+      "text": "체중 기록"
+     },
+     {
+      "route": "docs/mockups/c.html",
+      "role": "cta",
+      "text": "응원 보내기 · 2회 남음"
+     },
+     {
+      "route": "docs/mockups/c.html",
+      "role": "title",
+      "text": "+40"
+     },
+     {
+      "route": "docs/mockups/c.html",
+      "role": "label",
+      "text": "10"
+     },
+     {
+      "route": "docs/mockups/c.html",
+      "role": "label",
+      "text": "11"
+     },
+     {
+      "route": "docs/mockups/c.html",
+      "role": "label",
+      "text": "점심"
+     },
+     {
+      "route": "docs/mockups/c.html",
+      "role": "label",
+      "text": "점심"
+     },
+     {
+      "route": "docs/mockups/c.html",
+      "role": "body",
+      "text": "11–16시 · 0 / 10"
+     },
+     {
+      "route": "docs/mockups/c.html",
+      "role": "label",
+      "text": "아직"
+     },
+     {
+      "route": "docs/mockups/c.html",
+      "role": "label",
+      "text": "12"
+     },
+     {
+      "route": "docs/mockups/c.html",
+      "role": "label",
+      "text": "13"
+     },
+     {
+      "route": "docs/mockups/c.html",
+      "role": "label",
+      "text": "14"
+     },
+     {
+      "route": "docs/mockups/c.html",
+      "role": "label",
+      "text": "15"
+     },
+     {
+      "route": "docs/mockups/c.html",
+      "role": "label",
+      "text": "16"
+     },
+     {
+      "route": "docs/mockups/c.html",
+      "role": "label",
+      "text": "저녁"
+     },
+     {
+      "route": "docs/mockups/c.html",
+      "role": "label",
+      "text": "저녁"
+     },
+     {
+      "route": "docs/mockups/c.html",
+      "role": "body",
+      "text": "16–23시 · 0 / 10"
+     },
+     {
+      "route": "docs/mockups/c.html",
+      "role": "label",
+      "text": "아직"
+     },
+     {
+      "route": "docs/mockups/c.html",
+      "role": "label",
+      "text": "17"
+     },
+     {
+      "route": "docs/mockups/c.html",
+      "role": "label",
+      "text": "18"
+     },
+     {
+      "route": "docs/mockups/c.html",
+      "role": "label",
+      "text": "19"
+     },
+     {
+      "route": "docs/mockups/c.html",
+      "role": "label",
+      "text": "20"
+     },
+     {
+      "route": "docs/mockups/c.html",
+      "role": "label",
+      "text": "21"
+     },
+     {
+      "route": "docs/mockups/c.html",
+      "role": "label",
+      "text": "22"
+     },
+     {
+      "route": "docs/mockups/c.html",
+      "role": "label",
+      "text": "23"
+     },
+     {
+      "route": "docs/mockups/c.html",
+      "role": "label",
+      "text": "24"
+     },
+     {
+      "route": "docs/mockups/c.html",
+      "role": "body",
+      "text": "자정에 걸음까지 합쳐 6일차 점수가 정해져요"
+     },
+     {
+      "route": "docs/mockups/c.html",
+      "role": "cta",
+      "text": "점수는 이렇게 매겨요"
+     }
+    ],
+    "slopScore": 0,
+    "habits": 0
+   },
+   "ownMeasure": "page: 393x659 CSS px viewport, 1164px tall\ntype sizes, by how much text is set in each: 14px, 18px, 12px, 20px, 16px, 36px\nlargest text: 36px, weight 700, line-height 1.12, letter-spacing -0.020em, set in Bricolage Grotesque: \"480\"\nrunning text: none of paragraph length\nfaces: Geist, Bricolage Grotesque\ncorner radii: 6, 14, 22px, and full pills\nfills by area: #f7f2ea, #fffefd, #fef9f1, #0051b2, #dfecff; ink by amount of text: #484c52, #191610, #0048a0, #fffdfa\nmotion durations declared: none\nfirst screenful: 0 picture(s), 3 control(s); its largest element is a <section> of 393x549px",
+   "measures": {
+    "contrast": {
+     "passed": 388,
+     "total": 388
+    },
+    "touchTargets": {
+     "passed": 32,
+     "total": 32
+    },
+    "pressAnswer": {
+     "passed": 12,
+     "total": 12
+    },
+    "focusVisible": {
+     "passed": 17,
+     "total": 17
+    },
+    "layoutShift": null
+   },
+   "livingVisual": true
+  }
+ },
+ {
+  "id": "aud_b9cszzx76y9c2rey7e0t",
+  "taskId": "tsk_ksy79sdqhnr6bvghpfbh",
+  "at": "2026-11-13T15:52:10+09:00",
+  "score": 42.2,
+  "passed": false,
+  "report": {
+   "id": "aud_b9cszzx76y9c2rey7e0t",
+   "projectId": "prj_4vdh6gb4krv0r2v6w30j",
+   "taskId": "tsk_ksy79sdqhnr6bvghpfbh",
+   "createdAt": 1794552730558,
+   "score": 42.2,
+   "threshold": 85,
+   "passed": false,
+   "visionReviewed": true,
+   "vision": {
+    "status": "reviewed",
+    "via": "codex",
+    "model": "codex:default",
+    "limited": false,
+    "reviewed": 16,
+    "expected": 16,
+    "reason": null
+   },
+   "rubric": {
+    "hierarchy": 6,
+    "whitespace": 5.7,
+    "typography": 7.6,
+    "color": 7.7,
+    "copy": 6.3,
+    "originality": 7.3,
+    "tactility": 6.8
+   },
+   "slopScore": 27,
+   "archetype": "mobile-app",
+   "critique": "차분한 색과 명확한 입력 라벨은 좋지만, 지금은 신청에 필요한 질문을 한 장에 나열한 설문지에 가깝습니다. 기본 정보 입력에서 건강 확인으로 이어지는 진행 흐름과 정확한 응답을 돕는 안내가 필요합니다. 가장 중요한 변경은 긴 폼을 두 단계로 나누고 하단 행동을 현재 단계에 맞추는 것입니다.",
+   "grade": "F",
+   "redesignPatches": [
+    {
+     "viewport": "iphone-15-pro",
+     "route": "/",
+     "target": null,
+     "bbox": null,
+     "action": "restructure",
+     "instruction": "MobileShell.Content의 좌우 시간축을 전체 너비 활동 목록으로 교체하세요. 맨 위에 현재 가능한 체중 기록을 놓고, 아래에 최근 활동을 시간순으로 묶으세요. 각 항목에는 작성자, 시각, 활동명, 기록 내용을 표시하고 bg-surface border-border rounded-lg를 사용하세요. 빈 시간은 짧은 구간 표시로 접고 MobileShell.BottomDock에 가리지 않도록 하단 여백을 확보하세요."
+    },
+    {
+     "viewport": "iphone-15-pro",
+     "route": "/",
+     "target": "div.css-view-g5y9jx > div.css-view-g5y9jx.gap-3 > div.css-view-g5y9jx.flex-row:nth-of-type(3) > div.css-text-146c3p1.font-display:nth-of-type(1)",
+     "bbox": {
+      "x": 16,
+      "y": 214,
+      "w": 157.96875,
+      "h": 40.3125
+     },
+     "action": "restructure",
+     "instruction": "상단 대결 요약을 ‘나 416’과 ‘오트밀파 480’이 같은 기준선에 놓이는 한 행으로 정리하세요. ‘64점 차이 · 오늘 최대 96점 더 받을 수 있어요’를 text-sm text-fg-muted로 묶고, 다음 행동 ‘체중 기록하면 +40점’을 text-lg로 강조하세요. font-display는 누적 점수에 집중하세요."
+    },
+    {
+     "viewport": "iphone-15-pro",
+     "route": "/",
+     "target": "div.css-view-g5y9jx > div.css-view-g5y9jx.gap-3 > div.css-view-g5y9jx:nth-of-type(2) > button.css-view-g5y9jx.r-cursor-1loqt21",
+     "bbox": {
+      "x": 16,
+      "y": 158,
+      "w": 361,
+      "h": 44
+     },
+     "action": "restructure",
+     "instruction": "손잡이가 있는 무표기 막대를 제거하고 ‘점수 비교 보기’ 보조 TactileButton으로 교체하세요. 누르면 BottomSheet에서 두 사람의 누적 점수, 오늘 점수, 동일한 단위의 걸음 목표 달성률을 나란히 보여주세요."
+    },
+    {
+     "viewport": "iphone-15-pro",
+     "route": "/scores",
+     "target": null,
+     "bbox": null,
+     "action": "restructure",
+     "instruction": "MobileShell.Header의 ‘일별 점수’와 뒤로가기는 유지하세요. MobileShell.Content의 날짜 점수판은 초기 선택인 6일차가 완전히 보이도록 위치시키고, 아래 상세 영역을 ‘6일차 및 날짜·진행 상태 → 내 점수 4 / 100점 → 항목별 점수’ 순서로 재구성하세요. 기존 하단 합계 행은 제거하세요."
+    },
+    {
+     "viewport": "iphone-15-pro",
+     "route": "/scores",
+     "target": null,
+     "bbox": null,
+     "action": "restyle",
+     "instruction": "각 날짜 열을 날짜와 두 사람의 점수를 포함하는 하나의 TactileButton으로 만드세요. 선택된 열 전체에 rounded-lg, bg-surface, border-control-border를 적용하고 눌림 피드백을 제공하세요. 승리 칸의 굵은 테두리는 제거하고 ‘승’ 배지로 대체하며, 비선택 점수 표면에는 bg-sunken을 사용하세요."
+    },
+    {
+     "viewport": "iphone-15-pro",
+     "route": "/scores",
+     "target": "div.css-view-g5y9jx.gap-3:nth-of-type(3) > div.css-view-g5y9jx:nth-of-type(2) > div.css-view-g5y9jx.flex-row:nth-of-type(2) > div.css-text-146c3p1.font-sans:nth-of-type(1)",
+     "bbox": {
+      "x": 33,
+      "y": 417.375,
+      "w": 28,
+      "h": 25.59375
+     },
+     "action": "rewrite_copy",
+     "instruction": "‘추세’를 ‘체중 추세’로 변경하세요. 상세 영역 머리에 보조 TactileButton ‘점수 기준’을 추가하고, 누르면 각 항목의 실제 배점·계산 규칙·반영 시점을 담은 BottomSheet를 여세요."
+    },
+    {
+     "viewport": "iphone-15-pro",
+     "route": "/start?state=new",
+     "target": null,
+     "bbox": null,
+     "action": "restructure",
+     "instruction": "MobileShell 안에서 신청을 세 단계로 구성하세요. 1단계는 나이·키·체중과 하루 평균 걸음 수, 2단계는 건강 질문, 3단계는 상대 조건과 처리 안내를 담습니다. MobileShell.Header에는 '대결 신청', 현재 단계, 이전 단계로 돌아가는 동작을 두고 MobileShell.BottomDock에는 단계에 맞는 TactileButton을 배치하세요. 이전 단계의 입력값은 유지하세요."
+    },
+    {
+     "viewport": "iphone-15-pro",
+     "route": "/start?state=new",
+     "target": "div.css-view-g5y9jx.absolute:nth-of-type(3) > div.css-view-g5y9jx.w-full > div.css-view-g5y9jx > button.css-view-g5y9jx.r-pointerEvents-12vffkv",
+     "bbox": {
+      "x": 16,
+      "y": 591,
+      "w": 361,
+      "h": 56
+     },
+     "action": "restyle",
+     "instruction": "기존 고정 버튼 영역을 MobileShell.BottomDock으로 구성하고 bg-surface와 border-border로 본문과 구분하세요. MobileShell.Content에 도크 실측 높이와 safe-area를 포함한 하단 여백을 확보해 마지막 응답까지 도크 위에 완전히 올릴 수 있게 하세요."
+    },
+    {
+     "viewport": "iphone-15-pro",
+     "route": "/start?state=new",
+     "target": "div.css-view-g5y9jx.r-WebkitOverflowScrolling-150rngu:nth-of-type(2) > div.css-view-g5y9jx.w-full > div.css-view-g5y9jx.gap-3:nth-of-type(3) > div.css-text-146c3p1.font-sans:nth-of-type(3)",
+     "bbox": {
+      "x": 16,
+      "y": 849.9375,
+      "w": 361,
+      "h": 25.59375
+     },
+     "action": "restructure",
+     "instruction": "건강 답변 처리 안내를 e27 제목과 첫 질문 사이로 옮기세요. 문구는 '대결 참여 조건을 확인해요. 답변은 저장하지 않아요.'로 정리하고 text-sm text-fg-muted를 적용하세요."
+    },
+    {
+     "viewport": "iphone-15-pro",
+     "route": "/start?state=new",
+     "target": "div.css-view-g5y9jx.w-full > div.css-view-g5y9jx.gap-3:nth-of-type(2) > div.css-view-g5y9jx.flex-row:nth-of-type(1) > h1.css-text-146c3p1.font-display",
+     "bbox": {
+      "x": 16,
+      "y": 213.1875,
+      "w": 89.8125,
+      "h": 31.1875
+     },
+     "action": "rewrite_copy",
+     "instruction": "제목을 '하루 평균 걸음 수'로 변경하고 아래에 '건강 앱에서 불러오거나 대략 선택해 주세요.'를 text-sm text-fg-muted로 추가하세요. 가져오기 버튼과 세 가지 직접 선택 항목을 이 안내에 속하는 하나의 입력 그룹으로 묶으세요."
+    },
+    {
+     "viewport": "iphone-15-pro",
+     "route": "/match?state=waiting",
+     "target": null,
+     "bbox": null,
+     "action": "restructure",
+     "instruction": "MobileShell.Header의 ‘매칭’ 제목은 유지하세요. MobileShell.Content를 매칭 예정 시각 → 남은 시간 → ‘내 걸음 목표 8,500보’ 요약 → 일정 타임라인 순서로 구성하세요. 목표 요약은 bg-sunken과 rounded-md로 처리하고 내부 간격은 4px 배수로 맞추세요. ‘신청 취소’는 MobileShell.BottomDock에 유지하되 본문이 독과 안전 영역의 높이를 반영하도록 하세요."
+    },
+    {
+     "viewport": "iphone-15-pro",
+     "route": "/match?state=waiting",
+     "target": null,
+     "bbox": null,
+     "action": "rewrite_copy",
+     "instruction": "타임라인 e9를 ‘오늘 21:00’, e11을 ‘내일 00:00’, e13을 ‘내일 07:30’으로 변경하세요. 세 항목 모두 같은 font-display 스타일을 적용해 날짜 전환을 일관되게 읽을 수 있게 하세요."
+    },
+    {
+     "viewport": "iphone-15-pro",
+     "route": "/match?state=scheduled",
+     "target": null,
+     "bbox": null,
+     "action": "restructure",
+     "instruction": "MobileShell.Header의 현재 제목과 상대 이름의 font-display는 유지하세요. MobileShell.Content는 상대 이름, 시작 시각·내 걸음 목표 요약, 예상 승률 비교, 짧은 매칭 근거 순서로 구성하세요. 기존 버튼은 MobileShell.BottomDock의 TactileButton으로 유지하고, 본문 하단에 도크와 안전 영역을 반영한 여백을 넣으세요."
+    },
+    {
+     "viewport": "iphone-15-pro",
+     "route": "/match?state=scheduled",
+     "target": "div.css-view-g5y9jx.w-full > div.css-view-g5y9jx.gap-3:nth-of-type(2) > div.css-view-g5y9jx.flex-row:nth-of-type(2) > div.css-text-146c3p1.font-display",
+     "bbox": {
+      "x": 33,
+      "y": 259.78125,
+      "w": 87.28125,
+      "h": 53.75
+     },
+     "action": "restructure",
+     "instruction": "단독 ‘51 : 49’를 참여자별 확률 비교로 교체하세요. 막대 양쪽 위에 ‘나’와 ‘오트밀파’를 두고 각 이름 옆에 데이터에 대응하는 확률을 %로 표시하세요. 이름·확률·막대 구간의 순서를 일치시키고 내 구간에만 bg-accent를 사용하세요."
+    },
+    {
+     "viewport": "iphone-15-pro",
+     "route": "/match?state=scheduled",
+     "target": "div.css-view-g5y9jx.r-WebkitOverflowScrolling-150rngu:nth-of-type(2) > div.css-view-g5y9jx.w-full > div.css-view-g5y9jx.gap-3:nth-of-type(2) > div.css-text-146c3p1.font-sans:nth-of-type(4)",
+     "bbox": {
+      "x": 33,
+      "y": 349.53125,
+      "w": 327,
+      "h": 51.1875
+     },
+     "action": "move_to_sheet",
+     "instruction": "긴 매칭 규칙을 BottomSheet로 옮기세요. 본문에는 ‘지난 걸음 기록이 비슷한 상대와 연결했어요.’와 보조 TactileButton ‘매칭 기준’을 배치하고, e12의 중복 설명은 합치세요. 시트 제목은 ‘매칭 기준’, 설명은 ‘예상 승률이 45~55%인 상대와 연결해요.’로 설정하세요."
+    },
+    {
+     "viewport": "iphone-15-pro",
+     "route": "/result?state=finished",
+     "target": null,
+     "bbox": null,
+     "action": "restructure",
+     "instruction": "MobileShell.Content에 결과 요약, 완주 상태, 개인 체중 변화, e15 일별 점수 영역을 순서대로 배치하세요. e34와 e36은 MobileShell.BottomDock 안의 TactileButton으로 옮기고 기존 보조·주요 액션 구분을 유지하세요. Content에 dock의 실제 높이와 하단 safe-area inset에 대응하는 여백을 확보해 마지막 범례와 점수표 진입 버튼까지 가림 없이 스크롤되게 하세요."
+    },
+    {
+     "viewport": "iphone-15-pro",
+     "route": "/result?state=finished",
+     "target": "div.css-view-g5y9jx.r-WebkitOverflowScrolling-150rngu:nth-of-type(2) > div.css-view-g5y9jx.w-full > div.css-view-g5y9jx.gap-2:nth-of-type(1) > div.css-text-146c3p1.font-display:nth-of-type(1)",
+     "bbox": {
+      "x": 16,
+      "y": 77,
+      "w": 361,
+      "h": 67.1875
+     },
+     "action": "restructure",
+     "instruction": "콜론으로 연결된 단일 점수 문자열을 ‘나 / 1,086’과 ‘오트밀파님 / 1,041’의 두 열로 바꾸세요. 이름은 text-sm text-fg-muted, 점수는 font-display text-fg로 표시하고 ‘45점 차로 이겼어요’를 바로 아래에 두세요. 이름과 점수 사이보다 점수 묶음과 다음 섹션 사이의 간격을 크게 설정하세요."
+    },
+    {
+     "viewport": "iphone-15-pro",
+     "route": "/start",
+     "target": null,
+     "bbox": null,
+     "action": "restructure",
+     "instruction": "MobileShell.Content의 중앙 시간축과 좌우 카드 배치를 시간순 한 열 목록으로 교체하세요. 항목마다 시각, 작성자, 활동명, 기록 또는 메시지를 표시하고 기록 없는 시간 눈금은 접으세요. 다음 할 일은 목록 상단에 두고, 모든 카드가 화면 안에 들어오며 MobileShell.BottomDock 위로 완전히 스크롤되도록 구성하세요."
+    },
+    {
+     "viewport": "iphone-15-pro",
+     "route": "/start",
+     "target": null,
+     "bbox": null,
+     "action": "restructure",
+     "instruction": "상단을 MobileShell.Header와 하나의 점수 비교 영역으로 정리하세요. Header에는 ‘6일차 / 14일’과 기존 더보기 액션을 배치하고, 비교 영역에는 나와 오트밀파의 이름·총점·오늘 점수를 같은 기준선으로 배치하세요. ‘64점 뒤져요’는 text-base의 보조 상태로 낮추고 걸음 진행 표기는 양쪽 모두 백분율로 통일하세요."
+    },
+    {
+     "viewport": "iphone-15-pro",
+     "route": "/start",
+     "target": "div.css-view-g5y9jx > div.css-view-g5y9jx.gap-3 > div.css-view-g5y9jx:nth-of-type(2) > button.css-view-g5y9jx.r-cursor-1loqt21",
+     "bbox": {
+      "x": 16,
+      "y": 158,
+      "w": 361,
+      "h": 44
+     },
+     "action": "restyle",
+     "instruction": "점수 비교 막대에서 슬라이더처럼 보이는 원형 끝점을 제거하세요. bg-sunken 트랙에 두 사람의 위치와 이름을 연결한 비조작 지표로 만들고, 설명이 필요하면 별도 ‘점수 계산 보기’ TactileButton에서 BottomSheet를 열도록 분리하세요."
+    },
+    {
+     "viewport": "iphone-15-pro",
+     "route": "/start",
+     "target": "div.css-view-g5y9jx > div.css-view-g5y9jx.gap-3 > div.css-view-g5y9jx.flex-row:nth-of-type(3) > div.css-text-146c3p1.font-sans:nth-of-type(2)",
+     "bbox": {
+      "x": 181.96875,
+      "y": 228,
+      "w": 156,
+      "h": 25.59375
+     },
+     "action": "rewrite_copy",
+     "instruction": "‘오늘 아직 96점 남았어요’를 ‘오늘 더 받을 수 있는 점수 96점’으로 교체하고, text-sm text-fg-muted로 오늘 활동 요약 바로 위에 배치하세요."
+    },
+    {
+     "viewport": "iphone-15-pro",
+     "route": "/match",
+     "target": null,
+     "bbox": null,
+     "action": "restructure",
+     "instruction": "MobileShell.Header의 현재 제목을 유지하고, Content에서 e6 바로 아래에 e16·e17과 e19·e20을 라벨과 값의 두 열로 배치하세요. 그 아래 예상 승률과 매칭 근거 요약을 두세요. e22는 MobileShell.BottomDock 안의 TactileButton으로 구현하고, Content 끝에 dock 높이와 safe area를 반영해 마지막 행이 가려지지 않게 하세요."
+    },
+    {
+     "viewport": "iphone-15-pro",
+     "route": "/match",
+     "target": "div.css-view-g5y9jx.w-full > div.css-view-g5y9jx.gap-3:nth-of-type(2) > div.css-view-g5y9jx.flex-row:nth-of-type(2) > div.css-text-146c3p1.font-display",
+     "bbox": {
+      "x": 33,
+      "y": 259.78125,
+      "w": 87.28125,
+      "h": 53.75
+     },
+     "action": "restyle",
+     "instruction": "독립된 ‘51 : 49’를 막대 양쪽의 ‘나 {내 예상 승률}%’, ‘오트밀파 {상대 예상 승률}%’로 바꾸세요. 기존 데이터와 막대 구간의 대응을 확인해 연결하고, 이름과 수치를 text-fg로 표시하세요."
+    },
+    {
+     "viewport": "iphone-15-pro",
+     "route": "/match",
+     "target": "div.css-view-g5y9jx.r-WebkitOverflowScrolling-150rngu:nth-of-type(2) > div.css-view-g5y9jx.w-full > div.css-view-g5y9jx.gap-3:nth-of-type(2) > div.css-text-146c3p1.font-sans:nth-of-type(4)",
+     "bbox": {
+      "x": 33,
+      "y": 349.53125,
+      "w": 327,
+      "h": 51.1875
+     },
+     "action": "move_to_sheet",
+     "instruction": "e10의 규칙 설명을 ‘매칭 기준’ BottomSheet로 옮기고 ‘지난 기록을 바탕으로, 예상 승률이 45~55%인 상대와 연결해요.’로 정리하세요. 본문에는 e12와 e14를 ‘평소 걸음이 비슷하고, 둘 다 첫 대결이에요.’로 합친 text-sm text-fg-muted 요약과 ‘매칭 기준 보기’ 보조 TactileButton을 남기세요."
+    },
+    {
+     "viewport": "ipad-pro-11",
+     "route": "/",
+     "target": null,
+     "bbox": null,
+     "action": "restructure",
+     "instruction": "MobileShell.Content의 비교 시간축 상단에 고정되는 ‘나’와 ‘오트밀파’ 열 제목을 추가하세요. 현재 시각과 체중 기록은 펼쳐 두고, 기록 없는 시간대는 시간 범위와 끊김 표시가 있는 접힌 행으로 바꾸세요. 이후 점심·저녁 예정 행을 4px 배수 간격으로 배치하고 기존 기록 액션은 MobileShell.BottomDock에 유지하세요."
+    },
+    {
+     "viewport": "ipad-pro-11",
+     "route": "/",
+     "target": "ul.css-view-g5y9jx.flex-row > li.css-view-g5y9jx:nth-of-type(1) > div.css-view-g5y9jx > button.css-view-g5y9jx.r-cursor-1loqt21",
+     "bbox": {
+      "x": 97,
+      "y": 248.3125,
+      "w": 249.59375,
+      "h": 48
+     },
+     "action": "restyle",
+     "instruction": "체중·아침·점심·저녁 요약을 추가 아이콘과 점수 단위를 포함한 TactileButton으로 통일하세요. bg-surface border-control-border rounded-md를 적용하고, 걸음 요약은 bg-sunken 진행 지표로 남겨 기록 동작과 자동 집계를 구분하세요."
+    },
+    {
+     "viewport": "ipad-pro-11",
+     "route": "/",
+     "target": "div.css-view-g5y9jx > div.css-view-g5y9jx.gap-3 > div.css-view-g5y9jx:nth-of-type(2) > button.css-view-g5y9jx.r-cursor-1loqt21",
+     "bbox": {
+      "x": 97,
+      "y": 140,
+      "w": 640,
+      "h": 44
+     },
+     "action": "restructure",
+     "instruction": "비교 막대를 ‘동점’ 기준과 현재 앞선 사람·점수 차이가 표시된 읽기 전용 지표로 만드세요. 옆에 작은 TactileButton ‘점수 차이 보기’를 두고 누르면 두 사람의 누적 점수와 오늘 획득 점수를 담은 BottomSheet를 여세요."
+    },
+    {
+     "viewport": "ipad-pro-11",
+     "route": "/scores",
+     "target": null,
+     "bbox": null,
+     "action": "restructure",
+     "instruction": "MobileShell.Header 아래 MobileShell.Content에 결과 요약, 날짜 선택부, 선택 날짜의 상세 패널을 순서대로 배치하세요. 날짜 선택부와 상세 패널은 gap-6으로 연결하고, 상세 패널 상단에는 ‘6일차’, 날짜·진행 상태, ‘나 4점 · 오트밀파 42점’을 표시하세요. 다음에 ‘내 점수 내역’과 항목별 점수를 두고 체중 추세 섹션은 gap-8로 분리하세요."
+    },
+    {
+     "viewport": "ipad-pro-11",
+     "route": "/scores",
+     "target": "div.css-view-g5y9jx.w-full > div.css-view-g5y9jx.gap-3:nth-of-type(4) > div.css-view-g5y9jx.rounded-lg:nth-of-type(1) > svg",
+     "bbox": {
+      "x": 109,
+      "y": 946.40625,
+      "w": 616,
+      "h": 140
+     },
+     "action": "restructure",
+     "instruction": "기존 SVG를 실제 체중 기록을 탐색할 수 있는 차트로 구성하세요. bg-sunken 안에 날짜 축과 kg 눈금을 추가하고 실측점 선택 시 날짜·체중·3일 평균을 표시하세요. 평균선에 accent 색을 쓰고 목표선은 중립색 점선으로 유지하세요."
+    },
+    {
+     "viewport": "ipad-pro-11",
+     "route": "/scores",
+     "target": "div.css-view-g5y9jx.r-flexDirection-18u37iz > div.css-view-g5y9jx.flex-row > div.css-view-g5y9jx:nth-of-type(7) > button.css-view-g5y9jx.r-cursor-1loqt21",
+     "bbox": {
+      "x": 453,
+      "y": 118.59375,
+      "w": 56,
+      "h": 164
+     },
+     "action": "restyle",
+     "instruction": "날짜 선택부의 모든 열을 TactileButton으로 통일하세요. 선택 열 전체는 rounded-md, bg-sunken, border-control-border로 표시하고 진행 상태와 승패 배지는 선택 스타일에서 분리하세요. 미래 열의 점선 점수 칸은 ‘예정’ 표시로 대체하세요."
+    },
+    {
+     "viewport": "ipad-pro-11",
+     "route": "/scores",
+     "target": "div.css-view-g5y9jx.w-full > div.css-view-g5y9jx.gap-3:nth-of-type(3) > div.css-view-g5y9jx.gap-2:nth-of-type(3) > div.css-text-146c3p1.font-sans:nth-of-type(1)",
+     "bbox": {
+      "x": 114,
+      "y": 789.21875,
+      "w": 606,
+      "h": 21
+     },
+     "action": "restructure",
+     "instruction": "상대 활동의 pill 목록을 bg-sunken rounded-md 요약 영역으로 바꾸세요. ‘오트밀파님의 기록 현황’ 아래 ‘체중 기록 완료’, ‘아침 기록 없음’, ‘점심 기록 없음’, ‘저녁 기록 없음’, ‘걸음 목표 29%’를 일반 텍스트와 상태 아이콘으로 표시하세요."
+    },
+    {
+     "viewport": "ipad-pro-11",
+     "route": "/scores",
+     "target": "div.css-view-g5y9jx.flex-1 > div.css-view-g5y9jx.r-WebkitOverflowScrolling-150rngu:nth-of-type(2) > div.css-view-g5y9jx.w-full > div.css-text-146c3p1.font-sans:nth-of-type(1)",
+     "bbox": {
+      "x": 97,
+      "y": 69,
+      "w": 640,
+      "h": 25.59375
+     },
+     "action": "rewrite_copy",
+     "instruction": "완료된 날짜를 기준으로 ‘승 0 · 무 1 · 패 4’를 표시하고, 날짜 선택부의 5일차에도 중립색 ‘무’ 배지를 추가하세요."
+    },
+    {
+     "viewport": "ipad-pro-11",
+     "route": "/start?state=new",
+     "target": null,
+     "bbox": null,
+     "action": "restructure",
+     "instruction": "MobileShell.Header에 ‘대결 신청’과 현재 단계명을 표시하세요. MobileShell.Content의 첫 단계는 나이·키·체중과 하루 평균 걸음 수, 두 번째 단계는 건강 안내·네 질문·상대 조건으로 구성하세요. MobileShell.BottomDock에는 단계별 TactileButton 하나를 두고 ‘다음: 건강 확인’에서 ‘오늘 밤 상대 찾기’로 바꾸세요. 두 번째 단계의 뒤로 동작은 첫 단계로 돌아가며 입력값을 유지해야 합니다."
+    },
+    {
+     "viewport": "ipad-pro-11",
+     "route": "/start?state=new",
+     "target": "div.css-view-g5y9jx.r-WebkitOverflowScrolling-150rngu:nth-of-type(2) > div.css-view-g5y9jx.w-full > div.css-view-g5y9jx.gap-3:nth-of-type(3) > div.css-text-146c3p1.font-sans:nth-of-type(3)",
+     "bbox": {
+      "x": 97,
+      "y": 849.9375,
+      "w": 640,
+      "h": 25.59375
+     },
+     "action": "rewrite_copy",
+     "instruction": "건강 확인 제목 바로 아래로 옮기고 ‘현재 상태에 맞게 답해주세요. 답변은 저장하지 않고 참여 조건 확인에만 사용해요.’로 교체하세요. text-sm text-fg-muted를 적용하고 질문 목록과는 간격을 분리하세요."
+    },
+    {
+     "viewport": "ipad-pro-11",
+     "route": "/start?state=new",
+     "target": "div.css-view-g5y9jx.w-full > div.css-view-g5y9jx.gap-3:nth-of-type(2) > div.css-view-g5y9jx.flex-row:nth-of-type(1) > h1.css-text-146c3p1.font-display",
+     "bbox": {
+      "x": 97,
+      "y": 213.1875,
+      "w": 89.8125,
+      "h": 31.1875
+     },
+     "action": "restructure",
+     "instruction": "‘하루 평균 걸음 수’ 제목 아래에 ‘건강 앱에서 불러오거나 직접 선택해 주세요.’ 안내, 가져오기 버튼, 수동 선택 그룹 순서로 배치하세요. 가져오기 성공 시 bg-sunken rounded-lg 영역에 실제 집계 기간과 하루 평균값을 표시하고 수동 선택값은 해제하세요."
+    },
+    {
+     "viewport": "ipad-pro-11",
+     "route": "/start?state=new",
+     "target": "div.css-view-g5y9jx.gap-2:nth-of-type(1) > div.css-view-g5y9jx.flex-row:nth-of-type(2) > div.css-view-g5y9jx:nth-of-type(1) > div.css-view-g5y9jx.r-cursor-1loqt21",
+     "bbox": {
+      "x": 97,
+      "y": 473.15625,
+      "w": 70,
+      "h": 44
+     },
+     "action": "restyle",
+     "instruction": "네 건강 질문의 예·아니요를 각각 동일 너비의 두 구획을 가진 rounded-full 단일 선택 그룹으로 통일하세요. 그룹은 bg-sunken, 선택 구획은 bg-surface border-control-border로 처리하고 선택 표시와 누를 때의 피드백을 추가하세요."
+    },
+    {
+     "viewport": "ipad-pro-11",
+     "route": "/match?state=waiting",
+     "target": "div.css-view-g5y9jx.r-WebkitOverflowScrolling-150rngu:nth-of-type(2) > div.css-view-g5y9jx.w-full > div.css-view-g5y9jx.flex-1:nth-of-type(3) > div.css-text-146c3p1.font-sans:nth-of-type(1)",
+     "bbox": {
+      "x": 113,
+      "y": 546.90625,
+      "w": 608,
+      "h": 21
+     },
+     "action": "restructure",
+     "instruction": "e16과 e17의 부모 카드를 내용 높이의 걸음 목표 요약으로 재구성하세요. 높이를 늘리는 flex·min-height·고정 높이를 제거하고 bg-sunken, rounded-lg, 4px 배수의 내부 여백을 적용하세요. ‘내 걸음 목표’ 아래에 ‘8,500보’를 배치하고 마지막 일정 다음에 이어 붙이세요. 하단 신청 취소는 MobileShell.BottomDock에 유지하세요."
+    },
+    {
+     "viewport": "ipad-pro-11",
+     "route": "/match?state=waiting",
+     "target": "div.css-view-g5y9jx.pl-2:nth-of-type(2) > div.css-view-g5y9jx.flex-row:nth-of-type(3) > div.css-view-g5y9jx.flex-1:nth-of-type(2) > div.css-text-146c3p1.font-display:nth-of-type(1)",
+     "bbox": {
+      "x": 137,
+      "y": 344.90625,
+      "w": 600,
+      "h": 32
+     },
+     "action": "rewrite_copy",
+     "instruction": "일정의 e11 ‘00:00’을 ‘내일 00:00’으로, e13 ‘07:30’을 ‘내일 07:30’으로 변경하세요. 두 시간 표시는 기존 font-display와 text-fg 스타일을 유지하세요."
+    },
+    {
+     "viewport": "ipad-pro-11",
+     "route": "/match?state=scheduled",
+     "target": null,
+     "bbox": null,
+     "action": "restructure",
+     "instruction": "MobileShell.Header의 제목과 MobileShell.BottomDock의 ‘대결 화면으로’를 유지하세요. MobileShell.Content는 상대 이름 → 시작 일정과 걸음 목표를 묶은 bg-surface·rounded-lg 요약 → 예상 승률 비교 순으로 구성하세요. 요약 안의 라벨은 text-sm·text-fg-muted, 값은 text-xl·text-fg로 통일하고 내부 간격은 4px 배수로 맞추세요. 매칭 설명과 두 근거 행은 ‘매칭 기준 보기’ TactileButton에서 여는 BottomSheet로 옮기세요."
+    },
+    {
+     "viewport": "ipad-pro-11",
+     "route": "/match?state=scheduled",
+     "target": "div.css-view-g5y9jx.w-full > div.css-view-g5y9jx.gap-3:nth-of-type(2) > div.css-view-g5y9jx.flex-row:nth-of-type(2) > div.css-text-146c3p1.font-display",
+     "bbox": {
+      "x": 114,
+      "y": 259.78125,
+      "w": 87.28125,
+      "h": 53.75
+     },
+     "action": "restructure",
+     "instruction": "단독 비율 표기를 두 참가자의 이름과 백분율이 있는 비교 행으로 교체하세요. 실제 데이터에 따라 왼쪽은 ‘나 · {내 승률}%’, 오른쪽은 ‘오트밀파 · {상대 승률}%’로 표시하고 아래 막대의 순서도 일치시키세요. 숫자는 text-2xl, 참가자 라벨은 text-sm을 사용해 상대 이름과 시작 일정보다 보조적인 위계를 주세요."
+    },
+    {
+     "viewport": "ipad-pro-11",
+     "route": "/result?state=finished",
+     "target": "div.css-view-g5y9jx.absolute:nth-of-type(1) > div.css-view-g5y9jx.w-full > div.css-view-g5y9jx.flex-1:nth-of-type(2) > h1.css-text-146c3p1.r-maxWidth-dnmrzs",
+     "bbox": {
+      "x": 383,
+      "y": 11.59375,
+      "w": 68,
+      "h": 28.796875
+     },
+     "action": "add_app_bar",
+     "instruction": "현재 ‘대결 결과’ 제목을 MobileShell.Header에 유지하고 선행 위치에 닫기 아이콘 TactileButton을 추가하세요. 접근성 이름은 ‘결과 닫기’로 지정하고 기존 메인 화면으로 이동시키세요."
+    },
+    {
+     "viewport": "ipad-pro-11",
+     "route": "/result?state=finished",
+     "target": "div.css-view-g5y9jx.r-WebkitOverflowScrolling-150rngu:nth-of-type(2) > div.css-view-g5y9jx.w-full > div.css-view-g5y9jx:nth-of-type(4) > button.css-view-g5y9jx.r-cursor-1loqt21",
+     "bbox": {
+      "x": 97,
+      "y": 512.375,
+      "w": 640,
+      "h": 112.1875
+     },
+     "action": "restructure",
+     "instruction": "전체 영역을 감싼 버튼을 일반 점수 섹션으로 바꾸세요. 상단에는 ‘내 일별 점수’와 별도의 ‘점수표 보기’ TactileButton을 놓고, 아래 각 점수 칸에 일차 라벨을 연결하세요. 버튼을 누르면 날짜·내 점수·오트밀파님 점수를 나란히 보여주는 BottomSheet를 여세요. 기존 승리일 색상 구분은 유지하세요."
+    },
+    {
+     "viewport": "ipad-pro-11",
+     "route": "/result?state=finished",
+     "target": "div.css-view-g5y9jx.r-WebkitOverflowScrolling-150rngu:nth-of-type(2) > div.css-view-g5y9jx.w-full > div.css-view-g5y9jx.gap-2:nth-of-type(1) > div.css-text-146c3p1.font-display:nth-of-type(1)",
+     "bbox": {
+      "x": 97,
+      "y": 77,
+      "w": 640,
+      "h": 67.1875
+     },
+     "action": "restructure",
+     "instruction": "총점을 참가자별 두 열로 구성하세요. 왼쪽은 ‘나’와 ‘1,086’, 오른쪽은 ‘오트밀파님’과 ‘1,041’을 표시하고 라벨에는 text-sm text-fg-muted, 숫자에는 기존 font-display를 사용하세요. ‘45점 차로 이겼어요’는 두 열 아래의 결과 문장으로 유지하세요."
+    },
+    {
+     "viewport": "ipad-pro-11",
+     "route": "/start",
+     "target": null,
+     "bbox": null,
+     "action": "restructure",
+     "instruction": "MobileShell.Content의 타임라인을 고정되는 '나 / 오트밀파' 열 머리글, 현재 시각 주변 기록, 접힌 빈 시간 구간, 점심·저녁 예정 행 순으로 재구성하세요. 두 사람의 비교 구조는 유지하되 예정 행에는 시간 범위와 기록 상태만 표시하고, 선택하면 상세 시간대를 펼치세요. 넓은 살구색 시간대 배경은 제거하고 예정 행에만 bg-sunken을 적용하세요."
+    },
+    {
+     "viewport": "ipad-pro-11",
+     "route": "/start",
+     "target": "div.css-view-g5y9jx > div.css-view-g5y9jx.gap-3 > div.css-view-g5y9jx:nth-of-type(2) > button.css-view-g5y9jx.r-cursor-1loqt21",
+     "bbox": {
+      "x": 97,
+      "y": 140,
+      "w": 640,
+      "h": 44
+     },
+     "action": "restructure",
+     "instruction": "점수 차이 막대를 비대화형 시각화로 바꾸고 '점수 차이' 및 참가자 방향을 표시하세요. 옆에 border-control-border를 사용하는 '점수 내역' TactileButton을 배치해 두 사람의 항목별 획득 점수를 담은 BottomSheet를 여세요."
+    },
+    {
+     "viewport": "ipad-pro-11",
+     "route": "/start",
+     "target": "ul.css-view-g5y9jx.flex-row > li.css-view-g5y9jx:nth-of-type(1) > div.css-view-g5y9jx > button.css-view-g5y9jx.r-cursor-1loqt21",
+     "bbox": {
+      "x": 97,
+      "y": 248.3125,
+      "w": 249.59375,
+      "h": 48
+     },
+     "action": "restyle",
+     "instruction": "체중·아침·점심·저녁 요약 버튼을 동일한 bg-surface, border-control-border, rounded-md의 TactileButton 계열로 통일하고 기록 아이콘과 점수 단위를 표시하세요. 걸음 현황은 bg-sunken의 비대화형 진행 표시로 분리하세요."
+    },
+    {
+     "viewport": "ipad-pro-11",
+     "route": "/start",
+     "target": "div.css-view-g5y9jx > div.css-view-g5y9jx.gap-3 > div.css-view-g5y9jx.flex-row:nth-of-type(3) > div.css-text-146c3p1.font-sans:nth-of-type(2)",
+     "bbox": {
+      "x": 262.96875,
+      "y": 210,
+      "w": 156,
+      "h": 25.59375
+     },
+     "action": "rewrite_copy",
+     "instruction": "'오늘 아직 96점 남았어요'를 '오늘 더 얻을 수 있는 점수 96점'으로 교체하세요. 하단 체중 기록 보상 표기도 '+40점'으로 맞추세요."
+    },
+    {
+     "viewport": "ipad-pro-11",
+     "route": "/match",
+     "target": "div.css-view-g5y9jx.w-full > div.css-view-g5y9jx.gap-3:nth-of-type(2) > div.css-view-g5y9jx.flex-row:nth-of-type(2) > div.css-text-146c3p1.font-display",
+     "bbox": {
+      "x": 114,
+      "y": 259.78125,
+      "w": 87.28125,
+      "h": 53.75
+     },
+     "action": "restructure",
+     "instruction": "현재 단독 비율을 양쪽 주체가 있는 승률 비교 컴포넌트로 교체하세요. 상단에 ‘예상 승률’, 다음 행 양끝에 ‘나’와 ‘오트밀파’ 및 각각의 백분율, 아래에 같은 방향의 분할 막대를 배치하세요. 실제 데이터에 따라 수치를 연결하고 bg-surface, border-border, rounded-lg를 사용하세요."
+    },
+    {
+     "viewport": "ipad-pro-11",
+     "route": "/match",
+     "target": "div.css-view-g5y9jx.r-WebkitOverflowScrolling-150rngu:nth-of-type(2) > div.css-view-g5y9jx.w-full > div.css-view-g5y9jx.gap-3:nth-of-type(2) > div.css-text-146c3p1.font-sans:nth-of-type(4)",
+     "bbox": {
+      "x": 114,
+      "y": 349.53125,
+      "w": 606,
+      "h": 25.59375
+     },
+     "action": "rewrite_copy",
+     "instruction": "설명을 ‘예상 승률이 45~55%인 상대와 연결했어요.’로 교체하고 text-sm text-fg-muted로 비교 막대 아래에 배치하세요."
+    },
+    {
+     "viewport": "ipad-pro-11",
+     "route": "/match",
+     "target": null,
+     "bbox": null,
+     "action": "restructure",
+     "instruction": "MobileShell.Header와 하단 행동 위치는 유지하세요. 두 정보 카드를 본문의 걸음 목표 행과 MobileShell.BottomDock의 시작 안내로 분리하세요. 도크에는 ‘11월 8일 00:00에 시작해요’를 먼저 표시하고, 아래에 bg-accent text-on-accent의 TactileButton ‘대결 화면으로’를 배치하세요. 간격은 4px 배수로 통일하세요."
+    }
+   ],
+   "findings": [
+    {
+     "rule": "type/too-many-sizes",
+     "category": "typography",
+     "severity": "minor",
+     "source": "dom",
+     "viewport": "iphone-15-pro",
+     "route": "/",
+     "message": "7 font sizes on one view (12, 14, 16, 18, 24, 30, 36px); more than 6 flattens the hierarchy.",
+     "selector": null,
+     "bbox": null,
+     "fix": "Merge neighbouring sizes and separate levels with weight, colour (text-fg vs text-fg-muted) and space instead.",
+     "file": null,
+     "line": null
+    },
+    {
+     "rule": "touch/target-size",
+     "category": "touch-target",
+     "severity": "blocker",
+     "source": "dom",
+     "viewport": "iphone-15-pro",
+     "route": "/start?state=new",
+     "message": "input \"on\" is 40×20px; touch targets need 44×44px",
+     "selector": "div.css-view-g5y9jx.gap-3:nth-of-type(4) > div.css-view-g5y9jx.min-h-11:nth-of-type(2) > div.css-view-g5y9jx.r-cursor-1loqt21:nth-of-type(2) > input.r-appearance-30o5oe.r-bottom-1p0dtai",
+     "bbox": {
+      "x": 337,
+      "y": 954.7,
+      "w": 40,
+      "h": 20
+     },
+     "fix": "Give the control min-h-11 min-w-11 (44px), or padding that reaches it; keep the icon size and grow the hit area.",
+     "file": null,
+     "line": null
+    },
+    {
+     "rule": "type/too-many-sizes",
+     "category": "typography",
+     "severity": "minor",
+     "source": "dom",
+     "viewport": "iphone-15-pro",
+     "route": "/result?state=finished",
+     "message": "7 font sizes on one view (12, 14, 16, 18, 24, 30, 60px); more than 6 flattens the hierarchy.",
+     "selector": null,
+     "bbox": null,
+     "fix": "Merge neighbouring sizes and separate levels with weight, colour (text-fg vs text-fg-muted) and space instead.",
+     "file": null,
+     "line": null
+    },
+    {
+     "rule": "type/too-many-sizes",
+     "category": "typography",
+     "severity": "minor",
+     "source": "dom",
+     "viewport": "iphone-15-pro",
+     "route": "/start",
+     "message": "7 font sizes on one view (12, 14, 16, 18, 24, 30, 36px); more than 6 flattens the hierarchy.",
+     "selector": null,
+     "bbox": null,
+     "fix": "Merge neighbouring sizes and separate levels with weight, colour (text-fg vs text-fg-muted) and space instead.",
+     "file": null,
+     "line": null
+    },
+    {
+     "rule": "states/same-as-default",
+     "category": "responsive",
+     "severity": "major",
+     "source": "dom",
+     "viewport": "iphone-15-pro",
+     "route": "/?state=morning",
+     "message": "The route listed for the state \"D-01 아침 첫 화면\" shows the same screen as /: nothing reads the state from it.",
+     "selector": null,
+     "bbox": null,
+     "fix": "Have the route put the screen into that state (from the fixtures: no items, a failed request, the limit reached), so that what a person would see then is what loads.",
+     "file": null,
+     "line": null
+    },
+    {
+     "rule": "type/too-many-sizes",
+     "category": "typography",
+     "severity": "minor",
+     "source": "dom",
+     "viewport": "iphone-15-pro",
+     "route": "/?state=morning",
+     "message": "7 font sizes on one view (12, 14, 16, 18, 24, 30, 36px); more than 6 flattens the hierarchy.",
+     "selector": null,
+     "bbox": null,
+     "fix": "Merge neighbouring sizes and separate levels with weight, colour (text-fg vs text-fg-muted) and space instead.",
+     "file": null,
+     "line": null
+    },
+    {
+     "rule": "type/too-many-sizes",
+     "category": "typography",
+     "severity": "minor",
+     "source": "dom",
+     "viewport": "iphone-15-pro",
+     "route": "/?state=loading",
+     "message": "7 font sizes on one view (12, 14, 16, 18, 24, 30, 36px); more than 6 flattens the hierarchy.",
+     "selector": null,
+     "bbox": null,
+     "fix": "Merge neighbouring sizes and separate levels with weight, colour (text-fg vs text-fg-muted) and space instead.",
+     "file": null,
+     "line": null
+    },
+    {
+     "rule": "type/too-many-sizes",
+     "category": "typography",
+     "severity": "minor",
+     "source": "dom",
+     "viewport": "iphone-15-pro",
+     "route": "/?state=offline",
+     "message": "7 font sizes on one view (12, 14, 16, 18, 24, 30, 36px); more than 6 flattens the hierarchy.",
+     "selector": null,
+     "bbox": null,
+     "fix": "Merge neighbouring sizes and separate levels with weight, colour (text-fg vs text-fg-muted) and space instead.",
+     "file": null,
+     "line": null
+    },
+    {
+     "rule": "type/too-many-sizes",
+     "category": "typography",
+     "severity": "minor",
+     "source": "dom",
+     "viewport": "iphone-15-pro",
+     "route": "/?state=steps_disconnected",
+     "message": "7 font sizes on one view (12, 14, 16, 18, 24, 30, 36px); more than 6 flattens the hierarchy.",
+     "selector": null,
+     "bbox": null,
+     "fix": "Merge neighbouring sizes and separate levels with weight, colour (text-fg vs text-fg-muted) and space instead.",
+     "file": null,
+     "line": null
+    },
+    {
+     "rule": "type/too-many-sizes",
+     "category": "typography",
+     "severity": "minor",
+     "source": "dom",
+     "viewport": "iphone-15-pro",
+     "route": "/?state=rival_inactive",
+     "message": "7 font sizes on one view (12, 14, 16, 18, 24, 30, 36px); more than 6 flattens the hierarchy.",
+     "selector": null,
+     "bbox": null,
+     "fix": "Merge neighbouring sizes and separate levels with weight, colour (text-fg vs text-fg-muted) and space instead.",
+     "file": null,
+     "line": null
+    },
+    {
+     "rule": "type/too-many-sizes",
+     "category": "typography",
+     "severity": "minor",
+     "source": "dom",
+     "viewport": "ipad-pro-11",
+     "route": "/",
+     "message": "7 font sizes on one view (12, 14, 16, 18, 24, 30, 36px); more than 6 flattens the hierarchy.",
+     "selector": null,
+     "bbox": null,
+     "fix": "Merge neighbouring sizes and separate levels with weight, colour (text-fg vs text-fg-muted) and space instead.",
+     "file": null,
+     "line": null
+    },
+    {
+     "rule": "touch/target-size",
+     "category": "touch-target",
+     "severity": "blocker",
+     "source": "dom",
+     "viewport": "ipad-pro-11",
+     "route": "/start?state=new",
+     "message": "input \"on\" is 40×20px; touch targets need 44×44px",
+     "selector": "div.css-view-g5y9jx.gap-3:nth-of-type(4) > div.css-view-g5y9jx.min-h-11:nth-of-type(2) > div.css-view-g5y9jx.r-cursor-1loqt21:nth-of-type(2) > input.r-appearance-30o5oe.r-bottom-1p0dtai",
+     "bbox": {
+      "x": 697,
+      "y": 954.7,
+      "w": 40,
+      "h": 20
+     },
+     "fix": "Give the control min-h-11 min-w-11 (44px), or padding that reaches it; keep the icon size and grow the hit area.",
+     "file": null,
+     "line": null
+    },
+    {
+     "rule": "type/too-many-sizes",
+     "category": "typography",
+     "severity": "minor",
+     "source": "dom",
+     "viewport": "ipad-pro-11",
+     "route": "/result?state=finished",
+     "message": "7 font sizes on one view (12, 14, 16, 18, 24, 30, 60px); more than 6 flattens the hierarchy.",
+     "selector": null,
+     "bbox": null,
+     "fix": "Merge neighbouring sizes and separate levels with weight, colour (text-fg vs text-fg-muted) and space instead.",
+     "file": null,
+     "line": null
+    },
+    {
+     "rule": "type/too-many-sizes",
+     "category": "typography",
+     "severity": "minor",
+     "source": "dom",
+     "viewport": "ipad-pro-11",
+     "route": "/start",
+     "message": "7 font sizes on one view (12, 14, 16, 18, 24, 30, 36px); more than 6 flattens the hierarchy.",
+     "selector": null,
+     "bbox": null,
+     "fix": "Merge neighbouring sizes and separate levels with weight, colour (text-fg vs text-fg-muted) and space instead.",
+     "file": null,
+     "line": null
+    },
+    {
+     "rule": "vision/responsive",
+     "category": "responsive",
+     "severity": "major",
+     "source": "vlm",
+     "viewport": "iphone-15-pro",
+     "route": "/",
+     "message": "상대의 체중 기록 카드가 화면 오른쪽 밖으로 이어져 ‘기록’과 카드 끝이 잘립니다. 두 사람의 활동을 비교하는 핵심 영역이 온전히 보이지 않습니다.",
+     "selector": "div.css-view-g5y9jx > div.css-view-g5y9jx.rounded-lg > div.css-view-g5y9jx.flex-row:nth-of-type(2) > div.css-text-146c3p1.font-sans:nth-of-type(2)",
+     "bbox": {
+      "x": 376,
+      "y": 474,
+      "w": 20,
+      "h": 18
+     },
+     "fix": "MobileShell.Content 안에서 활동 카드를 전체 너비로 배치하고, 각 카드에 ‘나’ 또는 ‘오트밀파’를 text-fg-muted로 표시하세요. 같은 시간대의 두 사람 기록은 가로 분할 대신 세로로 묶고 bg-surface와 border-border로 구분하세요.",
+     "file": null,
+     "line": null
+    },
+    {
+     "rule": "vision/hierarchy",
+     "category": "hierarchy",
+     "severity": "major",
+     "source": "vlm",
+     "viewport": "iphone-15-pro",
+     "route": "/",
+     "message": "‘64점 뒤져요’가 화면의 가장 강한 문장인데, 이를 만회할 다음 행동은 하단 버튼과 가려진 체중 카드로 떨어져 있습니다. 한눈에 현재 상태와 다음 할 일을 연결하기 어렵습니다.",
+     "selector": "div.css-view-g5y9jx > div.css-view-g5y9jx.gap-3 > div.css-view-g5y9jx.flex-row:nth-of-type(3) > div.css-text-146c3p1.font-display:nth-of-type(1)",
+     "bbox": {
+      "x": 16,
+      "y": 214,
+      "w": 157.96875,
+      "h": 40.3125
+     },
+     "fix": "MobileShell.Header 아래에 두 사람의 누적 점수를 같은 기준선으로 묶고, 점수 차이는 text-sm text-fg-muted로 낮추세요. 바로 다음에 ‘체중 기록하면 +40점’을 text-lg로 제시하고 MobileShell.BottomDock의 TactileButton과 연결하세요.",
+     "file": null,
+     "line": null
+    },
+    {
+     "rule": "vision/spacing",
+     "category": "spacing",
+     "severity": "major",
+     "source": "vlm",
+     "viewport": "iphone-15-pro",
+     "route": "/",
+     "message": "시간축의 활동 없는 구간이 본문 대부분을 차지하고, 현재 시각 바로 아래의 내 체중 기록 카드는 하단 독에 가려집니다. 첫 화면에서 실제 기록보다 빈 시간이 더 많이 보입니다.",
+     "selector": null,
+     "bbox": null,
+     "fix": "MobileShell.Content를 현재 할 일, 최근 활동 순서로 구성하고 빈 시간대는 text-xs text-fg-muted의 구간 표시로 압축하세요. 항목 간격은 4px 배수로 통일하고 MobileShell.BottomDock 높이와 안전 영역만큼 스크롤 하단 여백을 확보하세요.",
+     "file": null,
+     "line": null
+    },
+    {
+     "rule": "vision/tactility",
+     "category": "tactility",
+     "severity": "major",
+     "source": "vlm",
+     "viewport": "iphone-15-pro",
+     "route": "/",
+     "message": "점수 아래 막대는 중앙 눈금과 원형 손잡이 때문에 조절 가능한 슬라이더처럼 보입니다. 실제로는 버튼인데 무엇을 누르는지, 막대의 위치가 무엇을 뜻하는지 설명이 없습니다.",
+     "selector": "div.css-view-g5y9jx > div.css-view-g5y9jx.gap-3 > div.css-view-g5y9jx:nth-of-type(2) > button.css-view-g5y9jx.r-cursor-1loqt21",
+     "bbox": {
+      "x": 16,
+      "y": 158,
+      "w": 361,
+      "h": 44
+     },
+     "fix": "점수 차이를 나타내는 막대라면 손잡이 형태를 없애고 text-fg-muted로 의미를 붙이세요. 상세 설명은 ‘점수 비교 보기’ TactileButton으로 분리하고 BottomSheet에서 누적 점수와 오늘 점수를 보여주세요.",
+     "file": null,
+     "line": null
+    },
+    {
+     "rule": "vision/copy",
+     "category": "copy",
+     "severity": "minor",
+     "source": "vlm",
+     "viewport": "iphone-15-pro",
+     "route": "/",
+     "message": "내 걸음은 ‘1,240 / 8,500’, 상대 걸음은 ‘29%’로 표시해 같은 항목을 바로 비교할 수 없습니다. 분모가 목표 걸음이라는 설명도 생략되어 있습니다.",
+     "selector": "div.css-view-g5y9jx.flex-row:nth-of-type(1) > div.css-view-g5y9jx.flex-1:nth-of-type(1) > div.css-view-g5y9jx.mt-1:nth-of-type(3) > div.css-text-146c3p1.font-sans:nth-of-type(2)",
+     "bbox": {
+      "x": 88,
+      "y": 110,
+      "w": 94.109375,
+      "h": 36
+     },
+     "fix": "두 사람의 요약은 모두 ‘걸음 목표 달성률’과 백분율로 맞추고 text-sm을 사용하세요. 내 실제 걸음과 목표는 ‘1,240걸음 / 목표 8,500걸음’으로 풀어 text-xs text-fg-muted에 배치하세요.",
+     "file": null,
+     "line": null
+    },
+    {
+     "rule": "vision/hierarchy",
+     "category": "hierarchy",
+     "severity": "major",
+     "source": "vlm",
+     "viewport": "iphone-15-pro",
+     "route": "/scores",
+     "message": "상세 영역은 6일차를 보여주는데, 위 점수판의 6일차는 오른쪽 가장자리에 일부만 보입니다. 현재 선택과 상세 내용의 연결을 사용자가 직접 찾아야 합니다.",
+     "selector": "div.css-view-g5y9jx.r-flexDirection-18u37iz > div.css-view-g5y9jx.flex-row > div.css-view-g5y9jx:nth-of-type(7) > button.css-view-g5y9jx.r-cursor-1loqt21",
+     "bbox": {
+      "x": 372,
+      "y": 118.59375,
+      "w": 56,
+      "h": 164
+     },
+     "fix": "MobileShell.Content 안의 가로 점수판은 진입 시 선택된 날짜가 완전히 보이도록 스크롤 위치를 맞추세요. 날짜를 누르면 선택 표시와 아래 상세 내용을 함께 갱신하고, 참여자 이름은 고정해 비교 맥락을 유지하세요.",
+     "file": null,
+     "line": null
+    },
+    {
+     "rule": "vision/tactility",
+     "category": "tactility",
+     "severity": "major",
+     "source": "vlm",
+     "viewport": "iphone-15-pro",
+     "route": "/scores",
+     "message": "굵은 테두리가 상대의 승리 칸 네 개에 반복되어 선택된 버튼처럼 보입니다. 실제 조작 단위는 날짜 열 전체인데, 화면은 개별 점수 칸을 누르는 구조처럼 읽힙니다.",
+     "selector": null,
+     "bbox": null,
+     "fix": "날짜 열 전체를 하나의 TactileButton으로 구성하고, 선택된 열에만 border-control-border와 bg-surface의 명확한 선택 처리를 적용하세요. 승리는 점수 옆의 작은 ‘승’ 배지로 표현하고, 비선택 점수 칸은 bg-sunken으로 낮추세요. ‘진행 중’은 선택 여부와 별도로 유지하세요.",
+     "file": null,
+     "line": null
+    },
+    {
+     "rule": "vision/hierarchy",
+     "category": "hierarchy",
+     "severity": "minor",
+     "source": "vlm",
+     "viewport": "iphone-15-pro",
+     "route": "/scores",
+     "message": "내 합계 4점이 여섯 항목 아래에 있어, 상세 영역을 읽기 시작할 때 오늘의 결과를 먼저 파악할 수 없습니다. 날짜가 가장 강조되고 정작 점수는 화면 하단에 도착해야 보입니다.",
+     "selector": "div.css-view-g5y9jx.gap-3:nth-of-type(3) > div.css-view-g5y9jx:nth-of-type(2) > div.css-view-g5y9jx.flex-row:nth-of-type(7) > div.css-text-146c3p1.font-display:nth-of-type(2)",
+     "bbox": {
+      "x": 351.234375,
+      "y": 630.34375,
+      "w": 8.765625,
+      "h": 31.1875
+     },
+     "fix": "합계를 ‘6일차’ 바로 아래로 옮겨 ‘내 점수 4 / 100점’으로 표시하세요. 점수는 text-2xl text-fg, 날짜와 진행 상태는 text-sm text-fg-muted로 구분하고, 항목별 점수는 그 아래에 유지하세요.",
+     "file": null,
+     "line": null
+    },
+    {
+     "rule": "vision/copy",
+     "category": "copy",
+     "severity": "minor",
+     "source": "vlm",
+     "viewport": "iphone-15-pro",
+     "route": "/scores",
+     "message": "‘추세’만으로는 무엇의 추세인지, 왜 30점이 배정됐는지 알 수 없습니다. 다른 항목처럼 기록할 행동인지 자동 계산되는 결과인지도 구분되지 않습니다.",
+     "selector": "div.css-view-g5y9jx.gap-3:nth-of-type(3) > div.css-view-g5y9jx:nth-of-type(2) > div.css-view-g5y9jx.flex-row:nth-of-type(2) > div.css-text-146c3p1.font-sans:nth-of-type(1)",
+     "bbox": {
+      "x": 33,
+      "y": 417.375,
+      "w": 28,
+      "h": 25.59375
+     },
+     "fix": "항목명을 ‘체중 추세’로 바꾸세요. 상세 영역에 text-fg-muted를 사용하는 보조 TactileButton ‘점수 기준’을 두고, BottomSheet에서 실제 계산 규칙과 반영 시점을 설명하세요.",
+     "file": null,
+     "line": null
+    },
+    {
+     "rule": "vision/responsive",
+     "category": "responsive",
+     "severity": "major",
+     "source": "vlm",
+     "viewport": "iphone-15-pro",
+     "route": "/start?state=new",
+     "message": "하단 액션 영역이 두 번째 건강 질문의 응답 버튼 위를 덮고, 다음 질문의 글자가 도크 아래로 비칩니다. 질문과 답변의 연결이 화면 경계에서 끊깁니다.",
+     "selector": "div.css-view-g5y9jx.absolute:nth-of-type(3) > div.css-view-g5y9jx.w-full > div.css-view-g5y9jx > button.css-view-g5y9jx.r-pointerEvents-12vffkv",
+     "bbox": {
+      "x": 16,
+      "y": 591,
+      "w": 361,
+      "h": 56
+     },
+     "fix": "MobileShell.Content와 MobileShell.BottomDock을 분리하고, Content의 하단 여백에 도크의 실제 높이와 safe-area를 반영하세요. 포커스한 입력과 응답 묶음이 도크 위로 완전히 스크롤되도록 하고, 도크에는 bg-surface 기반의 구분되는 표면을 적용하세요.",
+     "file": null,
+     "line": null
+    },
+    {
+     "rule": "vision/hierarchy",
+     "category": "hierarchy",
+     "severity": "major",
+     "source": "vlm",
+     "viewport": "iphone-15-pro",
+     "route": "/start?state=new",
+     "message": "신체 정보, 걸음 수, 건강 질문, 상대 조건이 한 흐름에 이어지는데 진행 표시가 없습니다. 아직 보이지 않는 필수 항목이 남은 상태에서 '오늘 밤 상대 찾기'가 비활성처럼 보여, 무엇을 마쳐야 하는지 알기 어렵습니다.",
+     "selector": null,
+     "bbox": null,
+     "fix": "MobileShell.Header에 현재 단계와 전체 단계를 표시하고 MobileShell.Content를 '기본 정보', '건강 확인', '상대 조건'으로 나누세요. MobileShell.BottomDock의 TactileButton은 앞 단계에서 '다음', 마지막 단계에서 '오늘 밤 상대 찾기'를 사용하고, 진행을 막는 미입력 항목은 해당 필드 가까이에 text-fg-muted로 안내하세요.",
+     "file": null,
+     "line": null
+    },
+    {
+     "rule": "vision/copy",
+     "category": "copy",
+     "severity": "major",
+     "source": "vlm",
+     "viewport": "iphone-15-pro",
+     "route": "/start?state=new",
+     "message": "민감한 건강 질문이 먼저 나오고, 답변을 저장하지 않는다는 설명은 모든 질문 뒤에 있습니다. 사용자가 첫 질문에 답할 시점에는 수집 목적과 처리 방식을 알 수 없습니다.",
+     "selector": "div.css-view-g5y9jx.w-full > div.css-view-g5y9jx.gap-3:nth-of-type(3) > div.css-view-g5y9jx.flex-row:nth-of-type(1) > h1.css-text-146c3p1.font-display",
+     "bbox": {
+      "x": 16,
+      "y": 384.375,
+      "w": 89.8125,
+      "h": 31.1875
+     },
+     "fix": "e52를 '건강 확인' 제목 바로 아래로 옮겨 '대결 참여 조건을 확인해요. 답변은 저장하지 않아요.'라고 표시하세요. text-sm과 text-fg-muted를 사용하고, 첫 질문과 하나의 안내 묶음으로 배치하세요.",
+     "file": null,
+     "line": null
+    },
+    {
+     "rule": "vision/copy",
+     "category": "copy",
+     "severity": "minor",
+     "source": "vlm",
+     "viewport": "iphone-15-pro",
+     "route": "/start?state=new",
+     "message": "'평소 걸음'과 '4천 보쯤'만으로는 하루 평균을 묻는지 알기 어렵고, 건강 앱 가져오기와 직접 선택이 대체 관계인지도 명시되지 않습니다.",
+     "selector": "div.css-view-g5y9jx.w-full > div.css-view-g5y9jx.gap-3:nth-of-type(2) > div.css-view-g5y9jx.flex-row:nth-of-type(1) > h1.css-text-146c3p1.font-display",
+     "bbox": {
+      "x": 16,
+      "y": 213.1875,
+      "w": 89.8125,
+      "h": 31.1875
+     },
+     "fix": "제목을 '하루 평균 걸음 수'로 바꾸고 text-sm text-fg-muted로 '건강 앱에서 불러오거나 대략 선택해 주세요.'를 추가하세요. 가져오기 완료 시에는 실제 집계 기간과 값을 bg-sunken rounded-md 요약 영역에 표시하고, 직접 선택한 값과 중복되지 않게 하나의 선택 상태로 관리하세요.",
+     "file": null,
+     "line": null
+    },
+    {
+     "rule": "vision/hierarchy",
+     "category": "hierarchy",
+     "severity": "major",
+     "source": "vlm",
+     "viewport": "iphone-15-pro",
+     "route": "/match?state=waiting",
+     "message": "첫 화면에서 ‘내 걸음 목표’ 제목만 보이고 실제 값 ‘8,500보’는 고정된 ‘신청 취소’ 영역에 가려집니다. 미래 일정 네 단계가 개인 목표보다 먼저 화면을 차지해, 신청 내용을 확인하기 어렵습니다.",
+     "selector": "div.css-view-g5y9jx.r-WebkitOverflowScrolling-150rngu:nth-of-type(2) > div.css-view-g5y9jx.w-full > div.css-view-g5y9jx.flex-1:nth-of-type(3) > div.css-text-146c3p1.font-display:nth-of-type(2)",
+     "bbox": {
+      "x": 32,
+      "y": 571.90625,
+      "w": 329,
+      "h": 31.1875
+     },
+     "fix": "MobileShell.Content에서 남은 시간 바로 아래에 ‘내 걸음 목표’와 ‘8,500보’를 하나의 간결한 bg-sunken 요약 영역으로 배치하고 타임라인을 그 아래에 두세요. MobileShell.BottomDock의 실제 높이와 안전 영역을 반영해 본문 하단 여백을 확보하고, 마지막 내용까지 독 위로 스크롤할 수 있게 하세요.",
+     "file": null,
+     "line": null
+    },
+    {
+     "rule": "vision/copy",
+     "category": "copy",
+     "severity": "minor",
+     "source": "vlm",
+     "viewport": "iphone-15-pro",
+     "route": "/match?state=waiting",
+     "message": "‘오늘 21:00’ 안내 아래에 ‘00:00’과 ‘07:30’이 날짜 없이 이어집니다. 자정을 넘기는 일정인데 날짜 전환 표시가 없어 사용자가 다음 날 일정임을 추론해야 합니다.",
+     "selector": "div.css-view-g5y9jx.pl-2:nth-of-type(2) > div.css-view-g5y9jx.flex-row:nth-of-type(3) > div.css-view-g5y9jx.flex-1:nth-of-type(2) > div.css-text-146c3p1.font-display:nth-of-type(1)",
+     "bbox": {
+      "x": 56,
+      "y": 344.90625,
+      "w": 321,
+      "h": 32
+     },
+     "fix": "타임라인의 시간 문구를 ‘오늘 21:00’, ‘내일 00:00’, ‘내일 07:30’으로 바꾸세요. 시간은 기존 font-display 처리를 유지하고, 날짜를 별도 보조 라벨로 분리한다면 본문 서체와 text-fg-muted를 사용하세요.",
+     "file": null,
+     "line": null
+    },
+    {
+     "rule": "vision/responsive",
+     "category": "responsive",
+     "severity": "major",
+     "source": "vlm",
+     "viewport": "iphone-15-pro",
+     "route": "/match?state=scheduled",
+     "message": "하단의 ‘내 걸음 목표 8,500보’와 ‘1일차 시작 내일 00:00’가 고정 버튼 영역 뒤에 가려집니다. 대결을 준비하는 데 필요한 정보가 현재 화면에서 보이지 않습니다.",
+     "selector": null,
+     "bbox": null,
+     "fix": "MobileShell.Content 안에서 상대 이름 다음에 목표와 시작 시각을 배치하세요. 버튼은 MobileShell.BottomDock에 두고, Content에 도크 높이와 하단 안전 영역을 반영한 스크롤 여백을 확보해 마지막 항목까지 완전히 드러나게 하세요.",
+     "file": null,
+     "line": null
+    },
+    {
+     "rule": "vision/hierarchy",
+     "category": "hierarchy",
+     "severity": "major",
+     "source": "vlm",
+     "viewport": "iphone-15-pro",
+     "route": "/match?state=scheduled",
+     "message": "‘51 : 49’와 두 색의 막대에 참여자 표시가 없어 어느 쪽이 내 예상 승률인지 알 수 없습니다. 화면에서 강조한 수치를 사용자가 해석할 단서가 빠져 있습니다.",
+     "selector": "div.css-view-g5y9jx.w-full > div.css-view-g5y9jx.gap-3:nth-of-type(2) > div.css-view-g5y9jx.flex-row:nth-of-type(2) > div.css-text-146c3p1.font-display",
+     "bbox": {
+      "x": 33,
+      "y": 259.78125,
+      "w": 87.28125,
+      "h": 53.75
+     },
+     "fix": "bg-surface의 비교 영역 안에서 ‘나’와 ‘오트밀파’를 양쪽에 표시하고, 실제 데이터의 참여자 순서에 맞춰 각각의 확률을 %로 표기하세요. bg-accent는 내 값에 연결하고 상대 값은 중립색으로 구분하되, 색 없이도 이름과 수치로 관계를 읽을 수 있게 하세요.",
+     "file": null,
+     "line": null
+    },
+    {
+     "rule": "vision/copy",
+     "category": "copy",
+     "severity": "minor",
+     "source": "vlm",
+     "viewport": "iphone-15-pro",
+     "route": "/match?state=scheduled",
+     "message": "‘45 : 55 밖이면’은 범위의 의미가 불명확하고 줄바꿈으로 비율도 끊어집니다. 매칭 규칙을 길게 설명한 뒤 아래에서 ‘평소 걸음이 비슷해요’를 다시 말해 같은 근거가 반복됩니다.",
+     "selector": "div.css-view-g5y9jx.r-WebkitOverflowScrolling-150rngu:nth-of-type(2) > div.css-view-g5y9jx.w-full > div.css-view-g5y9jx.gap-3:nth-of-type(2) > div.css-text-146c3p1.font-sans:nth-of-type(4)",
+     "bbox": {
+      "x": 33,
+      "y": 349.53125,
+      "w": 327,
+      "h": 51.1875
+     },
+     "fix": "본문은 text-sm과 text-fg-muted로 ‘지난 걸음 기록이 비슷한 상대와 연결했어요.’만 남기고 중복 문장을 합치세요. 세부 기준은 ‘매칭 기준’ 보조 TactileButton으로 여는 BottomSheet에 ‘예상 승률이 45~55%인 상대와 연결해요.’라고 표시하세요.",
+     "file": null,
+     "line": null
+    },
+    {
+     "rule": "vision/responsive",
+     "category": "responsive",
+     "severity": "major",
+     "source": "vlm",
+     "viewport": "iphone-15-pro",
+     "route": "/result?state=finished",
+     "message": "하단의 두 버튼이 일별 점수 영역을 덮고 있습니다. 요소 목록에 있는 ‘일별 점수’, ‘점수표 보기’, 날짜별 점수와 범례가 실제 캡처에서는 보이지 않아 결과를 확인하는 경로가 가려집니다.",
+     "selector": "div.css-view-g5y9jx.r-WebkitOverflowScrolling-150rngu:nth-of-type(2) > div.css-view-g5y9jx.w-full > div.css-view-g5y9jx:nth-of-type(4) > button.css-view-g5y9jx.r-cursor-1loqt21",
+     "bbox": {
+      "x": 16,
+      "y": 512.375,
+      "w": 361,
+      "h": 112.1875
+     },
+     "fix": "두 버튼을 MobileShell.BottomDock에 배치하고 e15는 MobileShell.Content 안에 유지하세요. Content의 하단 여백에 실제 dock 높이와 safe-area inset을 반영해 점수표와 범례 전체가 dock 위까지 스크롤되도록 하세요.",
+     "file": null,
+     "line": null
+    },
+    {
+     "rule": "vision/hierarchy",
+     "category": "hierarchy",
+     "severity": "major",
+     "source": "vlm",
+     "viewport": "iphone-15-pro",
+     "route": "/result?state=finished",
+     "message": "가장 강조된 ‘1,086 : 1,041’에 각 점수의 주인이 없습니다. 승리 문구를 읽고 나서야 높은 점수가 내 점수라고 추론할 수 있습니다.",
+     "selector": "div.css-view-g5y9jx.r-WebkitOverflowScrolling-150rngu:nth-of-type(2) > div.css-view-g5y9jx.w-full > div.css-view-g5y9jx.gap-2:nth-of-type(1) > div.css-text-146c3p1.font-display:nth-of-type(1)",
+     "bbox": {
+      "x": 16,
+      "y": 77,
+      "w": 361,
+      "h": 67.1875
+     },
+     "fix": "e5를 두 개의 점수 열로 구성하고 각 숫자 바로 위에 ‘나’와 ‘오트밀파님’을 text-sm, text-fg-muted로 표시하세요. 숫자는 font-display와 text-fg를 유지하고, 승리 문구는 두 열 아래에 배치해 점수와 결과를 한 묶음으로 만드세요.",
+     "file": null,
+     "line": null
+    },
+    {
+     "rule": "vision/responsive",
+     "category": "responsive",
+     "severity": "major",
+     "source": "vlm",
+     "viewport": "iphone-15-pro",
+     "route": "/start",
+     "message": "중앙 시간축 오른쪽의 상대 기록 카드가 화면 밖으로 잘려 ‘기록’과 카드의 끝을 볼 수 없습니다. 왼쪽 체중 기록 카드는 하단 독에 일부 가려져, 첫 화면에서 온전한 활동 카드를 읽기 어렵습니다.",
+     "selector": null,
+     "bbox": null,
+     "fix": "MobileShell.Content 안에 시간대별 한 열 활동 목록을 구성하고 각 항목에 ‘나’ 또는 ‘오트밀파’를 표시하세요. 카드는 가용 너비 안에 맞추고 bg-surface, border-border, rounded-lg를 적용하며, 마지막 항목까지 MobileShell.BottomDock 위로 스크롤할 수 있도록 하단 여백을 확보하세요.",
+     "file": null,
+     "line": null
+    },
+    {
+     "rule": "vision/hierarchy",
+     "category": "hierarchy",
+     "severity": "major",
+     "source": "vlm",
+     "viewport": "iphone-15-pro",
+     "route": "/start",
+     "message": "‘64점 뒤져요’가 화면에서 가장 강한 문장이고, 그 앞에 두 사람의 총점과 비교 막대까지 있어 같은 대결 상태를 세 번 강조합니다. 지금 할 수 있는 체중 기록보다 점수 차이가 화면의 중심이 됩니다.",
+     "selector": "div.css-view-g5y9jx > div.css-view-g5y9jx.gap-3 > div.css-view-g5y9jx.flex-row:nth-of-type(3) > div.css-text-146c3p1.font-display:nth-of-type(1)",
+     "bbox": {
+      "x": 16,
+      "y": 214,
+      "w": 157.96875,
+      "h": 40.3125
+     },
+     "fix": "MobileShell.Header에는 진행 일차와 메뉴를 두고, 총점과 점수 차이는 하나의 간결한 비교 영역으로 묶으세요. e17은 text-base와 text-fg-muted로 낮추고, ‘체중 기록’ TactileButton을 다음 행동의 기준점으로 유지하세요.",
+     "file": null,
+     "line": null
+    },
+    {
+     "rule": "vision/spacing",
+     "category": "spacing",
+     "severity": "major",
+     "source": "vlm",
+     "viewport": "iphone-15-pro",
+     "route": "/start",
+     "message": "활동 목록이 시작된 뒤 첫 기록이 나오기까지 빈 시간 구간과 눈금이 넓게 이어집니다. 현재 시각과 실제 기록보다 사건이 없는 시간이 더 큰 자리를 차지합니다.",
+     "selector": null,
+     "bbox": null,
+     "fix": "MobileShell.Content에서 기록 없는 시간은 접고 ‘00–06시’는 text-xs, text-fg-muted의 구간 라벨로만 남기세요. 실제 기록과 다음 할 일을 연속 배치하고, 항목 내부와 항목 사이의 간격은 4px 배수로 구분하세요.",
+     "file": null,
+     "line": null
+    },
+    {
+     "rule": "vision/tactility",
+     "category": "tactility",
+     "severity": "major",
+     "source": "vlm",
+     "viewport": "iphone-15-pro",
+     "route": "/start",
+     "message": "점수 비교 막대의 원형 끝점과 중앙 눈금이 조절 가능한 슬라이더처럼 보이지만, 무엇을 바꾸거나 여는지 설명이 없습니다. 읽는 지표와 누르는 버튼의 역할이 섞여 있습니다.",
+     "selector": "div.css-view-g5y9jx > div.css-view-g5y9jx.gap-3 > div.css-view-g5y9jx:nth-of-type(2) > button.css-view-g5y9jx.r-cursor-1loqt21",
+     "bbox": {
+      "x": 16,
+      "y": 158,
+      "w": 361,
+      "h": 44
+     },
+     "fix": "비교 지표라면 원형 손잡이를 없애고 bg-sunken 트랙과 두 사람의 이름·점수로 표현하세요. 점수 설명을 여는 기능이라면 막대를 비조작 지표로 분리하고 ‘점수 계산 보기’ TactileButton으로 BottomSheet를 여세요.",
+     "file": null,
+     "line": null
+    },
+    {
+     "rule": "vision/copy",
+     "category": "copy",
+     "severity": "minor",
+     "source": "vlm",
+     "viewport": "iphone-15-pro",
+     "route": "/start",
+     "message": "‘오늘 아직 96점 남았어요’는 추가로 얻을 수 있는 점수인지, 반드시 채워야 하는 목표인지 모호합니다. 바로 옆의 패배 표현과 만나 미완료 의무처럼 읽힙니다.",
+     "selector": "div.css-view-g5y9jx > div.css-view-g5y9jx.gap-3 > div.css-view-g5y9jx.flex-row:nth-of-type(3) > div.css-text-146c3p1.font-sans:nth-of-type(2)",
+     "bbox": {
+      "x": 181.96875,
+      "y": 228,
+      "w": 156,
+      "h": 25.59375
+     },
+     "fix": "문구를 ‘오늘 더 받을 수 있는 점수 96점’으로 바꾸고 text-sm, text-fg-muted로 오늘 활동 항목에 붙이세요.",
+     "file": null,
+     "line": null
+    },
+    {
+     "rule": "vision/hierarchy",
+     "category": "hierarchy",
+     "severity": "minor",
+     "source": "vlm",
+     "viewport": "iphone-15-pro",
+     "route": "/start",
+     "message": "내 걸음은 ‘1,240 / 8,500’, 상대 걸음은 ‘29%’로 표시되어 같은 위치의 정보끼리 바로 비교할 수 없습니다. 총점과 이름도 서로 다른 높이에 놓여 두 사람의 대응 관계가 약합니다.",
+     "selector": "div.css-view-g5y9jx.flex-row:nth-of-type(1) > div.css-view-g5y9jx.flex-1:nth-of-type(1) > div.css-view-g5y9jx.mt-1:nth-of-type(3) > div.css-text-146c3p1.font-sans:nth-of-type(2)",
+     "bbox": {
+      "x": 88,
+      "y": 110,
+      "w": 94.109375,
+      "h": 36
+     },
+     "fix": "두 사람의 이름·총점·오늘 점수를 동일한 순서와 기준선으로 맞추세요. 걸음 진행은 양쪽 모두 백분율로 통일하고, 내 실제 걸음 수와 목표는 text-xs, text-fg-muted의 보조 정보로 분리하세요.",
+     "file": null,
+     "line": null
+    },
+    {
+     "rule": "vision/responsive",
+     "category": "responsive",
+     "severity": "major",
+     "source": "vlm",
+     "viewport": "iphone-15-pro",
+     "route": "/match",
+     "message": "하단 액션 영역이 ‘내 걸음 목표’와 ‘1일차 시작’ 영역을 덮습니다. 카드 윗부분만 드러나고 실제 목표와 시각은 보이지 않아 화면이 덜 마무리된 인상을 줍니다.",
+     "selector": null,
+     "bbox": null,
+     "fix": "MobileShell.Content와 MobileShell.BottomDock을 분리하고, Content에 실제 dock 높이와 하단 safe area를 반영한 스크롤 여유를 확보하세요. e22는 BottomDock 안의 TactileButton으로 유지하고 마지막 정보 행까지 완전히 드러나게 하세요.",
+     "file": null,
+     "line": null
+    },
+    {
+     "rule": "vision/copy",
+     "category": "copy",
+     "severity": "major",
+     "source": "vlm",
+     "viewport": "iphone-15-pro",
+     "route": "/match",
+     "message": "‘예상 승률 51 : 49’와 두 색의 막대에 주체 표시가 없어 어느 쪽이 나인지 알 수 없습니다. 이 화면의 핵심 수치가 해석을 요구합니다.",
+     "selector": "div.css-view-g5y9jx.w-full > div.css-view-g5y9jx.gap-3:nth-of-type(2) > div.css-view-g5y9jx.flex-row:nth-of-type(2) > div.css-text-146c3p1.font-display",
+     "bbox": {
+      "x": 33,
+      "y": 259.78125,
+      "w": 87.28125,
+      "h": 53.75
+     },
+     "fix": "실제 데이터의 대응 관계에 따라 막대 양쪽에 ‘나 {내 예상 승률}%’와 ‘오트밀파 {상대 예상 승률}%’를 표시하세요. 이름에는 text-fg, 보조 설명에는 text-fg-muted를 쓰고, 색 없이도 양쪽을 구별할 수 있게 하세요.",
+     "file": null,
+     "line": null
+    },
+    {
+     "rule": "vision/hierarchy",
+     "category": "hierarchy",
+     "severity": "major",
+     "source": "vlm",
+     "viewport": "iphone-15-pro",
+     "route": "/match",
+     "message": "매칭 허용 범위를 설명하는 문단과 두 개의 매칭 근거 행이 목표와 시작 시각보다 먼저 나오며 화면 대부분을 차지합니다. 연결이 완료된 뒤에도 시스템 설명이 다음 행동에 필요한 정보를 밀어내고 있습니다.",
+     "selector": "div.css-view-g5y9jx.r-WebkitOverflowScrolling-150rngu:nth-of-type(2) > div.css-view-g5y9jx.w-full > div.css-view-g5y9jx.gap-3:nth-of-type(2) > div.css-text-146c3p1.font-sans:nth-of-type(4)",
+     "bbox": {
+      "x": 33,
+      "y": 349.53125,
+      "w": 327,
+      "h": 51.1875
+     },
+     "fix": "MobileShell.Content를 상대 이름 → 목표·시작 시각 → 예상 승률 순서로 재구성하세요. 매칭 근거는 text-sm과 text-fg-muted로 한 줄에 요약하고, 상세 규칙은 ‘매칭 기준 보기’ TactileButton으로 여는 BottomSheet로 옮기세요.",
+     "file": null,
+     "line": null
+    },
+    {
+     "rule": "vision/spacing",
+     "category": "spacing",
+     "severity": "major",
+     "source": "vlm",
+     "viewport": "ipad-pro-11",
+     "route": "/",
+     "message": "시간축에서 기록이 없는 구간이 본문의 대부분을 차지해 체중 다음의 할 일이 멀리 떨어집니다. 또한 06–08시와 이후 시간의 간격이 다른데 축이 연속으로 이어져, 시간 간격을 어떻게 읽어야 하는지 불명확합니다.",
+     "selector": null,
+     "bbox": null,
+     "fix": "MobileShell.Content에서 현재 기록 구간을 펼치고 빈 시간은 접으세요. 생략 구간에는 text-xs text-fg-muted로 ‘08–11시 · 예정된 기록 없음’과 축의 끊김을 표시하고, 점심·저녁은 간결한 예정 행으로 묶으세요.",
+     "file": null,
+     "line": null
+    },
+    {
+     "rule": "vision/hierarchy",
+     "category": "hierarchy",
+     "severity": "major",
+     "source": "vlm",
+     "viewport": "ipad-pro-11",
+     "route": "/",
+     "message": "시간축의 왼쪽과 오른쪽에 사람 이름이 없어 상단 점수판의 배치를 기억해야 기록 주인을 알 수 있습니다. 특히 오른쪽의 ‘먼저 쟀어요’가 누구의 말인지 카드 자체에서는 확인되지 않습니다.",
+     "selector": null,
+     "bbox": null,
+     "fix": "시간축 시작에 ‘나’와 ‘오트밀파’ 열 제목을 text-sm text-fg로 넣고, MobileShell.Content를 스크롤하는 동안 유지하세요. 상대 기록 카드에도 작성자를 text-xs text-fg-muted로 표시하세요.",
+     "file": null,
+     "line": null
+    },
+    {
+     "rule": "vision/tactility",
+     "category": "tactility",
+     "severity": "minor",
+     "source": "vlm",
+     "viewport": "ipad-pro-11",
+     "route": "/",
+     "message": "점수판 아래 비교 막대는 버튼이지만 정적인 지표처럼 보이며, 중앙 기준선과 점이 무엇을 뜻하는지도 표시되지 않습니다.",
+     "selector": "div.css-view-g5y9jx > div.css-view-g5y9jx.gap-3 > div.css-view-g5y9jx:nth-of-type(2) > button.css-view-g5y9jx.r-cursor-1loqt21",
+     "bbox": {
+      "x": 97,
+      "y": 140,
+      "w": 640,
+      "h": 44
+     },
+     "fix": "막대에 ‘동점’ 기준과 ‘오트밀파 64점 앞섬’ 상태를 text-xs text-fg-muted로 붙이세요. 상세 열기 동작은 border-control-border를 적용한 별도 TactileButton ‘점수 차이 보기’로 분리하고 BottomSheet에 연결하세요.",
+     "file": null,
+     "line": null
+    },
+    {
+     "rule": "vision/tactility",
+     "category": "tactility",
+     "severity": "minor",
+     "source": "vlm",
+     "viewport": "ipad-pro-11",
+     "route": "/",
+     "message": "체중·아침·점심·저녁은 버튼인데, 옆의 걸음 진행 지표와 같은 표면과 구성을 사용합니다. 읽는 요약인지 눌러 기록하는 항목인지 구분하기 어렵습니다.",
+     "selector": "ul.css-view-g5y9jx.flex-row > li.css-view-g5y9jx:nth-of-type(1) > div.css-view-g5y9jx > button.css-view-g5y9jx.r-cursor-1loqt21",
+     "bbox": {
+      "x": 97,
+      "y": 248.3125,
+      "w": 249.59375,
+      "h": 48
+     },
+     "fix": "기록 가능한 네 항목은 bg-surface, border-control-border, rounded-md를 적용한 TactileButton으로 만들고 추가 아이콘을 넣으세요. 걸음은 bg-sunken의 비상호작용 진행 지표로 구분하세요.",
+     "file": null,
+     "line": null
+    },
+    {
+     "rule": "vision/copy",
+     "category": "copy",
+     "severity": "minor",
+     "source": "vlm",
+     "viewport": "ipad-pro-11",
+     "route": "/",
+     "message": "‘체중’ 아래의 ‘0 / 40’에는 단위가 없어 기록 횟수인지 점수인지 해석해야 합니다. 상단의 다른 활동 요약도 같은 모호함이 있습니다.",
+     "selector": "div.css-view-g5y9jx > button.css-view-g5y9jx.r-cursor-1loqt21 > div.css-view-g5y9jx > div.css-text-146c3p1.font-sans:nth-of-type(2)",
+     "bbox": {
+      "x": 111,
+      "y": 548,
+      "w": 33,
+      "h": 18
+     },
+     "fix": "e65를 ‘오늘 0 / 40점’으로 바꾸고, 활동 요약에도 ‘0/40점’, ‘0/10점’, ‘4/30점’처럼 점수 단위를 일관되게 표시하세요. 보조 수치는 text-xs text-fg-muted로 유지하세요.",
+     "file": null,
+     "line": null
+    },
+    {
+     "rule": "vision/hierarchy",
+     "category": "hierarchy",
+     "severity": "major",
+     "source": "vlm",
+     "viewport": "ipad-pro-11",
+     "route": "/scores",
+     "message": "상세 패널은 ‘6일차’ 다음에 항목별 점수를 나열하고 합계를 아래에 둡니다. 누구의 점수 내역인지 제목으로 밝히지 않은 채 상대 활동까지 이어져, 오늘의 비교 결과보다 세부 내역을 먼저 해석하게 됩니다.",
+     "selector": "div.css-view-g5y9jx.w-full > div.css-view-g5y9jx.gap-3:nth-of-type(3) > div.css-view-g5y9jx.flex-row:nth-of-type(1) > div.css-text-146c3p1.font-display:nth-of-type(1)",
+     "bbox": {
+      "x": 114,
+      "y": 426.28125,
+      "w": 52.28125,
+      "h": 31.1875
+     },
+     "fix": "bg-surface 상세 패널 상단에 날짜와 진행 상태, ‘나 4점 · 오트밀파 42점’을 배치하세요. 그 아래 ‘내 점수 내역’을 text-sm font-semibold로 표시하고 기존 항목을 연결해 결과에서 근거로 읽히게 하세요.",
+     "file": null,
+     "line": null
+    },
+    {
+     "rule": "vision/hierarchy",
+     "category": "hierarchy",
+     "severity": "major",
+     "source": "vlm",
+     "viewport": "ipad-pro-11",
+     "route": "/scores",
+     "message": "체중 차트에 날짜, 체중 눈금, 단위가 없어 하락 방향만 알 수 있습니다. 실측점과 평균선, 목표선이 있지만 언제 얼마나 변했는지는 읽을 수 없습니다.",
+     "selector": "div.css-view-g5y9jx.w-full > div.css-view-g5y9jx.gap-3:nth-of-type(4) > div.css-view-g5y9jx.rounded-lg:nth-of-type(1) > svg",
+     "bbox": {
+      "x": 109,
+      "y": 946.40625,
+      "w": 616,
+      "h": 140
+     },
+     "fix": "bg-sunken 차트 안에 실제 데이터의 날짜와 kg 눈금을 text-xs text-fg-muted로 표시하세요. 실측점 선택 시 날짜·체중·3일 평균을 보여주고, 평균선은 text-accent에 대응하는 색으로, 목표선은 중립색 점선으로 구분하세요.",
+     "file": null,
+     "line": null
+    },
+    {
+     "rule": "vision/spacing",
+     "category": "spacing",
+     "severity": "major",
+     "source": "vlm",
+     "viewport": "ipad-pro-11",
+     "route": "/scores",
+     "message": "날짜별 점수표와 선택한 날짜의 상세 패널 사이에 큰 빈 영역이 있어, 하나의 선택과 결과가 서로 다른 섹션처럼 떨어져 보입니다.",
+     "selector": null,
+     "bbox": null,
+     "fix": "MobileShell.Content에서 날짜 선택부와 상세 패널을 하나의 그룹으로 묶고 간격을 gap-6으로 통일하세요. 독립적인 ‘내 체중 추세’ 앞에는 gap-8을 적용해 관련성과 구분이 간격으로 드러나게 하세요.",
+     "file": null,
+     "line": null
+    },
+    {
+     "rule": "vision/tactility",
+     "category": "tactility",
+     "severity": "major",
+     "source": "vlm",
+     "viewport": "ipad-pro-11",
+     "route": "/scores",
+     "message": "6일차의 배경 강조와 ‘진행 중’ 표시는 현재 날짜와 선택 상태를 구분하지 못합니다. 이전 날짜의 굵은 승리 테두리는 선택 표시처럼 보이고, 미래 날짜의 점선 칸은 빈 입력란처럼 보입니다.",
+     "selector": "div.css-view-g5y9jx.r-flexDirection-18u37iz > div.css-view-g5y9jx.flex-row > div.css-view-g5y9jx:nth-of-type(7) > button.css-view-g5y9jx.r-cursor-1loqt21",
+     "bbox": {
+      "x": 453,
+      "y": 118.59375,
+      "w": 56,
+      "h": 164
+     },
+     "fix": "각 날짜 열을 하나의 TactileButton으로 표현하고 선택된 열 전체에 border-control-border와 bg-sunken을 적용하세요. ‘진행 중’은 별도 text-accent 상태 라벨로 유지하고, 승리는 작은 ‘승’ 배지로 낮추세요. 미래 날짜는 ‘예정’ 상태로 표시하고 상세가 없다면 비활성화하세요.",
+     "file": null,
+     "line": null
+    },
+    {
+     "rule": "vision/tactility",
+     "category": "tactility",
+     "severity": "minor",
+     "source": "vlm",
+     "viewport": "ipad-pro-11",
+     "route": "/scores",
+     "message": "상대의 활동 상태가 테두리 있는 pill 형태여서 누를 수 있는 필터처럼 보입니다. ‘체중 했어요’, ‘아침 안 했어요’는 기록 여부인지 실제 행동 여부인지도 모호합니다.",
+     "selector": "div.css-view-g5y9jx.w-full > div.css-view-g5y9jx.gap-3:nth-of-type(3) > div.css-view-g5y9jx.gap-2:nth-of-type(3) > div.css-text-146c3p1.font-sans:nth-of-type(1)",
+     "bbox": {
+      "x": 114,
+      "y": 789.21875,
+      "w": 606,
+      "h": 21
+     },
+     "fix": "상대 활동을 bg-sunken의 비대화형 요약 영역으로 바꾸고 pill 테두리를 제거하세요. 제목은 ‘오트밀파님의 기록 현황’, 항목은 ‘체중 기록 완료’, ‘아침 기록 없음’, ‘점심 기록 없음’, ‘저녁 기록 없음’, ‘걸음 목표 29%’로 쓰고 상태는 text-fg-muted와 체크 아이콘으로 구분하세요.",
+     "file": null,
+     "line": null
+    },
+    {
+     "rule": "vision/copy",
+     "category": "copy",
+     "severity": "minor",
+     "source": "vlm",
+     "viewport": "ipad-pro-11",
+     "route": "/scores",
+     "message": "5일차는 두 사람 모두 82점인데 요약에는 이긴 날과 진 날만 있고, 해당 날짜에도 무승부 표시가 없습니다. 완료된 하루가 집계에서 빠진 것처럼 보입니다.",
+     "selector": "div.css-view-g5y9jx.flex-1 > div.css-view-g5y9jx.r-WebkitOverflowScrolling-150rngu:nth-of-type(2) > div.css-view-g5y9jx.w-full > div.css-text-146c3p1.font-sans:nth-of-type(1)",
+     "bbox": {
+      "x": 97,
+      "y": 69,
+      "w": 640,
+      "h": 25.59375
+     },
+     "fix": "요약을 ‘승 0 · 무 1 · 패 4’로 바꾸고 text-sm text-fg-muted로 표시하세요. 5일차에는 중립색 ‘무’ 배지를 추가하고 진행 중인 날은 완료 결과 집계에서 분리하세요.",
+     "file": null,
+     "line": null
+    },
+    {
+     "rule": "vision/hierarchy",
+     "category": "hierarchy",
+     "severity": "major",
+     "source": "vlm",
+     "viewport": "ipad-pro-11",
+     "route": "/start?state=new",
+     "message": "기본 정보, 걸음 수, 건강 문진, 상대 조건이 같은 위계로 이어집니다. 건강 문진이 화면 대부분을 차지하면서 지금 해야 할 일과 신청까지 남은 과정이 드러나지 않습니다.",
+     "selector": null,
+     "bbox": null,
+     "fix": "MobileShell 안에서 ‘기본 정보’와 ‘건강 확인’ 두 단계로 구성하세요. 첫 단계에는 신체 정보와 걸음 수를, 다음 단계에는 건강 질문과 상대 조건을 배치하고 MobileShell.BottomDock의 TactileButton을 각각 ‘다음: 건강 확인’, ‘오늘 밤 상대 찾기’로 연결하세요.",
+     "file": null,
+     "line": null
+    },
+    {
+     "rule": "vision/copy",
+     "category": "copy",
+     "severity": "major",
+     "source": "vlm",
+     "viewport": "ipad-pro-11",
+     "route": "/start?state=new",
+     "message": "‘모두 아니요인지만 확인해요’는 건강 질문의 목적보다 통과해야 할 답을 먼저 알려줍니다. 답변을 저장하지 않는다는 중요한 안내도 모든 질문을 지난 뒤에 나옵니다.",
+     "selector": "div.css-view-g5y9jx.r-WebkitOverflowScrolling-150rngu:nth-of-type(2) > div.css-view-g5y9jx.w-full > div.css-view-g5y9jx.gap-3:nth-of-type(3) > div.css-text-146c3p1.font-sans:nth-of-type(3)",
+     "bbox": {
+      "x": 97,
+      "y": 849.9375,
+      "w": 640,
+      "h": 25.59375
+     },
+     "fix": "e52를 건강 질문 위로 옮기고 ‘현재 상태에 맞게 답해주세요. 답변은 저장하지 않고 참여 조건 확인에만 사용해요.’로 바꾸세요. text-sm text-fg-muted로 안내를 구분하고, 응답에 따른 참여 조건 안내는 해당 질문 가까이에 표시하세요.",
+     "file": null,
+     "line": null
+    },
+    {
+     "rule": "vision/copy",
+     "category": "copy",
+     "severity": "major",
+     "source": "vlm",
+     "viewport": "ipad-pro-11",
+     "route": "/start?state=new",
+     "message": "‘평소 걸음’과 ‘4천 보쯤’만으로는 하루 기준인지 명확하지 않습니다. 건강 앱에서 가져오기와 아래 선택지가 대체 관계인지도 설명하지 않습니다.",
+     "selector": "div.css-view-g5y9jx.w-full > div.css-view-g5y9jx.gap-3:nth-of-type(2) > div.css-view-g5y9jx.flex-row:nth-of-type(1) > h1.css-text-146c3p1.font-display",
+     "bbox": {
+      "x": 97,
+      "y": 213.1875,
+      "w": 89.8125,
+      "h": 31.1875
+     },
+     "fix": "제목을 ‘하루 평균 걸음 수’로 바꾸고 text-sm text-fg-muted 안내 ‘건강 앱에서 불러오거나 직접 선택해 주세요.’를 추가하세요. 가져온 뒤에는 실제 집계 기간과 걸음 수를 bg-sunken rounded-lg 결과 영역에 보여주고 직접 선택한 값과 중복되지 않게 하세요.",
+     "file": null,
+     "line": null
+    },
+    {
+     "rule": "vision/tactility",
+     "category": "tactility",
+     "severity": "minor",
+     "source": "vlm",
+     "viewport": "ipad-pro-11",
+     "route": "/start?state=new",
+     "message": "건강 질문의 ‘아니요’와 ‘예’가 각각 독립된 윤곽선 버튼처럼 보여, 한 쌍에서 하나를 선택하는 응답 구조가 약합니다. 서로 다른 답인데도 글자 길이에 따라 시각적 무게가 달라집니다.",
+     "selector": "div.css-view-g5y9jx.gap-2:nth-of-type(1) > div.css-view-g5y9jx.flex-row:nth-of-type(2) > div.css-view-g5y9jx:nth-of-type(1) > div.css-view-g5y9jx.r-cursor-1loqt21",
+     "bbox": {
+      "x": 97,
+      "y": 473.15625,
+      "w": 70,
+      "h": 44
+     },
+     "fix": "e30·e32, e36·e38, e42·e44, e48·e50을 각각 같은 너비의 두 구획으로 묶으세요. 공통 bg-sunken rounded-full 안에 선택 항목을 bg-surface와 border-control-border로 띄우고 체크 표시와 눌림 피드백을 제공하세요. 초기에는 어느 답도 미리 선택하지 마세요.",
+     "file": null,
+     "line": null
+    },
+    {
+     "rule": "vision/spacing",
+     "category": "spacing",
+     "severity": "major",
+     "source": "vlm",
+     "viewport": "ipad-pro-11",
+     "route": "/match?state=waiting",
+     "message": "‘내 걸음 목표’와 ‘8,500보’만 담긴 카드가 남은 본문 대부분을 차지합니다. 정보가 없는 넓은 색면이 일정 안내보다 큰 시각적 비중을 가져, 무언가 로딩되지 않은 듯 보입니다.",
+     "selector": "div.css-view-g5y9jx.r-WebkitOverflowScrolling-150rngu:nth-of-type(2) > div.css-view-g5y9jx.w-full > div.css-view-g5y9jx.flex-1:nth-of-type(3) > div.css-text-146c3p1.font-sans:nth-of-type(1)",
+     "bbox": {
+      "x": 113,
+      "y": 546.90625,
+      "w": 608,
+      "h": 21
+     },
+     "fix": "e16과 e17을 감싸는 컨테이너의 고정 높이, min-height 또는 flex 확장을 제거하고 내용에 맞춰 높이를 정하세요. bg-sunken과 rounded-lg를 적용한 간결한 요약 영역으로 만들고, 내부 여백은 4px 배수로 통일하세요. MobileShell.Content의 남는 공간은 카드 밖에 두고 MobileShell.BottomDock은 유지하세요.",
+     "file": null,
+     "line": null
+    },
+    {
+     "rule": "vision/copy",
+     "category": "copy",
+     "severity": "minor",
+     "source": "vlm",
+     "viewport": "ipad-pro-11",
+     "route": "/match?state=waiting",
+     "message": "제목은 ‘오늘’이라고 명시하지만 자정을 넘는 일정에는 날짜 구분이 없습니다. ‘00:00’과 ‘07:30’이 내일 일정이라는 것을 사용자가 순서를 보고 추론해야 합니다.",
+     "selector": "div.css-view-g5y9jx.pl-2:nth-of-type(2) > div.css-view-g5y9jx.flex-row:nth-of-type(3) > div.css-view-g5y9jx.flex-1:nth-of-type(2) > div.css-text-146c3p1.font-display:nth-of-type(1)",
+     "bbox": {
+      "x": 137,
+      "y": 344.90625,
+      "w": 600,
+      "h": 32
+     },
+     "fix": "e11은 ‘내일 00:00’, e13은 ‘내일 07:30’으로 바꾸세요. 기존 font-display와 text-fg를 유지하고 설명은 text-fg-muted로 구분해 시간표의 위계를 보존하세요.",
+     "file": null,
+     "line": null
+    },
+    {
+     "rule": "vision/copy",
+     "category": "copy",
+     "severity": "major",
+     "source": "vlm",
+     "viewport": "ipad-pro-11",
+     "route": "/match?state=scheduled",
+     "message": "‘51 : 49’와 두 색의 막대에 주체가 없어, 내 예상 승률이 어느 쪽인지 알 수 없습니다. 화면에 이름이 나온 사람은 상대뿐이라 숫자의 의미를 반대로 읽을 수도 있습니다.",
+     "selector": "div.css-view-g5y9jx.w-full > div.css-view-g5y9jx.gap-3:nth-of-type(2) > div.css-view-g5y9jx.flex-row:nth-of-type(2) > div.css-text-146c3p1.font-display",
+     "bbox": {
+      "x": 114,
+      "y": 259.78125,
+      "w": 87.28125,
+      "h": 53.75
+     },
+     "fix": "각 값을 실제 데이터의 주체에 연결해 ‘나 · 51%’, ‘오트밀파 · 49%’처럼 표시하세요. 막대 양끝에 해당 라벨을 배치하고, 내 구간에는 bg-accent, 상대 구간에는 중립색을 사용해 색 없이도 대응 관계가 읽히게 하세요.",
+     "file": null,
+     "line": null
+    },
+    {
+     "rule": "vision/hierarchy",
+     "category": "hierarchy",
+     "severity": "major",
+     "source": "vlm",
+     "viewport": "ipad-pro-11",
+     "route": "/match?state=scheduled",
+     "message": "시작을 기다리는 화면인데 ‘내일 00:00’과 ‘8,500보’가 가장 아래의 보조 카드에 있고, 예상 승률과 매칭 정책이 본문의 중심을 차지합니다. 상대를 확인한 뒤 언제 무엇을 준비해야 하는지가 뒤늦게 드러납니다.",
+     "selector": null,
+     "bbox": null,
+     "fix": "MobileShell.Content에서 상대 이름 바로 아래에 ‘내일 00:00 시작’과 ‘내 걸음 목표 8,500보’를 하나의 bg-surface 요약 영역으로 묶으세요. 예상 승률은 그 아래 보조 비교로 배치하고, 매칭 기준 설명은 TactileButton ‘매칭 기준 보기’로 여는 BottomSheet에 넣으세요. 기존 하단 행동은 MobileShell.BottomDock에 유지하세요.",
+     "file": null,
+     "line": null
+    },
+    {
+     "rule": "vision/tactility",
+     "category": "tactility",
+     "severity": "major",
+     "source": "vlm",
+     "viewport": "ipad-pro-11",
+     "route": "/result?state=finished",
+     "message": "결과 화면에서 보이는 이동 수단이 재대결과 새 상대 찾기뿐입니다. 결과 확인만 마친 사용자가 대결을 시작하지 않고 나갈 명시적인 제어가 없습니다.",
+     "selector": "div.css-view-g5y9jx.absolute:nth-of-type(1) > div.css-view-g5y9jx.w-full > div.css-view-g5y9jx.flex-1:nth-of-type(2) > h1.css-text-146c3p1.r-maxWidth-dnmrzs",
+     "bbox": {
+      "x": 383,
+      "y": 11.59375,
+      "w": 68,
+      "h": 28.796875
+     },
+     "fix": "MobileShell.Header에 접근성 이름이 ‘결과 닫기’인 닫기 TactileButton을 추가하고 기존 메인 화면으로 연결하세요. 현재 두 대결 버튼은 MobileShell.BottomDock에 유지하세요.",
+     "file": null,
+     "line": null
+    },
+    {
+     "rule": "vision/hierarchy",
+     "category": "hierarchy",
+     "severity": "major",
+     "source": "vlm",
+     "viewport": "ipad-pro-11",
+     "route": "/result?state=finished",
+     "message": "일별 점수에 숫자 14개만 있어 특정 날짜의 기록을 찾기 어렵고, 표시된 숫자가 누구의 점수인지 제목에서 설명하지 않습니다. 승리한 날의 색상은 구분되지만 대결을 돌아볼 기준이 부족합니다.",
+     "selector": "div.css-view-g5y9jx.r-WebkitOverflowScrolling-150rngu:nth-of-type(2) > div.css-view-g5y9jx.w-full > div.css-view-g5y9jx:nth-of-type(4) > button.css-view-g5y9jx.r-cursor-1loqt21",
+     "bbox": {
+      "x": 97,
+      "y": 512.375,
+      "w": 640,
+      "h": 112.1875
+     },
+     "fix": "제목을 ‘내 일별 점수’로 바꾸고 각 칸에 실제 날짜 또는 ‘1일’부터 ‘14일’까지의 text-xs 라벨을 붙이세요. ‘점수표 보기’는 명시적인 TactileButton으로 분리하고, BottomSheet에서 날짜별 내 점수와 상대 점수를 함께 보여주세요.",
+     "file": null,
+     "line": null
+    },
+    {
+     "rule": "vision/copy",
+     "category": "copy",
+     "severity": "minor",
+     "source": "vlm",
+     "viewport": "ipad-pro-11",
+     "route": "/result?state=finished",
+     "message": "가장 강조된 두 총점에 참가자 이름이 없어 어느 쪽이 내 점수인지 승리 문구를 읽고 추론해야 합니다.",
+     "selector": "div.css-view-g5y9jx.r-WebkitOverflowScrolling-150rngu:nth-of-type(2) > div.css-view-g5y9jx.w-full > div.css-view-g5y9jx.gap-2:nth-of-type(1) > div.css-text-146c3p1.font-display:nth-of-type(1)",
+     "bbox": {
+      "x": 97,
+      "y": 77,
+      "w": 640,
+      "h": 67.1875
+     },
+     "fix": "총점을 두 묶음으로 구성하고 각각 ‘나’, ‘오트밀파님’이라는 text-sm text-fg-muted 라벨을 붙이세요. 숫자의 font-display와 text-fg는 유지하고 참가자 라벨을 각 점수에 직접 연결하세요.",
+     "file": null,
+     "line": null
+    },
+    {
+     "rule": "vision/spacing",
+     "category": "spacing",
+     "severity": "major",
+     "source": "vlm",
+     "viewport": "ipad-pro-11",
+     "route": "/start",
+     "message": "현재 기록 아래로 빈 시간축과 넓은 식사 시간대 배경이 이어져, 기록보다 빈 일정이 더 큰 비중을 차지합니다. 시간 간격도 구간마다 달라 연속된 시간축처럼 보이는 표현과 실제 배치가 맞지 않습니다.",
+     "selector": null,
+     "bbox": null,
+     "fix": "MobileShell.Content에서 현재 시각 주변의 기록을 먼저 보여주고, 빈 시간은 시간 범위를 적은 접힌 행으로 표시하세요. 점심과 저녁은 시간 범위가 있는 간결한 예정 행으로 구성하고, 펼친 시간축에만 일정한 시간 간격을 적용하세요. 예정 영역은 bg-sunken으로 제한하고 행 간격은 4px 배수로 통일하세요.",
+     "file": null,
+     "line": null
+    },
+    {
+     "rule": "vision/hierarchy",
+     "category": "hierarchy",
+     "severity": "major",
+     "source": "vlm",
+     "viewport": "ipad-pro-11",
+     "route": "/start",
+     "message": "타임라인의 좌우 열에 이름이 없어 왼쪽이 나의 할 일이고 오른쪽이 오트밀파의 기록이라는 관계를 상단 점수판에서 추론해야 합니다. 점수판이 화면 밖으로 나가면 기록의 주인을 확인할 단서가 사라집니다.",
+     "selector": null,
+     "bbox": null,
+     "fix": "MobileShell.Content의 타임라인 시작에 '나'와 '오트밀파' 열 머리글을 추가하고 스크롤 중에도 유지하세요. bg-surface와 border-border로 머리글을 구분하고, 각 기록과 예정 행을 해당 이름 아래에 정렬하세요.",
+     "file": null,
+     "line": null
+    },
+    {
+     "rule": "vision/tactility",
+     "category": "tactility",
+     "severity": "minor",
+     "source": "vlm",
+     "viewport": "ipad-pro-11",
+     "route": "/start",
+     "message": "점수판 아래 긴 막대는 중앙 기준선과 이동점이 있지만 무엇을 나타내는지 설명이 없고, 버튼이라는 단서도 없습니다. 진행률인지 점수 차이인지, 눌렀을 때 무엇이 나오는지 불분명합니다.",
+     "selector": "div.css-view-g5y9jx > div.css-view-g5y9jx.gap-3 > div.css-view-g5y9jx:nth-of-type(2) > button.css-view-g5y9jx.r-cursor-1loqt21",
+     "bbox": {
+      "x": 97,
+      "y": 140,
+      "w": 640,
+      "h": 44
+     },
+     "fix": "막대에 '점수 차이'와 양쪽 참가자 방향을 text-xs text-fg-muted로 표시하세요. 상세 정보가 있다면 별도의 '점수 내역' TactileButton으로 BottomSheet를 열고, 막대 자체는 비대화형 시각화로 분리하세요.",
+     "file": null,
+     "line": null
+    },
+    {
+     "rule": "vision/tactility",
+     "category": "tactility",
+     "severity": "minor",
+     "source": "vlm",
+     "viewport": "ipad-pro-11",
+     "route": "/start",
+     "message": "체중·식사 버튼과 걸음 현황이 같은 살구색 표면을 사용해, 누를 수 있는 항목과 상태 표시가 구분되지 않습니다. 체중 버튼의 넓은 면적도 기록 행동보다 점수 비중을 먼저 전달합니다.",
+     "selector": "ul.css-view-g5y9jx.flex-row > li.css-view-g5y9jx:nth-of-type(1) > div.css-view-g5y9jx > button.css-view-g5y9jx.r-cursor-1loqt21",
+     "bbox": {
+      "x": 97,
+      "y": 248.3125,
+      "w": 249.59375,
+      "h": 48
+     },
+     "fix": "체중·식사 항목은 bg-surface, border-control-border, rounded-md를 적용한 TactileButton으로 만들고 기록 아이콘을 붙이세요. 걸음은 bg-sunken 상태 영역으로 유지하고, 점수 비중은 버튼 폭 대신 '0/40점'처럼 텍스트로 표시하세요.",
+     "file": null,
+     "line": null
+    },
+    {
+     "rule": "vision/copy",
+     "category": "copy",
+     "severity": "minor",
+     "source": "vlm",
+     "viewport": "ipad-pro-11",
+     "route": "/start",
+     "message": "'오늘 아직 96점 남았어요'는 추가로 얻을 수 있는 점수인지 반드시 채워야 할 목표인지 모호합니다. 바로 앞의 패배 상태와 연결되면서 남은 의무처럼 읽힙니다.",
+     "selector": "div.css-view-g5y9jx > div.css-view-g5y9jx.gap-3 > div.css-view-g5y9jx.flex-row:nth-of-type(3) > div.css-text-146c3p1.font-sans:nth-of-type(2)",
+     "bbox": {
+      "x": 262.96875,
+      "y": 210,
+      "w": 156,
+      "h": 25.59375
+     },
+     "fix": "문구를 '오늘 더 얻을 수 있는 점수 96점'으로 바꾸고 text-fg-muted를 유지하세요. 하단 기록 버튼의 '+40'도 '+40점'으로 표기해 같은 단위를 사용하세요.",
+     "file": null,
+     "line": null
+    },
+    {
+     "rule": "vision/hierarchy",
+     "category": "hierarchy",
+     "severity": "major",
+     "source": "vlm",
+     "viewport": "ipad-pro-11",
+     "route": "/match",
+     "message": "‘51 : 49’와 두 색의 막대에 주체가 표시되지 않아 내 예상 승률이 어느 쪽인지 알 수 없습니다. 상대 이름만 크게 드러나 대결의 양쪽 관계도 약합니다.",
+     "selector": "div.css-view-g5y9jx.w-full > div.css-view-g5y9jx.gap-3:nth-of-type(2) > div.css-view-g5y9jx.flex-row:nth-of-type(2) > div.css-text-146c3p1.font-display",
+     "bbox": {
+      "x": 114,
+      "y": 259.78125,
+      "w": 87.28125,
+      "h": 53.75
+     },
+     "fix": "승률 영역을 bg-surface와 border-border의 비교 컴포넌트로 구성하세요. 실제 데이터의 주체에 맞춰 양쪽에 ‘나’와 ‘오트밀파’를 표시하고 각각의 백분율을 붙이세요. bg-accent 구간이 어느 주체인지 라벨과 위치로 명확하게 연결하세요.",
+     "file": null,
+     "line": null
+    },
+    {
+     "rule": "vision/copy",
+     "category": "copy",
+     "severity": "minor",
+     "source": "vlm",
+     "viewport": "ipad-pro-11",
+     "route": "/match",
+     "message": "‘45 : 55 밖이면’은 비율의 허용 범위를 사용자가 해석하게 만드는 표현입니다. 이미 매칭이 끝난 화면에서 연결하지 않는 조건까지 설명해 결과 확인의 흐름을 늘립니다.",
+     "selector": "div.css-view-g5y9jx.r-WebkitOverflowScrolling-150rngu:nth-of-type(2) > div.css-view-g5y9jx.w-full > div.css-view-g5y9jx.gap-3:nth-of-type(2) > div.css-text-146c3p1.font-sans:nth-of-type(4)",
+     "bbox": {
+      "x": 114,
+      "y": 349.53125,
+      "w": 606,
+      "h": 25.59375
+     },
+     "fix": "text-sm과 text-fg-muted로 ‘예상 승률이 45~55%인 상대와 연결했어요.’라고 바꾸세요. 결과에 적용된 기준만 한 문장으로 전달하세요.",
+     "file": null,
+     "line": null
+    },
+    {
+     "rule": "vision/spacing",
+     "category": "spacing",
+     "severity": "minor",
+     "source": "vlm",
+     "viewport": "ipad-pro-11",
+     "route": "/match",
+     "message": "시작일과 목표 아래의 큰 빈 공간 때문에 결과 정보와 ‘대결 화면으로’ 버튼이 서로 떨어진 별도 영역처럼 느껴집니다. 특히 다음 행동 직전에 필요한 시작 정보가 버튼과 연결되지 않습니다.",
+     "selector": null,
+     "bbox": null,
+     "fix": "MobileShell.Content에는 상대와 승률, 매칭 근거를 묶고, 시작일은 MobileShell.BottomDock의 TactileButton 바로 위에 text-sm text-fg-muted 안내로 옮기세요. 기존 시작일 카드는 제거하고 목표는 본문에서 간결한 정보 행으로 유지하세요.",
+     "file": null,
+     "line": null
+    }
+   ],
+   "screenshots": [
+    {
+     "viewport": "iphone-15-pro",
+     "route": "/",
+     "fold": 0,
+     "artifactId": "art_6j0p1smk2vx85kgrq46t",
+     "width": 393,
+     "height": 659
+    },
+    {
+     "viewport": "iphone-15-pro",
+     "route": "/scores",
+     "fold": 0,
+     "artifactId": "art_dj56hgfwm1wsatjran9y",
+     "width": 393,
+     "height": 659
+    },
+    {
+     "viewport": "iphone-15-pro",
+     "route": "/start?state=new",
+     "fold": 0,
+     "artifactId": "art_mrsseb993qmmer4kpf9f",
+     "width": 393,
+     "height": 659
+    },
+    {
+     "viewport": "iphone-15-pro",
+     "route": "/match?state=waiting",
+     "fold": 0,
+     "artifactId": "art_xpf8r2h8y8rw22nd5nta",
+     "width": 393,
+     "height": 659
+    },
+    {
+     "viewport": "iphone-15-pro",
+     "route": "/match?state=scheduled",
+     "fold": 0,
+     "artifactId": "art_gmfg9d15xhwgzq3apmvk",
+     "width": 393,
+     "height": 659
+    },
+    {
+     "viewport": "iphone-15-pro",
+     "route": "/result?state=finished",
+     "fold": 0,
+     "artifactId": "art_qxmepxkje1y3nw0bkj0y",
+     "width": 393,
+     "height": 659
+    },
+    {
+     "viewport": "iphone-15-pro",
+     "route": "/start",
+     "fold": 0,
+     "artifactId": "art_1hjdqc50emcy8g2k66hr",
+     "width": 393,
+     "height": 659
+    },
+    {
+     "viewport": "iphone-15-pro",
+     "route": "/match",
+     "fold": 0,
+     "artifactId": "art_2w4edrg3jre0y8xzhnbh",
+     "width": 393,
+     "height": 659
+    },
+    {
+     "viewport": "iphone-15-pro",
+     "route": "/?state=morning",
+     "fold": 0,
+     "artifactId": "art_egv6hp4zpwxyt6neemax",
+     "width": 393,
+     "height": 659,
+     "state": "D-01 아침 첫 화면"
+    },
+    {
+     "viewport": "iphone-15-pro",
+     "route": "/?state=loading",
+     "fold": 0,
+     "artifactId": "art_t0fg9p7r9qv4ezyv9vqv",
+     "width": 393,
+     "height": 659,
+     "state": "D-01 불러오는 중"
+    },
+    {
+     "viewport": "iphone-15-pro",
+     "route": "/?state=offline",
+     "fold": 0,
+     "artifactId": "art_7r9zhbxve88xe1apha94",
+     "width": 393,
+     "height": 659,
+     "state": "D-01 오프라인"
+    },
+    {
+     "viewport": "iphone-15-pro",
+     "route": "/?state=steps_disconnected",
+     "fold": 0,
+     "artifactId": "art_97ra3mnqssmvmr1v54wq",
+     "width": 393,
+     "height": 659,
+     "state": "D-01 걸음 연동 끊김"
+    },
+    {
+     "viewport": "iphone-15-pro",
+     "route": "/?state=rival_inactive",
+     "fold": 0,
+     "artifactId": "art_mjsmb19gt9st4ketwrbn",
+     "width": 393,
+     "height": 659,
+     "state": "D-01 상대 결장"
+    },
+    {
+     "viewport": "iphone-15-pro",
+     "route": "/?state=solo",
+     "fold": 0,
+     "artifactId": "art_tc13vv0p6j3a2d0z1q3f",
+     "width": 393,
+     "height": 659,
+     "state": "D-01 혼자 계속"
+    },
+    {
+     "viewport": "ipad-pro-11",
+     "route": "/",
+     "fold": 0,
+     "artifactId": "art_bbyzhe2ypqr8q23tk0pt",
+     "width": 834,
+     "height": 1194
+    },
+    {
+     "viewport": "ipad-pro-11",
+     "route": "/scores",
+     "fold": 0,
+     "artifactId": "art_tb0tbsvcx5hp1xhdksrw",
+     "width": 834,
+     "height": 1194
+    },
+    {
+     "viewport": "ipad-pro-11",
+     "route": "/start?state=new",
+     "fold": 0,
+     "artifactId": "art_y4nbmf2b99het7vprmsd",
+     "width": 834,
+     "height": 1194
+    },
+    {
+     "viewport": "ipad-pro-11",
+     "route": "/match?state=waiting",
+     "fold": 0,
+     "artifactId": "art_6hjer95tcbvzjqtq3h5f",
+     "width": 834,
+     "height": 1194
+    },
+    {
+     "viewport": "ipad-pro-11",
+     "route": "/match?state=scheduled",
+     "fold": 0,
+     "artifactId": "art_70y5d4pjttrrsk0dhjdb",
+     "width": 834,
+     "height": 1194
+    },
+    {
+     "viewport": "ipad-pro-11",
+     "route": "/result?state=finished",
+     "fold": 0,
+     "artifactId": "art_nbdn91xe19mmrxjw077h",
+     "width": 834,
+     "height": 1194
+    },
+    {
+     "viewport": "ipad-pro-11",
+     "route": "/start",
+     "fold": 0,
+     "artifactId": "art_h1fmq3d9sy1kb7dyd9m3",
+     "width": 834,
+     "height": 1194
+    },
+    {
+     "viewport": "ipad-pro-11",
+     "route": "/match",
+     "fold": 0,
+     "artifactId": "art_1ht6erjnybdv3yh6b1mw",
+     "width": 834,
+     "height": 1194
+    }
+   ],
+   "copy": {
+    "texts": [
+     {
+      "route": "/",
+      "role": "title",
+      "text": "6일차"
+     },
+     {
+      "route": "/",
+      "role": "body",
+      "text": "14일 중 · 오늘 16시간 47분 남음"
+     },
+     {
+      "route": "/",
+      "role": "title",
+      "text": "416"
+     },
+     {
+      "route": "/",
+      "role": "title",
+      "text": "480"
+     },
+     {
+      "route": "/",
+      "role": "title",
+      "text": ":"
+     },
+     {
+      "route": "/",
+      "role": "label",
+      "text": "· 오늘 4점"
+     },
+     {
+      "route": "/",
+      "role": "label",
+      "text": "나"
+     },
+     {
+      "route": "/",
+      "role": "label",
+      "text": "· 오늘 42점"
+     },
+     {
+      "route": "/",
+      "role": "label",
+      "text": "오트밀파"
+     },
+     {
+      "route": "/",
+      "role": "body",
+      "text": "걸음 1,240 / 8,500"
+     },
+     {
+      "route": "/",
+      "role": "label",
+      "text": "걸음 29%"
+     },
+     {
+      "route": "/",
+      "role": "title",
+      "text": "64점 뒤져요"
+     },
+     {
+      "route": "/",
+      "role": "label",
+      "text": "오늘 아직 96점 남았어요"
+     },
+     {
+      "route": "/",
+      "role": "label",
+      "text": "체중"
+     },
+     {
+      "route": "/",
+      "role": "label",
+      "text": "아침"
+     },
+     {
+      "route": "/",
+      "role": "label",
+      "text": "점심"
+     },
+     {
+      "route": "/",
+      "role": "label",
+      "text": "저녁"
+     },
+     {
+      "route": "/",
+      "role": "label",
+      "text": "걸음"
+     },
+     {
+      "route": "/",
+      "role": "label",
+      "text": "0/40"
+     },
+     {
+      "route": "/",
+      "role": "label",
+      "text": "0/10"
+     },
+     {
+      "route": "/",
+      "role": "label",
+      "text": "0/10"
+     },
+     {
+      "route": "/",
+      "role": "label",
+      "text": "0/10"
+     },
+     {
+      "route": "/",
+      "role": "label",
+      "text": "4/30"
+     },
+     {
+      "route": "/",
+      "role": "label",
+      "text": "00–06시"
+     },
+     {
+      "route": "/",
+      "role": "label",
+      "text": "06"
+     },
+     {
+      "route": "/",
+      "role": "label",
+      "text": "06:40"
+     },
+     {
+      "route": "/",
+      "role": "label",
+      "text": "체중"
+     },
+     {
+      "route": "/",
+      "role": "label",
+      "text": "기록"
+     },
+     {
+      "route": "/",
+      "role": "label",
+      "text": "07"
+     },
+     {
+      "route": "/",
+      "role": "label",
+      "text": "06:41"
+     },
+     {
+      "route": "/",
+      "role": "label",
+      "text": "07:12"
+     },
+     {
+      "route": "/",
+      "role": "label",
+      "text": "먼저 쟀어요"
+     },
+     {
+      "route": "/",
+      "role": "label",
+      "text": "체중"
+     },
+     {
+      "route": "/",
+      "role": "label",
+      "text": "0 / 40"
+     },
+     {
+      "route": "/",
+      "role": "label",
+      "text": "응원 보내기 · 2회 남음"
+     },
+     {
+      "route": "/",
+      "role": "title",
+      "text": "+40"
+     },
+     {
+      "route": "/",
+      "role": "label",
+      "text": "체중 기록"
+     },
+     {
+      "route": "/",
+      "role": "label",
+      "text": "08"
+     },
+     {
+      "route": "/",
+      "role": "label",
+      "text": "09"
+     },
+     {
+      "route": "/",
+      "role": "label",
+      "text": "10"
+     },
+     {
+      "route": "/",
+      "role": "label",
+      "text": "11"
+     },
+     {
+      "route": "/",
+      "role": "label",
+      "text": "점심"
+     },
+     {
+      "route": "/",
+      "role": "label",
+      "text": "점심"
+     },
+     {
+      "route": "/",
+      "role": "body",
+      "text": "11–16시 · 0 / 10"
+     },
+     {
+      "route": "/",
+      "role": "label",
+      "text": "아직"
+     },
+     {
+      "route": "/",
+      "role": "label",
+      "text": "12"
+     },
+     {
+      "route": "/",
+      "role": "label",
+      "text": "13"
+     },
+     {
+      "route": "/",
+      "role": "label",
+      "text": "14"
+     },
+     {
+      "route": "/",
+      "role": "label",
+      "text": "15"
+     },
+     {
+      "route": "/",
+      "role": "label",
+      "text": "16"
+     },
+     {
+      "route": "/",
+      "role": "label",
+      "text": "저녁"
+     },
+     {
+      "route": "/",
+      "role": "label",
+      "text": "저녁"
+     },
+     {
+      "route": "/",
+      "role": "body",
+      "text": "16–23시 · 0 / 10"
+     },
+     {
+      "route": "/",
+      "role": "label",
+      "text": "아직"
+     },
+     {
+      "route": "/",
+      "role": "label",
+      "text": "17"
+     },
+     {
+      "route": "/",
+      "role": "label",
+      "text": "18"
+     },
+     {
+      "route": "/",
+      "role": "label",
+      "text": "19"
+     },
+     {
+      "route": "/",
+      "role": "label",
+      "text": "20"
+     },
+     {
+      "route": "/",
+      "role": "label",
+      "text": "21"
+     },
+     {
+      "route": "/",
+      "role": "label",
+      "text": "22"
+     },
+     {
+      "route": "/",
+      "role": "label",
+      "text": "23"
+     },
+     {
+      "route": "/",
+      "role": "label",
+      "text": "24"
+     },
+     {
+      "route": "/",
+      "role": "body",
+      "text": "자정에 6일차가 닫혀요. 빠뜨린 끼니는 내일 09:00까지 넣을 수 있어요"
+     },
+     {
+      "route": "/",
+      "role": "label",
+      "text": "점수는 이렇게 매겨요"
+     },
+     {
+      "route": "/scores",
+      "role": "title",
+      "text": "일별 점수"
+     },
+     {
+      "route": "/scores",
+      "role": "label",
+      "text": "이긴 날 0 · 진 날 4"
+     },
+     {
+      "route": "/scores",
+      "role": "label",
+      "text": "6"
+     },
+     {
+      "route": "/scores",
+      "role": "label",
+      "text": "1"
+     },
+     {
+      "route": "/scores",
+      "role": "label",
+      "text": "2"
+     },
+     {
+      "route": "/scores",
+      "role": "label",
+      "text": "3"
+     },
+     {
+      "route": "/scores",
+      "role": "label",
+      "text": "4"
+     },
+     {
+      "route": "/scores",
+      "role": "label",
+      "text": "5"
+     },
+     {
+      "route": "/scores",
+      "role": "label",
+      "text": "7"
+     },
+     {
+      "route": "/scores",
+      "role": "label",
+      "text": "8"
+     },
+     {
+      "route": "/scores",
+      "role": "label",
+      "text": "9"
+     },
+     {
+      "route": "/scores",
+      "role": "label",
+      "text": "10"
+     },
+     {
+      "route": "/scores",
+      "role": "label",
+      "text": "11"
+     },
+     {
+      "route": "/scores",
+      "role": "label",
+      "text": "12"
+     },
+     {
+      "route": "/scores",
+      "role": "label",
+      "text": "13"
+     },
+     {
+      "route": "/scores",
+      "role": "label",
+      "text": "14"
+     },
+     {
+      "route": "/scores",
+      "role": "label",
+      "text": "진행 중"
+     },
+     {
+      "route": "/scores",
+      "role": "label",
+      "text": "88"
+     },
+     {
+      "route": "/scores",
+      "role": "label",
+      "text": "84"
+     },
+     {
+      "route": "/scores",
+      "role": "label",
+      "text": "67"
+     },
+     {
+      "route": "/scores",
+      "role": "label",
+      "text": "91"
+     },
+     {
+      "route": "/scores",
+      "role": "label",
+      "text": "82"
+     },
+     {
+      "route": "/scores",
+      "role": "label",
+      "text": "4"
+     },
+     {
+      "route": "/scores",
+      "role": "label",
+      "text": "나"
+     },
+     {
+      "route": "/scores",
+      "role": "label",
+      "text": "90"
+     },
+     {
+      "route": "/scores",
+      "role": "label",
+      "text": "86"
+     },
+     {
+      "route": "/scores",
+      "role": "label",
+      "text": "88"
+     },
+     {
+      "route": "/scores",
+      "role": "label",
+      "text": "92"
+     },
+     {
+      "route": "/scores",
+      "role": "label",
+      "text": "82"
+     },
+     {
+      "route": "/scores",
+      "role": "label",
+      "text": "42"
+     },
+     {
+      "route": "/scores",
+      "role": "label",
+      "text": "오트밀파"
+     },
+     {
+      "route": "/scores",
+      "role": "label",
+      "text": "승"
+     },
+     {
+      "route": "/scores",
+      "role": "label",
+      "text": "승"
+     },
+     {
+      "route": "/scores",
+      "role": "label",
+      "text": "승"
+     },
+     {
+      "route": "/scores",
+      "role": "label",
+      "text": "승"
+     },
+     {
+      "route": "/scores",
+      "role": "title",
+      "text": "6일차"
+     },
+     {
+      "route": "/scores",
+      "role": "label",
+      "text": "11월 13일 · 진행 중"
+     },
+     {
+      "route": "/scores",
+      "role": "label",
+      "text": "체중 기록"
+     },
+     {
+      "route": "/scores",
+      "role": "label",
+      "text": "0 / 10"
+     },
+     {
+      "route": "/scores",
+      "role": "label",
+      "text": "추세"
+     },
+     {
+      "route": "/scores",
+      "role": "label",
+      "text": "0 / 30"
+     },
+     {
+      "route": "/scores",
+      "role": "label",
+      "text": "아침"
+     },
+     {
+      "route": "/scores",
+      "role": "label",
+      "text": "0 / 10"
+     },
+     {
+      "route": "/scores",
+      "role": "label",
+      "text": "점심"
+     },
+     {
+      "route": "/scores",
+      "role": "label",
+      "text": "0 / 10"
+     },
+     {
+      "route": "/scores",
+      "role": "label",
+      "text": "저녁"
+     },
+     {
+      "route": "/scores",
+      "role": "label",
+      "text": "0 / 10"
+     },
+     {
+      "route": "/scores",
+      "role": "label",
+      "text": "걸음"
+     },
+     {
+      "route": "/scores",
+      "role": "label",
+      "text": "4 / 30"
+     },
+     {
+      "route": "/scores",
+      "role": "title",
+      "text": "4"
+     },
+     {
+      "route": "/scores",
+      "role": "label",
+      "text": "합계"
+     },
+     {
+      "route": "/scores",
+      "role": "label",
+      "text": "오트밀파님이 한 것"
+     },
+     {
+      "route": "/scores",
+      "role": "label",
+      "text": "체중 했어요"
+     },
+     {
+      "route": "/scores",
+      "role": "label",
+      "text": "아침 안 했어요"
+     },
+     {
+      "route": "/scores",
+      "role": "label",
+      "text": "점심 안 했어요"
+     },
+     {
+      "route": "/scores",
+      "role": "label",
+      "text": "저녁 안 했어요"
+     },
+     {
+      "route": "/scores",
+      "role": "label",
+      "text": "걸음 29%"
+     },
+     {
+      "route": "/scores",
+      "role": "title",
+      "text": "내 체중 추세"
+     },
+     {
+      "route": "/scores",
+      "role": "label",
+      "text": "점: 매일 잰 값"
+     },
+     {
+      "route": "/scores",
+      "role": "label",
+      "text": "선: 3일 평균"
+     },
+     {
+      "route": "/scores",
+      "role": "label",
+      "text": "점선: 주 0.5% 목표"
+     },
+     {
+      "route": "/scores",
+      "role": "body",
+      "text": "이 선은 나만 봐요. 오트밀파님의 체중은 어디에도 없어요"
+     },
+     {
+      "route": "/start?state=new",
+      "role": "title",
+      "text": "대결 신청"
+     },
+     {
+      "route": "/start?state=new",
+      "role": "title",
+      "text": "나에 대해"
+     },
+     {
+      "route": "/start?state=new",
+      "role": "label",
+      "text": "나이"
+     },
+     {
+      "route": "/start?state=new",
+      "role": "label",
+      "text": "키"
+     },
+     {
+      "route": "/start?state=new",
+      "role": "label",
+      "text": "체중"
+     },
+     {
+      "route": "/start?state=new",
+      "role": "label",
+      "text": "세"
+     },
+     {
+      "route": "/start?state=new",
+      "role": "label",
+      "text": "cm"
+     },
+     {
+      "route": "/start?state=new",
+      "role": "label",
+      "text": "kg"
+     },
+     {
+      "route": "/start?state=new",
+      "role": "title",
+      "text": "평소 걸음"
+     },
+     {
+      "route": "/start?state=new",
+      "role": "label",
+      "text": "건강 앱에서 가져오기"
+     },
+     {
+      "route": "/start?state=new",
+      "role": "label",
+      "text": "4천 보쯤"
+     },
+     {
+      "route": "/start?state=new",
+      "role": "label",
+      "text": "7천 보쯤"
+     },
+     {
+      "route": "/start?state=new",
+      "role": "label",
+      "text": "1만 보쯤"
+     },
+     {
+      "route": "/start?state=new",
+      "role": "title",
+      "text": "건강 확인"
+     },
+     {
+      "route": "/start?state=new",
+      "role": "body",
+      "text": "임신 중이거나 수유 중인가요"
+     },
+     {
+      "route": "/start?state=new",
+      "role": "label",
+      "text": "아니요"
+     },
+     {
+      "route": "/start?state=new",
+      "role": "label",
+      "text": "예"
+     },
+     {
+      "route": "/start?state=new",
+      "role": "body",
+      "text": "섭식장애로 치료받고 있거나 받은 적이 있나요"
+     },
+     {
+      "route": "/start?state=new",
+      "role": "label",
+      "text": "아니요"
+     },
+     {
+      "route": "/start?state=new",
+      "role": "label",
+      "text": "예"
+     },
+     {
+      "route": "/start?state=new",
+      "role": "label",
+      "text": "오늘 밤 상대 찾기"
+     },
+     {
+      "route": "/start?state=new",
+      "role": "body",
+      "text": "의사가 체중 감량을 말렸나요"
+     },
+     {
+      "route": "/start?state=new",
+      "role": "label",
+      "text": "아니요"
+     },
+     {
+      "route": "/start?state=new",
+      "role": "label",
+      "text": "예"
+     },
+     {
+      "route": "/start?state=new",
+      "role": "body",
+      "text": "최근 3개월 안에 수술을 받았나요"
+     },
+     {
+      "route": "/start?state=new",
+      "role": "label",
+      "text": "아니요"
+     },
+     {
+      "route": "/start?state=new",
+      "role": "label",
+      "text": "예"
+     },
+     {
+      "route": "/start?state=new",
+      "role": "body",
+      "text": "답은 저장하지 않아요. 모두 '아니요'인지만 확인해요"
+     },
+     {
+      "route": "/start?state=new",
+      "role": "title",
+      "text": "상대 고르기"
+     },
+     {
+      "route": "/start?state=new",
+      "role": "label",
+      "text": "같은 성별과만"
+     },
+     {
+      "route": "/start?state=new",
+      "role": "label",
+      "text": "on"
+     },
+     {
+      "route": "/start?state=new",
+      "role": "body",
+      "text": "체중·키·나이는 매칭과 점수에만 써요. 신청하면 이 처리에 동의하는 거예요."
+     },
+     {
+      "route": "/start?state=new",
+      "role": "label",
+      "text": "무엇을 저장하나요"
+     },
+     {
+      "route": "/match?state=waiting",
+      "role": "title",
+      "text": "매칭"
+     },
+     {
+      "route": "/match?state=waiting",
+      "role": "title",
+      "text": "오늘 21:00에 짝을 지어요"
+     },
+     {
+      "route": "/match?state=waiting",
+      "role": "label",
+      "text": "24분 남았어요"
+     },
+     {
+      "route": "/match?state=waiting",
+      "role": "label",
+      "text": "지금"
+     },
+     {
+      "route": "/match?state=waiting",
+      "role": "label",
+      "text": "신청해 두었어요"
+     },
+     {
+      "route": "/match?state=waiting",
+      "role": "label",
+      "text": "21:00"
+     },
+     {
+      "route": "/match?state=waiting",
+      "role": "body",
+      "text": "평소 걸음, 나이대, 기록 습관이 비슷한 사람과 짝을 지어요"
+     },
+     {
+      "route": "/match?state=waiting",
+      "role": "label",
+      "text": "00:00"
+     },
+     {
+      "route": "/match?state=waiting",
+      "role": "label",
+      "text": "1일차가 시작돼요"
+     },
+     {
+      "route": "/match?state=waiting",
+      "role": "label",
+      "text": "07:30"
+     },
+     {
+      "route": "/match?state=waiting",
+      "role": "body",
+      "text": "아침 체중 알림. 이 체중이 14일의 기준이 돼요"
+     },
+     {
+      "route": "/match?state=waiting",
+      "role": "label",
+      "text": "내 걸음 목표"
+     },
+     {
+      "route": "/match?state=waiting",
+      "role": "title",
+      "text": "8,500보"
+     },
+     {
+      "route": "/match?state=waiting",
+      "role": "label",
+      "text": "신청 취소"
+     },
+     {
+      "route": "/match?state=scheduled",
+      "role": "title",
+      "text": "상대가 정해졌어요"
+     },
+     {
+      "route": "/match?state=scheduled",
+      "role": "label",
+      "text": "14일 동안 겨룰 상대"
+     },
+     {
+      "route": "/match?state=scheduled",
+      "role": "title",
+      "text": "오트밀파"
+     },
+     {
+      "route": "/match?state=scheduled",
+      "role": "label",
+      "text": "예상 승률"
+     },
+     {
+      "route": "/match?state=scheduled",
+      "role": "title",
+      "text": "51 : 49"
+     },
+     {
+      "route": "/match?state=scheduled",
+      "role": "body",
+      "text": "지난 기록이 비슷한 사람끼리만 짝을 지어요. 45 : 55 밖이면 짝을 짓지 않아요"
+     },
+     {
+      "route": "/match?state=scheduled",
+      "role": "label",
+      "text": "평소 걸음이 비슷해요"
+     },
+     {
+      "route": "/match?state=scheduled",
+      "role": "label",
+      "text": "둘 다 첫 대결이에요"
+     },
+     {
+      "route": "/match?state=scheduled",
+      "role": "label",
+      "text": "내 걸음 목표"
+     },
+     {
+      "route": "/match?state=scheduled",
+      "role": "label",
+      "text": "1일차 시작"
+     },
+     {
+      "route": "/match?state=scheduled",
+      "role": "label",
+      "text": "대결 화면으로"
+     },
+     {
+      "route": "/match?state=scheduled",
+      "role": "title",
+      "text": "8,500보"
+     },
+     {
+      "route": "/match?state=scheduled",
+      "role": "title",
+      "text": "내일 00:00"
+     },
+     {
+      "route": "/result?state=finished",
+      "role": "title",
+      "text": "대결 결과"
+     },
+     {
+      "route": "/result?state=finished",
+      "role": "title",
+      "text": "1,086 : 1,041"
+     },
+     {
+      "route": "/result?state=finished",
+      "role": "title",
+      "text": "45점 차로 이겼어요"
+     },
+     {
+      "route": "/result?state=finished",
+      "role": "label",
+      "text": "오트밀파님과의 14일"
+     },
+     {
+      "route": "/result?state=finished",
+      "role": "label",
+      "text": "둘 다 끝까지 왔어요"
+     },
+     {
+      "route": "/result?state=finished",
+      "role": "body",
+      "text": "14일차까지 둘 다 하나 이상 기록했어요"
+     },
+     {
+      "route": "/result?state=finished",
+      "role": "body",
+      "text": "내 체중 변화 · 나만 봐요"
+     },
+     {
+      "route": "/result?state=finished",
+      "role": "title",
+      "text": "69.8 → 69.0kg"
+     },
+     {
+      "route": "/result?state=finished",
+      "role": "body",
+      "text": "시작 체중과 마지막 3일 평균이에요"
+     },
+     {
+      "route": "/result?state=finished",
+      "role": "title",
+      "text": "일별 점수"
+     },
+     {
+      "route": "/result?state=finished",
+      "role": "label",
+      "text": "점수표 보기"
+     },
+     {
+      "route": "/result?state=finished",
+      "role": "label",
+      "text": "같은 상대와 다시"
+     },
+     {
+      "route": "/result?state=finished",
+      "role": "label",
+      "text": "88"
+     },
+     {
+      "route": "/result?state=finished",
+      "role": "label",
+      "text": "84"
+     },
+     {
+      "route": "/result?state=finished",
+      "role": "label",
+      "text": "67"
+     },
+     {
+      "route": "/result?state=finished",
+      "role": "label",
+      "text": "91"
+     },
+     {
+      "route": "/result?state=finished",
+      "role": "label",
+      "text": "82"
+     },
+     {
+      "route": "/result?state=finished",
+      "role": "label",
+      "text": "84"
+     },
+     {
+      "route": "/result?state=finished",
+      "role": "label",
+      "text": "72"
+     },
+     {
+      "route": "/result?state=finished",
+      "role": "label",
+      "text": "90"
+     },
+     {
+      "route": "/result?state=finished",
+      "role": "label",
+      "text": "66"
+     },
+     {
+      "route": "/result?state=finished",
+      "role": "label",
+      "text": "78"
+     },
+     {
+      "route": "/result?state=finished",
+      "role": "label",
+      "text": "70"
+     },
+     {
+      "route": "/result?state=finished",
+      "role": "label",
+      "text": "74"
+     },
+     {
+      "route": "/result?state=finished",
+      "role": "label",
+      "text": "64"
+     },
+     {
+      "route": "/result?state=finished",
+      "role": "label",
+      "text": "76"
+     },
+     {
+      "route": "/result?state=finished",
+      "role": "body",
+      "text": "진한 칸은 내가 더 높았던 날이에요"
+     },
+     {
+      "route": "/result?state=finished",
+      "role": "label",
+      "text": "새 상대 찾기"
+     },
+     {
+      "route": "/start",
+      "role": "title",
+      "text": "6일차"
+     },
+     {
+      "route": "/start",
+      "role": "body",
+      "text": "14일 중 · 오늘 16시간 47분 남음"
+     },
+     {
+      "route": "/start",
+      "role": "title",
+      "text": "416"
+     },
+     {
+      "route": "/start",
+      "role": "title",
+      "text": "480"
+     },
+     {
+      "route": "/start",
+      "role": "title",
+      "text": ":"
+     },
+     {
+      "route": "/start",
+      "role": "label",
+      "text": "· 오늘 4점"
+     },
+     {
+      "route": "/start",
+      "role": "label",
+      "text": "나"
+     },
+     {
+      "route": "/start",
+      "role": "label",
+      "text": "· 오늘 42점"
+     },
+     {
+      "route": "/start",
+      "role": "label",
+      "text": "오트밀파"
+     },
+     {
+      "route": "/start",
+      "role": "body",
+      "text": "걸음 1,240 / 8,500"
+     },
+     {
+      "route": "/start",
+      "role": "label",
+      "text": "걸음 29%"
+     },
+     {
+      "route": "/start",
+      "role": "title",
+      "text": "64점 뒤져요"
+     },
+     {
+      "route": "/start",
+      "role": "label",
+      "text": "오늘 아직 96점 남았어요"
+     },
+     {
+      "route": "/start",
+      "role": "label",
+      "text": "체중"
+     },
+     {
+      "route": "/start",
+      "role": "label",
+      "text": "아침"
+     },
+     {
+      "route": "/start",
+      "role": "label",
+      "text": "점심"
+     },
+     {
+      "route": "/start",
+      "role": "label",
+      "text": "저녁"
+     },
+     {
+      "route": "/start",
+      "role": "label",
+      "text": "걸음"
+     },
+     {
+      "route": "/start",
+      "role": "label",
+      "text": "0/40"
+     },
+     {
+      "route": "/start",
+      "role": "label",
+      "text": "0/10"
+     },
+     {
+      "route": "/start",
+      "role": "label",
+      "text": "0/10"
+     },
+     {
+      "route": "/start",
+      "role": "label",
+      "text": "0/10"
+     },
+     {
+      "route": "/start",
+      "role": "label",
+      "text": "4/30"
+     },
+     {
+      "route": "/start",
+      "role": "label",
+      "text": "00–06시"
+     },
+     {
+      "route": "/start",
+      "role": "label",
+      "text": "06"
+     },
+     {
+      "route": "/start",
+      "role": "label",
+      "text": "06:40"
+     },
+     {
+      "route": "/start",
+      "role": "label",
+      "text": "체중"
+     },
+     {
+      "route": "/start",
+      "role": "label",
+      "text": "기록"
+     },
+     {
+      "route": "/start",
+      "role": "label",
+      "text": "07"
+     },
+     {
+      "route": "/start",
+      "role": "label",
+      "text": "06:41"
+     },
+     {
+      "route": "/start",
+      "role": "label",
+      "text": "07:12"
+     },
+     {
+      "route": "/start",
+      "role": "label",
+      "text": "먼저 쟀어요"
+     },
+     {
+      "route": "/start",
+      "role": "label",
+      "text": "체중"
+     },
+     {
+      "route": "/start",
+      "role": "label",
+      "text": "0 / 40"
+     },
+     {
+      "route": "/start",
+      "role": "label",
+      "text": "응원 보내기 · 2회 남음"
+     },
+     {
+      "route": "/start",
+      "role": "title",
+      "text": "+40"
+     },
+     {
+      "route": "/start",
+      "role": "label",
+      "text": "체중 기록"
+     },
+     {
+      "route": "/start",
+      "role": "label",
+      "text": "08"
+     },
+     {
+      "route": "/start",
+      "role": "label",
+      "text": "09"
+     },
+     {
+      "route": "/start",
+      "role": "label",
+      "text": "10"
+     },
+     {
+      "route": "/start",
+      "role": "label",
+      "text": "11"
+     },
+     {
+      "route": "/start",
+      "role": "label",
+      "text": "점심"
+     },
+     {
+      "route": "/start",
+      "role": "label",
+      "text": "점심"
+     },
+     {
+      "route": "/start",
+      "role": "body",
+      "text": "11–16시 · 0 / 10"
+     },
+     {
+      "route": "/start",
+      "role": "label",
+      "text": "아직"
+     },
+     {
+      "route": "/start",
+      "role": "label",
+      "text": "12"
+     },
+     {
+      "route": "/start",
+      "role": "label",
+      "text": "13"
+     },
+     {
+      "route": "/start",
+      "role": "label",
+      "text": "14"
+     },
+     {
+      "route": "/start",
+      "role": "label",
+      "text": "15"
+     },
+     {
+      "route": "/start",
+      "role": "label",
+      "text": "16"
+     },
+     {
+      "route": "/start",
+      "role": "label",
+      "text": "저녁"
+     },
+     {
+      "route": "/start",
+      "role": "label",
+      "text": "저녁"
+     },
+     {
+      "route": "/start",
+      "role": "body",
+      "text": "16–23시 · 0 / 10"
+     },
+     {
+      "route": "/start",
+      "role": "label",
+      "text": "아직"
+     },
+     {
+      "route": "/start",
+      "role": "label",
+      "text": "17"
+     },
+     {
+      "route": "/start",
+      "role": "label",
+      "text": "18"
+     },
+     {
+      "route": "/start",
+      "role": "label",
+      "text": "19"
+     },
+     {
+      "route": "/start",
+      "role": "label",
+      "text": "20"
+     },
+     {
+      "route": "/start",
+      "role": "label",
+      "text": "21"
+     },
+     {
+      "route": "/start",
+      "role": "label",
+      "text": "22"
+     },
+     {
+      "route": "/start",
+      "role": "label",
+      "text": "23"
+     },
+     {
+      "route": "/start",
+      "role": "label",
+      "text": "24"
+     },
+     {
+      "route": "/start",
+      "role": "body",
+      "text": "자정에 6일차가 닫혀요. 빠뜨린 끼니는 내일 09:00까지 넣을 수 있어요"
+     },
+     {
+      "route": "/start",
+      "role": "label",
+      "text": "점수는 이렇게 매겨요"
+     },
+     {
+      "route": "/match",
+      "role": "title",
+      "text": "상대가 정해졌어요"
+     },
+     {
+      "route": "/match",
+      "role": "label",
+      "text": "14일 동안 겨룰 상대"
+     },
+     {
+      "route": "/match",
+      "role": "title",
+      "text": "오트밀파"
+     },
+     {
+      "route": "/match",
+      "role": "label",
+      "text": "예상 승률"
+     },
+     {
+      "route": "/match",
+      "role": "title",
+      "text": "51 : 49"
+     },
+     {
+      "route": "/match",
+      "role": "body",
+      "text": "지난 기록이 비슷한 사람끼리만 짝을 지어요. 45 : 55 밖이면 짝을 짓지 않아요"
+     },
+     {
+      "route": "/match",
+      "role": "label",
+      "text": "평소 걸음이 비슷해요"
+     },
+     {
+      "route": "/match",
+      "role": "label",
+      "text": "둘 다 첫 대결이에요"
+     },
+     {
+      "route": "/match",
+      "role": "label",
+      "text": "내 걸음 목표"
+     },
+     {
+      "route": "/match",
+      "role": "label",
+      "text": "1일차 시작"
+     },
+     {
+      "route": "/match",
+      "role": "label",
+      "text": "대결 화면으로"
+     },
+     {
+      "route": "/match",
+      "role": "title",
+      "text": "8,500보"
+     },
+     {
+      "route": "/match",
+      "role": "title",
+      "text": "11월 8일 00:00"
+     },
+     {
+      "route": "/?state=morning",
+      "role": "title",
+      "text": "6일차"
+     },
+     {
+      "route": "/?state=morning",
+      "role": "body",
+      "text": "14일 중 · 오늘 16시간 47분 남음"
+     },
+     {
+      "route": "/?state=morning",
+      "role": "title",
+      "text": "416"
+     },
+     {
+      "route": "/?state=morning",
+      "role": "title",
+      "text": "480"
+     },
+     {
+      "route": "/?state=morning",
+      "role": "title",
+      "text": ":"
+     },
+     {
+      "route": "/?state=morning",
+      "role": "label",
+      "text": "· 오늘 4점"
+     },
+     {
+      "route": "/?state=morning",
+      "role": "label",
+      "text": "나"
+     },
+     {
+      "route": "/?state=morning",
+      "role": "label",
+      "text": "· 오늘 42점"
+     },
+     {
+      "route": "/?state=morning",
+      "role": "label",
+      "text": "오트밀파"
+     },
+     {
+      "route": "/?state=morning",
+      "role": "body",
+      "text": "걸음 1,240 / 8,500"
+     },
+     {
+      "route": "/?state=morning",
+      "role": "label",
+      "text": "걸음 29%"
+     },
+     {
+      "route": "/?state=morning",
+      "role": "title",
+      "text": "64점 뒤져요"
+     },
+     {
+      "route": "/?state=morning",
+      "role": "label",
+      "text": "오늘 아직 96점 남았어요"
+     },
+     {
+      "route": "/?state=morning",
+      "role": "label",
+      "text": "체중"
+     },
+     {
+      "route": "/?state=morning",
+      "role": "label",
+      "text": "아침"
+     },
+     {
+      "route": "/?state=morning",
+      "role": "label",
+      "text": "점심"
+     },
+     {
+      "route": "/?state=morning",
+      "role": "label",
+      "text": "저녁"
+     },
+     {
+      "route": "/?state=morning",
+      "role": "label",
+      "text": "걸음"
+     },
+     {
+      "route": "/?state=morning",
+      "role": "label",
+      "text": "0/40"
+     },
+     {
+      "route": "/?state=morning",
+      "role": "label",
+      "text": "0/10"
+     },
+     {
+      "route": "/?state=morning",
+      "role": "label",
+      "text": "0/10"
+     },
+     {
+      "route": "/?state=morning",
+      "role": "label",
+      "text": "0/10"
+     },
+     {
+      "route": "/?state=morning",
+      "role": "label",
+      "text": "4/30"
+     },
+     {
+      "route": "/?state=morning",
+      "role": "label",
+      "text": "00–06시"
+     },
+     {
+      "route": "/?state=morning",
+      "role": "label",
+      "text": "06"
+     },
+     {
+      "route": "/?state=morning",
+      "role": "label",
+      "text": "06:40"
+     },
+     {
+      "route": "/?state=morning",
+      "role": "label",
+      "text": "체중"
+     },
+     {
+      "route": "/?state=morning",
+      "role": "label",
+      "text": "기록"
+     },
+     {
+      "route": "/?state=morning",
+      "role": "label",
+      "text": "07"
+     },
+     {
+      "route": "/?state=morning",
+      "role": "label",
+      "text": "06:41"
+     },
+     {
+      "route": "/?state=morning",
+      "role": "label",
+      "text": "07:12"
+     },
+     {
+      "route": "/?state=morning",
+      "role": "label",
+      "text": "먼저 쟀어요"
+     },
+     {
+      "route": "/?state=morning",
+      "role": "label",
+      "text": "체중"
+     },
+     {
+      "route": "/?state=morning",
+      "role": "label",
+      "text": "0 / 40"
+     },
+     {
+      "route": "/?state=morning",
+      "role": "label",
+      "text": "응원 보내기 · 2회 남음"
+     },
+     {
+      "route": "/?state=morning",
+      "role": "title",
+      "text": "+40"
+     },
+     {
+      "route": "/?state=morning",
+      "role": "label",
+      "text": "체중 기록"
+     },
+     {
+      "route": "/?state=morning",
+      "role": "label",
+      "text": "08"
+     },
+     {
+      "route": "/?state=morning",
+      "role": "label",
+      "text": "09"
+     },
+     {
+      "route": "/?state=morning",
+      "role": "label",
+      "text": "10"
+     },
+     {
+      "route": "/?state=morning",
+      "role": "label",
+      "text": "11"
+     },
+     {
+      "route": "/?state=morning",
+      "role": "label",
+      "text": "점심"
+     },
+     {
+      "route": "/?state=morning",
+      "role": "label",
+      "text": "점심"
+     },
+     {
+      "route": "/?state=morning",
+      "role": "body",
+      "text": "11–16시 · 0 / 10"
+     },
+     {
+      "route": "/?state=morning",
+      "role": "label",
+      "text": "아직"
+     },
+     {
+      "route": "/?state=morning",
+      "role": "label",
+      "text": "12"
+     },
+     {
+      "route": "/?state=morning",
+      "role": "label",
+      "text": "13"
+     },
+     {
+      "route": "/?state=morning",
+      "role": "label",
+      "text": "14"
+     },
+     {
+      "route": "/?state=morning",
+      "role": "label",
+      "text": "15"
+     },
+     {
+      "route": "/?state=morning",
+      "role": "label",
+      "text": "16"
+     },
+     {
+      "route": "/?state=morning",
+      "role": "label",
+      "text": "저녁"
+     },
+     {
+      "route": "/?state=morning",
+      "role": "label",
+      "text": "저녁"
+     },
+     {
+      "route": "/?state=morning",
+      "role": "body",
+      "text": "16–23시 · 0 / 10"
+     },
+     {
+      "route": "/?state=morning",
+      "role": "label",
+      "text": "아직"
+     },
+     {
+      "route": "/?state=morning",
+      "role": "label",
+      "text": "17"
+     },
+     {
+      "route": "/?state=morning",
+      "role": "label",
+      "text": "18"
+     },
+     {
+      "route": "/?state=morning",
+      "role": "label",
+      "text": "19"
+     },
+     {
+      "route": "/?state=morning",
+      "role": "label",
+      "text": "20"
+     },
+     {
+      "route": "/?state=morning",
+      "role": "label",
+      "text": "21"
+     },
+     {
+      "route": "/?state=morning",
+      "role": "label",
+      "text": "22"
+     },
+     {
+      "route": "/?state=morning",
+      "role": "label",
+      "text": "23"
+     },
+     {
+      "route": "/?state=morning",
+      "role": "label",
+      "text": "24"
+     },
+     {
+      "route": "/?state=morning",
+      "role": "body",
+      "text": "자정에 6일차가 닫혀요. 빠뜨린 끼니는 내일 09:00까지 넣을 수 있어요"
+     },
+     {
+      "route": "/?state=morning",
+      "role": "label",
+      "text": "점수는 이렇게 매겨요"
+     },
+     {
+      "route": "/?state=loading",
+      "role": "title",
+      "text": "6일차"
+     },
+     {
+      "route": "/?state=loading",
+      "role": "body",
+      "text": "14일 중 · 오늘 16시간 47분 남음"
+     },
+     {
+      "route": "/?state=loading",
+      "role": "title",
+      "text": "416"
+     },
+     {
+      "route": "/?state=loading",
+      "role": "title",
+      "text": "480"
+     },
+     {
+      "route": "/?state=loading",
+      "role": "title",
+      "text": ":"
+     },
+     {
+      "route": "/?state=loading",
+      "role": "label",
+      "text": "· 오늘 4점"
+     },
+     {
+      "route": "/?state=loading",
+      "role": "label",
+      "text": "나"
+     },
+     {
+      "route": "/?state=loading",
+      "role": "label",
+      "text": "· 오늘 42점"
+     },
+     {
+      "route": "/?state=loading",
+      "role": "label",
+      "text": "오트밀파"
+     },
+     {
+      "route": "/?state=loading",
+      "role": "body",
+      "text": "걸음 1,240 / 8,500"
+     },
+     {
+      "route": "/?state=loading",
+      "role": "label",
+      "text": "걸음 29%"
+     },
+     {
+      "route": "/?state=loading",
+      "role": "title",
+      "text": "64점 뒤져요"
+     },
+     {
+      "route": "/?state=loading",
+      "role": "label",
+      "text": "오늘 아직 96점 남았어요"
+     },
+     {
+      "route": "/?state=loading",
+      "role": "label",
+      "text": "갱신 중"
+     },
+     {
+      "route": "/?state=loading",
+      "role": "label",
+      "text": "체중"
+     },
+     {
+      "route": "/?state=loading",
+      "role": "label",
+      "text": "아침"
+     },
+     {
+      "route": "/?state=loading",
+      "role": "label",
+      "text": "점심"
+     },
+     {
+      "route": "/?state=loading",
+      "role": "label",
+      "text": "저녁"
+     },
+     {
+      "route": "/?state=loading",
+      "role": "label",
+      "text": "걸음"
+     },
+     {
+      "route": "/?state=loading",
+      "role": "label",
+      "text": "0/40"
+     },
+     {
+      "route": "/?state=loading",
+      "role": "label",
+      "text": "0/10"
+     },
+     {
+      "route": "/?state=loading",
+      "role": "label",
+      "text": "0/10"
+     },
+     {
+      "route": "/?state=loading",
+      "role": "label",
+      "text": "0/10"
+     },
+     {
+      "route": "/?state=loading",
+      "role": "label",
+      "text": "4/30"
+     },
+     {
+      "route": "/?state=loading",
+      "role": "label",
+      "text": "00–06시"
+     },
+     {
+      "route": "/?state=loading",
+      "role": "label",
+      "text": "06"
+     },
+     {
+      "route": "/?state=loading",
+      "role": "label",
+      "text": "06:40"
+     },
+     {
+      "route": "/?state=loading",
+      "role": "label",
+      "text": "체중"
+     },
+     {
+      "route": "/?state=loading",
+      "role": "label",
+      "text": "기록"
+     },
+     {
+      "route": "/?state=loading",
+      "role": "label",
+      "text": "07"
+     },
+     {
+      "route": "/?state=loading",
+      "role": "label",
+      "text": "06:41"
+     },
+     {
+      "route": "/?state=loading",
+      "role": "label",
+      "text": "07:12"
+     },
+     {
+      "route": "/?state=loading",
+      "role": "label",
+      "text": "먼저 쟀어요"
+     },
+     {
+      "route": "/?state=loading",
+      "role": "label",
+      "text": "체중"
+     },
+     {
+      "route": "/?state=loading",
+      "role": "label",
+      "text": "응원 보내기 · 2회 남음"
+     },
+     {
+      "route": "/?state=loading",
+      "role": "label",
+      "text": "0 / 40"
+     },
+     {
+      "route": "/?state=loading",
+      "role": "title",
+      "text": "+40"
+     },
+     {
+      "route": "/?state=loading",
+      "role": "label",
+      "text": "체중 기록"
+     },
+     {
+      "route": "/?state=loading",
+      "role": "label",
+      "text": "08"
+     },
+     {
+      "route": "/?state=loading",
+      "role": "label",
+      "text": "09"
+     },
+     {
+      "route": "/?state=loading",
+      "role": "label",
+      "text": "10"
+     },
+     {
+      "route": "/?state=loading",
+      "role": "label",
+      "text": "11"
+     },
+     {
+      "route": "/?state=loading",
+      "role": "label",
+      "text": "점심"
+     },
+     {
+      "route": "/?state=loading",
+      "role": "label",
+      "text": "점심"
+     },
+     {
+      "route": "/?state=loading",
+      "role": "body",
+      "text": "11–16시 · 0 / 10"
+     },
+     {
+      "route": "/?state=loading",
+      "role": "label",
+      "text": "아직"
+     },
+     {
+      "route": "/?state=loading",
+      "role": "label",
+      "text": "12"
+     },
+     {
+      "route": "/?state=loading",
+      "role": "label",
+      "text": "13"
+     },
+     {
+      "route": "/?state=loading",
+      "role": "label",
+      "text": "14"
+     },
+     {
+      "route": "/?state=loading",
+      "role": "label",
+      "text": "15"
+     },
+     {
+      "route": "/?state=loading",
+      "role": "label",
+      "text": "16"
+     },
+     {
+      "route": "/?state=loading",
+      "role": "label",
+      "text": "저녁"
+     },
+     {
+      "route": "/?state=loading",
+      "role": "label",
+      "text": "저녁"
+     },
+     {
+      "route": "/?state=loading",
+      "role": "body",
+      "text": "16–23시 · 0 / 10"
+     },
+     {
+      "route": "/?state=loading",
+      "role": "label",
+      "text": "아직"
+     },
+     {
+      "route": "/?state=loading",
+      "role": "label",
+      "text": "17"
+     },
+     {
+      "route": "/?state=loading",
+      "role": "label",
+      "text": "18"
+     },
+     {
+      "route": "/?state=loading",
+      "role": "label",
+      "text": "19"
+     },
+     {
+      "route": "/?state=loading",
+      "role": "label",
+      "text": "20"
+     },
+     {
+      "route": "/?state=loading",
+      "role": "label",
+      "text": "21"
+     },
+     {
+      "route": "/?state=loading",
+      "role": "label",
+      "text": "22"
+     },
+     {
+      "route": "/?state=loading",
+      "role": "label",
+      "text": "23"
+     },
+     {
+      "route": "/?state=loading",
+      "role": "label",
+      "text": "24"
+     },
+     {
+      "route": "/?state=loading",
+      "role": "body",
+      "text": "자정에 6일차가 닫혀요. 빠뜨린 끼니는 내일 09:00까지 넣을 수 있어요"
+     },
+     {
+      "route": "/?state=loading",
+      "role": "label",
+      "text": "점수는 이렇게 매겨요"
+     },
+     {
+      "route": "/?state=offline",
+      "role": "title",
+      "text": "6일차"
+     },
+     {
+      "route": "/?state=offline",
+      "role": "body",
+      "text": "14일 중 · 오늘 16시간 47분 남음"
+     },
+     {
+      "route": "/?state=offline",
+      "role": "body",
+      "text": "오프라인이에요. 기록은 연결되면 보내요"
+     },
+     {
+      "route": "/?state=offline",
+      "role": "body",
+      "text": "오트밀파님 기록은 07:02 기준이에요"
+     },
+     {
+      "route": "/?state=offline",
+      "role": "title",
+      "text": "416"
+     },
+     {
+      "route": "/?state=offline",
+      "role": "title",
+      "text": "480"
+     },
+     {
+      "route": "/?state=offline",
+      "role": "title",
+      "text": ":"
+     },
+     {
+      "route": "/?state=offline",
+      "role": "label",
+      "text": "· 오늘 4점"
+     },
+     {
+      "route": "/?state=offline",
+      "role": "label",
+      "text": "나"
+     },
+     {
+      "route": "/?state=offline",
+      "role": "label",
+      "text": "· 오늘 42점"
+     },
+     {
+      "route": "/?state=offline",
+      "role": "label",
+      "text": "오트밀파"
+     },
+     {
+      "route": "/?state=offline",
+      "role": "body",
+      "text": "걸음 1,240 / 8,500"
+     },
+     {
+      "route": "/?state=offline",
+      "role": "label",
+      "text": "걸음 29%"
+     },
+     {
+      "route": "/?state=offline",
+      "role": "title",
+      "text": "64점 뒤져요"
+     },
+     {
+      "route": "/?state=offline",
+      "role": "label",
+      "text": "오늘 아직 96점 남았어요"
+     },
+     {
+      "route": "/?state=offline",
+      "role": "label",
+      "text": "체중"
+     },
+     {
+      "route": "/?state=offline",
+      "role": "label",
+      "text": "아침"
+     },
+     {
+      "route": "/?state=offline",
+      "role": "label",
+      "text": "점심"
+     },
+     {
+      "route": "/?state=offline",
+      "role": "label",
+      "text": "저녁"
+     },
+     {
+      "route": "/?state=offline",
+      "role": "label",
+      "text": "걸음"
+     },
+     {
+      "route": "/?state=offline",
+      "role": "label",
+      "text": "대기"
+     },
+     {
+      "route": "/?state=offline",
+      "role": "label",
+      "text": "0/10"
+     },
+     {
+      "route": "/?state=offline",
+      "role": "label",
+      "text": "0/10"
+     },
+     {
+      "route": "/?state=offline",
+      "role": "label",
+      "text": "0/10"
+     },
+     {
+      "route": "/?state=offline",
+      "role": "label",
+      "text": "4/30"
+     },
+     {
+      "route": "/?state=offline",
+      "role": "label",
+      "text": "00–06시"
+     },
+     {
+      "route": "/?state=offline",
+      "role": "label",
+      "text": "06"
+     },
+     {
+      "route": "/?state=offline",
+      "role": "label",
+      "text": "06:40"
+     },
+     {
+      "route": "/?state=offline",
+      "role": "label",
+      "text": "체중"
+     },
+     {
+      "route": "/?state=offline",
+      "role": "label",
+      "text": "기록"
+     },
+     {
+      "route": "/?state=offline",
+      "role": "label",
+      "text": "07"
+     },
+     {
+      "route": "/?state=offline",
+      "role": "label",
+      "text": "06:41"
+     },
+     {
+      "route": "/?state=offline",
+      "role": "label",
+      "text": "07:12"
+     },
+     {
+      "route": "/?state=offline",
+      "role": "label",
+      "text": "연결되면 보낼 수 있어요"
+     },
+     {
+      "route": "/?state=offline",
+      "role": "title",
+      "text": "+40"
+     },
+     {
+      "route": "/?state=offline",
+      "role": "body",
+      "text": "07:11 · 69.5kg · 대기 중"
+     },
+     {
+      "route": "/?state=offline",
+      "role": "label",
+      "text": "먼저 쟀어요"
+     },
+     {
+      "route": "/?state=offline",
+      "role": "label",
+      "text": "체중 기록"
+     },
+     {
+      "route": "/?state=offline",
+      "role": "title",
+      "text": "+40"
+     },
+     {
+      "route": "/?state=offline",
+      "role": "label",
+      "text": "체중"
+     },
+     {
+      "route": "/?state=offline",
+      "role": "label",
+      "text": "체중"
+     },
+     {
+      "route": "/?state=offline",
+      "role": "label",
+      "text": "0 / 40"
+     },
+     {
+      "route": "/?state=offline",
+      "role": "label",
+      "text": "08"
+     },
+     {
+      "route": "/?state=offline",
+      "role": "label",
+      "text": "09"
+     },
+     {
+      "route": "/?state=offline",
+      "role": "label",
+      "text": "10"
+     },
+     {
+      "route": "/?state=offline",
+      "role": "label",
+      "text": "11"
+     },
+     {
+      "route": "/?state=offline",
+      "role": "label",
+      "text": "점심"
+     },
+     {
+      "route": "/?state=offline",
+      "role": "label",
+      "text": "점심"
+     },
+     {
+      "route": "/?state=offline",
+      "role": "body",
+      "text": "11–16시 · 0 / 10"
+     },
+     {
+      "route": "/?state=offline",
+      "role": "label",
+      "text": "아직"
+     },
+     {
+      "route": "/?state=offline",
+      "role": "label",
+      "text": "12"
+     },
+     {
+      "route": "/?state=offline",
+      "role": "label",
+      "text": "13"
+     },
+     {
+      "route": "/?state=offline",
+      "role": "label",
+      "text": "14"
+     },
+     {
+      "route": "/?state=offline",
+      "role": "label",
+      "text": "15"
+     },
+     {
+      "route": "/?state=offline",
+      "role": "label",
+      "text": "16"
+     },
+     {
+      "route": "/?state=offline",
+      "role": "label",
+      "text": "저녁"
+     },
+     {
+      "route": "/?state=offline",
+      "role": "label",
+      "text": "저녁"
+     },
+     {
+      "route": "/?state=offline",
+      "role": "body",
+      "text": "16–23시 · 0 / 10"
+     },
+     {
+      "route": "/?state=offline",
+      "role": "label",
+      "text": "아직"
+     },
+     {
+      "route": "/?state=offline",
+      "role": "label",
+      "text": "17"
+     },
+     {
+      "route": "/?state=offline",
+      "role": "label",
+      "text": "18"
+     },
+     {
+      "route": "/?state=offline",
+      "role": "label",
+      "text": "19"
+     },
+     {
+      "route": "/?state=offline",
+      "role": "label",
+      "text": "20"
+     },
+     {
+      "route": "/?state=offline",
+      "role": "label",
+      "text": "21"
+     },
+     {
+      "route": "/?state=offline",
+      "role": "label",
+      "text": "22"
+     },
+     {
+      "route": "/?state=offline",
+      "role": "label",
+      "text": "23"
+     },
+     {
+      "route": "/?state=offline",
+      "role": "label",
+      "text": "24"
+     },
+     {
+      "route": "/?state=offline",
+      "role": "body",
+      "text": "자정에 6일차가 닫혀요. 빠뜨린 끼니는 내일 09:00까지 넣을 수 있어요"
+     },
+     {
+      "route": "/?state=offline",
+      "role": "label",
+      "text": "점수는 이렇게 매겨요"
+     },
+     {
+      "route": "/?state=steps_disconnected",
+      "role": "title",
+      "text": "6일차"
+     },
+     {
+      "route": "/?state=steps_disconnected",
+      "role": "body",
+      "text": "14일 중 · 오늘 16시간 47분 남음"
+     },
+     {
+      "route": "/?state=steps_disconnected",
+      "role": "title",
+      "text": "416"
+     },
+     {
+      "route": "/?state=steps_disconnected",
+      "role": "title",
+      "text": "480"
+     },
+     {
+      "route": "/?state=steps_disconnected",
+      "role": "title",
+      "text": ":"
+     },
+     {
+      "route": "/?state=steps_disconnected",
+      "role": "label",
+      "text": "· 오늘 4점"
+     },
+     {
+      "route": "/?state=steps_disconnected",
+      "role": "label",
+      "text": "나"
+     },
+     {
+      "route": "/?state=steps_disconnected",
+      "role": "label",
+      "text": "· 오늘 42점"
+     },
+     {
+      "route": "/?state=steps_disconnected",
+      "role": "label",
+      "text": "오트밀파"
+     },
+     {
+      "route": "/?state=steps_disconnected",
+      "role": "label",
+      "text": "건강 앱 연결이 끊겼어요"
+     },
+     {
+      "route": "/?state=steps_disconnected",
+      "role": "label",
+      "text": "걸음 29%"
+     },
+     {
+      "route": "/?state=steps_disconnected",
+      "role": "title",
+      "text": "64점 뒤져요"
+     },
+     {
+      "route": "/?state=steps_disconnected",
+      "role": "label",
+      "text": "오늘 아직 96점 남았어요"
+     },
+     {
+      "route": "/?state=steps_disconnected",
+      "role": "body",
+      "text": "건강 앱 연결이 끊겼어요. 걸음을 눌러 직접 넣을 수 있어요"
+     },
+     {
+      "route": "/?state=steps_disconnected",
+      "role": "label",
+      "text": "다시 연결"
+     },
+     {
+      "route": "/?state=steps_disconnected",
+      "role": "label",
+      "text": "체중"
+     },
+     {
+      "route": "/?state=steps_disconnected",
+      "role": "label",
+      "text": "아침"
+     },
+     {
+      "route": "/?state=steps_disconnected",
+      "role": "label",
+      "text": "점심"
+     },
+     {
+      "route": "/?state=steps_disconnected",
+      "role": "label",
+      "text": "저녁"
+     },
+     {
+      "route": "/?state=steps_disconnected",
+      "role": "label",
+      "text": "걸음"
+     },
+     {
+      "route": "/?state=steps_disconnected",
+      "role": "label",
+      "text": "0/40"
+     },
+     {
+      "route": "/?state=steps_disconnected",
+      "role": "label",
+      "text": "0/10"
+     },
+     {
+      "route": "/?state=steps_disconnected",
+      "role": "label",
+      "text": "0/10"
+     },
+     {
+      "route": "/?state=steps_disconnected",
+      "role": "label",
+      "text": "0/10"
+     },
+     {
+      "route": "/?state=steps_disconnected",
+      "role": "label",
+      "text": "4/30"
+     },
+     {
+      "route": "/?state=steps_disconnected",
+      "role": "label",
+      "text": "00–06시"
+     },
+     {
+      "route": "/?state=steps_disconnected",
+      "role": "label",
+      "text": "06"
+     },
+     {
+      "route": "/?state=steps_disconnected",
+      "role": "label",
+      "text": "06:40"
+     },
+     {
+      "route": "/?state=steps_disconnected",
+      "role": "label",
+      "text": "체중"
+     },
+     {
+      "route": "/?state=steps_disconnected",
+      "role": "label",
+      "text": "기록"
+     },
+     {
+      "route": "/?state=steps_disconnected",
+      "role": "label",
+      "text": "07"
+     },
+     {
+      "route": "/?state=steps_disconnected",
+      "role": "label",
+      "text": "06:41"
+     },
+     {
+      "route": "/?state=steps_disconnected",
+      "role": "label",
+      "text": "07:12"
+     },
+     {
+      "route": "/?state=steps_disconnected",
+      "role": "label",
+      "text": "응원 보내기 · 2회 남음"
+     },
+     {
+      "route": "/?state=steps_disconnected",
+      "role": "title",
+      "text": "+40"
+     },
+     {
+      "route": "/?state=steps_disconnected",
+      "role": "label",
+      "text": "체중 기록"
+     },
+     {
+      "route": "/?state=steps_disconnected",
+      "role": "label",
+      "text": "먼저 쟀어요"
+     },
+     {
+      "route": "/?state=steps_disconnected",
+      "role": "label",
+      "text": "체중"
+     },
+     {
+      "route": "/?state=steps_disconnected",
+      "role": "label",
+      "text": "0 / 40"
+     },
+     {
+      "route": "/?state=steps_disconnected",
+      "role": "label",
+      "text": "08"
+     },
+     {
+      "route": "/?state=steps_disconnected",
+      "role": "label",
+      "text": "09"
+     },
+     {
+      "route": "/?state=steps_disconnected",
+      "role": "label",
+      "text": "10"
+     },
+     {
+      "route": "/?state=steps_disconnected",
+      "role": "label",
+      "text": "11"
+     },
+     {
+      "route": "/?state=steps_disconnected",
+      "role": "label",
+      "text": "점심"
+     },
+     {
+      "route": "/?state=steps_disconnected",
+      "role": "label",
+      "text": "점심"
+     },
+     {
+      "route": "/?state=steps_disconnected",
+      "role": "body",
+      "text": "11–16시 · 0 / 10"
+     },
+     {
+      "route": "/?state=steps_disconnected",
+      "role": "label",
+      "text": "아직"
+     },
+     {
+      "route": "/?state=steps_disconnected",
+      "role": "label",
+      "text": "12"
+     },
+     {
+      "route": "/?state=steps_disconnected",
+      "role": "label",
+      "text": "13"
+     },
+     {
+      "route": "/?state=steps_disconnected",
+      "role": "label",
+      "text": "14"
+     },
+     {
+      "route": "/?state=steps_disconnected",
+      "role": "label",
+      "text": "15"
+     },
+     {
+      "route": "/?state=steps_disconnected",
+      "role": "label",
+      "text": "16"
+     },
+     {
+      "route": "/?state=steps_disconnected",
+      "role": "label",
+      "text": "저녁"
+     },
+     {
+      "route": "/?state=steps_disconnected",
+      "role": "label",
+      "text": "저녁"
+     },
+     {
+      "route": "/?state=steps_disconnected",
+      "role": "body",
+      "text": "16–23시 · 0 / 10"
+     },
+     {
+      "route": "/?state=steps_disconnected",
+      "role": "label",
+      "text": "아직"
+     },
+     {
+      "route": "/?state=steps_disconnected",
+      "role": "label",
+      "text": "17"
+     },
+     {
+      "route": "/?state=steps_disconnected",
+      "role": "label",
+      "text": "18"
+     },
+     {
+      "route": "/?state=steps_disconnected",
+      "role": "label",
+      "text": "19"
+     },
+     {
+      "route": "/?state=steps_disconnected",
+      "role": "label",
+      "text": "20"
+     },
+     {
+      "route": "/?state=steps_disconnected",
+      "role": "label",
+      "text": "21"
+     },
+     {
+      "route": "/?state=steps_disconnected",
+      "role": "label",
+      "text": "22"
+     },
+     {
+      "route": "/?state=steps_disconnected",
+      "role": "label",
+      "text": "23"
+     },
+     {
+      "route": "/?state=steps_disconnected",
+      "role": "label",
+      "text": "24"
+     },
+     {
+      "route": "/?state=steps_disconnected",
+      "role": "body",
+      "text": "자정에 6일차가 닫혀요. 빠뜨린 끼니는 내일 09:00까지 넣을 수 있어요"
+     },
+     {
+      "route": "/?state=steps_disconnected",
+      "role": "label",
+      "text": "점수는 이렇게 매겨요"
+     },
+     {
+      "route": "/?state=rival_inactive",
+      "role": "title",
+      "text": "6일차"
+     },
+     {
+      "route": "/?state=rival_inactive",
+      "role": "body",
+      "text": "14일 중 · 오늘 16시간 47분 남음"
+     },
+     {
+      "route": "/?state=rival_inactive",
+      "role": "title",
+      "text": "416"
+     },
+     {
+      "route": "/?state=rival_inactive",
+      "role": "title",
+      "text": "264"
+     },
+     {
+      "route": "/?state=rival_inactive",
+      "role": "title",
+      "text": ":"
+     },
+     {
+      "route": "/?state=rival_inactive",
+      "role": "label",
+      "text": "· 오늘 4점"
+     },
+     {
+      "route": "/?state=rival_inactive",
+      "role": "label",
+      "text": "나"
+     },
+     {
+      "route": "/?state=rival_inactive",
+      "role": "label",
+      "text": "· 오늘 0점"
+     },
+     {
+      "route": "/?state=rival_inactive",
+      "role": "label",
+      "text": "오트밀파"
+     },
+     {
+      "route": "/?state=rival_inactive",
+      "role": "body",
+      "text": "걸음 1,240 / 8,500"
+     },
+     {
+      "route": "/?state=rival_inactive",
+      "role": "label",
+      "text": "걸음 0%"
+     },
+     {
+      "route": "/?state=rival_inactive",
+      "role": "title",
+      "text": "152점 앞서요"
+     },
+     {
+      "route": "/?state=rival_inactive",
+      "role": "label",
+      "text": "오늘 아직 96점 남았어요"
+     },
+     {
+      "route": "/?state=rival_inactive",
+      "role": "label",
+      "text": "체중"
+     },
+     {
+      "route": "/?state=rival_inactive",
+      "role": "label",
+      "text": "아침"
+     },
+     {
+      "route": "/?state=rival_inactive",
+      "role": "label",
+      "text": "점심"
+     },
+     {
+      "route": "/?state=rival_inactive",
+      "role": "label",
+      "text": "저녁"
+     },
+     {
+      "route": "/?state=rival_inactive",
+      "role": "label",
+      "text": "걸음"
+     },
+     {
+      "route": "/?state=rival_inactive",
+      "role": "label",
+      "text": "0/40"
+     },
+     {
+      "route": "/?state=rival_inactive",
+      "role": "label",
+      "text": "0/10"
+     },
+     {
+      "route": "/?state=rival_inactive",
+      "role": "label",
+      "text": "0/10"
+     },
+     {
+      "route": "/?state=rival_inactive",
+      "role": "label",
+      "text": "0/10"
+     },
+     {
+      "route": "/?state=rival_inactive",
+      "role": "label",
+      "text": "4/30"
+     },
+     {
+      "route": "/?state=rival_inactive",
+      "role": "label",
+      "text": "00–06시"
+     },
+     {
+      "route": "/?state=rival_inactive",
+      "role": "label",
+      "text": "06"
+     },
+     {
+      "route": "/?state=rival_inactive",
+      "role": "label",
+      "text": "07"
+     },
+     {
+      "route": "/?state=rival_inactive",
+      "role": "label",
+      "text": "07:12"
+     },
+     {
+      "route": "/?state=rival_inactive",
+      "role": "label",
+      "text": "체중"
+     },
+     {
+      "route": "/?state=rival_inactive",
+      "role": "body",
+      "text": "오트밀파님이 이틀째 기록이 없어요"
+     },
+     {
+      "route": "/?state=rival_inactive",
+      "role": "label",
+      "text": "0 / 40"
+     },
+     {
+      "route": "/?state=rival_inactive",
+      "role": "title",
+      "text": "+40"
+     },
+     {
+      "route": "/?state=rival_inactive",
+      "role": "label",
+      "text": "체중 기록"
+     },
+     {
+      "route": "/?state=rival_inactive",
+      "role": "label",
+      "text": "다른 상대 찾기"
+     },
+     {
+      "route": "/?state=rival_inactive",
+      "role": "label",
+      "text": "08"
+     },
+     {
+      "route": "/?state=rival_inactive",
+      "role": "label",
+      "text": "09"
+     },
+     {
+      "route": "/?state=rival_inactive",
+      "role": "label",
+      "text": "10"
+     },
+     {
+      "route": "/?state=rival_inactive",
+      "role": "label",
+      "text": "11"
+     },
+     {
+      "route": "/?state=rival_inactive",
+      "role": "label",
+      "text": "점심"
+     },
+     {
+      "route": "/?state=rival_inactive",
+      "role": "body",
+      "text": "11–16시 · 0 / 10"
+     },
+     {
+      "route": "/?state=rival_inactive",
+      "role": "label",
+      "text": "12"
+     },
+     {
+      "route": "/?state=rival_inactive",
+      "role": "label",
+      "text": "13"
+     },
+     {
+      "route": "/?state=rival_inactive",
+      "role": "label",
+      "text": "14"
+     },
+     {
+      "route": "/?state=rival_inactive",
+      "role": "label",
+      "text": "15"
+     },
+     {
+      "route": "/?state=rival_inactive",
+      "role": "label",
+      "text": "16"
+     },
+     {
+      "route": "/?state=rival_inactive",
+      "role": "label",
+      "text": "저녁"
+     },
+     {
+      "route": "/?state=rival_inactive",
+      "role": "body",
+      "text": "16–23시 · 0 / 10"
+     },
+     {
+      "route": "/?state=rival_inactive",
+      "role": "label",
+      "text": "17"
+     },
+     {
+      "route": "/?state=rival_inactive",
+      "role": "label",
+      "text": "18"
+     },
+     {
+      "route": "/?state=rival_inactive",
+      "role": "label",
+      "text": "19"
+     },
+     {
+      "route": "/?state=rival_inactive",
+      "role": "label",
+      "text": "20"
+     },
+     {
+      "route": "/?state=rival_inactive",
+      "role": "label",
+      "text": "21"
+     },
+     {
+      "route": "/?state=rival_inactive",
+      "role": "label",
+      "text": "22"
+     },
+     {
+      "route": "/?state=rival_inactive",
+      "role": "label",
+      "text": "23"
+     },
+     {
+      "route": "/?state=rival_inactive",
+      "role": "label",
+      "text": "24"
+     },
+     {
+      "route": "/?state=rival_inactive",
+      "role": "body",
+      "text": "자정에 6일차가 닫혀요. 빠뜨린 끼니는 내일 09:00까지 넣을 수 있어요"
+     },
+     {
+      "route": "/?state=rival_inactive",
+      "role": "label",
+      "text": "점수는 이렇게 매겨요"
+     },
+     {
+      "route": "/?state=solo",
+      "role": "title",
+      "text": "6일차"
+     },
+     {
+      "route": "/?state=solo",
+      "role": "body",
+      "text": "14일 중 · 오늘 16시간 47분 남음"
+     },
+     {
+      "route": "/?state=solo",
+      "role": "title",
+      "text": "416"
+     },
+     {
+      "route": "/?state=solo",
+      "role": "label",
+      "text": "· 오늘 4점"
+     },
+     {
+      "route": "/?state=solo",
+      "role": "label",
+      "text": "나"
+     },
+     {
+      "route": "/?state=solo",
+      "role": "title",
+      "text": "남은 날 하루 평균 60점이면 이겨요"
+     },
+     {
+      "route": "/?state=solo",
+      "role": "body",
+      "text": "혼자 한 1일 동안 하루 평균 82점"
+     },
+     {
+      "route": "/?state=solo",
+      "role": "label",
+      "text": "오늘 아직 96점 남았어요"
+     },
+     {
+      "route": "/?state=solo",
+      "role": "label",
+      "text": "체중"
+     },
+     {
+      "route": "/?state=solo",
+      "role": "label",
+      "text": "아침"
+     },
+     {
+      "route": "/?state=solo",
+      "role": "label",
+      "text": "점심"
+     },
+     {
+      "route": "/?state=solo",
+      "role": "label",
+      "text": "저녁"
+     },
+     {
+      "route": "/?state=solo",
+      "role": "label",
+      "text": "걸음"
+     },
+     {
+      "route": "/?state=solo",
+      "role": "label",
+      "text": "0/40"
+     },
+     {
+      "route": "/?state=solo",
+      "role": "label",
+      "text": "0/10"
+     },
+     {
+      "route": "/?state=solo",
+      "role": "label",
+      "text": "0/10"
+     },
+     {
+      "route": "/?state=solo",
+      "role": "label",
+      "text": "0/10"
+     },
+     {
+      "route": "/?state=solo",
+      "role": "label",
+      "text": "4/30"
+     },
+     {
+      "route": "/?state=solo",
+      "role": "label",
+      "text": "00–06시"
+     },
+     {
+      "route": "/?state=solo",
+      "role": "label",
+      "text": "06"
+     },
+     {
+      "route": "/?state=solo",
+      "role": "label",
+      "text": "07"
+     },
+     {
+      "route": "/?state=solo",
+      "role": "label",
+      "text": "07:12"
+     },
+     {
+      "route": "/?state=solo",
+      "role": "label",
+      "text": "체중"
+     },
+     {
+      "route": "/?state=solo",
+      "role": "label",
+      "text": "0 / 40"
+     },
+     {
+      "route": "/?state=solo",
+      "role": "label",
+      "text": "08"
+     },
+     {
+      "route": "/?state=solo",
+      "role": "title",
+      "text": "+40"
+     },
+     {
+      "route": "/?state=solo",
+      "role": "label",
+      "text": "체중 기록"
+     },
+     {
+      "route": "/?state=solo",
+      "role": "label",
+      "text": "09"
+     },
+     {
+      "route": "/?state=solo",
+      "role": "label",
+      "text": "10"
+     },
+     {
+      "route": "/?state=solo",
+      "role": "label",
+      "text": "11"
+     },
+     {
+      "route": "/?state=solo",
+      "role": "label",
+      "text": "점심"
+     },
+     {
+      "route": "/?state=solo",
+      "role": "body",
+      "text": "11–16시 · 0 / 10"
+     },
+     {
+      "route": "/?state=solo",
+      "role": "label",
+      "text": "12"
+     },
+     {
+      "route": "/?state=solo",
+      "role": "label",
+      "text": "13"
+     },
+     {
+      "route": "/?state=solo",
+      "role": "label",
+      "text": "14"
+     },
+     {
+      "route": "/?state=solo",
+      "role": "label",
+      "text": "15"
+     },
+     {
+      "route": "/?state=solo",
+      "role": "label",
+      "text": "16"
+     },
+     {
+      "route": "/?state=solo",
+      "role": "label",
+      "text": "저녁"
+     },
+     {
+      "route": "/?state=solo",
+      "role": "body",
+      "text": "16–23시 · 0 / 10"
+     },
+     {
+      "route": "/?state=solo",
+      "role": "label",
+      "text": "17"
+     },
+     {
+      "route": "/?state=solo",
+      "role": "label",
+      "text": "18"
+     },
+     {
+      "route": "/?state=solo",
+      "role": "label",
+      "text": "19"
+     },
+     {
+      "route": "/?state=solo",
+      "role": "label",
+      "text": "20"
+     },
+     {
+      "route": "/?state=solo",
+      "role": "label",
+      "text": "21"
+     },
+     {
+      "route": "/?state=solo",
+      "role": "label",
+      "text": "22"
+     },
+     {
+      "route": "/?state=solo",
+      "role": "label",
+      "text": "23"
+     },
+     {
+      "route": "/?state=solo",
+      "role": "label",
+      "text": "24"
+     },
+     {
+      "route": "/?state=solo",
+      "role": "body",
+      "text": "자정에 6일차가 닫혀요. 빠뜨린 끼니는 내일 09:00까지 넣을 수 있어요"
+     },
+     {
+      "route": "/?state=solo",
+      "role": "label",
+      "text": "점수는 이렇게 매겨요"
+     }
+    ],
+    "slopScore": 0,
+    "habits": 0
+   },
+   "ownMeasure": "page: 393x659 CSS px viewport, 659px tall\ntype sizes, by how much text is set in each: 12px, 14px, 16px, 24px, 36px, 30px, 18px\nlargest text: 36px, weight 400, line-height 1.12, letter-spacing -0.020em, set in Instrument Serif: \"64점 뒤져요\"\nrunning text: none of paragraph length\nfaces: Geist, Instrument Serif\ncorner radii: 8, 12px, and full pills\nfills by area: #ffe6d5, #f2f2f2, #fff9f5, #fffefe, #fdf0e7; ink by amount of text: #544942, #1d140e, #0d0603, #773b00\nmotion durations declared: none\nfirst screenful: 0 picture(s), 9 control(s); its largest element is a <div> of 393x659px",
+   "measures": {
+    "contrast": {
+     "passed": 951,
+     "total": 951
+    },
+    "touchTargets": {
+     "passed": 197,
+     "total": 199
+    },
+    "pressAnswer": {
+     "passed": 14,
+     "total": 14
+    },
+    "focusVisible": {
+     "passed": 27,
+     "total": 27
+    },
+    "layoutShift": 0.16542676399859715
+   },
+   "livingVisual": true
+  }
+ }
+]
