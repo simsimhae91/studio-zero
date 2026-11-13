@@ -166,6 +166,15 @@ function Workbench({ project, onOpen, onChanged }: { project: Project; onOpen: (
     tasks.reload();
   });
   const cancel = useAction(() => backend.call('tasks.cancel', { taskId: active!.id }));
+  /** The same request again, as a new task: what a person does after a failure that was not the request's fault, or a cancel they regret. */
+  const rerun = useAction(async (old: Task) => {
+    if (old.kind === 'kirby_materialize') return;
+    const task = await backend.call('tasks.submit', { projectId: project.id, kind: old.kind, prompt: old.prompt, track: old.track, ...(session ? { sessionId: session } : {}), ...(old.kind === 'ideate' ? designChoice.fields : choice.fields) });
+    setPicked((prev) => ({ ...prev, [key]: task.id }));
+    tasks.reload();
+  });
+  /** A past request put back in the field, to send again as it is or changed. */
+  const reuse = (prompt: string): void => setDrafts((prev) => ({ ...prev, [key]: prompt }));
 
   // ---- the design's mock-ups: one choice and one set of notes, shared by the card and the browser pane
   const design = list.findLast((t) => t.kind === 'ideate' && t.state === 'succeeded') ?? null;
@@ -246,7 +255,11 @@ function Workbench({ project, onOpen, onChanged }: { project: Project; onOpen: (
       .then(
         // With a task selected the answer arrives in that task's event stream; without one it is kept here.
         (reply) => (taskId ? undefined : setAdvice((prev) => [...prev, { advisor: reply.advisor, question: command.question, answer: reply.answer, ok: true, durationMs: reply.durationMs }])),
-        (err: unknown) => setAskError(errorText(err)),
+        (err: unknown) => {
+          setAskError(errorText(err));
+          // The field was cleared when the question went out. It did not arrive: put it back, unless something else was typed since.
+          setDrafts((prev) => ((prev[key] ?? '') === '' ? { ...prev, [key]: `/ask-${command.advisor} ${command.question}` } : prev));
+        },
       )
       .finally(() => setAsking(null));
     return true;
@@ -403,6 +416,8 @@ function Workbench({ project, onOpen, onChanged }: { project: Project; onOpen: (
                     onFile={(path) => (setOpenFile(path), show('files'))}
                     onBuild={(as, mockup, from) => void submit.run(buildRequest(mockup), { kind: 'build', track: as, ...(from ? { baseBranch: from } : {}) })}
                     onContinue={setFork}
+                    onReuse={reuse}
+                    onRerun={(task) => rerun.run(task)}
                     core={core}
                   />
                 );
@@ -492,8 +507,9 @@ function Workbench({ project, onOpen, onChanged }: { project: Project; onOpen: (
                     </MenuItem>
                   ))}
                 </Menu>
-                {steering ? (
-                  <IconButton label="작업 중단" disabled={cancel.busy} onClick={() => void cancel.run()}>
+                {/* Whatever is in flight can be stopped, a task still waiting its turn included. */}
+                {active !== null ? (
+                  <IconButton label={active.state === 'queued' ? '대기 중인 작업 취소' : '작업 중단'} disabled={cancel.busy} onClick={() => void cancel.run()}>
                     <Square className="size-4" aria-hidden />
                   </IconButton>
                 ) : null}
@@ -590,7 +606,7 @@ function SessionTabs({ sessions, current, busy, onSelect, onCreate, onRename, on
 }
 
 /** One session's task stream, in its own scrolling layer. */
-function SessionStream({ visible, loaded, tasks, selected, pending, asking, advice, onPick, onShow, onCheckpoint, onFile, onBuild, onContinue, core }: { visible: boolean; loaded: boolean; tasks: Task[]; selected: Task | null; pending: Approval[]; asking: AdvisorId | null; advice: Advice[]; onPick: (taskId: string) => void; onShow: (tab: TabId) => void; onCheckpoint: (checkpointId: string) => void; onFile: (path: string) => void; onBuild: (track: TaskTrack, mockup: string | null, from: string | null) => void; onContinue: (branch: string) => void; core: boolean }) {
+function SessionStream({ visible, loaded, tasks, selected, pending, asking, advice, onPick, onShow, onCheckpoint, onFile, onBuild, onContinue, onReuse, onRerun, core }: { onReuse: (prompt: string) => void; onRerun: (task: Task) => Promise<unknown>; visible: boolean; loaded: boolean; tasks: Task[]; selected: Task | null; pending: Approval[]; asking: AdvisorId | null; advice: Advice[]; onPick: (taskId: string) => void; onShow: (tab: TabId) => void; onCheckpoint: (checkpointId: string) => void; onFile: (path: string) => void; onBuild: (track: TaskTrack, mockup: string | null, from: string | null) => void; onContinue: (branch: string) => void; core: boolean }) {
   const events = useTaskEvents(selected?.id ?? null);
   const items = useMemo(() => narrate(events), [events]);
   const scroll = useStickToEnd(`${selected?.id}:${events.length}:${selected?.state}:${asking}:${advice.length}`);
@@ -605,7 +621,7 @@ function SessionStream({ visible, loaded, tasks, selected, pending, asking, advi
         ) : null}
         {tasks.map((task) =>
           task.id === selected?.id ? (
-            <Passage key={task.id} task={task} items={items} pending={pending} onShow={onShow} onCheckpoint={onCheckpoint} onFile={onFile} onBuild={onBuild} onContinue={onContinue} core={core} />
+            <Passage key={task.id} task={task} items={items} pending={pending} onShow={onShow} onCheckpoint={onCheckpoint} onFile={onFile} onBuild={onBuild} onContinue={onContinue} onReuse={onReuse} onRerun={onRerun} core={core} />
           ) : (
             <button key={task.id} type="button" onClick={() => onPick(task.id)} className="flex min-h-11 flex-wrap items-baseline justify-between gap-x-4 gap-y-1 rounded-lg border border-border px-4 py-2 text-left hover:bg-sunken">
               <span className="line-clamp-1 min-w-0 flex-1 break-all text-base">{task.prompt.split('\n')[0]}</span>
@@ -635,6 +651,36 @@ function Working({ children }: { children: ReactNode }) {
  * How long a running task has been at it, counted from when the daemon started it. It ticks every second, so it
  * is kept out of what a screen reader announces.
  */
+/** Which tasks were merged, kept on this device: a task does not say so itself, and the button must not come back after a reload. */
+const MERGED_KEY = 'studio-zero.merged';
+function mergedInto(taskId: string): string | null {
+  try {
+    const kept = JSON.parse(localStorage.getItem(MERGED_KEY) ?? '{}') as Record<string, unknown>;
+    return typeof kept[taskId] === 'string' ? kept[taskId] : null;
+  } catch {
+    return null;
+  }
+}
+function rememberMerged(taskId: string, into: string): void {
+  try {
+    const kept = JSON.parse(localStorage.getItem(MERGED_KEY) ?? '{}') as Record<string, string>;
+    localStorage.setItem(MERGED_KEY, JSON.stringify(Object.fromEntries([...Object.entries(kept).slice(-199), [taskId, into]])));
+  } catch {
+    // Storage refused: the button comes back after a reload, and merging again changes nothing.
+  }
+}
+
+/** How long an approval has left, counted down where the decision is made. */
+function Remaining({ until }: { until: number }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+  const left = until - now;
+  return <span className="text-sm text-fg-muted">{left <= 0 ? '시간이 지났습니다. 곧 닫힙니다.' : `${elapsed(left)} 안에 정하지 않으면 거절로 닫힙니다`}</span>;
+}
+
 function Elapsed({ since }: { since: number }) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -713,20 +759,22 @@ function AdvisorCard({ advisor, question, answer, ok, durationMs }: Advice) {
 }
 
 /** One task, opened out: the request, the steps, what was said, and how it ended. */
-function Passage({ task, items, pending, onShow, onCheckpoint, onFile, onBuild, onContinue, core }: { task: Task; items: Item[]; pending: Approval[]; onShow: (tab: TabId) => void; onCheckpoint: (checkpointId: string) => void; onFile: (path: string) => void; onBuild: (track: TaskTrack, mockup: string | null, from: string | null) => void; onContinue: (branch: string) => void; core: boolean }) {
+function Passage({ task, items, pending, onShow, onCheckpoint, onFile, onBuild, onContinue, onReuse, onRerun, core }: { onReuse: (prompt: string) => void; onRerun: (task: Task) => Promise<unknown>; task: Task; items: Item[]; pending: Approval[]; onShow: (tab: TabId) => void; onCheckpoint: (checkpointId: string) => void; onFile: (path: string) => void; onBuild: (track: TaskTrack, mockup: string | null, from: string | null) => void; onContinue: (branch: string) => void; core: boolean }) {
   const { backend } = useStudio();
-  const [merged, setMerged] = useState<string | null>(null);
+  const [merged, setMerged] = useState<string | null>(() => mergedInto(task.id));
   // Drawn once at the end of a design task; a re-run draws again, and the latest set is the one on offer.
   const mockups = items.findLast((item) => item.kind === 'mockups')?.options ?? [];
   // Shown from the first page the engine has measured, long before the task ends.
   const drafts = items.find((item) => item.kind === 'drafts')?.options ?? [];
   const merge = useAction(async () => {
     const result = await backend.call('git.merge', { projectId: task.projectId, branch: task.branch! });
+    rememberMerged(task.id, result.into);
     setMerged(result.into);
   });
   const resume = useAction(() => backend.call('tasks.resume', { taskId: task.id }));
   const drop = useAction(() => backend.call('tasks.cancel', { taskId: task.id }));
-  useEffect(() => setMerged(null), [task.id]);
+  const again = useAction(() => onRerun(task));
+  useEffect(() => setMerged(mergedInto(task.id)), [task.id]);
   const requestMeta = [kindLabel[task.kind], task.kind !== 'ideate' && task.track === 'fast' ? '초안' : null, task.origin === 'desktop' ? null : `${task.origin}에서`, stamp(task.createdAt)].filter(Boolean).join(' · ');
 
   return (
@@ -734,6 +782,10 @@ function Passage({ task, items, pending, onShow, onCheckpoint, onFile, onBuild, 
       <Said meta={requestMeta} clamp>
         {task.prompt}
       </Said>
+      {/* A request is worth having back: to send again after a failure, or changed. */}
+      <button type="button" onClick={() => onReuse(task.prompt)} className="-mt-1 min-h-9 pointer-coarse:min-h-11 self-start px-1 text-sm font-medium text-fg-muted underline underline-offset-4 hover:text-fg">
+        이 요청을 입력창으로 가져오기
+      </button>
 
       {items.map((item, i) => {
         switch (item.kind) {
@@ -782,6 +834,15 @@ function Passage({ task, items, pending, onShow, onCheckpoint, onFile, onBuild, 
           {task.state === 'running' && task.startedAt !== null ? <Elapsed since={task.startedAt} /> : null}, 토큰 {tokens(task.spentTokens)} / {tokens(task.budgetTokens)}
         </Working>
       ) : null}
+      {/* Stopped from the task itself, where it says it is running or waiting: not only from the field below. */}
+      {task.state === 'running' || task.state === 'queued' ? (
+        <div className="flex flex-col items-start gap-2 px-1">
+          <Button busy={drop.busy} onClick={() => void drop.run()} icon={<Square className="size-4" aria-hidden />}>
+            {task.state === 'queued' ? '대기 중인 작업 취소' : '작업 중단'}
+          </Button>
+          {drop.error ? <Problem>{drop.error}</Problem> : null}
+        </div>
+      ) : null}
 
       {live(task.state) ? null : (
         <div className="flex flex-col gap-3 rounded-lg border border-border bg-surface px-4 py-3">
@@ -799,7 +860,7 @@ function Passage({ task, items, pending, onShow, onCheckpoint, onFile, onBuild, 
             </span>
           </div>
           {task.error ? <Problem>{task.error}</Problem> : null}
-          {(merge.error ?? resume.error ?? drop.error) ? <Problem>{merge.error ?? resume.error ?? drop.error}</Problem> : null}
+          {(merge.error ?? resume.error ?? drop.error ?? again.error) ? <Problem>{merge.error ?? resume.error ?? drop.error ?? again.error}</Problem> : null}
           {task.state === 'suspended' ? (
             <div className="flex flex-col gap-3 border-l-4 border-warning pl-4">
               <div className="flex flex-col gap-1">
@@ -844,6 +905,11 @@ function Passage({ task, items, pending, onShow, onCheckpoint, onFile, onBuild, 
               {task.state === 'failed' && task.branch ? (
                 <Button variant="primary" onClick={() => onContinue(task.branch!)} icon={<GitFork className="size-4" aria-hidden />}>
                   이 작업물에서 이어가기
+                </Button>
+              ) : null}
+              {(task.state === 'failed' || task.state === 'cancelled') && task.kind !== 'kirby_materialize' ? (
+                <Button busy={again.busy} onClick={() => void again.run()} icon={<RotateCw className="size-4" aria-hidden />}>
+                  같은 요청 다시 실행
                 </Button>
               ) : null}
               {task.state === 'failed' && task.baseCheckpointId ? (
@@ -1107,6 +1173,7 @@ function ApprovalCard({ approval }: { approval: Approval }) {
     <div className="flex flex-col gap-3 rounded-lg border border-warning bg-surface px-4 py-3">
       <span className="text-sm font-medium text-warning">승인 필요</span>
       <p className="text-base">{approval.summary}</p>
+      <Remaining until={approval.expiresAt} />
       {resolve.error ? <Problem>{resolve.error}</Problem> : null}
       <div className="flex flex-wrap gap-2">
         <Button variant="primary" busy={resolve.busy} onClick={() => void resolve.run('approve')}>
