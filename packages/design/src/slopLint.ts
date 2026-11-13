@@ -114,6 +114,14 @@ const lineRules: LineRule[] = [
     },
   },
   {
+    id: 'slop/font-scaling-off',
+    category: 'typography',
+    severity: 'major',
+    fix: 'Remove it. Text follows the size the person set on their phone; make the layout survive the largest size (let rows grow and wrap) instead of pinning the type.',
+    applies: (f) => f.markup,
+    check: (line) => (/\ballowFontScaling\s*=\s*\{\s*false\s*\}|\bmaxFontSizeMultiplier\s*=\s*\{\s*1(?:\.0+)?\s*\}/.test(line) ? 'text set to ignore the system text size' : null),
+  },
+  {
     id: 'slop/caps-eyebrow',
     category: 'typography',
     severity: 'minor',

@@ -1,3 +1,4 @@
+import { HOUSE_BAR_MOBILE, HOUSE_BAR_WEB } from '../harness/houseBar.ts';
 import type Anthropic from '@anthropic-ai/sdk';
 import { z } from 'zod';
 import { RedesignAction, ScreenArchetype, type Finding, type FindingCategory, type RedesignPatch, type Severity, type Template, type ViewportId } from '@studio-zero/protocol';
@@ -156,7 +157,7 @@ const MOCKUP_NOTE =
 export function visionParts(input: VisionInput): { head: string; elements: string; measured: string } {
   const measured = input.measured.length === 0 ? '(none)' : input.measured.map((f) => `- [${f.severity}] ${f.rule}: ${f.message}`).join('\n');
   return {
-    head: `Product: ${PRODUCT[input.template]}. Viewport: ${input.viewport} (${input.digest.width}x${input.digest.height} CSS px). Route: ${input.route}. ${input.firstScreen ? 'This is the product\'s first screen: what a person sees before doing anything. ' : ''}${input.mockup ? MOCKUP_NOTE : ''}${input.folds.length} screenshot(s) follow, top of page first.`,
+    head: `Product: ${PRODUCT[input.template]}. Viewport: ${input.viewport} (${input.digest.width}x${input.digest.height} CSS px). Route: ${input.route}. ${input.firstScreen ? `This is the product's first screen: what a person sees before doing anything. It was built to the bar below, and is judged against it: say which of its points the screen misses, as findings.\n${input.template === 'mobile-expo' ? HOUSE_BAR_MOBILE : HOUSE_BAR_WEB}\n` : ''}${input.mockup ? MOCKUP_NOTE : ''}${input.folds.length} screenshot(s) follow, top of page first.`,
     elements: `Element list (id, tag, own text, size, position, font):\n${untrusted('browser-page', elementList(input.digest), { route: input.route })}`,
     measured: `Already measured from the DOM (do not repeat):\n${untrusted('browser-page', measured)}`,
   };

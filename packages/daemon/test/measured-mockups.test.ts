@@ -273,6 +273,35 @@ test('measuring a design task\'s mock-ups: each drawn, walked and filmed, the au
   }
 });
 
+test('a mock-up made of the browser\'s own parts is walked with scripts off: a popover opened by its button, one panel open at a time', async (t) => {
+  const browser = await launch();
+  if (!browser) return t.skip('headless Chrome cannot be launched here');
+  // What the brief now offers beside checked inputs: popovertarget, <details name>, and an entrance by @starting-style.
+  const NATIVE = `<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>D · 서랍</title><style>
+body{margin:0;font:16px/1.5 system-ui;padding:24px}button,summary{min-height:48px;min-width:48px;font:inherit;padding:0 16px}button:active,summary:active{transform:scale(.97);background:#123;color:#fff}
+[popover]{inset:auto 0 0 0;margin:0;width:100%;border:0;border-top:1px solid #333;padding:24px;transition:translate 200ms ease-out, display 200ms allow-discrete, overlay 200ms allow-discrete;translate:0 0}
+@starting-style{[popover]:popover-open{translate:0 100%}}
+details{border-bottom:1px solid #999}
+</style></head><body>
+<h1>망원동 집 장부</h1>
+<details name="chore"><summary data-step="log:1">설거지</summary><button popovertarget="sheet" data-step="log:2">20분 적기</button></details>
+<details name="chore"><summary>빨래</summary><p>40분</p></details>
+<div id="sheet" popover><p data-done="log">지우 방금 · 설거지 20분</p></div>
+</body></html>`;
+  try {
+    const context = await browser.newContext({ viewport: { width: 393, height: 852 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, javaScriptEnabled: false, offline: true });
+    const page = await context.newPage();
+    await page.setContent(NATIVE, { waitUntil: 'load' });
+    const walk = await walkFlow(page, [{ id: 'log', goal: '설거지 20분을 적는다', outcome: '방금 적은 줄이 서랍에 보인다' }], { touch: true });
+    assert.deepEqual(walk.tasks.map((task) => [task.id, task.reached, task.stopped, task.presses, task.answered]), [['log', true, null, 2, 2]], 'the summary opened its panel, the button opened the popover, and both answered the press');
+    assert.deepEqual(walkProblems(walk, [{ id: 'log', goal: '설거지 20분을 적는다', outcome: '방금 적은 줄이 서랍에 보인다' }], { touch: true }), []);
+    assert.equal(await page.locator('#sheet').evaluate((el) => el.matches(':popover-open')), true);
+    await context.close();
+  } finally {
+    await browser.close();
+  }
+});
+
 test('an engine checks its own page: the studio measures it as it will be judged, asks no reviewer, records no audit, and shows the owner what it drew', async (t) => {
   const browser = await launch();
   if (!browser) return t.skip('headless Chrome cannot be launched here');

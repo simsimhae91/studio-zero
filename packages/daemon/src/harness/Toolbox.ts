@@ -9,6 +9,7 @@ import { untrusted, type UntrustedSource } from '../trust/dataBlock.ts';
 import { errorMessage, excerpt, newId } from '../util/core.ts';
 import type { ImageDesk } from '../qa/ImageDesk.ts';
 import { MOCKUP_DIR, MOCKUP_FILES, renderMockupCheck, type MockupRenderer } from '../qa/MockupRenderer.ts';
+import { WEB_GUIDANCE_VERSION } from './houseBar.ts';
 import { THEME_SEED_FILE, ThemeChoice, chosenTheme } from './themeSeed.ts';
 
 export interface ToolContext {
@@ -274,6 +275,36 @@ export class Toolbox {
           const next = input.replace_all ? content.replaceAll(input.old_string, input.new_string) : content.replace(input.old_string, () => input.new_string);
           await sandboxes.writeFile(ctx.project, input.path, next);
           return { text: `edited ${input.path} (${occurrences} replacement${occurrences === 1 ? '' : 's'})`, ok: true, exitCode: null };
+        },
+      }),
+      define({
+        name: 'web_guidance',
+        description:
+          'Look up how the web platform does something today before writing it by hand. Modern Web Guidance (from the Chrome, Edge, Firefox and MDN teams; about 200 guides) covers native UI primitives (dialog, popover, menu, tooltip, accordion, tabs, carousel, drawer, toast), forms (when to validate, autofill, styling a select, one-time codes), motion (entry and exit, view transitions, scroll effects), layout and CSS (container queries, :has(), anchor positioning, fluid sizing), type and colour (text wrapping, font fallbacks, light-dark, contrast-color), accessibility, performance and security. action "search" finds guides for a need said in plain words (give query); "retrieve" returns up to two guides in full, with the pattern, the gotchas and the fallback for browsers that lack it (give ids from a search); "scan" reads the project for legacy patterns and lists candidates, each with the conditions under which it holds or should be dropped (path defaults to the whole project). It runs in the sandbox and sends nothing out. For web projects.',
+        schema: z.object({
+          action: z.enum(['search', 'retrieve', 'scan']),
+          query: z.string().min(3).max(200).optional().describe('For search: what you are building, in a few plain words ("animate a dialog and its backdrop").'),
+          ids: z.array(z.string().regex(/^[a-z0-9][a-z0-9-]{1,60}$/)).min(1).max(2).optional().describe('For retrieve: one or two guide ids from a search.'),
+          path: z.string().regex(/^[A-Za-z0-9_.][A-Za-z0-9_./-]{0,200}$/).refine((p) => !p.includes('..'), 'no ".." in the path').optional().describe('For scan: a directory or file relative to /workspace. Default: the project.'),
+        }),
+        action: (input, project) => ({ kind: 'sandbox.exec', projectId: project.id, command: `web_guidance ${input.action}` }),
+        // The guides are a third party's text.
+        source: 'external-tool',
+        summarize: (input) => `${input.action} ${input.action === 'search' ? (input.query ?? '') : input.action === 'retrieve' ? (input.ids ?? []).join(', ') : (input.path ?? '.')}`.trim(),
+        run: async (input, ctx) => {
+          if (input.action === 'search' && input.query === undefined) return { text: 'search needs a query.', ok: false, exitCode: null };
+          if (input.action === 'retrieve' && input.ids === undefined) return { text: 'retrieve needs ids: one or two guide ids from a search.', ok: false, exitCode: null };
+          // The query is a model's words on a command line: quoted whole, so nothing in it is read as shell.
+          const quoted = (text: string): string => `'${text.replaceAll("'", `'\\''`)}'`;
+          const args = input.action === 'search' ? `search ${quoted(input.query!)}` : input.action === 'retrieve' ? `retrieve ${quoted(input.ids!.join(','))}` : `legacy-scan ${quoted(input.path ?? '.')} --json`;
+          // The package reports each search to its maker unless told not to. A query is the product described in
+          // a few words, so it never leaves: the opt-out is set here, for every call, and not left to an engine.
+          // Written to a file and read back: with its output on a pipe the package saves a long guide somewhere of
+          // its own choosing and prints where, for an agent with a file tool that can reach it. An engine here has none.
+          const res = await sandboxes.exec(ctx.project, `cd /workspace && out=$(mktemp) && DISABLE_TELEMETRY=1 NO_COLOR=1 npx -y modern-web-guidance@${WEB_GUIDANCE_VERSION} ${args} > "$out"; code=$?; cat "$out"; rm -f "$out"; exit $code`, { timeoutSec: 180, signal: ctx.signal });
+          const text = res.stdout.trim();
+          if (res.exitCode !== 0 || text === '') return { text: `The guidance could not be read (${excerpt(res.stderr.trim() || 'no output', 400)}). Build it from what you know, with the platform's own element where there is one.`, ok: false, exitCode: res.exitCode };
+          return { text: text === '[]' ? 'No guide matches. Say the need differently, or build it from what you know.' : text, ok: true, exitCode: res.exitCode };
         },
       }),
       // Just-in-time tooling. Two fixed tools instead of a tool list that changes as servers are found:

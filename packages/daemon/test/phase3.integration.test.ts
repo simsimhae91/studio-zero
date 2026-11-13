@@ -106,6 +106,33 @@ test('mock-ups on a real engine: pages in a sandbox are drawn in the QA browser 
   }
 });
 
+test('web guidance on a real engine: the pinned package runs in a sandbox, finds a guide, returns it in full and scans a file', { skip }, async () => {
+  const home = tempDir('sz-guide-');
+  const config = testConfig(home.dir, { listen: { port: await freePort() }, gateway: { port: await freePort() }, engines: { claudeCode: { enabled: false } }, runtime: { memoryMb: 1024 }, selfHosting: { enabled: false } });
+  const daemon = await createDaemon(config, quietLog, { securityRun: fakeSecurity().run });
+  const { studio, sandboxes, toolbox } = daemon;
+  const project = studio.createProject({ type: 'owner', via: 'desktop' }, { name: 'Guide test', slug: `it-${randomBytes(4).toString('hex')}`, template: 'web-vite-react' });
+  try {
+    await studio.settle();
+    const task = await studio.submitTask({ type: 'owner', via: 'desktop' }, { projectId: project.id, kind: 'build', prompt: 'guide test' }, 'desktop');
+    const ctx = { project, taskId: task.id };
+    const found = await toolbox.call(ctx, 'web_guidance', { action: 'search', query: 'accordion that opens one panel at a time' });
+    assert.equal(found.isError, false, found.content);
+    assert.match(found.content, /"id":"accordion"/);
+    const guide = await toolbox.call(ctx, 'web_guidance', { action: 'retrieve', ids: ['accordion'] });
+    assert.equal(guide.isError, false, guide.content.slice(0, 300));
+    assert.ok(guide.content.length > 2000 && /details/.test(guide.content), `the guide in full (${guide.content.length} chars): ${JSON.stringify(guide.content)}`);
+    await sandboxes.writeFile(project, 'src/SignIn.tsx', 'export const SignIn = () => <form><input type="email" name="email" /><input type="password" name="password" /><button>로그인</button></form>;\n');
+    const scan = await toolbox.call(ctx, 'web_guidance', { action: 'scan', path: 'src' });
+    assert.equal(scan.isError, false, scan.content.slice(0, 300));
+    assert.ok(/"totalFindings"/.test(scan.content) && /keepWhen/.test(scan.content), `candidates with their keep and drop conditions: ${scan.content.slice(0, 700)}`);
+  } finally {
+    await sandboxes.destroy(project, { deleteWorkspace: true }).catch(() => undefined);
+    await daemon.stop().catch(() => undefined);
+    home.cleanup();
+  }
+});
+
 // Spends one picture of the owner's Codex subscription, so it asks for both switches.
 const skipImage = (process.env.SZ_TEST_ENGINE !== '1' || process.env.SZ_TEST_SESSION !== '1') && 'set SZ_TEST_ENGINE=1 and SZ_TEST_SESSION=1 to run (needs OrbStack and a logged-in Codex CLI; makes one picture on that subscription)';
 

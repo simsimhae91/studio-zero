@@ -164,6 +164,6 @@ test('the empty first screen is a trap on the first screen and an observation el
   assert.deepEqual([deeper.findings[0]!.severity, deeper.slopScore, deeper.patches.length], ['major', 20, 0], 'a settings page may be all text');
 
   const head = (firstScreen: boolean): string => (visionContent({ scope: { projectId: 'p', taskId: null }, viewport: 'desktop-1440', route: '/', template: 'web-vite-react', firstScreen, folds: [], digest, measured: [] })[0] as { text: string }).text;
-  assert.match(head(true), /Route: \/\. This is the product's first screen: what a person sees before doing anything\. 0 screenshot/);
+  assert.match(head(true), /Route: \/\. This is the product's first screen: what a person sees before doing anything\. It was built to the bar below, and is judged against it[\s\S]*None of this is a look to copy[^\n]*\n0 screenshot/);
   assert.match(head(false), /Route: \/\. 0 screenshot/);
 });
