@@ -23,6 +23,13 @@ const MAX_SAMPLE = 40;
 const HOLD_MS = 140;
 /** The longest the walk waits for what a press set off to finish. */
 const SETTLE_CAP_MS = 1500;
+/**
+ * Movement longer than this is not an answer to a press: it is something the screen keeps doing (a countdown
+ * on an undo, a progress bar). It is waited through up to the cap and left out of the response time.
+ */
+const RESPONSE_MAX_MS = 1500;
+/** How far around a control the screen is compared between rest and held: a press is often answered by the row it sits in. */
+const AROUND_PX = 40;
 
 /** One picture of a walk: the screen at rest (`task` null), or as it stood after a press. */
 export interface WalkFrame {
@@ -105,19 +112,19 @@ function painted(el: Element): string {
   return parts.join('\n');
 }
 
-/** Runs in the page: what is moving because of the last press, and for how long. Loops are not a response. */
-function moving(): number {
+/** Runs in the page: how long each thing that is moving right now runs for, start to end. Loops are left out. */
+function moving(): number[] {
   const list = typeof document.getAnimations === 'function' ? document.getAnimations() : [];
-  let longest = 0;
+  const lengths: number[] = [];
   for (let i = 0; i < list.length && i < 400; i++) {
     const a = list[i]!;
     if (a.playState !== 'running' || !a.effect) continue;
     const t = a.effect.getComputedTiming();
     if (t.iterations === Infinity) continue;
     const once = typeof t.duration === 'number' ? t.duration : 0;
-    longest = Math.max(longest, (t.delay ?? 0) + once * (t.iterations ?? 1));
+    lengths.push((t.delay ?? 0) + once * (t.iterations ?? 1));
   }
-  return longest;
+  return lengths;
 }
 
 /**
@@ -148,6 +155,23 @@ export async function walkFlow(page: Page, tasks: readonly FlowTask[], opts: { t
   };
   const frames: WalkFrame[] = [];
   const shoot = async (task: number | null, step: number | null): Promise<void> => void frames.push({ task, step, jpeg: await page.screenshot({ type: 'jpeg', quality: 72 }) });
+  /** Waits for what is moving to finish, up to the cap. Returns how long the answer to a press ran, if there was one. */
+  const settle = async (): Promise<number> => {
+    await page.waitForTimeout(40);
+    const lengths = z.array(z.number().min(0).max(3_600_000)).max(400).catch([]).parse(await page.evaluate(moving).catch(() => []));
+    await page.waitForTimeout(Math.min(SETTLE_CAP_MS, Math.max(0, ...lengths) + 60));
+    return Math.max(0, ...lengths.filter((ms) => ms <= RESPONSE_MAX_MS));
+  };
+  const view = page.viewportSize() ?? { width: 1280, height: 800 };
+  /** The screen around a control, as bytes that are equal when, and only when, it looks the same. */
+  const around = (target: { x: number; y: number; w: number; h: number }): Promise<Buffer | null> => {
+    const left = Math.max(0, Math.floor(target.x - target.w / 2 - AROUND_PX));
+    const top = Math.max(0, Math.floor(target.y - target.h / 2 - AROUND_PX));
+    const clip = { x: left, y: top, width: Math.max(1, Math.min(view.width - left, Math.ceil(target.w + AROUND_PX * 2))), height: Math.max(1, Math.min(view.height - top, Math.ceil(target.h + AROUND_PX * 2))) };
+    return page.screenshot({ type: 'png', clip }).catch(() => null);
+  };
+  // The entrance is over before the first picture is taken: "at rest" means at rest.
+  await settle();
   await shoot(null, null);
 
   const walked: FlowTaskWalk[] = [];
@@ -181,13 +205,18 @@ export async function walkFlow(page: Page, tasks: readonly FlowTask[], opts: { t
         Object.assign(result, { stopped: 'covered', stoppedAtStep: step });
         break;
       }
+      // Whether the press is answered is read two ways, and either counts: the control's own computed styles, and
+      // the pixels around it. A page may answer in the control's row, a sibling or a pseudo-element, which only the
+      // pixels show; a change too slight for the eye still shows in the styles.
       const control = page.locator(selectors(step).step).nth(target.index);
       const look1 = await control.evaluate(painted).catch(() => '');
+      const seen1 = await around(target);
       await page.mouse.move(target.x, target.y);
       const hovered = opts.touch ? look1 : await control.evaluate(painted).catch(() => look1);
       await page.mouse.down();
       await page.waitForTimeout(HOLD_MS);
       const held = await control.evaluate(painted).catch(() => look1);
+      const seen2 = await around(target);
       await page.mouse.up();
       if (target.field) {
         const sample = (target.sample.trim() || '1').slice(0, MAX_SAMPLE);
@@ -195,15 +224,13 @@ export async function walkFlow(page: Page, tasks: readonly FlowTask[], opts: { t
         result.typed += [...sample].length;
       }
       result.presses += 1;
-      if (held !== look1 || hovered !== look1) result.answered += 1;
+      if (held !== look1 || hovered !== look1 || (seen1 !== null && seen2 !== null && !seen1.equals(seen2))) result.answered += 1;
       result.smallestTargetPx = Math.round(Math.min(result.smallestTargetPx ?? Infinity, target.w, target.h));
 
-      await page.waitForTimeout(40);
-      const longest = z.number().min(0).max(600_000).catch(0).parse(await page.evaluate(moving).catch(() => 0));
-      if (longest > 0) result.responseMs = Math.round(Math.max(result.responseMs ?? 0, longest));
-      await page.waitForTimeout(Math.min(SETTLE_CAP_MS, longest + 60));
       // Take the pointer off what it pressed, so the next look is at the screen and not at a hover.
       await page.mouse.move(0, 0);
+      const answer = await settle();
+      if (answer > 0) result.responseMs = Math.round(Math.max(result.responseMs ?? 0, answer));
       await shoot(taskIndex, step);
     }
 

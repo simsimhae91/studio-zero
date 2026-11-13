@@ -148,6 +148,13 @@ test('the walk: a page with scripts off is operated through the core flow, and w
     assert.match(said[2]!, /1 of its 1 control\(s\) look the same while held down as at rest/);
     assert.ok(!walkProblems(dead, FLOW_TASKS, { touch: false }).some((line) => line.includes('thumb')), 'target size is a touch-screen measure');
 
+    // What a real model's page did, which is why the answer is also read from the pixels around the control: the
+    // press is answered by the row the control sits in, and an undo countdown runs for five seconds beside it.
+    const inRow = await walkOn(
+      OPERABLE.replace('.btn:active{transform:scale(.96);background:#143526}', 'section:has(.btn:active){background:#e4e2da}').replace('.quiet:active{background:#ecebe6}', '@keyframes drain{from{width:100%}to{width:0}}.stamp::after{content:"";display:block;height:4px;background:var(--brand);animation:drain 5000ms linear both}'),
+    );
+    assert.deepEqual(inRow.tasks.map((task) => [task.id, task.reached, task.answered, task.responseMs]), [['log', true, 1, 320], ['undo', true, 1, null]], 'answered in the row counts; the countdown is not the response');
+
     // A field among the steps is typed into, and a page with none of the marks cannot be started.
     const typed = await walkOn(OPERABLE.replace('<label class="btn" for="s-logged" data-step="log:1">설거지 20분 적기</label>', '<input class="btn quiet" placeholder="분" data-step="log:1" data-sample="20"><label class="btn" for="s-logged" data-step="log:2">적기</label>'));
     assert.deepEqual(typed.tasks.map((task) => [task.id, task.reached, task.presses, task.typed]), [['log', true, 2, 2], ['undo', true, 1, 0]]);

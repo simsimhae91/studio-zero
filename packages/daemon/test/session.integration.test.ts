@@ -5,15 +5,18 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { z } from 'zod';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { chromium, devices } from 'playwright-core';
 import { contract, createTheme, renderThemeCss, seedFromName } from '@studio-zero/design';
-import { codingSystemPrompt } from '../src/harness/prompts.ts';
+import { MOCKUP_RULES, codingSystemPrompt } from '../src/harness/prompts.ts';
 import { loopTool, runToolLoop } from '../src/llm/toolLoop.ts';
 import { gradeAudit, runDomChecks } from '../src/qa/checks.ts';
 import { PageDigest, collectDigest } from '../src/qa/collector.ts';
+import { walkFlow, walkProblems } from '../src/qa/FlowWalker.ts';
+import { withFaces } from '../src/qa/mockupFaces.ts';
 import { runCommand } from '../src/util/run.ts';
+import { SCREEN_SPEC } from './fixtures-mockup.ts';
 import { freePort, sampleProject, testDaemon } from './helpers.ts';
 
 const enabled = process.env.SZ_TEST_SESSION === '1';
@@ -236,6 +239,69 @@ test('a chosen model, for real: each CLI lists its own, runs the one picked, and
       });
     }
   } finally {
+    await d.cleanup();
+  }
+});
+
+// The brief a design task's mock-ups are drawn under, put to a real model: does it come back with a page that
+// can be operated with scripts off, marked so the studio can walk it? One page, one call, no tools.
+//
+//   SZ_TEST_SESSION=1 node --test --test-name-pattern="a mock-up from the real brief" packages/daemon/test/session.integration.test.ts
+//
+// SZ_TEST_OUT=<dir> keeps the page and a picture of it for a person to look at.
+test('a mock-up from the real brief: a real model writes a page that opens before the act, and the walk carries the core flow out on it', { skip: enabled ? false : 'set SZ_TEST_SESSION=1 (uses the Claude Code login on this machine)', timeout: 15 * 60 * 1000 }, async (t) => {
+  const browser = await chromium.launch({ channel: 'chrome', headless: true, timeout: 15_000 }).catch(() => null);
+  if (!browser) return t.skip('headless Chrome cannot be launched here');
+  const d = await testDaemon({ listen: { port: await freePort() }, engines: { claudeCode: { enabled: true } } }, {}, (docker) => (file, args, opts) => (file === 'claude' ? runCommand(file, args, opts) : docker(file, args, opts)));
+  await d.daemon.start();
+  try {
+    assert.equal((await d.daemon.studio.status()).brain, 'session');
+    const theme = renderThemeCss(createTheme({ ...seedFromName('household-chore-tracker'), hue: 28, chroma: 0.14 }));
+    const tasks = SCREEN_SPEC.tasks.map(({ id, goal, outcome }) => ({ id, goal, outcome }));
+    const started = Date.now();
+    const { html } = await d.daemon.claude.structured({
+      scope: { projectId: 'prj_studio', taskId: null },
+      model: 'claude-fable-5-2',
+      effort: 'medium',
+      system: codingSystemPrompt('mobile-expo'),
+      schema: z.object({ html: z.string().describe('The complete HTML document of the mock-up page.') }),
+      maxTokens: 24_000,
+      content: [
+        {
+          type: 'text',
+          text: `Draw one mock-up page, page a, for the product whose screen spec is below (a phone app that two people in one home use to record chores). You have no tools in this exchange: do not call set_theme or generate_image. Use the custom properties of the theme below as the page's :root, and compose a direction that needs no picture file. Return the complete HTML document in "html".\n\nThe rules every mock-up is drawn under:\n\n${MOCKUP_RULES}\n\ndocs/screens.json:\n${JSON.stringify(SCREEN_SPEC, null, 2)}\n\n.studio-zero/theme.css:\n${theme}`,
+        },
+      ],
+    });
+    t.diagnostic(`the model answered in ${Math.round((Date.now() - started) / 1000)}s with ${html.length} characters`);
+    assert.ok(/<html[\s>]/i.test(html) && html.length > 2000, 'a whole page came back');
+    assert.ok(!/<script[\s>]/i.test(html), 'and it has no script in it');
+
+    const context = await browser.newContext({ viewport: { width: 393, height: 852 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, javaScriptEnabled: false, offline: true });
+    const page = await context.newPage();
+    await page.setContent(withFaces(html), { waitUntil: 'load' });
+    const out = process.env.SZ_TEST_OUT;
+    if (out) {
+      mkdirSync(out, { recursive: true });
+      writeFileSync(join(out, 'a.html'), html);
+      await page.screenshot({ path: join(out, 'a-at-rest.png') });
+    }
+    const walk = await walkFlow(page, tasks, { touch: true });
+    if (out) await page.screenshot({ path: join(out, 'a-after-walk.png') });
+    const problems = walkProblems(walk, tasks, { touch: true });
+    t.diagnostic(`walk: ${JSON.stringify(walk.tasks)}`);
+    for (const problem of problems) t.diagnostic(`found: ${problem}`);
+    const digest = PageDigest.safeParse(await page.evaluate(collectDigest, 600));
+    if (digest.success) {
+      const measured = runDomChecks(digest.data, { viewport: 'iphone-15-pro', viewportWidth: 393, route: 'docs/mockups/a.html', touch: true, scope: 'full' }, contract);
+      t.diagnostic(`measured at phone size: ${measured.filter((f) => f.severity === 'blocker').length} blocker(s), ${measured.filter((f) => f.severity === 'major').length} major, ${measured.filter((f) => f.severity === 'minor').length} minor${measured.length > 0 ? `: ${[...new Set(measured.map((f) => f.rule))].join(', ')}` : ''}`);
+    }
+    await context.close();
+
+    assert.notEqual(walk.tasks[0]?.stopped, 'already-done', 'the page opens in the state before the person acts');
+    assert.deepEqual(walk.tasks.map((task) => [task.id, task.reached]), tasks.map((task) => [task.id, true]), `every task of the core flow was carried out on the page: ${problems.join(' | ')}`);
+  } finally {
+    await browser.close();
     await d.cleanup();
   }
 });
