@@ -207,10 +207,12 @@ test('Korean copy lint names each generated habit with the wording to replace', 
       t('body', '설정은 세 단계로 이루어집니다. 화면을 따라가면 됩니다. 결과는 대시보드에서 확인하실 수 있습니다.'),
       t('cta', '시작하기'),
       t('cta', '더 알아보기'),
+      t('title', '관리비 도우미에 오신 것을 환영합니다'),
+      t('body', '이 화면에서 지난달 고지서를 올릴 수 있어요. 올리면 항목별로 나눠서 보여 드려요. 평균보다 많이 나온 항목은 빨갛게 표시돼요. 궁금한 항목을 누르면 이유를 알려 드려요.'),
     ],
     [0, 320, 640].map((x) => ({ group: 'main > section', x, y: 400, w: 300, h: 200 })),
   );
-  assert.deepEqual([...new Set(hits.map((h) => h.pattern))].sort(), KOREAN_TEXT_SLOP_PATTERNS.map((p) => p.id).sort(), 'all five habits');
+  assert.deepEqual([...new Set(hits.map((h) => h.pattern))].sort(), KOREAN_TEXT_SLOP_PATTERNS.map((p) => p.id).sort(), 'every habit in the table');
   const listing = hits.find((h) => h.pattern === 'feature-list-dumping')!;
   assert.equal(listing.quote, '토론하고 문서를 고칩니다');
   assert.equal(listing.index, 1);
@@ -219,6 +221,17 @@ test('Korean copy lint names each generated habit with the wording to replace', 
   assert.deepEqual(hits.filter((h) => h.pattern === 'generic-cta').map((h) => h.quote), ['시작하기', '더 알아보기']);
   assert.equal(hits.find((h) => h.pattern === 'uniform-card-grid')!.severity, 'minor');
   assert.equal(textSlopScore(hits), 100);
+
+  // Sentences that were English first, wherever they stand; and a notice that has become a monologue.
+  const translated = (role: InterfaceText['role'], text: string): string[] => lintInterfaceText([t(role, text)]).filter((h) => h.pattern === 'translationese').map((h) => h.quote);
+  assert.deepEqual(translated('title', '관리비 도우미에 오신 것을 환영합니다'), ['에 오신 것을 환영']);
+  assert.deepEqual(translated('cta', '새로운 정산을 경험해보세요'), ['경험해보세요']);
+  assert.deepEqual(translated('body', '당신의 고지서를 한눈에.'), ['당신의']);
+  assert.deepEqual(translated('body', '사진 분석을 통해 누수를 찾을 수 있어요.'), ['을 통해 누수를 찾을 수 있']);
+  assert.deepEqual(translated('label', '당신의 기록'), [], 'a short label is too little to tell');
+  const notice = hits.find((h) => h.pattern === 'long-notice')!;
+  assert.deepEqual([notice.severity, notice.message], ['minor', '안내문 하나가 4문장입니다: "이 화면에서 지난달 고지서를 올릴 수 있어요. 올리면 항목별로 나눠서 보여 드려요. 평균보다 많이 나온 항목…"']);
+  assert.deepEqual(lintInterfaceText([t('cta', '제출')]).map((h) => h.pattern), ['generic-cta']);
 });
 
 test('Korean copy lint leaves specific copy alone', () => {
@@ -233,6 +246,8 @@ test('Korean copy lint leaves specific copy alone', () => {
       t('cta', '사진에서 주소 지우기'),
       t('cta', '확인'),
       t('label', '시작하기'),
+      t('body', '환영 인사는 생략할게요. 고지서 사진만 올려 주세요.'),
+      t('body', '우체통을 통해 받은 고지서도 돼요.'),
     ],
     // Rows of a list are equal by nature; so are two cards, and boxes on different rows.
     [0, 80, 160, 240].map((y) => ({ group: 'ul', x: 0, y, w: 600, h: 80 })),

@@ -209,10 +209,31 @@ export const KOREAN_TEXT_SLOP_PATTERNS = [
   {
     id: 'generic-cta',
     name: '어디에나 붙는 공용 버튼 문구',
-    regex: /^(시작하기|더 알아보기|지금 확인하기|첫 .* 열어보기|지금 시작하기|무료로 시작하기|바로 시작하기|자세히 알아보기|Get started|Learn more)$/i,
+    // "확인" is not here on purpose: it is the honest label of an acknowledgement, and flagging it would have every
+    // dialog's OK button renamed into something contrived.
+    regex: /^(시작하기|더 알아보기|지금 확인하기|첫 .* 열어보기|지금 시작하기|무료로 시작하기|바로 시작하기|자세히 알아보기|제출|제출하기|Get started|Learn more|Submit)$/i,
     rule: '그 제품에서만 나올 수 있는 구체적인 행동 동사를 써라 (예: "사진에서 주소 지우기").',
     reads: 'cta',
     severity: 'major',
+  },
+  {
+    id: 'translationese',
+    name: '영어 문장을 옮겨 적은 번역투',
+    // "Welcome to …", "Experience …", "Meet …", "your …", "through … you can …": sentences that were English first.
+    regex: /(에 오신 (?:것|걸) ?(?:을 )?환영|(?:경험|체험)해 ?보세요|만나 ?보세요|당신(?:의|만의|을|이|에게|과)|[을를] 통해 [^.!?\n]{0,40}(?:수 있|하세요|해 ?보세요|드립니다))/,
+    rule: '번역한 문장 대신 한국어로 처음 쓴 문장으로 바꿔라: 인사와 권유를 빼고, 지금 이 사람이 할 수 있는 일과 그 결과를 말하라 (예: "누수되는 관리비 3초 만에 찾기").',
+    reads: 'any',
+    severity: 'major',
+  },
+  {
+    id: 'long-notice',
+    name: '세 문장이 넘는 독백형 안내문',
+    regex: null,
+    rule: '안내를 한 줄의 핵심으로 줄이고, 나머지는 조건이나 수치를 담은 짧은 라벨로 나눠라.',
+    reads: 'body',
+    // An interface can also hold real prose (a message someone wrote, a policy), which read as text alone looks
+    // the same as a notice. So this one is said and not held to zero.
+    severity: 'minor',
   },
   {
     id: 'uniform-card-grid',
@@ -256,6 +277,9 @@ export interface TextSlopHit {
 /** A statement in the formal explaining register: "…합니다.", "…됩니다.", "…있습니다." */
 const STATEMENT_END = /[가-힣]니다[.。]?$/;
 const RUN_LENGTH = 3;
+/** One piece of body text that is a notice grown into a monologue: this many sentences, and at least this long. */
+const NOTICE_SENTENCES = 3;
+const NOTICE_CHARS = 90;
 const sentencesOf = (text: string): string[] => text.split(/(?<=[.!?。…])\s+|\n+/).map((s) => s.trim()).filter((s) => s !== '');
 const pattern = (id: KoreanTextSlopId): (typeof KOREAN_TEXT_SLOP_PATTERNS)[number] => KOREAN_TEXT_SLOP_PATTERNS.find((p) => p.id === id)!;
 
@@ -277,6 +301,7 @@ export function lintInterfaceText(texts: readonly InterfaceText[], cards: readon
   const explaining = pattern('passive-explanation-tone').regex!;
   const slogan = pattern('empty-slogan-title').regex!;
   const stockCta = pattern('generic-cta').regex!;
+  const translated = pattern('translationese').regex!;
 
   let run: { index: number; first: string; count: number } | null = null;
   const closeRun = (): void => {
@@ -287,6 +312,11 @@ export function lintInterfaceText(texts: readonly InterfaceText[], cards: readon
   texts.forEach((item, index) => {
     const text = item.text.trim();
     if (text === '') return;
+    // Translated phrasing gives itself away wherever it stands: a title, a sentence, a button. A short label is too little to tell.
+    if (item.role !== 'label') {
+      const phrase = translated.exec(text);
+      if (phrase) add('translationese', index, phrase[0], `번역투입니다: "${text.slice(0, 80)}"`);
+    }
     if (item.role === 'cta') {
       if (stockCta.test(text)) add('generic-cta', index, text, `버튼 문구 "${text}"는 어느 제품에나 붙습니다.`);
       return closeRun();
@@ -300,7 +330,9 @@ export function lintInterfaceText(texts: readonly InterfaceText[], cards: readon
     // A run is one passage of explanation. A label or a control between two statements means they belong to
     // different things on the screen (a list of options, each described in a line), which is not a passage.
     if (item.role !== 'body') return closeRun();
-    for (const sentence of sentencesOf(text)) {
+    const sentences = sentencesOf(text);
+    if (sentences.length >= NOTICE_SENTENCES && text.length >= NOTICE_CHARS) add('long-notice', index, text, `안내문 하나가 ${sentences.length}문장입니다: "${text.slice(0, 60)}…"`);
+    for (const sentence of sentences) {
       const chained = listing.exec(sentence);
       if (chained) add('feature-list-dumping', index, chained[0], `기능을 한 문장에 이어 붙였습니다: "${sentence.slice(0, 80)}"`);
       const phrase = explaining.exec(sentence);
