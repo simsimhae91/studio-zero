@@ -346,7 +346,7 @@ const fileEntries: FileEntry[] = [
 const receipt = (over: Partial<LedgerEntry> & Pick<LedgerEntry, 'id' | 'taskId' | 'createdAt'>): LedgerEntry => ({
   projectId: 'prj_ledger', taskKind: 'build', track: 'full', outcome: 'succeeded', engine: 'native-claude',
   code: { compilerErrors: 0, firstCompilerErrors: 0, verifyRounds: 1, checksPassed: 2, checksFailed: [], buildMs: 9800, bundleBytes: 188_600 },
-  design: { grade: 'A', score: 91, slopScore: 18, livingVisual: true, contrastAaa: 1, touchTargets: 1, textSlop: 0 },
+  design: { grade: 'A', score: 91, slopScore: 18, livingVisual: true, contrastAaa: 1, touchTargets: 1, pressAnswer: 1, focusVisible: 1, copySlop: 0, textSlop: 0 },
   cost: { modelCalls: 14, inputTokens: 368_000, outputTokens: 44_800, usdMicros: 1_890_000, wallMs: 14 * 60_000 },
   review: { plan: 'codex', acceptance: 'codex', verdict: 'pass' },
   flow: { tasks: 2, reached: 2, presses: 3, scrolls: 0, smallestTargetPx: 48, answered: 3 },
@@ -357,7 +357,7 @@ const ledger: LedgerEntry[] = [
   receipt({
     id: 'led_3', taskId: 'tsk_list', createdAt: min(-81),
     code: { compilerErrors: 0, firstCompilerErrors: 3, verifyRounds: 2, checksPassed: 2, checksFailed: [], buildMs: 9800, bundleBytes: 188_600 },
-    design: { grade: 'S', score: 96, slopScore: 8, livingVisual: true, contrastAaa: 1, touchTargets: 1, textSlop: 0 },
+    design: { grade: 'S', score: 96, slopScore: 8, livingVisual: true, contrastAaa: 1, touchTargets: 1, pressAnswer: 1, focusVisible: 1, copySlop: 0, textSlop: 0 },
     review: { plan: 'codex', acceptance: 'codex', verdict: 'patched' },
     delta: [
       { metric: '타입 에러', before: '3', after: '0', better: true },
@@ -370,13 +370,13 @@ const ledger: LedgerEntry[] = [
   receipt({
     id: 'led_2', taskId: 'tsk_refactor', createdAt: min(-231), taskKind: 'refactor', outcome: 'failed', engine: 'claude-code',
     code: { compilerErrors: 3, firstCompilerErrors: 5, verifyRounds: 4, checksPassed: 1, checksFailed: ['unit-tests'], buildMs: null, bundleBytes: null },
-    design: { grade: 'B', score: 86, slopScore: 27, livingVisual: true, contrastAaa: 0.94, touchTargets: 1, textSlop: 4 },
+    design: { grade: 'B', score: 86, slopScore: 27, livingVisual: true, contrastAaa: 0.94, touchTargets: 1, pressAnswer: 0.86, focusVisible: 1, copySlop: 80, textSlop: 4 },
     cost: { modelCalls: 9, inputTokens: 88_000, outputTokens: 8200, usdMicros: 0, wallMs: 9 * 60_000 },
     review: { plan: null, acceptance: null, verdict: null },
     delta: [{ metric: '타입 에러', before: '0', after: '3', better: false }, { metric: '검증 회차', before: '1회', after: '4회', better: false }],
     proof: '타입 에러 0→3, 검증 회차 1회→4회',
   }),
-  receipt({ id: 'led_1', taskId: 'tsk_first', createdAt: min(-420), track: 'fast', design: { grade: 'B', score: 85, slopScore: 30, livingVisual: false, contrastAaa: 0.9, touchTargets: 0.92, textSlop: 6 }, review: { plan: null, acceptance: null, verdict: null } }),
+  receipt({ id: 'led_1', taskId: 'tsk_first', createdAt: min(-420), track: 'fast', design: { grade: 'B', score: 85, slopScore: 30, livingVisual: false, contrastAaa: 0.9, touchTargets: 0.92, pressAnswer: 0.5, focusVisible: 0.8, copySlop: 100, textSlop: 6 }, review: { plan: null, acceptance: null, verdict: null } }),
 ];
 
 const quota: SubscriptionQuota[] = [

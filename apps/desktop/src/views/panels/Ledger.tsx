@@ -62,16 +62,28 @@ function Trend({ entries }: { entries: readonly LedgerEntry[] }) {
           <line key={mark} x1={PAD} x2={W - PAD} y1={y(mark)} y2={y(mark)} stroke="var(--color-border)" strokeWidth="1" />
         ))}
         <polyline points={line((e) => e.design.slopScore)} fill="none" stroke="var(--color-fg-muted)" strokeWidth="2" strokeDasharray="6 4" strokeLinejoin="round" />
+        {/* How generated the words read, by the copy lint. Receipts from before it was kept have none, and the line starts where they end. */}
+        <polyline points={line((e) => e.design.copySlop ?? null)} fill="none" stroke="var(--color-warning)" strokeWidth="2" strokeDasharray="2 5" strokeLinecap="round" strokeLinejoin="round" />
         <polyline points={line((e) => e.design.score)} fill="none" stroke="var(--color-accent)" strokeWidth="3" strokeLinejoin="round" />
         {graded.map((e, i) => (
-          <circle key={e.id} cx={x(i)} cy={y(e.design.score ?? 0)} r="4" fill={e.outcome === 'succeeded' ? 'var(--color-accent)' : 'var(--color-danger)'}>
-            <title>{`${stamp(e.createdAt)} · 점수 ${e.design.score}${e.design.grade ? ` · 등급 ${e.design.grade}` : ''}`}</title>
-          </circle>
+          <g key={e.id}>
+            <circle cx={x(i)} cy={y(e.design.score ?? 0)} r="4" fill={e.outcome === 'succeeded' ? 'var(--color-accent)' : 'var(--color-danger)'}>
+              <title>{`${stamp(e.createdAt)} · 점수 ${e.design.score}${e.design.grade ? ` · 등급 ${e.design.grade}` : ''}`}</title>
+            </circle>
+            {/* The grade beside its point: S to F is what a person remembers of a number. */}
+            {e.design.grade ? (
+              <text x={x(i)} y={Math.max(14, y(e.design.score ?? 0) - 10)} textAnchor={i === 0 ? 'start' : i === graded.length - 1 ? 'end' : 'middle'} fontSize="12" fontWeight="600" fill="var(--color-fg)">
+                {e.design.grade}
+              </text>
+            ) : null}
+          </g>
         ))}
       </svg>
       <figcaption className="flex flex-wrap gap-x-6 gap-y-1 text-sm text-fg-muted">
         <span className="font-medium text-accent">실선: 디자인 점수 (높을수록 좋음)</span>
         <span>점선: 슬롭 지수 (낮을수록 좋음)</span>
+        <span className="font-medium text-warning">가는 점선: 카피 슬롭 (낮을수록 좋음)</span>
+        <span>점 위 글자: 디자인 등급</span>
         <span>왼쪽이 오래된 작업</span>
       </figcaption>
     </figure>
@@ -131,7 +143,7 @@ function Receipt({ entry, task }: { entry: LedgerEntry; task: Task | null }) {
           <Row label="등급과 점수">{design.grade === null ? (design.score === null ? '감사 없음' : `심사 없음, ${design.score}점`) : `${design.grade}, ${design.score}점`}</Row>
           <Row label="슬롭 지수">{design.slopScore === null ? '심사 없음' : String(design.slopScore)}</Row>
           <Row label="첫 화면 볼거리">{design.livingVisual === null ? '심사 없음' : design.livingVisual ? '있음' : '없음'}</Row>
-          <Row label="텍스트 슬롭">{design.textSlop === null ? '재지 않음' : design.textSlop === 0 ? '0건' : `${design.textSlop}건`}</Row>
+          <Row label="텍스트 슬롭">{design.textSlop === null ? '재지 않음' : `${design.textSlop === 0 ? '0건' : `${design.textSlop}건`}${typeof design.copySlop === 'number' ? `, 지수 ${design.copySlop}` : ''}`}</Row>
           <Row label="AAA 대비">{pct(design.contrastAaa)}</Row>
           <Row label="터치 타깃">{pct(design.touchTargets)}</Row>
           {/* Tried by hand in a browser: held down, tabbed through. Absent on receipts from before screens were tried. */}

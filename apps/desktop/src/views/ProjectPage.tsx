@@ -5,11 +5,13 @@ import { ReviewerPref, type AdvisorId, type Approval, type Project, type Session
 import { Markdown } from '@studio-zero/ax/react';
 import { duration, effortLabel, elapsed, engineLabel, kindLabel, phaseLabel, stamp, subscriptionLabel, taskStateLabel, templateLabel, tokens } from '../lib/format.ts';
 import { redrawRequest, revisionRequest, type MockupNote } from '../lib/mockups.ts';
+import { RIGOR_CHECKS } from '../lib/rigor.ts';
 import { advisorCommand, buildRequest, flowLine, measuresLine, mockupName, narrate, type Item, type Mockup } from '../lib/steps.ts';
 import { errorText, useAction, useQuery, useStudio, useTaskEvents } from '../lib/studio.tsx';
 import { EnginePicker, pickerClass, useEngineChoice } from './enginePicker.tsx';
 import { Button, IconButton, Menu, MenuItem, MenuSeparator, Problem, Segmented, Sheet, Status, TitlebarSpace, inputClass } from '../ui.tsx';
 import { ActionStepper } from './ActionStepper.tsx';
+import { ArtifactImage } from './artifactImage.tsx';
 import { ExternalApisModal } from './ExternalApis.tsx';
 import { MockupDeskContext, MockupThumb, useMockupDesk, useMockupPages, type MockupDesk } from './mockupDesk.tsx';
 import { Composer, useStickToEnd } from './page.tsx';
@@ -447,6 +449,20 @@ function Workbench({ project, onOpen, onChanged }: { project: Project; onOpen: (
                       spellCheck={false}
                       className={`${inputClass} min-h-9 pointer-coarse:min-h-11 max-w-sm flex-1 text-sm`}
                     />
+                  ) : null}
+                  {/* What the verified track holds this build to, said before it is started: it is why it takes longer than a draft. */}
+                  {designed && !core ? (
+                    <details className="basis-full px-1 text-sm">
+                      <summary className="flex min-h-9 pointer-coarse:min-h-11 cursor-pointer items-center font-medium text-fg-muted hover:text-fg">검증까지 가면 통과해야 하는 것 {RIGOR_CHECKS.length}가지</summary>
+                      <dl className="flex flex-col pb-2">
+                        {RIGOR_CHECKS.map((check) => (
+                          <div key={check.title} className="flex flex-col gap-x-4 border-t border-border py-2 md:flex-row md:items-baseline">
+                            <dt className="shrink-0 font-semibold md:w-40">{check.title}</dt>
+                            <dd className="min-w-0 text-fg-muted">{check.holds}</dd>
+                          </div>
+                        ))}
+                      </dl>
+                    </details>
                   ) : null}
                   {fork ? (
                     <span className="flex items-center gap-1 pl-2 text-sm font-medium text-accent">
@@ -1015,24 +1031,6 @@ function DesignDecision({ task, mockups, onFile, onBuild }: { task: Task; mockup
 /** One line of what the daemon measured on a mock-up. Plain when it is fine; marked when it found something. */
 function Measured({ ok, text }: { ok: boolean; text: string }) {
   return <span className={`break-words text-sm ${ok ? 'text-fg-muted' : 'font-medium text-warning'}`}>{text}</span>;
-}
-
-/** A picture the daemon made (a film of a walk), loaded by its artifact id. */
-function ArtifactImage({ artifactId, alt, className }: { artifactId: string; alt: string; className: string }) {
-  const { backend } = useStudio();
-  const [src, setSrc] = useState<string | null>(null);
-  useEffect(() => {
-    setSrc(null);
-    let stale = false;
-    void backend.artifactUrl(artifactId).then(
-      (url) => !stale && setSrc(url),
-      () => undefined,
-    );
-    return () => {
-      stale = true;
-    };
-  }, [backend, artifactId]);
-  return src ? <img src={src} alt={alt} className={`block h-auto ${className}`} /> : <p className="py-6 text-sm text-fg-muted">장면을 불러오는 중입니다.</p>;
 }
 
 /** A mock-up as the QA browser drew it. A picture: whatever the page contained, nothing of it runs here. */

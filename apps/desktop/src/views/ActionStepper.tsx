@@ -1,7 +1,9 @@
 import { Check, ChevronDown, LoaderCircle, ScanEye, X } from 'lucide-react';
 import { useState } from 'react';
 import type { Step } from '../lib/steps.ts';
+import { useQuery } from '../lib/studio.tsx';
 import { Button } from '../ui.tsx';
+import { ArtifactImage } from './artifactImage.tsx';
 
 const stateWord = { done: '완료', active: '진행 중', failed: '실패' } as const;
 /** Steps whose subject is a sentence, not a command or a path. */
@@ -68,6 +70,7 @@ function StepRow({ step, onAudit }: { step: Step; onAudit: () => void }) {
               ))}
             </ol>
           ) : null}
+          {step.audit ? <AuditEvidence audit={step.audit} /> : null}
           {step.audit ? (
             <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
               <p className="text-base">
@@ -81,5 +84,55 @@ function StepRow({ step, onAudit }: { step: Step; onAudit: () => void }) {
         </div>
       ) : null}
     </li>
+  );
+}
+
+/**
+ * What a verification round's audit saw, where the round is told: the first screen as captured, its grade, and
+ * the design reviewer's words. When the task had audited before, that capture sits beside it, so a repair reads
+ * as the same screen before and after. The pictures are the daemon's captures; the review is a model's words,
+ * shown as text.
+ */
+function AuditEvidence({ audit }: { audit: NonNullable<Step['audit']> }) {
+  const now = useQuery('audits.get', { auditId: audit.id });
+  const before = useQuery('audits.get', audit.previousId === null ? null : { auditId: audit.previousId });
+  const shots = [before.data ? { label: '앞 회차', report: before.data } : null, now.data ? { label: before.data ? '이번 회차' : '이번 회차의 첫 화면', report: now.data } : null].flatMap((entry) => {
+    const shot = entry?.report.screenshots.find((s) => s.fold === 0 && s.state === undefined);
+    return entry && shot ? [{ ...entry, shot }] : [];
+  });
+  if (shots.length === 0) return null;
+  const states = now.data?.screenshots.filter((s) => s.fold === 0 && s.state !== undefined) ?? [];
+  return (
+    <div className="flex flex-col gap-3">
+      <div className={`grid gap-3 ${shots.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+        {shots.map(({ label, report, shot }) => (
+          <figure key={report.id} className="flex min-w-0 flex-col gap-1">
+            <ArtifactImage artifactId={shot.artifactId} alt={`${label}에 캡처한 첫 화면`} className="max-h-80 w-auto max-w-full self-start rounded-md border border-border object-contain" />
+            <figcaption className="text-sm text-fg-muted">
+              <span className="font-medium text-fg">{label}</span> · {report.grade ? `등급 ${report.grade}` : '심사 없음'} · {report.score.toFixed(0)}점{report.slopScore === null ? '' : ` · 슬롭 ${report.slopScore}`}
+            </figcaption>
+          </figure>
+        ))}
+      </div>
+      {now.data?.critique ? (
+        <blockquote className="border-l-4 border-accent pl-3 text-base">
+          {now.data.critique}
+          <footer className="text-sm text-fg-muted">디자인 리드의 평</footer>
+        </blockquote>
+      ) : null}
+      {states.length > 0 ? (
+        <div className="flex flex-col gap-1">
+          <p className="text-sm font-medium text-fg-muted">명세가 적은 상태 화면</p>
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+            {states.map((s) => (
+              <figure key={s.artifactId} className="flex min-w-0 flex-col gap-1">
+                <ArtifactImage artifactId={s.artifactId} alt={`${s.state} 상태로 캡처한 화면`} className="max-h-56 w-auto max-w-full self-start rounded-md border border-border object-contain" />
+                <figcaption className="break-words text-sm text-fg-muted">{s.state}</figcaption>
+              </figure>
+            ))}
+          </div>
+        </div>
+      ) : null}
+    </div>
   );
 }

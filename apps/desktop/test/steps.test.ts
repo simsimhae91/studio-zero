@@ -77,7 +77,21 @@ test('verification is one step per round: the gates and evals that ran, the firs
   assert.deepEqual(rows(items), ['[✗] 검증 1회차 실패 (컴파일)', '[✓] 파일 1개 작성 (src/App.tsx)', '[✓] 검증 2회차 통과 (컴파일, 스모크 테스트, 슬롭 린트, 시각 감사)']);
   const [failed, , passed] = steps(items) as [Step, Step, Step];
   assert.deepEqual(failed.lines.map((l) => [l.text, l.tone, l.meta, l.output]), [['컴파일', 'bad', '실패, 종료 코드 2, 4.1초', "src/App.tsx(24,12): error TS2322: Type 'string' is not assignable to type 'number'."]]);
-  assert.deepEqual(passed.audit, { score: 91.2, passed: true, blockers: 0, majors: 0, minors: 2 });
+  assert.deepEqual(passed.audit, { id: 'aud_1', previousId: null, grade: null, score: 91.2, passed: true, blockers: 0, majors: 0, minors: 2 }, 'the first round never got as far as an audit');
+
+  // Two rounds that were both audited: the second knows the first, so the same screen can be shown before and after the repair.
+  const twice = steps(
+    narrate(
+      envelopes([
+        { type: 'task.phase', phase: 'verify', round: 1 },
+        { type: 'audit.completed', auditId: 'aud_a', score: 61, passed: false, blockers: 1, majors: 2, minors: 0, visionReviewed: true, grade: 'D' },
+        { type: 'task.phase', phase: 'execute', round: 2 },
+        { type: 'task.phase', phase: 'verify', round: 2 },
+        { type: 'audit.completed', auditId: 'aud_b', score: 96, passed: true, blockers: 0, majors: 0, minors: 0, visionReviewed: true, grade: 'S' },
+      ]),
+    ),
+  ).filter((s) => s.kind === 'verify');
+  assert.deepEqual(twice.map((s) => [s.audit?.id, s.audit?.previousId, s.audit?.grade]), [['aud_a', null, 'D'], ['aud_b', 'aud_a', 'S']]);
   assert.ok(passed.lines.every((l) => l.tone === 'good' && l.output === ''));
 });
 
@@ -94,7 +108,7 @@ test('a round whose design review did not run is neither a pass nor a failure, a
   assert.deepEqual(rows(items), ['[✓] 검증 1회차: 검증하지 못한 항목 있음 (시각 감사)']);
   const [round] = steps(items) as [Step];
   assert.deepEqual(round.lines.map((l) => [l.text, l.tone, l.meta]), [['컴파일', 'good', '통과, 3.9초'], ['시각 감사', 'warn', '검증하지 못함, 9.0초']]);
-  assert.deepEqual(round.audit, { score: 50, passed: false, blockers: 0, majors: 0, minors: 0, visionReviewed: false });
+  assert.deepEqual(round.audit, { id: 'aud_2', previousId: null, grade: null, score: 50, passed: false, blockers: 0, majors: 0, minors: 0, visionReviewed: false });
 });
 
 test('a running verification is in progress; a plan is a step with its steps inside; a round with nothing to check says so', () => {

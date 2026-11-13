@@ -29,7 +29,19 @@ export interface Step {
   /** Things the agent said while doing this. Kept with the step instead of interrupting the list. */
   notes: string[];
   /** Verify steps only: the visual audit of that round, if one ran. */
-  audit: { score: number; passed: boolean; blockers: number; majors: number; minors: number; /** False: no design reviewer saw the screens. Undefined on audits recorded before that was tracked. */ visionReviewed?: boolean } | null;
+  audit: {
+    /** The audit this round ran, and the one the task's round before it ran: the same screen before and after the repair. */
+    id: string;
+    previousId: string | null;
+    grade: string | null;
+    score: number;
+    passed: boolean;
+    blockers: number;
+    majors: number;
+    minors: number;
+    /** False: no design reviewer saw the screens. Undefined on audits recorded before that was tracked. */
+    visionReviewed?: boolean;
+  } | null;
 }
 
 /** One drawn direction of a design task: the page it was drawn from, the picture of it, and what the daemon measured on it. */
@@ -219,6 +231,8 @@ export function narrate(events: readonly EventEnvelope[]): Item[] {
   const waiting: Extract<Item, { kind: 'steer' }>[] = [];
   let group: Building | null = null;
   let verify: Step | null = null;
+  /** The last audit the task ran so far: what the next round's screen is set beside. */
+  let lastAuditId: string | null = null;
   /** The agent's latest words, if nothing has followed them yet: a closing message, unless a tool call comes next. */
   let trailing: Extract<Item, { kind: 'said' }> | null = null;
 
@@ -369,7 +383,8 @@ export function narrate(events: readonly EventEnvelope[]): Item[] {
         verify?.lines.push({ text: evalLabel(b.name), mono: false, tone: b.passed ? 'good' : b.unverified ? 'warn' : 'bad', meta: `${b.passed ? '통과' : b.unverified ? '검증하지 못함' : '실패'}, ${duration(b.durationMs)}`, output: b.passed ? '' : b.detail });
         break;
       case 'audit.completed':
-        if (verify) verify.audit = { score: b.score, passed: b.passed, blockers: b.blockers, majors: b.majors, minors: b.minors, ...(b.visionReviewed === undefined ? {} : { visionReviewed: b.visionReviewed }) };
+        if (verify) verify.audit = { id: b.auditId, previousId: lastAuditId, grade: b.grade ?? null, score: b.score, passed: b.passed, blockers: b.blockers, majors: b.majors, minors: b.minors, ...(b.visionReviewed === undefined ? {} : { visionReviewed: b.visionReviewed }) };
+        lastAuditId = b.auditId;
         break;
       case 'steer.queued': {
         closeWork();
