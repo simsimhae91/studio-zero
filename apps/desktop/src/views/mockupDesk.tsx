@@ -48,8 +48,9 @@ export const MockupDeskContext = createContext<MockupDesk>(noDesk);
 export const useMockupDesk = (): MockupDesk => useContext(MockupDeskContext);
 
 /**
- * The mock-up pages in the project's workspace, read as text. `stamp` changes when they may have changed (a
- * task ended). A page that is missing, empty or not text is simply not there.
+ * The mock-up pages in the project's workspace, as the daemon shows and measures them: each with its pictures
+ * and the theme's faces inside it, so the page in the frame is the page that was audited and walked. `stamp`
+ * changes when they may have changed (a task ended). A page that is missing or empty is simply not there.
  */
 export function useMockupPages(projectId: string, stamp: string): { pages: readonly MockupPage[]; reload: () => void } {
   const { backend } = useStudio();
@@ -59,8 +60,8 @@ export function useMockupPages(projectId: string, stamp: string): { pages: reado
     let stale = false;
     void Promise.all(
       MOCKUP_FILES.map((file) =>
-        backend.call('files.read', { projectId, path: file }).then(
-          (read): MockupPage | null => (read.binary || read.truncated || read.content.trim() === '' ? null : { file, html: read.content }),
+        backend.call('mockups.page', { projectId, file }).then(
+          (read): MockupPage | null => (read.html === null || read.html.trim() === '' ? null : { file, html: read.html }),
           () => null,
         ),
       ),

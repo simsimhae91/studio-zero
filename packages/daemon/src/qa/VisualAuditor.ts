@@ -53,6 +53,29 @@ export interface AuditRequest {
   signal?: AbortSignal;
 }
 
+/** Pages given as documents and not as addresses: a design task's mock-ups. `route` is the file each came from. */
+export interface PageAuditRequest {
+  project: Project;
+  taskId: string | null;
+  pages: readonly { route: string; html: string }[];
+  signal?: AbortSignal;
+}
+
+/** One thing to audit, and how the browser gets it on a page. Resolves to null, or to why it could not be opened. */
+interface Subject {
+  route: string;
+  open: (page: Page) => Promise<string | null>;
+}
+
+interface Mode {
+  /** Agent-written documents: opened with scripts and the network off, like every other showing of them. */
+  sealed: boolean;
+  /** Every subject is a first screen in its own right (each mock-up is one). Otherwise only the first route is. */
+  everyFirst: boolean;
+  /** The sizes a design reviewer is asked about. Null: all that are measured. */
+  reviewAt: readonly ViewportId[] | null;
+}
+
 /**
  * The Slop Audit pipeline: render in a containerised browser → capture per-viewport screenfuls → measure the
  * DOM against the design contract → have a vision model review what cannot be measured → score → report.
@@ -83,7 +106,40 @@ export class VisualAuditor {
     this.#log = deps.log;
   }
 
-  async audit(req: AuditRequest): Promise<AuditReport> {
+  audit(req: AuditRequest): Promise<AuditReport> {
+    return this.#run(
+      req,
+      (host) => req.routes.map((route) => ({
+        route,
+        open: async (page) => {
+          const response = await page.goto(`http://${host}:${req.port}${route}`, { waitUntil: 'networkidle', timeout: 45_000 });
+          return !response || response.status() >= 500 ? `HTTP ${response?.status() ?? 'no response'}` : null;
+        },
+      })),
+      { sealed: false, everyFirst: false, reviewAt: null },
+    ).then((ran) => ran.report);
+  }
+
+  /**
+   * The same audit over a design task's mock-up pages: the same measurements against the same contract, the
+   * same copy lint, the same reviewer. What is built is held to these; a drawing of it that was not would be a
+   * promise nobody had checked, and the owner chooses a build by it.
+   *
+   * Each page is a first screen and is judged as one, in light and in dark. The reviewer is asked once per
+   * page, at the size the product is first met at, and is told it is looking at a mock-up. `slopByRoute` is
+   * that reviewer's score for each page it saw.
+   */
+  auditPages(req: PageAuditRequest): Promise<{ report: AuditReport; slopByRoute: Map<string, number> }> {
+    const primary: ViewportId = req.project.template === 'mobile-expo' ? 'iphone-15-pro' : 'desktop-1440';
+    const measured = auditViewports(req.project.template, this.#config.audit.viewports);
+    return this.#run(
+      { ...req, routes: req.pages.map((p) => p.route) },
+      () => req.pages.map(({ route, html }) => ({ route, open: async (page) => (await page.setContent(html, { waitUntil: 'load', timeout: 20_000 }), null) })),
+      { sealed: true, everyFirst: true, reviewAt: [measured.includes(primary) ? primary : (measured[0] ?? primary)] },
+    );
+  }
+
+  async #run(req: Omit<AuditRequest, 'port'>, subjectsFor: (host: string) => Subject[], mode: Mode): Promise<{ report: AuditReport; slopByRoute: Map<string, number> }> {
     const auditId = newId('aud');
     const scope = { projectId: req.project.id, taskId: req.taskId };
 
@@ -108,12 +164,14 @@ export class VisualAuditor {
 
     await this.#browser.use(req.project, req.signal, async ({ browser, host, devices }) => {
       const viewports = viewportSpecs(devices);
+      const subjects = subjectsFor(host);
       for (const viewport of auditViewports(req.project.template, this.#config.audit.viewports)) {
         const spec = viewports[viewport];
-        for (const [routeIndex, route] of req.routes.entries()) {
+        for (const [routeIndex, subject] of subjects.entries()) {
           if (req.signal?.aborted) throw req.signal.reason;
-          const url = `http://${host}:${req.port}${route}`;
-          const light = await this.#capture(browser, spec, 'light', url, true);
+          const route = subject.route;
+          const first = mode.everyFirst || routeIndex === 0;
+          const light = await this.#capture(browser, spec, 'light', subject, true, mode.sealed);
           if (!light.digest) {
             findings.push(loadFailure(viewport, route, light.error));
             continue;
@@ -143,19 +201,19 @@ export class VisualAuditor {
           }
 
           // Dark scheme: one more render per viewport, checked only for what a colour scheme can break.
-          if (routeIndex === 0) {
-            const dark = await this.#capture(browser, spec, 'dark', url, false);
+          if (first) {
+            const dark = await this.#capture(browser, spec, 'dark', subject, false, mode.sealed);
             if (dark.digest) {
               const darkFindings = runDomChecks(dark.digest, { viewport, viewportWidth, route, touch: spec.touch, scope: 'color-only' }, contract);
               findings.push(...darkFindings.map((f) => ({ ...f, rule: `${f.rule}@dark`, message: `In dark mode: ${f.message}` })));
             }
           }
 
-          if (light.folds.length === 0) continue;
+          if (light.folds.length === 0 || (mode.reviewAt !== null && !mode.reviewAt.includes(viewport))) continue;
           screens += 1;
           if (stopped !== null) continue;
           try {
-            const answered = await this.#vision.review({ scope, viewport, route, template, firstScreen: routeIndex === 0, folds: light.folds, digest: light.digest, measured, signal: req.signal });
+            const answered = await this.#vision.review({ scope, viewport, route, template, firstScreen: first, mockup: mode.sealed, folds: light.folds, digest: light.digest, measured, signal: req.signal });
             reviews.push(answered.review);
             findings.push(...answered.review.findings);
             via ??= answered.via;
@@ -215,23 +273,23 @@ export class VisualAuditor {
       copy: summariseCopy(copy),
       measures,
       // Only a reviewer who saw the first screen can say whether there was anything on it to look at.
-      livingVisual: reviews.some((r) => r.route === req.routes[0]) ? !findings.some((f) => f.rule === LIVING_VISUAL_RULE && f.severity === 'blocker') : null,
+      livingVisual: reviews.some((r) => mode.everyFirst || r.route === req.routes[0]) ? !findings.some((f) => f.rule === LIVING_VISUAL_RULE && f.severity === 'blocker') : null,
     };
     this.#store.insertAudit(report);
     if (!visionReviewed) {
       this.#events.emit(scope, { type: 'notice', level: 'warn', message: `Design review ${reviewed > 0 ? `covered ${reviewed} of ${screens} screens` : 'did not run'} (${vision.reason}). The design is not verified: the audit score is capped at ${UNREVIEWED_SCORE_CAP} and the audit does not pass.` });
     }
     this.#events.emit(scope, { type: 'audit.completed', auditId, score: verdict.score, passed: verdict.passed, blockers: verdict.blockers, majors: verdict.majors, minors: verdict.minors, visionReviewed, grade: verdict.grade });
-    return report;
+    return { report, slopByRoute: new Map(reviews.map((r) => [r.route, r.slopScore])) };
   }
 
-  async #capture(browser: Browser, spec: ViewportSpec, scheme: 'light' | 'dark', url: string, screenshots: boolean): Promise<{ digest: PageDigest | null; folds: Buffer[]; error: string }> {
-    const context = await browser.newContext({ ...spec.context, colorScheme: scheme, reducedMotion: 'reduce', serviceWorkers: 'block' });
+  async #capture(browser: Browser, spec: ViewportSpec, scheme: 'light' | 'dark', subject: Subject, screenshots: boolean, sealed: boolean): Promise<{ digest: PageDigest | null; folds: Buffer[]; error: string }> {
+    const context = await browser.newContext({ ...spec.context, colorScheme: scheme, reducedMotion: 'reduce', serviceWorkers: 'block', ...(sealed ? { javaScriptEnabled: false, offline: true } : {}) });
     try {
       const page = await context.newPage();
-      const response = await page.goto(url, { waitUntil: 'networkidle', timeout: 45_000 });
-      if (!response || response.status() >= 500) return { digest: null, folds: [], error: `HTTP ${response?.status() ?? 'no response'}` };
-      await settle(page);
+      const failed = await subject.open(page);
+      if (failed !== null) return { digest: null, folds: [], error: failed };
+      await settle(page, sealed);
       const digest = PageDigest.safeParse(await page.evaluate(collectDigest, 600));
       if (!digest.success) return { digest: null, folds: [], error: 'the page returned measurements that failed validation' };
 
@@ -251,8 +309,13 @@ export class VisualAuditor {
   }
 }
 
-/** Wait for web fonts and a quiet frame, so the measurements describe the final layout rather than a fallback. */
-async function settle(page: Page): Promise<void> {
+/**
+ * Wait for web fonts and a quiet frame, so the measurements describe the final layout rather than a fallback.
+ * A sealed page runs no callbacks of its own for the studio to wait on, and its fonts are inside it: it gets a
+ * moment to lay out instead.
+ */
+async function settle(page: Page, sealed = false): Promise<void> {
+  if (sealed) return page.waitForTimeout(250);
   await page.evaluate(async () => {
     await document.fonts.ready;
     await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));

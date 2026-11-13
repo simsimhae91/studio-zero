@@ -75,8 +75,8 @@ const LiveMotion = z.object({
  * Runs in a blank page of the studio's own: lays the frames out as a captioned sheet, and compares each frame
  * taken over time with the one before it. Returns, per pair, the share of the picture that changed.
  */
-async function layOut({ frames, timed, tile }: { frames: { label: string; src: string }[]; timed: number; tile: { width: number; height: number; caption: number; columns: number } }): Promise<number[]> {
-  document.body.style.cssText = `margin:0;background:#111;display:grid;grid-template-columns:repeat(${tile.columns},${tile.width}px);font:13px/${tile.caption}px system-ui,sans-serif;color:#eee`;
+async function layOut({ frames, timed, tile }: { frames: { label: string; src: string }[]; timed: number; tile: { width: number; height: number; caption: number; columns: number; gap?: number } }): Promise<number[]> {
+  document.body.style.cssText = `margin:0;background:#111;display:grid;grid-template-columns:repeat(${tile.columns},${tile.width}px);gap:${tile.gap ?? 0}px;font:13px/${tile.caption}px system-ui,sans-serif;color:#eee`;
   const images: HTMLImageElement[] = [];
   for (const frame of frames) {
     const figure = document.createElement('figure');
@@ -115,6 +115,42 @@ async function layOut({ frames, timed, tile }: { frames: { label: string; src: s
   return changed;
 }
 
+/** One picture of a sequence, with the caption the studio gives it. */
+export interface Frame {
+  label: string;
+  jpeg: Buffer;
+}
+export interface Tile {
+  width: number;
+  height: number;
+  caption: number;
+  columns: number;
+  /** Space between frames, in px. None when the frames are moments of one screen to be read as a strip. */
+  gap?: number;
+}
+
+/**
+ * Tiles frames into one captioned PNG, in a blank page of the studio's own that `open` supplies (and that is
+ * closed here). The first `timed` frames are also compared, each with the one before: the share of the picture
+ * that changed. The page that does this runs the studio's script, so it must come from a context where scripts
+ * run; the frames themselves are only pictures by now.
+ */
+export async function contactSheet(open: () => Promise<Page>, frames: readonly Frame[], opts: { tile: Tile; timed?: number }): Promise<{ sheet: Uint8Array; changed: number[] }> {
+  const tile = opts.tile;
+  const sheetPage = await open();
+  try {
+    const columns = Math.max(1, Math.min(tile.columns, frames.length));
+    const rows = Math.max(1, Math.ceil(frames.length / columns));
+    const gap = tile.gap ?? 0;
+    await sheetPage.setViewportSize({ width: columns * tile.width + (columns - 1) * gap, height: rows * (tile.height + tile.caption) + (rows - 1) * gap });
+    const changed = await sheetPage.evaluate(layOut, { frames: frames.map((f) => ({ label: f.label, src: `data:image/jpeg;base64,${f.jpeg.toString('base64')}` })), timed: opts.timed ?? 0, tile: { ...tile, columns, gap } });
+    const sheet = await sheetPage.screenshot({ type: 'png' });
+    return { sheet, changed: z.array(z.number().min(0).max(1)).max(frames.length).catch([]).parse(changed) };
+  } finally {
+    await sheetPage.close().catch(() => undefined);
+  }
+}
+
 const percent = (share: number): string => `${Math.round(share * 100)}%`;
 const size = (b: { w: number; h: number }): string => `${b.w}x${b.h}`;
 const largest = <T extends { w: number; h: number }>(boxes: readonly T[]): T => boxes.reduce((a, b) => (b.w * b.h > a.w * a.h ? b : a));
@@ -126,7 +162,7 @@ const largest = <T extends { w: number; h: number }>(boxes: readonly T[]): T => 
 export async function filmPage(page: Page, replay: () => Promise<unknown>): Promise<Film> {
   await replay();
   const started = Date.now();
-  const frames: { label: string; jpeg: Buffer }[] = [];
+  const frames: Frame[] = [];
   const at: string[] = [];
   for (const t of TIMES_MS) {
     const wait = t - (Date.now() - started);
@@ -144,18 +180,7 @@ export async function filmPage(page: Page, replay: () => Promise<unknown>): Prom
     frames.push({ label: `scrolled ${i} screen${i === 1 ? '' : 's'} down`, jpeg: await page.screenshot({ type: 'jpeg', quality: 70 }) });
   }
 
-  const sheetPage = await page.context().newPage();
-  let changed: number[];
-  let sheet: Uint8Array;
-  try {
-    const rows = Math.ceil(frames.length / TILE.columns);
-    await sheetPage.setViewportSize({ width: TILE.columns * TILE.width, height: rows * (TILE.height + TILE.caption) });
-    changed = await sheetPage.evaluate(layOut, { frames: frames.map((f) => ({ label: f.label, src: `data:image/jpeg;base64,${f.jpeg.toString('base64')}` })), timed, tile: { ...TILE } });
-    sheet = await sheetPage.screenshot({ type: 'png' });
-  } finally {
-    await sheetPage.close().catch(() => undefined);
-  }
-  const shares = z.array(z.number().min(0).max(1)).max(TIMES_MS.length).catch([]).parse(changed);
+  const { sheet, changed: shares } = await contactSheet(() => page.context().newPage(), frames, { tile: TILE, timed });
 
   const lines = [`over time: frames at ${at.join(', ')} after the page starts; share of the first screen that changed from each to the next: ${shares.map(percent).join(', ') || 'not measured'}`];
   const late = shares.slice(-2);

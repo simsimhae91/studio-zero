@@ -1,4 +1,4 @@
-import type { Approval, AuditReport, AxBlock, Checkpoint, Eval, EventBody, EventEnvelope, FileEntry, KnowledgeJob, LedgerEntry, Lesson, MethodName, ParamsOf, Project, ProposalCard, ResultOf, SandboxInfo, ScratchEntry, Scratchpad, Session, SubscriptionQuota, Task } from '@studio-zero/protocol';
+import type { Approval, AuditReport, AxBlock, Checkpoint, Eval, EventBody, EventEnvelope, FileEntry, FlowTaskWalk, KnowledgeJob, LedgerEntry, Lesson, MethodName, ParamsOf, Project, ProposalCard, ResultOf, SandboxInfo, ScratchEntry, Scratchpad, ScreenSpec, Session, SubscriptionQuota, Task } from '@studio-zero/protocol';
 import { matchesFilter } from '@studio-zero/protocol';
 import type { Backend } from './backend.ts';
 
@@ -109,13 +109,17 @@ const designBodies: EventBody[] = [
   {
     type: 'mockups.rendered',
     options: [
-      { file: 'docs/mockups/a.html', title: '흐름 한 줄', idea: '세 사람 사이에 오가야 할 돈을 화살표 한 줄로 먼저 보여 주고, 내역은 그 아래에 둡니다.', artifactId: 'art_mock_a', width: 1440, height: 900 },
-      { file: 'docs/mockups/b.html', title: '이번 달 영수증', idea: '이번 달 지출을 영수증 한 장처럼 펼쳐 놓고, 맨 아래 합계에서 각자 몫이 갈립니다.', artifactId: 'art_mock_b', width: 1440, height: 900 },
-      { file: 'docs/mockups/c.html', title: '사람별 저울', idea: '사람마다 낸 돈과 쓴 돈을 저울처럼 나란히 놓아 기운 쪽이 줄 사람임을 보입니다.', artifactId: 'art_mock_c', width: 1440, height: 900 },
+      { file: 'docs/mockups/a.html', title: '흐름 한 줄', idea: '세 사람 사이에 오가야 할 돈을 화살표 한 줄로 먼저 보여 주고, 내역은 그 아래에 둡니다.', artifactId: 'art_mock_a', width: 1440, height: 900, flow: { filmArtifactId: 'art_film_a', tasks: [walked('settle', 1, 56), walked('undo', 1, 48)] }, measures: { blockers: 0, majors: 0, copyHabits: 0, slopScore: 14 } },
+      { file: 'docs/mockups/b.html', title: '이번 달 영수증', idea: '이번 달 지출을 영수증 한 장처럼 펼쳐 놓고, 맨 아래 합계에서 각자 몫이 갈립니다.', artifactId: 'art_mock_b', width: 1440, height: 900, flow: { filmArtifactId: 'art_film_b', tasks: [{ ...walked('settle', 3, 44), scrolls: 1 }, walked('undo', 1, 44)] }, measures: { blockers: 0, majors: 1, copyHabits: 0, slopScore: 22 } },
+      { file: 'docs/mockups/c.html', title: '사람별 저울', idea: '사람마다 낸 돈과 쓴 돈을 저울처럼 나란히 놓아 기운 쪽이 줄 사람임을 보입니다.', artifactId: 'art_mock_c', width: 1440, height: 900, flow: { filmArtifactId: null, tasks: [{ ...walked('settle', 0, null), reached: false, stopped: 'covered', stoppedAtStep: 1 }] }, measures: { blockers: 1, majors: 2, copyHabits: 1, slopScore: 41 } },
     ],
   },
   { type: 'task.state', state: 'succeeded', error: null },
 ];
+/** One task of a walk that went through, for the demo's mock-ups. */
+function walked(id: string, presses: number, smallestTargetPx: number | null): FlowTaskWalk {
+  return { id, reached: true, stopped: null, stoppedAtStep: null, presses, typed: 0, scrolls: 0, smallestTargetPx, answered: presses, responseMs: presses > 0 ? 320 : null };
+}
 const events: EventEnvelope[] = [
   ...bodies.map((body, i): EventEnvelope => ({ seq: 100 + i, at: min(-18) + i * 35_000, projectId: 'prj_ledger', taskId: 'tsk_detail', body })),
   ...designBodies.map((body, i): EventEnvelope => ({ seq: 40 + i, at: min(-66) + i * 50_000, projectId: 'prj_tide', taskId: 'tsk_tide_design', body })),
@@ -137,7 +141,32 @@ h1{font-size:30px;line-height:1.25;margin:0}p{margin:0;color:var(--muted)}
 .arrow{flex:1;block-size:4px;background:var(--accent)}button{min-height:44px;border:0;border-radius:8px;padding:0 16px;background:var(--accent);color:var(--bg);font:inherit;font-weight:600}
 .cols{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.bar{background:var(--accent);border-radius:4px}
 </style></head><body><main>${body}</main></body></html>`;
+const tideSpec: ScreenSpec = {
+  coreMoment: '민지가 이번 달에 서준에게 보낼 돈을 한눈에 보고, 보냈다고 표시한다.',
+  screens: [
+    {
+      id: 'S-01',
+      name: '이번 달 정산',
+      purpose: '누가 누구에게 얼마를 보내야 하는지 보고, 보낸 것을 표시한다.',
+      entry: ['앱 실행', '정산 알림'],
+      elements: [
+        { name: '보낼 돈', rule: '세 사람 사이에 오가야 할 금액을 가장 적은 횟수로 묶어 보여 준다. 지출이 바뀌면 바로 다시 계산한다.', goesTo: null },
+        { name: '보냈어요', rule: '누르면 그 줄이 보낸 것으로 바뀌고 받는 사람에게 알림이 간다. 10초 동안 되돌릴 수 있다.', goesTo: null },
+        { name: '지출 내역', rule: '이번 달 지출을 날짜순으로 보여 준다. 누르면 그 지출을 고치는 화면으로 간다.', goesTo: 'S-02' },
+      ],
+      states: [{ name: '지출 없음', shows: '이번 달에 적은 지출이 없어요' }, { name: '모두 정산함', shows: '11월은 서로 줄 돈이 없어요' }],
+      exceptions: ['환불은 음수 지출로 적는다.', '한 사람이 빠진 지출은 나머지 사람끼리만 나눈다.'],
+    },
+    { id: 'S-02', name: '지출 고치기', purpose: '지출 한 건의 금액과 나눌 사람을 고친다.', entry: ['S-01'], elements: [{ name: '금액', rule: '원 단위 정수. 0은 받지 않는다.', goesTo: null }], states: [], exceptions: [] },
+  ],
+  tasks: [
+    { id: 'settle', goal: '서준에게 184,000원을 보냈다고 표시한다', outcome: '그 줄이 보낸 것으로 바뀐다', screen: 'S-01' },
+    { id: 'undo', goal: '잘못 누른 표시를 되돌린다', outcome: '그 줄이 다시 보낼 것으로 돌아온다', screen: 'S-01' },
+  ],
+  events: [{ name: 'settlement_marked', when: '보냈어요를 누를 때', measures: '달마다 정산을 끝낸 모임의 비율' }],
+};
 const tideFiles: Record<string, string> = {
+  'docs/screens.json': JSON.stringify(tideSpec, null, 2),
   'docs/mockups/a.html': tidePage('흐름 한 줄', '세 사람 사이에 오가야 할 돈을 화살표 한 줄로 먼저 보여 주고, 내역은 그 아래에 둡니다.', `<h1>민지가 서준에게 184,000원</h1><p>11월 정산 · 지출 14건 · 11월 12일 기준</p><div class="flow"><span class="who">민지</span><span class="arrow"></span><span class="who">서준</span><span class="arrow" style="opacity:.4"></span><span class="who">하람</span></div><div class="card"><div class="row"><span>공유 오피스 11월</span><span class="sum">660,000원</span></div><div class="row"><span>촬영 장비 대여</span><span class="sum">132,000원</span></div><div class="row"><span>환불 대기 · 폰트 라이선스</span><span class="sum">−48,000원</span></div></div><button type="button">184,000원 보냈다고 표시</button>`),
   'docs/mockups/b.html': tidePage('이번 달 영수증', '이번 달 지출을 영수증 한 장처럼 펼쳐 놓고, 맨 아래 합계에서 각자 몫이 갈립니다.', `<div class="card" style="max-width:420px;margin:0 auto;inline-size:100%"><h1>11월 영수증</h1><div class="row"><span>공유 오피스</span><span>660,000</span></div><div class="row"><span>촬영 장비 대여</span><span>132,000</span></div><div class="row"><span>택시 · 야간 촬영</span><span>41,800</span></div><div class="row"><span>폰트 라이선스 환불</span><span>−48,000</span></div><div class="row sum"><span>합계</span><span>785,800원</span></div><div class="row"><span>민지 몫</span><span>261,934원</span></div><div class="row"><span>서준 몫</span><span>261,933원</span></div><div class="row"><span>하람 몫</span><span>261,933원</span></div></div>`),
   'docs/mockups/c.html': tidePage('사람별 저울', '사람마다 낸 돈과 쓴 돈을 저울처럼 나란히 놓아 기운 쪽이 줄 사람임을 보입니다.', `<h1>누가 더 냈나</h1><div class="cols"><div class="card"><p>민지</p><div class="bar" style="block-size:60px"></div><p class="sum">−184,000</p></div><div class="card"><p>서준</p><div class="bar" style="block-size:160px"></div><p class="sum">+151,000</p></div><div class="card"><p>하람</p><div class="bar" style="block-size:110px"></div><p class="sum">+33,000</p></div></div><p>막대는 낸 돈, 숫자는 받을 돈(+)과 줄 돈(−)입니다.</p>`),
@@ -394,6 +423,7 @@ const handlers: Handlers = {
   }),
   'sessions.list': (p) => ({ sessions: sessions.filter((s) => s.projectId === p.projectId) }),
   'files.list': (p) => ({ entries: p.projectId === 'prj_ledger' ? fileEntries.filter((e) => parentOf(e.path) === (p.path ?? '.')) : [], truncated: false }),
+  'mockups.page': (p) => ({ html: (p.projectId === 'prj_tide' ? tideFiles[p.file] : undefined) ?? null }),
   'files.read': (p) => {
     const content = (p.projectId === 'prj_tide' ? tideFiles[p.path] : fileBodies[p.path]) ?? '';
     return { content, encoding: 'utf-8', size: new TextEncoder().encode(content).length, truncated: false, binary: false };
@@ -479,7 +509,7 @@ export function demoBackend(): Backend {
         },
       };
     },
-    artifactUrl: async (id) => (id === 'art_mock_a' ? fakeMockup('a') : id === 'art_mock_b' ? fakeMockup('b') : id === 'art_mock_c' ? fakeMockup('c') : id === 'art_tablet' ? fakeScreen(834, 1194) : id === 'art_desktop' ? fakeScreen(1440, 900) : fakeScreen(393, 659)),
+    artifactUrl: async (id) => (id.startsWith('art_film_') ? fakeScreen(1440, 324) : id === 'art_mock_a' ? fakeMockup('a') : id === 'art_mock_b' ? fakeMockup('b') : id === 'art_mock_c' ? fakeMockup('c') : id === 'art_tablet' ? fakeScreen(834, 1194) : id === 'art_desktop' ? fakeScreen(1440, 900) : fakeScreen(393, 659)),
     close: () => undefined,
   };
 }

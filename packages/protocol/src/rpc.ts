@@ -121,6 +121,13 @@ export const methods = {
   'files.write': { params: z.object({ projectId: z.string(), path: WorkspacePath, content: z.string().max(400_000) }), result: z.object({ written: z.boolean() }) },
 
   /**
+   * One of a design task's mock-up pages as the studio shows and measures it: the page with the pictures it
+   * points at and the theme's faces carried inside it, so it needs nothing from outside. `html` is null when
+   * the page is not there. An agent wrote it: a client seals it before showing it.
+   */
+  'mockups.page': { params: z.object({ projectId: z.string(), file: z.enum(['docs/mockups/a.html', 'docs/mockups/b.html', 'docs/mockups/c.html']) }), result: z.object({ html: z.string().nullable() }) },
+
+  /**
    * An interactive shell in the project's sandbox, on a real pseudo-terminal. The terminal belongs to the
    * connection that opened it: its output arrives as `terminal.output` frames on that socket, keystrokes go
    * back as `terminal.data` frames, and it is killed when the socket closes.

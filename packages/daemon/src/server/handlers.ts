@@ -43,6 +43,7 @@ export function createHandlers(studio: Studio): Handlers {
 
     'files.list': (p) => studio.listFiles(p.projectId, p.path, p.depth),
     'files.read': (p) => studio.readFile(p.projectId, p.path),
+    'mockups.page': async (p) => ({ html: await studio.mockupPage(p.projectId, p.file) }),
     'files.write': async (p) => {
       await studio.writeFile(OWNER, p.projectId, p.path, p.content);
       return { written: true };

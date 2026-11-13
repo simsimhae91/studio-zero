@@ -127,7 +127,7 @@ const screens: { name: string; url: string; go: (page: Page, narrow: boolean) =>
   } },
   { name: 'design-mockup-notes', url: '/?demo', go: async (page, narrow) => {
     await openFromIndex('Tide 정산')(page, narrow);
-    await page.getByRole('button', { name: '프리뷰에서 보기' }).nth(1).click();
+    await page.getByRole('button', { name: '프리뷰에서 눌러 보기' }).nth(1).click();
     await page.getByTitle('B안 시안').waitFor();
     await page.getByRole('button', { name: '요소 고르기' }).click();
     await page.getByRole('textbox', { name: 'B안 전체에 대한 수정 메모' }).fill('합계 줄을 맨 위로 올리고 색을 더 차분하게');
@@ -136,6 +136,16 @@ const screens: { name: string; url: string; go: (page: Page, narrow: boolean) =>
     await page.getByRole('button', { name: '하나 더 적기' }).click();
     await page.getByRole('textbox', { name: 'B안 전체에 대한 수정 메모' }).fill('금액을 더 크게');
     await page.getByRole('button', { name: '수정 요청 2건 보내기' }).waitFor();
+  } },
+  { name: 'design-screen-spec', url: '/?demo', go: async (page, narrow) => {
+    await openFromIndex('Tide 정산')(page, narrow);
+    await page.getByRole('button', { name: /^화면 명세/ }).click();
+    await page.getByRole('dialog', { name: '화면 명세' }).waitFor();
+  } },
+  { name: 'design-walk-film', url: '/?demo', go: async (page, narrow) => {
+    await openFromIndex('Tide 정산')(page, narrow);
+    await page.getByRole('button', { name: '브라우저가 눌러 본 장면' }).first().click();
+    await page.getByRole('dialog', { name: 'A안을 눌러 본 장면' }).waitFor();
   } },
   { name: 'design-mockup-redraw', url: '/?demo', go: async (page, narrow) => {
     await openFromIndex('Tide 정산')(page, narrow);

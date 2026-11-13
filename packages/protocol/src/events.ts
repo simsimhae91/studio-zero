@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { ScratchState } from './ax.ts';
-import { AdvisorId, ApprovalState, DesignGrade, LessonState, Origin, Phase, PowerMode, ProposalState, ReviewerId, ReviewerPref, SandboxState, TaskKind, TaskState } from './domain.ts';
+import { AdvisorId, ApprovalState, DesignGrade, FlowWalk, LessonState, MockupMeasures, Origin, Phase, PowerMode, ProposalState, ReviewerId, ReviewerPref, SandboxState, TaskKind, TaskState } from './domain.ts';
 
 /**
  * Every state change in the daemon is an append-only event with a monotonically increasing `seq`.
@@ -63,8 +63,11 @@ export const EventBody = z.discriminatedUnion('type', [
    */
   z.object({
     type: z.literal('gate.result'),
-    /** `anchor`: the anchor table a design task owes before code. `build`: the production build, measured for the ledger. */
-    gate: z.enum(['compiler', 'smoke', 'anchor', 'build']),
+    /**
+     * `anchor`: the anchor table a design task owes before code. `build`: the production build, measured for the ledger.
+     * `screens`: the screen spec a design task owes. `flow`: the core flow of that spec, walked on the mock-ups.
+     */
+    gate: z.enum(['compiler', 'smoke', 'anchor', 'build', 'screens', 'flow']),
     /** What ran: the command line for the compiler gate, the routes for the smoke gate. */
     name: z.string(),
     passed: z.boolean(),
@@ -142,10 +145,25 @@ export const EventBody = z.discriminatedUnion('type', [
   /**
    * A design task's directions, drawn: one picture per mock-up page it wrote. `title` and `idea` come from the
    * page's own head and are a model's words. The owner picks one of these to build.
+   *
+   * `flow` is the core flow as a browser carried it out on that page, and `measures` what the page's audit came
+   * to. Both are the daemon's own counts; they are absent on events from before mock-ups were measured, and
+   * null when that measurement could not be had.
    */
   z.object({
     type: z.literal('mockups.rendered'),
-    options: z.array(z.object({ file: z.string(), title: z.string(), idea: z.string(), artifactId: z.string(), width: z.number(), height: z.number() })),
+    options: z.array(
+      z.object({
+        file: z.string(),
+        title: z.string(),
+        idea: z.string(),
+        artifactId: z.string(),
+        width: z.number(),
+        height: z.number(),
+        flow: FlowWalk.nullable().optional(),
+        measures: MockupMeasures.nullable().optional(),
+      }),
+    ),
   }),
   /** A picture made for the product by a subscription's image tool and written into the workspace. `purpose` is the engine's own sentence. */
   z.object({ type: z.literal('image.generated'), path: z.string(), purpose: z.string(), width: z.number().int(), height: z.number().int(), bytes: z.number().int(), durationMs: z.number() }),

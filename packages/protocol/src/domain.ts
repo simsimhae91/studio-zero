@@ -378,6 +378,96 @@ export const LedgerDelta = z.object({
 });
 export type LedgerDelta = z.infer<typeof LedgerDelta>;
 
+// ------------------------------------------------------------- screen spec and the walk through it
+
+/**
+ * The screen spec a design task writes (`docs/screens.json`): what each screen is for, how a person gets to it,
+ * what each thing on it does and under which rule, the states it can be in besides the usual one, and the
+ * exceptions. It is function, not look: the same spec holds for every mock-up drawn from it and for the build.
+ *
+ * `tasks` is the core flow, as goals: what a person gets done, in order, and what is true afterwards. Every
+ * mock-up carries the same tasks out in its own way, which is what makes the ways comparable by counting.
+ * `events` names what the product records so it can be measured once people use it.
+ *
+ * Lenient on purpose: this shape is for reading what a model wrote. The bounds are the daemon's check.
+ */
+export const ScreenSpec = z.object({
+  coreMoment: z.string(),
+  screens: z.array(
+    z.object({
+      /** A short stable id in the manner of a screen plan: `H-01`, `R-02`. */
+      id: z.string(),
+      name: z.string(),
+      purpose: z.string(),
+      /** Where a person comes from: another screen's id, or something outside the product (a push, a link, opening the app). */
+      entry: z.array(z.string()),
+      elements: z.array(z.object({ name: z.string(), rule: z.string(), goesTo: z.string().nullable().optional() })),
+      states: z.array(z.object({ name: z.string(), shows: z.string() })),
+      exceptions: z.array(z.string()),
+      /** True for a screen that is planned and not part of the first version. */
+      later: z.boolean().optional(),
+    }),
+  ),
+  tasks: z.array(z.object({ id: z.string(), goal: z.string(), outcome: z.string(), screen: z.string() })),
+  events: z.array(z.object({ name: z.string(), when: z.string(), measures: z.string() })),
+});
+export type ScreenSpec = z.infer<typeof ScreenSpec>;
+
+/** Why a walk through one task stopped short of its outcome. */
+export const FlowStop = z.enum([
+  /** The outcome was already on screen before anything was pressed: the page shows the after-state and there is nothing to carry out. */
+  'already-done',
+  /** No visible control carries the task's next step. */
+  'step-missing',
+  /** The control for the step is there, but another element lies over it. */
+  'covered',
+  /** Every step was carried out and the outcome did not show. */
+  'outcome-not-shown',
+]);
+export type FlowStop = z.infer<typeof FlowStop>;
+
+/**
+ * One task of the core flow as a browser carried it out on a page: found each step's control, pressed it, and
+ * looked for the outcome. Everything here is counted or measured by the daemon; none of it is a judgement.
+ */
+export const FlowTaskWalk = z.object({
+  id: z.string(),
+  reached: z.boolean(),
+  stopped: FlowStop.nullable(),
+  /** The step the walk stopped at (1-based), when it stopped at one. */
+  stoppedAtStep: z.number().int().nullable(),
+  /** Controls pressed, and characters typed into fields among them. */
+  presses: z.number().int(),
+  typed: z.number().int(),
+  /** Steps whose control was outside the screen as it stood and had to be scrolled to. */
+  scrolls: z.number().int(),
+  /** The shorter side, in CSS px, of the smallest control pressed. */
+  smallestTargetPx: z.number().nullable(),
+  /** Steps whose control looked different while held down than at rest. */
+  answered: z.number().int(),
+  /** The longest transition or animation a press set off, in ms. Null when nothing moved. */
+  responseMs: z.number().nullable(),
+});
+export type FlowTaskWalk = z.infer<typeof FlowTaskWalk>;
+
+export const FlowWalk = z.object({
+  tasks: z.array(FlowTaskWalk),
+  /** The walk as pictures: the screen at rest, then after each press, on one sheet. */
+  filmArtifactId: z.string().nullable(),
+});
+export type FlowWalk = z.infer<typeof FlowWalk>;
+
+/** What the measurements of one mock-up page came to, for the card the owner chooses from. */
+export const MockupMeasures = z.object({
+  blockers: z.number().int(),
+  majors: z.number().int(),
+  /** Copy habits the text lint found on this page. */
+  copyHabits: z.number().int(),
+  /** The design reviewer's slop score for this page; null when no reviewer saw it. */
+  slopScore: z.number().nullable(),
+});
+export type MockupMeasures = z.infer<typeof MockupMeasures>;
+
 /**
  * How the one acceptance review of a task ended.
  *

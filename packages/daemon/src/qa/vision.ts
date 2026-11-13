@@ -118,6 +118,8 @@ export interface VisionInput {
   template: Template;
   /** True for the route a person lands on. Only there is a screen of text and rules alone a blocker. */
   firstScreen?: boolean;
+  /** True when the screen is a design task's mock-up page and not a running product. */
+  mockup?: boolean;
   /** PNG screenfuls, top of page first. */
   folds: Uint8Array[];
   digest: PageDigest;
@@ -143,11 +145,18 @@ const PRODUCT: Record<Template, string> = {
   'web-next': 'a web application',
 };
 
+/**
+ * Said to the reviewer when the screen is a mock-up. Written by this codebase, like the rest of the head: it
+ * changes the vocabulary of the fixes, not the bar.
+ */
+const MOCKUP_NOTE =
+  'This is a design mock-up, not the built product: one self-contained page of plain HTML and CSS, drawn so the owner can choose a direction before anything is built, and shown with scripts off. Hold it to the same bar. Phrase every fix and patch as a change to this page (its markup, its own CSS, the theme values in its custom properties), not in component or utility names; a place left for a picture with a sentence describing it, or a note addressed to the reader instead of the product\'s own words, is an unfinished screen and a finding. ';
+
 /** The pieces of a review's user turn: what is being looked at, and the two data blocks. */
 export function visionParts(input: VisionInput): { head: string; elements: string; measured: string } {
   const measured = input.measured.length === 0 ? '(none)' : input.measured.map((f) => `- [${f.severity}] ${f.rule}: ${f.message}`).join('\n');
   return {
-    head: `Product: ${PRODUCT[input.template]}. Viewport: ${input.viewport} (${input.digest.width}x${input.digest.height} CSS px). Route: ${input.route}. ${input.firstScreen ? 'This is the product\'s first screen: what a person sees before doing anything. ' : ''}${input.folds.length} screenshot(s) follow, top of page first.`,
+    head: `Product: ${PRODUCT[input.template]}. Viewport: ${input.viewport} (${input.digest.width}x${input.digest.height} CSS px). Route: ${input.route}. ${input.firstScreen ? 'This is the product\'s first screen: what a person sees before doing anything. ' : ''}${input.mockup ? MOCKUP_NOTE : ''}${input.folds.length} screenshot(s) follow, top of page first.`,
     elements: `Element list (id, tag, own text, size, position, font):\n${untrusted('browser-page', elementList(input.digest), { route: input.route })}`,
     measured: `Already measured from the DOM (do not repeat):\n${untrusted('browser-page', measured)}`,
   };

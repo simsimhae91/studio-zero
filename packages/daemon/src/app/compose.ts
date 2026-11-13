@@ -187,7 +187,7 @@ export async function createDaemon(config: Config, log: PinoLogger, overrides: D
   const refkit = new RefKit({ config, store, events, policy, browser: qaBrowser, clock, log: log.child({ mod: 'refkit' }) });
   const reviewer = new SandwichReviewer({ desk, router, events, log: log.child({ mod: 'review' }) });
   const ledger = new Ledger({ config, store, events, clock, log: log.child({ mod: 'ledger' }) });
-  const mockups = new MockupRenderer({ config, store, sandboxes, browser: qaBrowser, clock, log: log.child({ mod: 'mockups' }) });
+  const mockups = new MockupRenderer({ config, store, sandboxes, browser: qaBrowser, auditor, clock, log: log.child({ mod: 'mockups' }) });
   const harness = new Harness({ config, store, events, policy, sandboxes, provisioner, router, claude, evals, compiler, smoke, lessons, reflection, refkit, reviewer, ledger, build: new BuildMeter({ sandboxes }), mockups, selfHosting, clock, log: log.child({ mod: 'harness' }) });
   const queue = new TaskQueue({ store, events, execute: (task, signal) => harness.run(task, signal), clock, log: log.child({ mod: 'queue' }) });
   // Tasks suspended for want of a design reviewer are queued again when one answers.
@@ -237,7 +237,7 @@ export async function createDaemon(config: Config, log: PinoLogger, overrides: D
   const power: CaffeinateManager = new CaffeinateManager({ log: log.child({ mod: 'power' }), spawn: overrides.powerSpawn, platform: overrides.platform, onChange: (mode) => studio.announcePower(mode) });
   // "Gemini" is reached through Antigravity's CLI, the Google agent this daemon already knows how to confine.
   const advisors = { codex, gemini: antigravity };
-  const studio: Studio = new Studio({ config, store, events, policy, sandboxes, provisioner, queue, vault, claude, router, auditor, evals, lessons, kirby, scratch, knowledge, calibration, steering, mcp, files, pty, namer, ledger, power, quota, selfHosting, external, advisors, relayStates, clock, log: log.child({ mod: 'studio' }), version: VERSION });
+  const studio: Studio = new Studio({ config, store, events, policy, sandboxes, provisioner, queue, vault, claude, router, auditor, evals, lessons, kirby, scratch, knowledge, calibration, steering, mcp, files, mockups, pty, namer, ledger, power, quota, selfHosting, external, advisors, relayStates, clock, log: log.child({ mod: 'studio' }), version: VERSION });
 
   // The token every owner client presents. Created on first boot and kept in the Keychain, where the desktop
   // client on this Mac reads it directly; a second machine is paired by copying it once (`sz token`).

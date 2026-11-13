@@ -1,4 +1,4 @@
-import type { AdvisorId, EventEnvelope } from '@studio-zero/protocol';
+import type { AdvisorId, EventEnvelope, FlowStop, FlowWalk, MockupMeasures } from '@studio-zero/protocol';
 import { duration, evalLabel, reviewerLabel } from './format.ts';
 
 export type StepKind = 'plan' | 'reference' | 'anchor' | 'review' | 'scaffold' | 'install' | 'write' | 'read' | 'check' | 'run' | 'tool' | 'verify';
@@ -32,7 +32,7 @@ export interface Step {
   audit: { score: number; passed: boolean; blockers: number; majors: number; minors: number; /** False: no design reviewer saw the screens. Undefined on audits recorded before that was tracked. */ visionReviewed?: boolean } | null;
 }
 
-/** One drawn direction of a design task: the page it was drawn from, and the picture of it. */
+/** One drawn direction of a design task: the page it was drawn from, the picture of it, and what the daemon measured on it. */
 export interface Mockup {
   file: string;
   title: string;
@@ -40,6 +40,38 @@ export interface Mockup {
   artifactId: string;
   width: number;
   height: number;
+  /** The core flow as a browser carried it out on the page. Absent on designs from before mock-ups were walked. */
+  flow?: FlowWalk | null;
+  measures?: MockupMeasures | null;
+}
+
+const STOPPED: Record<FlowStop, (step: number | null) => string> = {
+  'already-done': () => '화면이 이미 끝난 뒤의 모습으로 열립니다',
+  'step-missing': (step) => `${step ?? 1}번째로 누를 곳이 화면에 없습니다`,
+  covered: (step) => `${step ?? 1}번째로 누를 곳이 다른 요소에 가려 있습니다`,
+  'outcome-not-shown': () => '끝까지 눌러도 결과가 나타나지 않습니다',
+};
+
+/**
+ * A mock-up's walk as one line the owner can compare across directions: what it took to get the core flow done.
+ * Every figure is a count the daemon made in a browser; `ok` is false when the flow could not be walked to its end.
+ */
+export function flowLine(flow: FlowWalk): { ok: boolean; text: string } {
+  const stuck = flow.tasks.find((t) => !t.reached);
+  if (flow.tasks.length === 0) return { ok: false, text: '핵심 흐름을 걷지 못했습니다' };
+  if (stuck) return { ok: false, text: `핵심 흐름이 끝까지 가지 않음: ${stuck.stopped ? STOPPED[stuck.stopped](stuck.stoppedAtStep) : '멈춘 곳을 알 수 없습니다'}` };
+  const sum = (pick: (t: FlowWalk['tasks'][number]) => number): number => flow.tasks.reduce((n, t) => n + pick(t), 0);
+  const [presses, typed, scrolls, answered] = [sum((t) => t.presses), sum((t) => t.typed), sum((t) => t.scrolls), sum((t) => t.answered)];
+  const smallest = Math.min(...flow.tasks.flatMap((t) => (t.smallestTargetPx === null ? [] : [t.smallestTargetPx])));
+  const parts = [`누름 ${presses}번`, typed > 0 ? `입력 ${typed}자` : null, scrolls > 0 ? `스크롤 ${scrolls}번` : '스크롤 없음', Number.isFinite(smallest) ? `가장 작은 버튼 ${smallest}px` : null, `눌렀을 때 답함 ${answered}/${presses}`];
+  return { ok: true, text: `핵심 흐름 ${parts.filter(Boolean).join(' · ')}` };
+}
+
+/** A mock-up's audit as one line: what was measured wrong on the page, and how generated it reads to the reviewer. */
+export function measuresLine(m: MockupMeasures): { ok: boolean; text: string } {
+  const found = m.blockers + m.majors + m.copyHabits;
+  const parts = [m.blockers > 0 ? `막는 결함 ${m.blockers}` : null, m.majors > 0 ? `큰 결함 ${m.majors}` : null, m.copyHabits > 0 ? `문구 습관 ${m.copyHabits}` : null, found === 0 ? '측정된 결함 없음' : null, m.slopScore === null ? '디자인 심사 없음' : `슬롭 지수 ${m.slopScore}`];
+  return { ok: m.blockers === 0 && m.copyHabits === 0 && (m.slopScore === null || m.slopScore <= 30), text: parts.filter(Boolean).join(' · ') };
 }
 
 const BUILD_FROM_DESIGN = 'docs/prd.md, docs/architecture.md, docs/erd.md, docs/openapi.yaml에 정리한 설계대로 MVP를 구현해줘. 문서에서 범위 밖으로 둔 것은 만들지 말고, 문서와 다르게 구현해야 하는 부분이 생기면 마지막에 알려줘.';
@@ -174,7 +206,7 @@ function refresh(group: Building): void {
   }));
 }
 
-const gateLabel = { compiler: '컴파일', smoke: '스모크 테스트', anchor: '고정표', build: '프로덕션 빌드' } as const;
+const gateLabel = { compiler: '컴파일', smoke: '스모크 테스트', anchor: '고정표', build: '프로덕션 빌드', screens: '화면 명세', flow: '시안에서 핵심 흐름 걷기' } as const;
 
 /**
  * A task's event stream as what the owner reads: a short list of steps with their outcome, the agent's closing

@@ -14,6 +14,7 @@ import { CORE_PROJECT_ID, type Project } from '@studio-zero/protocol';
 import { createDaemon } from '../src/app/compose.ts';
 import { testConfig } from '../src/config.ts';
 import { findRepoRoot } from '../src/harness/SelfHosting.ts';
+import { FLOW_TASKS, FROZEN, OPERABLE } from './fixtures-mockup.ts';
 import { fakeSecurity, freePort, quietLog, tempDir } from './helpers.ts';
 
 const skip = process.env.SZ_TEST_ENGINE !== '1' && 'set SZ_TEST_ENGINE=1 to run (needs OrbStack running and network access)';
@@ -48,7 +49,7 @@ test('reference capture on a real engine: a public page is opened in the QA brow
 
 test('mock-ups on a real engine: pages in a sandbox are drawn in the QA browser container with scripts and the network off', { skip }, async () => {
   const home = tempDir('sz-mock-');
-  const config = testConfig(home.dir, { listen: { port: await freePort() }, gateway: { port: await freePort() }, engines: { claudeCode: { enabled: false } }, runtime: { memoryMb: 1024 }, selfHosting: { enabled: false } });
+  const config = testConfig(home.dir, { listen: { port: await freePort() }, gateway: { port: await freePort() }, engines: { claudeCode: { enabled: false } }, runtime: { memoryMb: 1024 }, selfHosting: { enabled: false }, audit: { vision: false } });
   const daemon = await createDaemon(config, quietLog, { securityRun: fakeSecurity().run });
   const { studio, sandboxes, mockups, store } = daemon;
   const project = studio.createProject({ type: 'owner', via: 'desktop' }, { name: 'Mock-up test', slug: `it-${randomBytes(4).toString('hex')}`, template: 'web-vite-react' });
@@ -73,6 +74,30 @@ test('mock-ups on a real engine: pages in a sandbox are drawn in the QA browser 
       assert.deepEqual([png.readUInt32BE(16), png.readUInt32BE(20)], [1440, 900], 'a PNG of the first screen');
       assert.ok(png.length > 3000, 'and not a blank one');
     }
+
+    // A page that works, with a picture of its own: read out of the sandbox with the picture and the face inside
+    // it, then walked and audited in the container exactly as it is shown.
+    const dot = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+    assert.equal((await sandboxes.exec(project, `mkdir -p docs/mockups/assets && printf %s '${dot}' | base64 -d > docs/mockups/assets/dot.png`, { timeoutSec: 30 })).exitCode, 0);
+    await write('a.html', OPERABLE.replace('<h1>망원동 집 장부</h1>', '<h1>망원동 집 장부</h1><img src="assets/dot.png" alt="도장" width="24" height="24">'));
+    await write('b.html', FROZEN);
+    const shown = await mockups.page(project, 'docs/mockups/a.html');
+    assert.ok(shown?.html.includes(`<img src="data:image/png;base64,${dot}" alt="도장"`), 'the picture travels inside the page');
+    assert.match(shown!.html, /<style data-studio-faces>@font-face\{font-family:"Geist"/);
+
+    const measured = await mockups.measure(project, { taskId: null, tasks: FLOW_TASKS });
+    assert.deepEqual(measured.options.map((o) => [o.file, o.flow?.tasks.map((t) => [t.id, t.reached, t.stopped, t.presses])]), [
+      ['docs/mockups/a.html', [['log', true, null, 1], ['undo', true, null, 1]]],
+      ['docs/mockups/b.html', [['log', false, 'already-done', 0]]],
+    ], 'the container\'s browser pressed through the flow of the page that has one');
+    const film = readFileSync(store.getArtifact(measured.options[0]!.flow!.filmArtifactId!)!.file);
+    assert.deepEqual([film.readUInt32BE(16), film.readUInt32BE(20)], [3 * 480 + 2 * 8, 300 + 28], 'three frames of a desktop page on one sheet');
+    assert.deepEqual(measured.flowProblems.map((p) => p.file), ['docs/mockups/b.html']);
+    // The design review is switched off in this test (it would spend a subscription): measured, and said to be unjudged.
+    assert.deepEqual([measured.audit?.visionReviewed, measured.audit?.vision.status, measured.audit?.passed], [false, 'off', false]);
+    assert.ok(measured.audit!.screenshots.length >= 6 && measured.audit!.screenshots.every((s) => s.route.startsWith('docs/mockups/')), 'both pages at all three sizes');
+    assert.ok(measured.audit!.findings.every((f) => f.rule !== 'type/font-not-loaded' && f.rule !== 'render/load-failed'), JSON.stringify(measured.audit!.findings.map((f) => [f.rule, f.route, f.message])));
+    assert.deepEqual(measured.options.map((o) => o.measures?.slopScore), [null, null]);
   } finally {
     await sandboxes.destroy(project, { deleteWorkspace: true }).catch(() => undefined);
     await sandboxes.stopQaBrowser().catch(() => undefined);

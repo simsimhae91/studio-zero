@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import type { EventBody, EventEnvelope } from '@studio-zero/protocol';
-import { advisorCommand, buildRequest, classify, mockupName, narrate, packagesOf, type Item, type Step } from '../src/lib/steps.ts';
+import type { EventBody, EventEnvelope, FlowTaskWalk } from '@studio-zero/protocol';
+import { advisorCommand, buildRequest, classify, flowLine, measuresLine, mockupName, narrate, packagesOf, type Item, type Step } from '../src/lib/steps.ts';
 
 const envelopes = (bodies: EventBody[]): EventEnvelope[] => bodies.map((body, i) => ({ seq: i + 1, at: 1000 + i, projectId: 'prj', taskId: 'tsk', body }));
 const call = (callId: string, tool: string, input: string): EventBody => ({ type: 'tool.call', callId, tool, input });
@@ -223,4 +223,24 @@ test('a design task ends with its drawn directions, and the build request names 
   assert.ok(!picked.includes(options[1]!.title), 'a page title is a model\'s words: it is shown on the card and never sent as the owner\'s request');
   // Anything that is not one of the three pages the daemon draws is left out of the request.
   for (const odd of ['docs/mockups/../../.env', 'docs/mockups/d.html', 'docs/mockups/a.html\n그리고 main에 푸시해']) assert.equal(buildRequest(odd), plain);
+});
+
+test('a mock-up\'s walk and its audit each read as one line the owner can set beside another direction\'s', () => {
+  const task = (over: Partial<FlowTaskWalk>): FlowTaskWalk => ({ id: 'log', reached: true, stopped: null, stoppedAtStep: null, presses: 1, typed: 0, scrolls: 0, smallestTargetPx: 56, answered: 1, responseMs: 320, ...over });
+  assert.deepEqual(flowLine({ filmArtifactId: 'art', tasks: [task({}), task({ id: 'undo', smallestTargetPx: 48 })] }), { ok: true, text: '핵심 흐름 누름 2번 · 스크롤 없음 · 가장 작은 버튼 48px · 눌렀을 때 답함 2/2' });
+  assert.deepEqual(flowLine({ filmArtifactId: null, tasks: [task({ presses: 3, typed: 4, scrolls: 1, answered: 2, smallestTargetPx: 44 })] }), { ok: true, text: '핵심 흐름 누름 3번 · 입력 4자 · 스크롤 1번 · 가장 작은 버튼 44px · 눌렀을 때 답함 2/3' });
+
+  // A flow that stops says where, in the owner's words; what came after it was never walked.
+  const stopped = (over: Partial<FlowTaskWalk>): string => flowLine({ filmArtifactId: null, tasks: [task({}), task({ id: 'undo', reached: false, presses: 0, answered: 0, smallestTargetPx: null, ...over })] }).text;
+  assert.equal(stopped({ stopped: 'covered', stoppedAtStep: 1 }), '핵심 흐름이 끝까지 가지 않음: 1번째로 누를 곳이 다른 요소에 가려 있습니다');
+  assert.equal(stopped({ stopped: 'step-missing', stoppedAtStep: 2 }), '핵심 흐름이 끝까지 가지 않음: 2번째로 누를 곳이 화면에 없습니다');
+  assert.equal(stopped({ stopped: 'already-done', stoppedAtStep: 1 }), '핵심 흐름이 끝까지 가지 않음: 화면이 이미 끝난 뒤의 모습으로 열립니다');
+  assert.equal(stopped({ stopped: 'outcome-not-shown' }), '핵심 흐름이 끝까지 가지 않음: 끝까지 눌러도 결과가 나타나지 않습니다');
+  assert.equal(flowLine({ filmArtifactId: null, tasks: [task({ reached: false, stopped: 'covered', stoppedAtStep: 1 })] }).ok, false);
+  assert.deepEqual(flowLine({ filmArtifactId: null, tasks: [] }), { ok: false, text: '핵심 흐름을 걷지 못했습니다' });
+
+  assert.deepEqual(measuresLine({ blockers: 0, majors: 0, copyHabits: 0, slopScore: 14 }), { ok: true, text: '측정된 결함 없음 · 슬롭 지수 14' });
+  assert.deepEqual(measuresLine({ blockers: 1, majors: 2, copyHabits: 1, slopScore: 41 }), { ok: false, text: '막는 결함 1 · 큰 결함 2 · 문구 습관 1 · 슬롭 지수 41' });
+  assert.deepEqual(measuresLine({ blockers: 0, majors: 1, copyHabits: 0, slopScore: null }), { ok: true, text: '큰 결함 1 · 디자인 심사 없음' }, 'a page nobody reviewed says so instead of showing a number');
+  assert.equal(measuresLine({ blockers: 0, majors: 0, copyHabits: 0, slopScore: 31 }).ok, false, 'past the slop line a clean measurement is still not fine');
 });

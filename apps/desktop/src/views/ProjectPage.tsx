@@ -1,14 +1,14 @@
 import * as Tabs from '@radix-ui/react-tabs';
-import { Check, ChevronDown, FileText, FolderTree, GitFork, GitMerge, Globe, History as HistoryIcon, KeyRound, Lightbulb, Maximize2, MessageCircleQuestion, Monitor, MoreHorizontal, Pencil, Plus, ReceiptText, RotateCw, ScanEye, Smartphone, Sparkles, Square, SquareTerminal, Star, Trash2, X } from 'lucide-react';
+import { Check, ChevronDown, FileText, Film, FolderTree, GitFork, GitMerge, Globe, History as HistoryIcon, KeyRound, Lightbulb, Maximize2, MessageCircleQuestion, Monitor, MoreHorizontal, Pencil, Plus, ReceiptText, RotateCw, ScanEye, Smartphone, Sparkles, Square, SquareTerminal, Star, Trash2, X } from 'lucide-react';
 import { Suspense, lazy, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { ReviewerPref, type AdvisorId, type Approval, type Project, type Session, type Task, type TaskKind, type TaskState, type TaskTrack } from '@studio-zero/protocol';
 import { Markdown } from '@studio-zero/ax/react';
 import { duration, effortLabel, elapsed, engineLabel, kindLabel, phaseLabel, stamp, subscriptionLabel, taskStateLabel, templateLabel, tokens } from '../lib/format.ts';
 import { redrawRequest, revisionRequest, type MockupNote } from '../lib/mockups.ts';
-import { advisorCommand, buildRequest, mockupName, narrate, type Item, type Mockup } from '../lib/steps.ts';
+import { advisorCommand, buildRequest, flowLine, measuresLine, mockupName, narrate, type Item, type Mockup } from '../lib/steps.ts';
 import { errorText, useAction, useQuery, useStudio, useTaskEvents } from '../lib/studio.tsx';
 import { EnginePicker, pickerClass, useEngineChoice } from './enginePicker.tsx';
-import { Button, IconButton, Menu, MenuItem, MenuSeparator, Problem, Segmented, Status, TitlebarSpace, inputClass } from '../ui.tsx';
+import { Button, IconButton, Menu, MenuItem, MenuSeparator, Problem, Segmented, Sheet, Status, TitlebarSpace, inputClass } from '../ui.tsx';
 import { ActionStepper } from './ActionStepper.tsx';
 import { ExternalApisModal } from './ExternalApis.tsx';
 import { MockupDeskContext, MockupThumb, useMockupDesk, useMockupPages, type MockupDesk } from './mockupDesk.tsx';
@@ -18,6 +18,7 @@ import { FileTree } from './panels/FileTree.tsx';
 import { History } from './panels/History.tsx';
 import { Learning } from './panels/Learning.tsx';
 import { Ledger } from './panels/Ledger.tsx';
+import { SCREEN_SPEC_FILE, ScreenSpecView, useScreenSpec } from './panels/ScreenSpecView.tsx';
 import { Preview } from './panels/Preview.tsx';
 import { Proposals } from './panels/Proposals.tsx';
 import { DeleteProjectModal, InlineName, restartSandbox } from './projectActions.tsx';
@@ -889,12 +890,19 @@ function DesignDecision({ task, mockups, onFile, onBuild }: { task: Task; mockup
   // Drawing them all again is a whole design pass on the owner's subscription: asked for in two steps.
   const [redrawing, setRedrawing] = useState(false);
   const [direction, setDirection] = useState('');
+  // The walk of one mock-up as pictures, and the screen spec as a document: each opens beside the card.
+  const [film, setFilm] = useState<Mockup | null>(null);
+  const [reading, setReading] = useState(false);
+  const spec = useScreenSpec(task.projectId, `${task.id}:${task.state}`);
+  const walked = mockups.some((m) => m.flow);
   return (
     <div className="@container flex flex-col gap-3 border-l-4 border-accent pl-4">
       <div className="flex flex-col gap-1">
         <p className="text-base font-semibold">{drawn ? `설계 문서와 첫 화면 시안 ${mockups.length}개가 준비됐습니다. 어느 안으로 만들까요?` : '설계 문서가 준비됐습니다. 이대로 만들까요?'}</p>
         <p className="text-base text-fg-muted">
-          {drawn ? '시안은 구성이 서로 다른 방향입니다. 누르면 옆의 프리뷰에 실제 크기로 뜹니다. 고칠 곳은 거기서 요소를 골라 적어 보내고, 마음에 들면 승인하세요.' : '문서를 읽어 보고, 승인하면 이 문서들을 기준으로 구현을 시작합니다.'}
+          {drawn
+            ? `시안마다 구성이 다릅니다. 하나를 눌러 옆 프리뷰에 띄우고 직접 조작해 보세요.${walked ? ' 시안 아래 숫자는 QA 브라우저가 같은 핵심 흐름을 눌러 보며 센 값입니다.' : ''} 고칠 곳은 프리뷰에서 요소를 골라 적어 보내세요.`
+            : '문서를 읽어 보고, 승인하면 이 문서들을 기준으로 구현을 시작합니다.'}
         </p>
       </div>
       {drawn ? (
@@ -918,17 +926,33 @@ function DesignDecision({ task, mockups, onFile, onBuild }: { task: Task; mockup
                   {/* The page's own title and description: a model's words, shown as text. */}
                   <span className="break-words text-sm font-medium">{m.title}</span>
                   {m.idea ? <span className="break-words text-sm text-fg-muted">{m.idea}</span> : null}
+                  {/* What the daemon counted on this page: the way it works, as numbers that can be set side by side. */}
+                  {m.flow ? <Measured {...flowLine(m.flow)} /> : null}
+                  {m.measures ? <Measured {...measuresLine(m.measures)} /> : null}
                 </button>
                 <button type="button" onClick={() => desk.view(m.file)} className="flex min-h-9 pointer-coarse:min-h-11 items-center gap-2 border-t border-border px-3 text-sm text-fg-muted hover:bg-sunken">
                   <Maximize2 className="size-4 shrink-0" aria-hidden />
-                  프리뷰에서 보기
+                  프리뷰에서 눌러 보기
                 </button>
+                {m.flow?.filmArtifactId ? (
+                  <button type="button" onClick={() => setFilm(m)} className="flex min-h-9 pointer-coarse:min-h-11 items-center gap-2 border-t border-border px-3 text-sm text-fg-muted hover:bg-sunken">
+                    <Film className="size-4 shrink-0" aria-hidden />
+                    브라우저가 눌러 본 장면
+                  </button>
+                ) : null}
               </div>
             );
           })}
         </div>
       ) : null}
       <ul className="flex flex-col">
+        <li className="max-w-none">
+          <button type="button" onClick={() => (spec ? setReading(true) : onFile(SCREEN_SPEC_FILE))} className="flex min-h-9 pointer-coarse:min-h-11 w-full items-center gap-3 rounded-md px-2 text-left text-sm hover:bg-sunken">
+            <FileText className="size-4 shrink-0 text-fg-muted" aria-hidden />
+            <span className="font-medium">화면 명세{spec ? ` (화면 ${spec.screens.length}개, 핵심 흐름 ${spec.tasks.length}단계)` : ''}</span>
+            <span className="break-all font-mono text-fg-muted">{SCREEN_SPEC_FILE}</span>
+          </button>
+        </li>
         {DESIGN_DOCS.map((doc) => (
           <li key={doc.path} className="max-w-none">
             <button type="button" onClick={() => onFile(doc.path)} className="flex min-h-9 pointer-coarse:min-h-11 w-full items-center gap-3 rounded-md px-2 text-left text-sm hover:bg-sunken">
@@ -973,8 +997,42 @@ function DesignDecision({ task, mockups, onFile, onBuild }: { task: Task; mockup
           </div>
         </form>
       ) : null}
+      <Sheet open={film !== null} onOpenChange={(open) => !open && setFilm(null)} title={film ? `${mockupName(film.file)}을 눌러 본 장면` : ''} description="QA 브라우저가 이 시안에서 핵심 흐름을 직접 눌러 본 기록입니다. 처음 화면, 그리고 한 번 누를 때마다 한 장." wide>
+        {film?.flow?.filmArtifactId ? (
+          <div className="flex flex-col gap-4 p-6">
+            <Measured {...flowLine(film.flow)} />
+            <ArtifactImage artifactId={film.flow.filmArtifactId} alt={`${mockupName(film.file)}에서 핵심 흐름을 누른 순서대로 찍은 화면`} className="w-full rounded-md border border-border" />
+          </div>
+        ) : null}
+      </Sheet>
+      <Sheet open={reading && spec !== null} onOpenChange={setReading} title="화면 명세" description="화면마다 무엇을 하는 곳인지, 각 요소가 어떤 규칙으로 동작하는지 적은 문서입니다. 생김새는 여기에 없습니다: 시안이 달라도 이 명세는 같고, 구현은 이 명세를 따릅니다." wide>
+        {spec ? <ScreenSpecView spec={spec} /> : null}
+      </Sheet>
     </div>
   );
+}
+
+/** One line of what the daemon measured on a mock-up. Plain when it is fine; marked when it found something. */
+function Measured({ ok, text }: { ok: boolean; text: string }) {
+  return <span className={`break-words text-sm ${ok ? 'text-fg-muted' : 'font-medium text-warning'}`}>{text}</span>;
+}
+
+/** A picture the daemon made (a film of a walk), loaded by its artifact id. */
+function ArtifactImage({ artifactId, alt, className }: { artifactId: string; alt: string; className: string }) {
+  const { backend } = useStudio();
+  const [src, setSrc] = useState<string | null>(null);
+  useEffect(() => {
+    setSrc(null);
+    let stale = false;
+    void backend.artifactUrl(artifactId).then(
+      (url) => !stale && setSrc(url),
+      () => undefined,
+    );
+    return () => {
+      stale = true;
+    };
+  }, [backend, artifactId]);
+  return src ? <img src={src} alt={alt} className={`block h-auto ${className}`} /> : <p className="py-6 text-sm text-fg-muted">장면을 불러오는 중입니다.</p>;
 }
 
 /** A mock-up as the QA browser drew it. A picture: whatever the page contained, nothing of it runs here. */

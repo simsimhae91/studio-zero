@@ -7,17 +7,18 @@ import type { EventLog } from '../events/EventLog.ts';
 import { pngBlock, textBlock, type ClaudeClient } from '../llm/ClaudeClient.ts';
 import type { EnginePick, ModelRouter } from '../llm/ModelRouter.ts';
 import { ApprovalDeniedError, type PolicyEngine } from '../policy/PolicyEngine.ts';
-import type { MockupRenderer } from '../qa/MockupRenderer.ts';
+import type { MockupMeasurement, MockupRenderer } from '../qa/MockupRenderer.ts';
 import type { ReferenceCapture, RefKit } from '../qa/RefKit.ts';
 import type { SmokeRunner } from '../qa/SmokeTester.ts';
 import type { OrbStackManager } from '../sandbox/OrbStackManager.ts';
 import { ANCHOR_FILE, AnchorTableShape, anchorTableJson, readAnchorTable, renderAnchorTable, type AnchorRead, type AnchorTable } from '../scratch/AnchorTable.ts';
+import { SCREEN_SPEC_FILE, readScreenSpec, type FlowTask } from '../scratch/ScreenSpec.ts';
 import { untrusted, type UntrustedSource } from '../trust/dataBlock.ts';
 import { errorMessage, excerpt, type Clock, type Logger } from '../util/core.ts';
 import type { WorkspaceProvisioner } from './bootstrap.ts';
 import type { BuildMeter } from './BuildMeter.ts';
 import type { CompilerGate } from './CompilerGate.ts';
-import type { EvalRunner } from './EvalRunner.ts';
+import { visualOutcome, type EvalRunner } from './EvalRunner.ts';
 import type { EngineResult, EngineSession } from './engines/Engine.ts';
 import { countCompilerErrors, emptyRun, renderEvidence, type Ledger, type RunRecord } from './Ledger.ts';
 import type { LessonBook } from './LessonBook.ts';
@@ -43,6 +44,12 @@ type Plan = z.infer<typeof Plan>;
 
 /** How many times an engine may correct an anchor table it was asked to write, before the task is refused. */
 const ANCHOR_CORRECTIONS = 2;
+/**
+ * How many times an engine reworks its mock-ups after they were measured. Past this they go to the owner with
+ * what was found said beside them: a drawing is for the owner to judge, and a measurement that would not come
+ * clean is something they are told, not a reason to throw the design away.
+ */
+const MOCKUP_CORRECTIONS = 2;
 
 /** One thing a verification round found wrong. `detail` is tool or page output: it reaches the engine inside a data block. */
 interface Failure {
@@ -98,6 +105,11 @@ export class ShutdownSignal extends Error {
  *   Reflect  a judge model reads the trace and proposes lessons and regression checks.
  *   Evolve   code decides which proposals are kept; the lesson files are re-rendered.
  *
+ * A design task (`ideate`) writes documents and mock-ups and no product code, and is verified as that: its
+ * documents are there, its screen spec holds, and its mock-up pages are measured the way a build's screens are
+ * (audited, and the spec's core flow walked on each). The first two are owed; what the measurement finds is
+ * reworked a bounded number of times and then shown to the owner beside the mock-ups.
+ *
  * A `fast` task (Draft 0) is the same loop with the model-judged parts left out: no planning call before the
  * engine starts, no anchor table, no cross-checks, no design gates, no reflection. Compiler, smoke load and
  * regression commands still gate it.
@@ -130,7 +142,7 @@ export class Harness {
   readonly #reviewer: SandwichReviewer;
   readonly #ledger: Ledger;
   readonly #build: BuildMeter;
-  readonly #mockups: Pick<MockupRenderer, 'render'> | null;
+  readonly #mockups: Pick<MockupRenderer, 'measure'> | null;
   readonly #core: SelfHosting | null;
   readonly #clock: Clock;
   readonly #log: Logger;
@@ -153,7 +165,7 @@ export class Harness {
     reviewer: SandwichReviewer;
     ledger: Ledger;
     build: BuildMeter;
-    mockups?: Pick<MockupRenderer, 'render'> | null;
+    mockups?: Pick<MockupRenderer, 'measure'> | null;
     selfHosting?: SelfHosting | null;
     clock: Clock;
     log: Logger;
@@ -306,7 +318,7 @@ export class Harness {
         phase('execute', 1);
         await open();
         // A design task that starts where a finished design already is (the owner sent it back with notes) revises it.
-        const revising = ideation && (await this.#verifyIdeation(project)).length === 0;
+        const revising = ideation && (await this.#ideationDocuments(project)).length === 0;
         result = await send(executeMessage(task, plan, lessons.text, { anchor, critique, references, revising }));
         checkCancel();
       }
@@ -315,20 +327,36 @@ export class Harness {
       let unverified: string[] = [];
       let waitingOn: string | null = null;
       let round = 0;
+      /** A design task's mock-ups as last measured, and what was still wrong with them when the reworking stopped. */
+      let drawn: MockupMeasurement | null = null;
+      let outstanding: string[] = [];
       /** Verifies, and has the engine repair what failed, until a round is clean or the corrections run out. */
       const verifyUntilClean = async (): Promise<void> => {
         const corrections = this.#config.budgets.verifyRounds;
-        for (let used = 0; ; used++) {
+        let reworks = 0;
+        for (let used = 0; ; ) {
           round += 1;
           phase('verify', round);
-          const checked = ideation ? { failures: await this.#verifyIdeation(project), unverified: [], waitingOn: null } : await this.#verify(project, task, plan, signal, { design, record });
+          const looked = ideation ? await this.#verifyIdeation(project, task, signal) : null;
+          const checked = looked ?? (await this.#verify(project, task, plan, signal, { design, record }));
           record.rounds = round;
           const failures = checked.failures;
           unverified = checked.unverified;
           waitingOn = checked.waitingOn;
+          if (looked) drawn = looked.drawn;
           checkCancel();
           if (failures.length === 0) return;
-          if (used >= corrections) throw new Error(`verification still failing after ${corrections} corrections: ${failures.map((f) => f.name).join(', ')}`);
+          if (looked?.advisory) {
+            // What the measurement found on the mock-ups: reworked a bounded number of times, then said.
+            if (reworks >= MOCKUP_CORRECTIONS) {
+              outstanding = failures.map((f) => f.name);
+              return;
+            }
+            reworks += 1;
+          } else {
+            if (used >= corrections) throw new Error(`verification still failing after ${corrections} corrections: ${failures.map((f) => f.name).join(', ')}`);
+            used += 1;
+          }
 
           phase('execute', round + 1);
           result = await send(repairMessage(failures));
@@ -386,11 +414,15 @@ export class Harness {
         this.#events.emit(scope, { type: 'task.state', state: 'suspended', error: null });
         return;
       }
-      // A design task's directions are drawn, so the owner chooses a build by looking at it and not by reading about it.
+      // A design task's directions are drawn, so the owner chooses a build by looking at it and not by reading about
+      // it. They are the ones the last verification round measured: what the owner sees is what was checked.
       if (ideation && this.#mockups) {
-        const options = await this.#mockups.render(project, signal);
+        const options = (drawn as MockupMeasurement | null)?.options ?? [];
         if (options.length > 0) this.#events.emit(scope, { type: 'mockups.rendered', options });
         else this.#events.emit(scope, { type: 'notice', level: 'warn', message: 'The mock-ups could not be drawn (the QA browser did not start, or no mock-up page was found). The documents are complete.' });
+        if (outstanding.length > 0) {
+          unverified = [...unverified, `the mock-ups were reworked ${MOCKUP_CORRECTIONS} times and the measurement still finds problems (${outstanding.join(', ')}); they are shown with what was found`];
+        }
       }
       // The production build, for the ledger. It runs after the commit and gates nothing; a failure is said.
       if (!draft && !ideation) {
@@ -613,12 +645,52 @@ export class Harness {
     };
   }
 
-  /** Ideation produces documents, not screens: the check is that each required document exists and has substance. */
-  async #verifyIdeation(project: Project): Promise<Failure[]> {
+  /** What a design task owes as files: each required document exists and has substance. */
+  async #ideationDocuments(project: Project): Promise<Failure[]> {
     const script = IDEATION_REQUIRED_FILES.map((f) => `[ "$(wc -c < '${f}' 2>/dev/null || echo 0)" -ge 400 ] || echo '${f}'`).join('\n');
     const res = await this.#sandboxes.exec(project, script, { timeoutSec: 30 });
     const missing = res.stdout.trim().split('\n').filter(Boolean);
     return missing.length === 0 ? [] : [{ name: 'ideation-documents', source: 'sandbox-output', detail: `Missing or nearly empty: ${missing.join(', ')}` }];
+  }
+
+  /**
+   * One verification round of a design task. Two things are owed and fail the task if they cannot be had: the
+   * documents, and a screen spec that holds. Then the mock-ups are measured, and what that finds is `advisory`:
+   * the engine is sent back to rework them a bounded number of times, and after that the owner is shown the
+   * mock-ups with the findings instead of a failed task.
+   *
+   * A design review that could not run leaves the mock-ups measured and not judged; that is said and not
+   * waited for. The owner is the one who chooses between them.
+   */
+  async #verifyIdeation(project: Project, task: Task, signal: AbortSignal): Promise<{ failures: Failure[]; unverified: string[]; waitingOn: null; advisory: boolean; drawn: MockupMeasurement | null }> {
+    const scope = { projectId: project.id, taskId: task.id };
+    const owed = (failures: Failure[]) => ({ failures, unverified: [], waitingOn: null, advisory: false, drawn: null });
+    const missing = await this.#ideationDocuments(project);
+    if (missing.length > 0) return owed(missing);
+
+    const started = Date.now();
+    const read = await this.#sandboxes.exec(project, `head -c 262144 ${SCREEN_SPEC_FILE}`, { timeoutSec: 20, maxOutputBytes: 300_000 });
+    const spec = readScreenSpec(read.stdout);
+    this.#events.emit(scope, { type: 'gate.result', gate: 'screens', name: SCREEN_SPEC_FILE, passed: spec.ok, exitCode: null, durationMs: Date.now() - started, detail: spec.ok ? '' : spec.problems.join('\n') });
+    if (!spec.ok) return owed([{ name: 'screen-spec', source: 'sandbox-output', detail: `${SCREEN_SPEC_FILE} does not hold as the screen spec yet. Correct exactly these, keeping its shape:\n${spec.problems.map((line) => `- ${line}`).join('\n')}` }]);
+    if (!this.#mockups) return owed([]);
+
+    const tasks: FlowTask[] = spec.spec.tasks.map(({ id, goal, outcome }) => ({ id, goal, outcome }));
+    const walkStarted = Date.now();
+    const drawn = await this.#mockups.measure(project, { taskId: task.id, tasks, signal });
+    const failures: Failure[] = [];
+    const unverified: string[] = [];
+    if (drawn.flowProblems.length > 0 || drawn.options.some((o) => o.flow)) {
+      const detail = drawn.flowProblems.map((page) => `${page.file}\n${page.problems.map((line) => `- ${line}`).join('\n')}`).join('\n\n');
+      this.#events.emit(scope, { type: 'gate.result', gate: 'flow', name: drawn.options.map((o) => o.file).join(' '), passed: drawn.flowProblems.length === 0, exitCode: null, durationMs: Date.now() - walkStarted, detail });
+      if (drawn.flowProblems.length > 0) failures.push({ name: 'mockup-flow', source: 'browser-page', detail: `${MOCKUP_FLOW_NOTE}\n\n${detail}` });
+    }
+    if (drawn.audit) {
+      const outcome = visualOutcome(drawn.audit, this.#config.audit.threshold);
+      if (outcome.unverified) unverified.push(`the mock-ups: the design review did not run (${drawn.audit.vision.reason ?? 'no reason recorded'}), so they are measured and not judged`);
+      else if (!outcome.passed) failures.push({ name: 'mockup-audit', source: 'browser-page', detail: `${MOCKUP_AUDIT_NOTE}\n\n${outcome.detail}` });
+    }
+    return { failures, unverified, waitingOn: null, advisory: true, drawn };
   }
 
   /** Keep the unfinished work on its branch for inspection and put the workspace back on the integration branch. */
@@ -677,6 +749,12 @@ function anchorMessage(task: Task, references: readonly ReferenceCapture[], prob
   if (problems.length > 0) parts.push(`The table in ${ANCHOR_FILE} was checked and does not hold yet. Correct exactly these:\n${problems.map((p) => `- ${p}`).join('\n')}`);
   return parts.join('\n\n');
 }
+
+/** Said above what a walk found, so the findings read as being about the pages and the two attributes they are walked by. */
+const MOCKUP_FLOW_NOTE = `The studio opened each mock-up page in a browser, with scripts off as it is always shown, and carried out the core flow of ${SCREEN_SPEC_FILE} on it: for each task it pressed the control marked data-step="<task>:1", then "<task>:2" and so on, and then looked for something visible carrying data-done="<task>". These pages could not be walked to the end, or have controls in the flow that fall short. Fix the pages: the states are CSS states (checked inputs, :has(), <details>, :focus-within, :placeholder-shown), and each page opens in the state before the person acts.`;
+
+/** Said above a mock-up audit: the same findings a build gets, pointed at pages of plain HTML and CSS. */
+const MOCKUP_AUDIT_NOTE = 'The studio audited the mock-up pages under docs/mockups/ as it audits a built screen: measured from the DOM at each size, their words read as plain text, and a design reviewer shown each page. Each finding names its page as the route. Fix the pages themselves (their markup and their own CSS). Where a fix names a theme utility (text-fg, bg-surface, rounded-lg), use the theme value behind it, which the page keeps in its :root.';
 
 /** The acceptance reviewer's single corrective patch, as the engine receives it. */
 function patchMessage(acceptance: Acceptance): string {

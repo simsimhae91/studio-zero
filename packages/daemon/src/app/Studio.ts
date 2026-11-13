@@ -69,6 +69,7 @@ import { SandboxError, sandboxNames, type OrbStackManager } from '../sandbox/Orb
 import type { PtyManager, TerminalSink } from '../sandbox/PtyManager.ts';
 import type { FileContent, FileListing, SandboxFileService } from '../sandbox/SandboxFileService.ts';
 import { assertBranchName } from '../sandbox/scripts.ts';
+import type { MockupRenderer } from '../qa/MockupRenderer.ts';
 import { PromotionWorkflow, type PromotionHost } from '../scratch/PromotionWorkflow.ts';
 import type { ScratchService, ScratchView } from '../scratch/ScratchService.ts';
 import { untrusted } from '../trust/dataBlock.ts';
@@ -113,6 +114,7 @@ export interface StudioDeps {
   steering: SteeringQueue;
   mcp: McpRegistry;
   files: SandboxFileService;
+  mockups: Pick<MockupRenderer, 'page'>;
   pty: PtyManager;
   namer: ProjectNamer;
   ledger: Ledger;
@@ -333,6 +335,12 @@ export class Studio implements PromotionHost {
   readFile(projectId: string, path: string): Promise<FileContent> {
     const project = this.getProject(projectId);
     return this.#inSandbox(project, () => this.#d.files.read(project, path));
+  }
+
+  /** A mock-up page as the studio measured it: its pictures and the theme's faces inside it. Null when there is no such page. */
+  async mockupPage(projectId: string, file: string): Promise<string | null> {
+    const project = this.getProject(projectId);
+    return (await this.#inSandbox(project, () => this.#d.mockups.page(project, file)))?.html ?? null;
   }
 
   async writeFile(actor: Actor, projectId: string, path: string, content: string): Promise<void> {
