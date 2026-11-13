@@ -1,5 +1,5 @@
 import { blend, contractFamilies, contrastRatio, hostedFamilies, hueSaturation, isAllowedRadius, isDisplayInProportion, isLargeText, isOnTypeScale, typeStepNames, type DesignContract, type Rgb } from '@studio-zero/design';
-import { UNREVIEWED_SCORE_CAP, type DesignGrade, type Finding, type FindingCategory, type Severity, type ViewportId } from '@studio-zero/protocol';
+import { UNREVIEWED_SCORE_CAP, type DesignGrade, type Finding, type FindingCategory, type Severity, type Template, type ViewportId } from '@studio-zero/protocol';
 import type { DigestElement, PageDigest } from './collector.ts';
 import type { ProbedControl, Touchability } from './InteractionProbe.ts';
 
@@ -12,6 +12,8 @@ export interface CheckContext {
   touch: boolean;
   /** 'full' on the primary (light) pass; the dark pass re-checks only what a colour scheme can change. */
   scope: 'full' | 'color-only';
+  /** What the product is built as, when the caller knows: some rules hold for a phone app and not for a web page. */
+  template?: Template;
 }
 
 const GENERIC_FAMILIES = new Set(['serif', 'sans-serif', 'monospace', 'system-ui', 'ui-sans-serif', 'ui-serif', 'ui-monospace', 'cursive', 'fantasy', '-apple-system', 'blinkmacsystemfont']);
@@ -21,14 +23,11 @@ const near = (a: number, b: number, tolerance = 0.5): boolean => Math.abs(a - b)
 const rgbOf = (c: readonly [number, number, number, number]): Rgb => [c[0], c[1], c[2]];
 const round = (n: number, digits = 1): number => Number(n.toFixed(digits));
 
-/**
- * The measured half of the Slop Audit. Everything here is arithmetic on what the browser rendered, so it is
- * repeatable, costs no tokens and cannot be argued with. The vision model is only asked about what cannot be
- * measured (hierarchy, cadence, tone), and is told which defects were already found here.
- */
-export function runDomChecks(digest: PageDigest, ctx: CheckContext, c: DesignContract): Finding[] {
-  const findings: Finding[] = [];
-  const add = (rule: string, category: FindingCategory, severity: Severity, message: string, fix: string, el?: DigestElement): void => {
+type Add = (rule: string, category: FindingCategory, severity: Severity, message: string, fix: string, el?: DigestElement) => void;
+
+/** How every measured finding is made: where it was seen, what was measured, the fix, and the element when there is one to point at. */
+function adder(findings: Finding[], ctx: Pick<CheckContext, 'viewport' | 'route'>): Add {
+  return (rule, category, severity, message, fix, el) => {
     findings.push({
       rule,
       category,
@@ -44,6 +43,16 @@ export function runDomChecks(digest: PageDigest, ctx: CheckContext, c: DesignCon
       line: null,
     });
   };
+}
+
+/**
+ * The measured half of the Slop Audit. Everything here is arithmetic on what the browser rendered, so it is
+ * repeatable, costs no tokens and cannot be argued with. The vision model is only asked about what cannot be
+ * measured (hierarchy, cadence, tone), and is told which defects were already found here.
+ */
+export function runDomChecks(digest: PageDigest, ctx: CheckContext, c: DesignContract): Finding[] {
+  const findings: Finding[] = [];
+  const add = adder(findings, ctx);
   /** Reports the worst offenders of one rule and folds the rest into a count, so one mistake repeated 40× stays readable. */
   const addTop = <T>(items: T[], limit: number, emit: (item: T, rest: number) => void): void => {
     items.slice(0, limit).forEach((item, i) => emit(item, i === limit - 1 ? Math.max(0, items.length - limit) : 0));
@@ -245,6 +254,192 @@ export function runDomChecks(digest: PageDigest, ctx: CheckContext, c: DesignCon
   const cardGrid = [...groups.values()].find((g) => g.length >= 3 && g[0]!.shadow !== 'none' && g[0]!.radius >= 8);
   if (cardGrid) {
     add('slop/identical-cards', 'originality', 'minor', `${cardGrid.length} identical rounded, shadowed cards in a row: the stock feature-grid layout.`, 'Ask whether these items are really equal. Lead with the one that matters, or use a plain list or table; drop the shadow and let a border or surface colour group them.', cardGrid[0]);
+  }
+
+  // 9. How the first screen is put together -----------------------------------------------------------
+  findings.push(...compositionFindings(digest, ctx));
+
+  return findings;
+}
+
+/**
+ * Where a number read of a screen's composition becomes a finding. In one object so that the design lab can
+ * set them from what it measures; these are first values, taken from the screens a real engine drew on
+ * 2026-11-13. The sizes that define small text (12px and under) and a figure (28px and up) are the
+ * collector's: it runs in the page and can read nothing from here.
+ */
+export const COMPOSITION_LIMITS = {
+  /** Share of the first screen's characters set at 12px or under. Above it, small text is carrying the screen. */
+  microShare: 0.4,
+  /** Small text of this many characters or more is a sentence, not a label. */
+  sentenceChars: 24,
+  /** Text turned further than this many degrees has to be read with a tilted head. */
+  turnDegrees: 15,
+  /** This many things at the largest size compete. Two are a comparison. */
+  figuresAtLargest: 3,
+  /** A card at least this tall, */
+  cardMinHeightPx: 140,
+  /** whose content reaches under this share of its height, was stretched past what it holds. */
+  cardReach: 0.6,
+  /** More than this many controls on the first screen of a touch device is a panel, not a screen. */
+  controls: 9,
+} as const;
+
+/**
+ * The handbook's rules of type and layout that can be counted, on what the collector read of the first
+ * screenful. Each fix opens with the id of the handbook rule it enforces, so that what the engine was told to
+ * do and what it is told it did not do are the same sentence. A digest read before composition was collected
+ * says nothing here.
+ */
+export function compositionFindings(digest: PageDigest, ctx: CheckContext): Finding[] {
+  const read = digest.composition;
+  if (!read || ctx.scope !== 'full') return [];
+  const findings: Finding[] = [];
+  const add = adder(findings, ctx);
+  const limits = COMPOSITION_LIMITS;
+  /** The element a piece of text read by the collector is, when the digest kept it. */
+  const at = (text: string): DigestElement | undefined => digest.elements.find((e) => e.text !== '' && e.text.slice(0, 60) === text);
+  const more = (list: readonly unknown[]): string => (list.length > 1 ? ` (${list.length - 1} more)` : '');
+  const quoted = (list: readonly string[], limit = 4): string => `${list.slice(0, limit).map((text) => `"${text}"`).join(', ')}${list.length > limit ? ` and ${list.length - limit} more` : ''}`;
+
+  // T1: one face ------------------------------------------------------------------------------------------
+  const faces = read.families.filter((family) => !GENERIC_FAMILIES.has(family.toLowerCase()));
+  if (faces.length >= 2) {
+    add(
+      'type/second-family',
+      'typography',
+      'major',
+      `Text on the first screen is set in ${faces.length} faces: ${faces.join(', ')}. A product has one.`,
+      `T1: Set all of it in font-sans, which is ${faces[0]} on most of this screen. A title is the same face at weight 700 or 800, not another family: no second sans, no serif, no italics.`,
+      digest.elements.find((e) => e.text !== '' && e.fontFamily === faces[1]),
+    );
+  }
+  if (read.monoOutsideCode.length > 0) {
+    add(
+      'type/mono-outside-code',
+      'typography',
+      'major',
+      `"${read.monoOutsideCode[0]}" is set in a monospace face outside a code block${more(read.monoOutsideCode)}.`,
+      'T1: Monospace is for code, pre, kbd and samp. Set dates and figures in font-sans with tabular-nums (font-variant-numeric: tabular-nums), which lines the digits up without changing the face.',
+      at(read.monoOutsideCode[0]!),
+    );
+  }
+
+  // T3: the budget of small text --------------------------------------------------------------------------
+  if (read.microShare > limits.microShare) {
+    add(
+      'type/micro-overuse',
+      'typography',
+      'major',
+      `${Math.round(read.microShare * 100)}% of the characters on the first screen are set at 12px or under. About a third is the budget, and ${Math.round(limits.microShare * 100)}% the limit.`,
+      'T3: text-xs and text-2xs are for a time, a unit, a badge, a stat label and a table head. Set what the screen is there to say at text-base (16px) and what supports it at text-sm (14px), and leave only those labels small.',
+    );
+  }
+  const sentences = read.microSentences.filter((text) => [...text].length >= limits.sentenceChars);
+  if (sentences.length > 0) {
+    add(
+      'type/micro-sentence',
+      'typography',
+      'minor',
+      `A sentence is set at the size of a label (12px or under): "${sentences[0]}"${more(sentences)}.`,
+      'T3: A sentence is read, so set it at text-sm (14px) or larger; or cut it down to the label it is standing in for.',
+      at(sentences[0]!),
+    );
+  }
+
+  // T5: text stands level and runs across -----------------------------------------------------------------
+  const turned = read.turnedText.flatMap((entry) => {
+    const [, text, degrees] = /^(.*) \((\d+)deg\)$/s.exec(entry) ?? [];
+    return text !== undefined && Number(degrees) > limits.turnDegrees ? [{ text, degrees: Number(degrees) }] : [];
+  });
+  if (turned.length > 0) {
+    add(
+      'type/turned-text',
+      'typography',
+      'major',
+      `"${turned[0]!.text}" is turned ${turned[0]!.degrees} degrees${more(turned)}.`,
+      'T5: Text stands level. Take the rotation off the label and set it across; if it does not fit there, shorten it or put it above what it names.',
+      at(turned[0]!.text),
+    );
+  }
+  if (read.stackedText.length > 0) {
+    add(
+      'type/stacked-text',
+      'typography',
+      'major',
+      `"${read.stackedText[0]}" is stacked one character to a line${more(read.stackedText)}.`,
+      'T5: Text runs across. Give the label the width of its words (above or beside the column it names), and use neither a vertical writing-mode nor a box one character wide.',
+      at(read.stackedText[0]!),
+    );
+  }
+
+  // T6: words start at the start side ---------------------------------------------------------------------
+  if (read.endAlignedText.length > 0) {
+    add(
+      'type/end-aligned-block',
+      'typography',
+      'minor',
+      `"${read.endAlignedText[0]}" is aligned to the end side${more(read.endAlignedText)}.`,
+      'T6: Words start at the start side (text-start). The end side is for figures in a column, and the centre for one figure or an empty state.',
+      at(read.endAlignedText[0]!),
+    );
+  }
+
+  // M3: one figure ----------------------------------------------------------------------------------------
+  if (read.figuresAtLargest.length >= limits.figuresAtLargest) {
+    add(
+      'layout/competing-figures',
+      'hierarchy',
+      'major',
+      `${read.figuresAtLargest.length} things are set at the largest size on the first screen: ${quoted(read.figuresAtLargest)}. With that many, none of them is the figure.`,
+      'M3: One thing per screen is set at figure size. Keep the one the screen is about and bring the others down a step or more. Two values being compared sit in one comparison block at the same size, and the difference is said once.',
+      at(read.figuresAtLargest[0]!),
+    );
+  }
+
+  // M5: what holds things ---------------------------------------------------------------------------------
+  const stretched = read.halfEmptyCards.filter((card) => card.h >= limits.cardMinHeightPx && card.reach < limits.cardReach).sort((a, b) => a.reach - b.reach);
+  if (stretched.length > 0) {
+    const card = stretched[0]!;
+    add(
+      'layout/half-empty-card',
+      'spacing',
+      'minor',
+      `A ${card.w}×${card.h}px card is filled to ${Math.round(card.reach * 100)}% of its height: it was stretched past what it holds${more(stretched)}.`,
+      'M5: A container is as tall as its content. Remove the fixed height or the stretch that matches it to a neighbour (items-start on the row); twins of one height belong on one surface with a divider between them.',
+      digest.elements.find((e) => e.selector === card.selector),
+    );
+  }
+  if (read.nestedCards > 0) {
+    add(
+      'layout/nested-cards',
+      'hierarchy',
+      'minor',
+      `${read.nestedCards} card${read.nestedCards === 1 ? ' sits' : 's sit'} inside another card on the first screen.`,
+      'M5: No card inside a card. Keep one surface: set what is inside as sections on it (a title and its content, a hairline between them), or drop the outer card and let the page hold the inner ones.',
+    );
+  }
+
+  // M7: density, where a thumb does the pressing ----------------------------------------------------------
+  if (ctx.touch && read.controls > limits.controls) {
+    add(
+      'layout/too-many-controls',
+      'hierarchy',
+      'major',
+      `${read.controls} controls can be pressed on the first screen; ${limits.controls} is the limit.`,
+      'M7: A first screen offers up to 7 controls beside its rows and app bar. Keep the main action in the dock, move the rest into a sheet or onto the screen a row opens, and let a row be pressed whole in place of carrying buttons.',
+    );
+  }
+
+  // M4: said once -----------------------------------------------------------------------------------------
+  if (read.figuresTwice.length > 0) {
+    add(
+      'copy/figure-twice',
+      'copy',
+      'minor',
+      `The same figure is stated more than once on the first screen: ${read.figuresTwice.slice(0, 4).join(', ')}${read.figuresTwice.length > 4 ? ` and ${read.figuresTwice.length - 4} more` : ''}.`,
+      'M4: Say it once. A date, a round, a gap, a name and a score each appear in one place: keep the one where it is read and delete the other (a badge and a sentence that give the same number are one too many).',
+    );
   }
 
   return findings;
