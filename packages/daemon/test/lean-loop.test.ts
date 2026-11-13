@@ -87,6 +87,11 @@ test('Draft 0: no planning call, the compiler error goes back verbatim, then the
   const d = await testDaemon({}, { anthropic: model.sdk, smoke });
   await d.daemon.start();
   const { studio, events } = d.daemon;
+  // A draft is looked at once, after its smoke passes. What the look is (one size, no reviewer, an audit that
+  // was only measured) is the auditor's and is tested on a real page; here, when it is asked for. The stand-in
+  // also keeps the test off whatever happens to be listening on the template's dev port on this machine.
+  const looks: number[] = [];
+  d.daemon.evals.measureDraft = async () => (looks.push(smokeRuns.length), null);
   try {
     const project = studio.createProject(OWNER, { name: 'Garim', slug: 'garim-app', template: 'mobile-expo' });
     const submitted = await studio.submitTask(OWNER, { projectId: project.id, kind: 'build', prompt: '사진 속 아파트 동 호수를 가려 주는 앱', track: 'fast' }, 'desktop');
@@ -115,7 +120,7 @@ test('Draft 0: no planning call, the compiler error goes back verbatim, then the
     const [first, , compileFix, , smokeFix] = model.sent as [Anthropic.Beta.MessageCreateParams, unknown, Anthropic.Beta.MessageCreateParams, unknown, Anthropic.Beta.MessageCreateParams];
     const opening = String(first.messages[0]!.content);
     assert.ok(opening.startsWith(DRAFT_BRIEF), 'the draft brief leads the first turn');
-    assert.match(opening, /Do not ask questions[\s\S]*The owner's request:\n사진 속 아파트 동 호수를 가려 주는 앱$/);
+    assert.match(opening, /Do not ask questions[\s\S]*The owner's request:\n사진 속 아파트 동 호수를 가려 주는 앱\n\nOne more thing is not left to defaults in a draft: what its first screen is made of\.[\s\S]*<what_a_screen_is_made_of>[\s\S]*\nE5\. Colour\. Strong colour is welcome: a fifth to a third of the first screen[\s\S]*<\/what_a_screen_is_made_of>$/);
     assert.ok(!opening.includes('Plan drafted for this request'));
 
     const compilerFeedback = String(compileFix.messages.at(-1)!.content);
@@ -129,6 +134,7 @@ test('Draft 0: no planning call, the compiler error goes back verbatim, then the
     const smokeFeedback = String(smokeFix.messages.at(-1)!.content);
     assert.match(smokeFeedback, /Check "smoke" failed:\n<untrusted-data id="[0-9a-f]{24}" source="browser-page" check="smoke">\nThe app was loaded in a headless browser and reported 1 problem:\n- \[console\.error\] \/\n  TypeError: Cannot read properties of undefined \(reading "map"\)\n      at \/src\/App\.tsx:31/);
     assert.equal(smokeRuns.length, 2);
+    assert.deepEqual(looks, [2], 'the draft is measured once, after the smoke that passed, and the task is not sent back for what the look found');
 
     assert.equal(readFileSync(join(d.workspace, 'src/App.tsx'), 'utf8'), 'export const count: number = 1;\nexport const rows: string[] = [];\n');
     assert.match(task.summary ?? '', /Assumed three sample photos/);

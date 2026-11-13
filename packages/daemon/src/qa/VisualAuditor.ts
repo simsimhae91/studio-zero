@@ -118,6 +118,10 @@ interface Mode {
    * a measurement an engine asked for while it was still working, which is nobody's verdict on anything.
    */
   record: boolean;
+  /** The sizes looked at, when not all the project's: a draft is looked at at one. */
+  sizes?: readonly ViewportId[];
+  /** A draft's measurement: no reviewer is asked by design, and that is not announced as a review that failed to run. */
+  draft?: boolean;
 }
 
 /**
@@ -150,16 +154,32 @@ export class VisualAuditor {
     this.#log = deps.log;
   }
 
-  audit(req: AuditRequest): Promise<AuditReport> {
-    const subject = (host: string, route: string, state?: string): Subject => ({
+  /** A route of the running app, as something to open and look at. */
+  #served(port: number, host: string, route: string, state?: string): Subject {
+    return {
       route,
       ...(state === undefined ? {} : { state }),
       open: async (page) => {
-        const response = await page.goto(`http://${host}:${req.port}${route}`, { waitUntil: 'networkidle', timeout: 45_000 });
+        const response = await page.goto(`http://${host}:${port}${route}`, { waitUntil: 'networkidle', timeout: 45_000 });
         // A refusal or "not found" is the server's own page. Measuring it, or asking a reviewer about it, judges nothing of the product.
         return !response || response.status() >= 400 ? `HTTP ${response?.status() ?? 'no response'}: the route did not serve the app` : null;
       },
-    });
+    };
+  }
+
+  /**
+   * A draft's one look: its first route, at the size the product is first met at, measured and photographed
+   * with no reviewer asked. It is stored and announced as an audit that was only measured, so the owner can see
+   * what a draft looks like to the ruler; nothing is held to it and nothing is sent back for it. Until this a
+   * draft was looked at by nothing after it loaded, and a build set in a face nobody chose went out unseen.
+   */
+  measureDraft(req: AuditRequest): Promise<AuditReport> {
+    const route = req.routes[0] ?? '/';
+    return this.#run({ ...req, routes: [route], states: [], missingStates: [] }, (host) => [this.#served(req.port, host, route)], { sealed: false, everyFirst: false, reviewAt: [], record: true, sizes: [primaryViewport(req.project.template)], draft: true }).then((ran) => ran.report);
+  }
+
+  audit(req: AuditRequest): Promise<AuditReport> {
+    const subject = (host: string, route: string, state?: string): Subject => this.#served(req.port, host, route, state);
     const reviewAt = reviewViewports(req.project.template, auditViewports(req.project.template, this.#config.audit.viewports));
     return this.#run(req, (host) => [...req.routes.map((route) => subject(host, route)), ...(req.states ?? []).map((s) => subject(host, s.route, s.label))], { sealed: false, everyFirst: false, reviewAt, record: true }).then((ran) => ran.report);
   }
@@ -215,7 +235,7 @@ export class VisualAuditor {
     const measures: AccessMeasures = { contrast: { passed: 0, total: 0 }, touchTargets: { passed: 0, total: 0 }, pressAnswer: { passed: 0, total: 0 }, focusVisible: { passed: 0, total: 0 }, layoutShift: null };
     // The studio's own repository has no template an owner could pick; its screens are a web application's.
     const template: Template = req.project.template === 'studio-core' ? 'web-vite-react' : req.project.template;
-    const available: Awaited<ReturnType<QaVisionBridge['availability']>> = mode.record ? await this.#vision.availability() : { status: 'off', paths: [], reason: 'a measurement, not an audit: no reviewer is asked' };
+    const available: Awaited<ReturnType<QaVisionBridge['availability']>> = mode.draft ? { status: 'off', paths: [], reason: 'a draft: measured only, no design review is asked' } : mode.record ? await this.#vision.availability() : { status: 'off', paths: [], reason: 'a measurement, not an audit: no reviewer is asked' };
     /** Captured screens (viewport × route): what a complete review has to cover. */
     let screens = 0;
     let failures = 0;
@@ -262,7 +282,7 @@ export class VisualAuditor {
     await this.#browser.use(req.project, req.signal, async ({ browser, host, devices }) => {
       const viewports = viewportSpecs(devices);
       const subjects = subjectsFor(host);
-      const audited = auditViewports(req.project.template, this.#config.audit.viewports);
+      const audited = mode.sizes ? [...mode.sizes] : auditViewports(req.project.template, this.#config.audit.viewports);
       // Screens are tried by hand at one size: the one the product is first used at. A phone app under a thumb; a
       // web product at a desk, where the pointer hovers and the keyboard is a way in.
       const tried: ViewportId = req.project.template !== 'mobile-expo' && audited.includes('desktop-1440') ? 'desktop-1440' : (audited[0] ?? 'iphone-15-pro');
@@ -398,7 +418,9 @@ export class VisualAuditor {
     };
     if (!mode.record) return { report, slopByRoute: new Map() };
     this.#store.insertAudit(report);
-    if (!visionReviewed) {
+    if (mode.draft) {
+      this.#events.emit(scope, { type: 'notice', level: 'info', message: `Draft measured at ${mode.sizes?.join(', ')}: ${verdict.blockers} blocker, ${verdict.majors} major, ${verdict.minors} minor. Measured only: no design review was asked, and nothing is held to it.` });
+    } else if (!visionReviewed) {
       this.#events.emit(scope, { type: 'notice', level: 'warn', message: `Design review ${reviewed > 0 ? `covered ${reviewed} of ${screens} screens` : 'did not run'} (${vision.reason}). The design is not verified: the audit score is capped at ${UNREVIEWED_SCORE_CAP} and the audit does not pass.` });
     }
     this.#events.emit(scope, { type: 'audit.completed', auditId, score: verdict.score, passed: verdict.passed, blockers: verdict.blockers, majors: verdict.majors, minors: verdict.minors, visionReviewed, grade: verdict.grade });

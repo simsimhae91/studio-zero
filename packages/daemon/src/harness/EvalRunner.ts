@@ -154,6 +154,19 @@ export class EvalRunner {
     }
   }
 
+  /**
+   * A draft's one look (see `VisualAuditor.measureDraft`): the first route the project lists, on the dev server
+   * the smoke gate has just loaded. Null when the server is not there to look at. Not an eval: nothing passes
+   * or fails by it.
+   */
+  async measureDraft(project: Project, taskId: string, opts: { signal?: AbortSignal } = {}): Promise<AuditReport | null> {
+    const file = await readProjectFile(this.#sandboxes, project, this.#config);
+    const listed = this.#store.listEvals(project.id).flatMap((e) => (e.enabled && e.spec.kind === 'visual' ? e.spec.routes : []));
+    // The smoke gate loaded the app a moment ago: its server is either answering or this is not the time to start one.
+    if (!(await this.#sandboxes.waitForHttp(project, file.dev.port, '/', 2))) return null;
+    return this.#auditor.measureDraft({ project, taskId, port: file.dev.port, routes: [[...listed, ...file.routes][0] ?? '/'], signal: opts.signal });
+  }
+
   /** The states this project's screen spec owes a way to see. None when it has no spec, or one that does not hold. */
   async #owedStates(project: Project): Promise<NamedState[]> {
     const res = await this.#sandboxes.exec(project, `[ -f ${SCREEN_SPEC_FILE} ] && head -c 262144 ${SCREEN_SPEC_FILE}`, { timeoutSec: 20, maxOutputBytes: 300_000 }).catch(() => null);

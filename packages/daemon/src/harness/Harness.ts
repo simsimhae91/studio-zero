@@ -24,6 +24,7 @@ import { visualOutcome, type EvalRunner } from './EvalRunner.ts';
 import type { EngineResult, EngineSession } from './engines/Engine.ts';
 import { countCompilerErrors, emptyRun, renderEvidence, type Ledger, type RunRecord } from './Ledger.ts';
 import type { LessonBook } from './LessonBook.ts';
+import { materialFor } from './handbook.ts';
 import { ANCHOR_BRIEF, DEEP_DIVE_BRIEF, DRAFT_BRIEF, DRAW_ALL_BRIEF, IDEATION_BRIEF, IDEATION_REQUIRED_FILES, IDEATION_REVISION_BRIEF, PLANNER_SYSTEM_PROMPT, SCREEN_SPEC_RULES, codingSystemPrompt, directionBrief } from './prompts.ts';
 import { chosenTheme, writeProjectTheme } from './themeSeed.ts';
 import type { ReflectionAgent } from './ReflectionAgent.ts';
@@ -347,7 +348,7 @@ export class Harness {
         await open();
         // A design task that starts where a finished design already is (the owner sent it back with notes) revises it.
         const revising = ideation && (await this.#ideationDocuments(project)).length === 0;
-        result = await send(executeMessage(task, plan, lessons.text, { anchor, critique, references, revising, specOwed }));
+        result = await send(executeMessage(task, plan, lessons.text, { anchor, critique, references, revising, specOwed, template: project.template }));
         checkCancel();
         // A new design: its directions are drawn from the table the lead just wrote, each by an engine of its own.
         if (ideation && !revising) {
@@ -730,6 +731,16 @@ export class Harness {
         this.#events.emit(scope, { type: 'gate.result', gate: 'smoke', name: smoke.routes.join(' '), passed: smoke.passed, exitCode: null, durationMs: smoke.durationMs, detail: excerpt(smoke.detail, 2000) });
         if (!smoke.passed) return { failures: [{ name: 'smoke', source: 'browser-page', detail: smoke.detail }], unverified: [], waitingOn: null };
         record.flow = await this.#walkApp(project, task, signal);
+        // A draft is held to nothing past this point, and is still looked at once: measured at the size it
+        // is first met at, with no reviewer, for the owner to see. A look that cannot be had is said and no more.
+        if (task.track === 'fast') {
+          try {
+            record.audit = (await this.#evals.measureDraft(project, task.id, { signal })) ?? record.audit;
+          } catch (err) {
+            if (signal.aborted) throw err;
+            this.#events.emit(scope, { type: 'notice', level: 'info', message: `The draft was not measured: ${errorMessage(err)}` });
+          }
+        }
       } catch (err) {
         if (signal.aborted) throw err;
         // The browser not starting is the studio's problem, not a defect in the work: say so and carry on.
@@ -949,7 +960,7 @@ function referenceBlock(ref: ReferenceCapture): string {
   return `Reference page ${ref.url} as measured in a browser. Read principles out of it; its numbers and assets are its own and are not to be carried across:\n${untrusted('browser-page', `${ref.title}\n${ref.summary}`, { url: ref.url })}`;
 }
 
-function executeMessage(task: Task, plan: Plan | null, lessonText: string, handed: { anchor: AnchorTable | null; critique: PlanCritique | null; references: readonly ReferenceCapture[]; revising?: boolean; specOwed?: string[] | null } = { anchor: null, critique: null, references: [] }): string {
+function executeMessage(task: Task, plan: Plan | null, lessonText: string, handed: { anchor: AnchorTable | null; critique: PlanCritique | null; references: readonly ReferenceCapture[]; revising?: boolean; specOwed?: string[] | null; template?: Project['template'] } = { anchor: null, critique: null, references: [] }): string {
   const parts = [task.kind === 'ideate' ? (handed.revising ? IDEATION_REVISION_BRIEF : IDEATION_BRIEF) : '', task.track === 'fast' && task.kind !== 'ideate' ? DRAFT_BRIEF : '', `The owner's request:\n${task.prompt}`];
   if (plan) parts.push(`Plan drafted for this request (follow it unless the code shows it is wrong; say so if you deviate):\n${planText(plan)}`);
   // The table's cells were written by a model that had read reference pages, so they travel as data; the instruction to build to it is the harness's.
@@ -965,6 +976,10 @@ function executeMessage(task: Task, plan: Plan | null, lessonText: string, hande
     );
   }
   if (lessonText) parts.push(lessonText);
+  // A draft is built from no approved page, so what a screen is made of reaches it here: last, where the design lab found it acted on.
+  if (task.track === 'fast' && task.kind !== 'ideate' && handed.template && handed.template !== 'studio-core') {
+    parts.push(`One more thing is not left to defaults in a draft: what its first screen is made of. This is the handbook's last section, said again here because it is the first thing the owner sees.\n\n${materialFor(handed.template)}`);
+  }
   return parts.filter(Boolean).join('\n\n');
 }
 

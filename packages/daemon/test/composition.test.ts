@@ -5,6 +5,8 @@
 // and how much is near-black, through the auditor as an engine's own check of its page gets it.
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { chromium, devices, type Browser } from 'playwright-core';
@@ -339,6 +341,39 @@ test('colour by the pixel, through the auditor: a flood of brand and a dark band
     assert.deepEqual(atPhone(report.findings.filter((f) => f.rule.startsWith('color/'))), ['color/flood']);
     assert.ok(report.screenshots.length > 0 && kept(phoneProject).length === report.screenshots.length);
   } finally {
+    await d.cleanup();
+    await browser.close();
+  }
+});
+
+test('a draft is looked at once: its first route at the size it is first met at, measured, with no reviewer asked, and recorded as measured only', async (t) => {
+  const browser = await launch();
+  if (!browser) return t.skip('headless Chrome cannot be launched here');
+  const d = await testDaemon();
+  const app = createServer((req, res) => void res.writeHead(req.url === '/' ? 200 : 404, { 'content-type': 'text/html; charset=utf-8' }).end(req.url === '/' ? withFaces(screen()) : 'not here'));
+  await new Promise<void>((resolve) => app.listen(0, '127.0.0.1', resolve));
+  try {
+    const { store, events } = d.daemon;
+    store.insertProject(phoneProject);
+    const asked: string[] = [];
+    const reviewer = { availability: async () => (asked.push('availability'), { status: 'ready', paths: ['codex'], reason: '' }), review: async () => (asked.push('review'), Promise.reject(new Error('nobody is asked'))) } as unknown as QaVisionBridge;
+    const auditor = new VisualAuditor({ config: d.config, store, events, browser: localBrowser(browser), vision: reviewer, clock: () => 1000, log: quietLog });
+    const report = await auditor.measureDraft({ project: phoneProject, taskId: null, port: (app.address() as AddressInfo).port, routes: ['/', '/settings'] });
+
+    assert.deepEqual(asked, [], 'no reviewer is asked, or asked whether it could be');
+    assert.deepEqual([report.visionReviewed, report.vision.status, report.vision.reason, report.slopScore], [false, 'off', 'a draft: measured only, no design review is asked', null]);
+    assert.deepEqual([...new Set(report.findings.map((f) => f.viewport))], ['iphone-15-pro'], 'one size: the one a phone app is first met at');
+    assert.deepEqual([...new Set(report.findings.map((f) => f.route))], ['/'], 'one route: the first');
+    // The clean screen of these tests is text and rules with one button of colour: on a first screen that is said.
+    assert.deepEqual(rules(report.findings.filter((f) => /^(color|material)\//.test(f.rule))), ['color/grey-screen', 'material/nothing-drawn']);
+    assert.ok(report.screenshots.length > 0 && report.screenshots.every((shot) => shot.viewport === 'iphone-15-pro'));
+    // It is in the project's audits, announced as an audit that completed unreviewed, with a plain notice and no warning.
+    assert.deepEqual(store.listAudits(phoneProject.id, 10).map((a) => a.id), [report.id]);
+    const said = events.history({ projectId: phoneProject.id }, 0, 100).map((e) => e.body);
+    assert.deepEqual(said.flatMap((b) => (b.type === 'audit.completed' ? [[b.auditId, b.visionReviewed, b.passed]] : [])), [[report.id, false, false]]);
+    assert.deepEqual(said.flatMap((b) => (b.type === 'notice' ? [[b.level, /^Draft measured at iphone-15-pro: 0 blocker, \d+ major, \d+ minor\. Measured only: no design review was asked, and nothing is held to it\.$/.test(b.message)]] : [])), [['info', true]]);
+  } finally {
+    await new Promise((resolve) => app.close(resolve));
     await d.cleanup();
     await browser.close();
   }

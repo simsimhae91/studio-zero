@@ -25,13 +25,14 @@ http.createServer((req, res) => {
 }).listen(5173, '0.0.0.0');
 `;
 
-const PAGE = `<!doctype html>
+/** The page of the test product, set in the face its theme names: the one whose file the studio put beside the theme. */
+const page = (family: string): string => `<!doctype html>
 <html lang="ko">
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="stylesheet" href="/.studio-zero/theme.css">
 <style>
-  body { margin: 0; font-family: "Pretendard Variable", sans-serif; background: var(--sz-bg); color: var(--sz-fg); }
+  body { margin: 0; font-family: "${family}", sans-serif; background: var(--sz-bg); color: var(--sz-fg); }
   main { padding: 24px; display: grid; gap: 24px; }
   h1 { font-size: 30px; line-height: 1.3; margin: 0; }
   p { font-size: 16px; line-height: 1.6; margin: 0; color: var(--sz-fg-muted); }
@@ -41,7 +42,7 @@ const PAGE = `<!doctype html>
   a.action:focus-visible { outline: 3px solid var(--sz-fg); outline-offset: 2px; }
 </style>
 </head>
-<body><main><h1>미결제 청구서</h1><p>결제를 기다리는 청구서가 3건 있습니다.</p><a class="action" href="/invoices">청구서 보기</a></main></body>
+<body><main><h1>미결제 청구서</h1><p>결제를 기다리는 청구서가 3건 있습니다.</p><svg viewBox="0 0 320 96" width="320" height="96" role="img" aria-label="청구서 세 장"><rect x="8" y="20" width="96" height="68" rx="6" fill="var(--sz-brand-soft)"/><rect x="112" y="12" width="96" height="76" rx="6" fill="var(--sz-brand-soft)"/><rect x="216" y="4" width="96" height="84" rx="6" fill="var(--sz-brand)"/><rect x="228" y="20" width="56" height="6" rx="3" fill="var(--sz-on-brand)"/><rect x="228" y="36" width="72" height="6" rx="3" fill="var(--sz-on-brand)"/></svg><a class="action" href="/invoices">청구서 보기</a></main></body>
 </html>
 `;
 
@@ -133,7 +134,11 @@ test('real container engine', { skip: process.env.SZ_TEST_ENGINE !== '1' && 'set
 
     await t.test('dev server, preview URLs, stop', async () => {
       await sandboxes.writeFile(project, 'server.js', SERVER_JS);
-      await sandboxes.writeFile(project, 'index.html', PAGE);
+      // The family the project's theme sheet loads, read off the sheet in the sandbox.
+      const family = (await sh(`grep -m1 -o 'font-family: "[^"]*"' .studio-zero/theme.css`)).replace(/^font-family: "|"$/g, '');
+      assert.ok(['Pretendard Variable', 'SUIT Variable', 'SUITE Variable'].includes(family), family);
+      assert.equal(await sh('ls .studio-zero/fonts | wc -l | tr -d " "'), '1', 'one face file a project');
+      await sandboxes.writeFile(project, 'index.html', page(family));
       await sandboxes.writeFile(project, '.studio-zero/project.json', JSON.stringify({ dev: { command: 'node server.js', port: 5173 }, routes: ['/'] }));
       await sandboxes.commitAll(project, 'page');
       await sandboxes.startProcess(project, 'dev', 'node server.js');
@@ -188,7 +193,9 @@ test('real container engine', { skip: process.env.SZ_TEST_ENGINE !== '1' && 'set
       assert.deepEqual([missing.screenshots.length, missing.passed], [0, false]);
       const domRules = [...new Set(report.findings.filter((f) => f.source === 'dom').map((f) => f.rule))];
       assert.deepEqual([...new Set(report.screenshots.map((s) => s.viewport))], ['iphone-15-pro', 'ipad-pro-11', 'desktop-1440']);
-      assert.deepEqual(domRules, ['type/font-not-loaded'], JSON.stringify(report.findings.map((f) => `${f.rule}: ${f.message}`)));
+      // The face is the project's own: its file was written beside the theme, the theme's @font-face points at it, and
+      // the container's browser loaded it from the project's server. Nothing is left to say about the page.
+      assert.deepEqual(domRules, [], JSON.stringify(report.findings.map((f) => `${f.rule}: ${f.message}`)));
       // The container's browser also tried the screen by hand: its one control was held down and tabbed to, and answered both times.
       assert.deepEqual([report.measures?.pressAnswer, report.measures?.focusVisible], [{ passed: 1, total: 1 }, { passed: 1, total: 1 }]);
       assert.equal(typeof report.measures?.layoutShift, 'number');
