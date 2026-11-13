@@ -17,6 +17,8 @@ export interface Prefs {
    * design task is one long turn of writing, and the level that suits a build is not the level it needs.
    */
   designEffort: string;
+  /** Whether a long line in the file pane wraps. On by default: the pane is for reading, and a line cut off at its edge is not read. */
+  wrapFiles: boolean;
 }
 
 /** Each preset is a seed for the theme generator (see scripts/theme.mjs); `system` follows the OS light/dark setting. */
@@ -41,7 +43,7 @@ export const MONO_FONTS: readonly { id: MonoFont; label: string; stack: string; 
 ];
 
 const KEY = 'studio-zero.prefs';
-const DEFAULTS: Prefs = { theme: 'studio-dark', mono: 'geist-mono', engine: 'auto', model: 'default', effort: 'default', designEffort: 'default' };
+const DEFAULTS: Prefs = { theme: 'studio-dark', mono: 'geist-mono', engine: 'auto', model: 'default', effort: 'default', designEffort: 'default', wrapFiles: true };
 
 function load(): Prefs {
   try {
@@ -53,6 +55,7 @@ function load(): Prefs {
       model: typeof saved?.model === 'string' ? saved.model : DEFAULTS.model,
       effort: typeof saved?.effort === 'string' ? saved.effort : DEFAULTS.effort,
       designEffort: typeof saved?.designEffort === 'string' ? saved.designEffort : DEFAULTS.designEffort,
+      wrapFiles: typeof saved?.wrapFiles === 'boolean' ? saved.wrapFiles : DEFAULTS.wrapFiles,
     };
   } catch {
     return DEFAULTS;

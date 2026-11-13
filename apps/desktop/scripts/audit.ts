@@ -108,6 +108,12 @@ const screens: { name: string; url: string; go: (page: Page, narrow: boolean) =>
     await page.getByRole('treeitem', { name: 'App.tsx' }).click();
     await page.getByText('Unpaid invoices, oldest first.').waitFor();
   } },
+  { name: 'files-doc', url: '/?demo', go: async (page, narrow) => {
+    await workspaceTab('Ledger', '파일')(page, narrow);
+    await page.getByRole('treeitem', { name: 'README.md' }).click();
+    // A markdown file opens as the document it is: headings, not lines of source beginning with "#".
+    await page.getByRole('heading', { name: '화면', exact: true }).waitFor();
+  } },
   { name: 'terminal', url: '/?demo', go: async (page, narrow) => {
     await workspaceTab('Ledger', '터미널')(page, narrow);
     await page.getByText('데모 터미널입니다').waitFor();

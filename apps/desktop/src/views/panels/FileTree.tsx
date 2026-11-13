@@ -1,7 +1,10 @@
-import { Check, ChevronRight, Copy, File, FileCode, FileJson, FileText, Folder, FolderOpen, Image, Palette, Pencil, RefreshCw, Save, X } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { BookOpen, Check, ChevronRight, Code, Copy, File, FileCode, FileJson, FileText, Folder, FolderOpen, Image, Palette, Pencil, RefreshCw, Save, WrapText, X } from 'lucide-react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Markdown } from '@studio-zero/ax/react';
 import type { FileEntry, Project } from '@studio-zero/protocol';
+import { isMarkdown, shownLines } from '../../lib/codeLines.ts';
 import type { CodeNode } from '../../lib/highlight.ts';
+import { setPrefs, usePrefs } from '../../lib/prefs.ts';
 import { errorText, useAction, useQuery, useStudio } from '../../lib/studio.tsx';
 import { Button, Empty, IconButton, Problem } from '../../ui.tsx';
 
@@ -165,9 +168,19 @@ function render(nodes: readonly CodeNode[]): ReactNode {
   );
 }
 
-/** One file: read-only with line numbers and colour, or as a plain text field when the owner chooses to edit it. */
+/**
+ * One file: read-only with line numbers and colour, or as a plain text field when the owner chooses to edit it.
+ *
+ * It is a place to read. A long line wraps (its number stays beside its first row) unless the owner turns that
+ * off, and a markdown file opens as the document it is, with its source one press away: the design documents
+ * of a project are read here before a build is approved, and they are paragraphs, not code.
+ */
 function FileViewer({ project, path, onClose }: { project: Project; path: string; onClose: () => void }) {
   const { backend } = useStudio();
+  const { wrapFiles } = usePrefs();
+  const prose = isMarkdown(path);
+  const [asSource, setAsSource] = useState(false);
+  useEffect(() => setAsSource(false), [path]);
   const file = useQuery('files.read', { projectId: project.id, path }, ['checkpoint.created', 'checkpoint.restored']);
   const [draft, setDraft] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -192,7 +205,9 @@ function FileViewer({ project, path, onClose }: { project: Project; path: string
     };
   }, [file.data, content, path]);
 
-  const lineCount = useMemo(() => (content === '' ? 1 : content.split('\n').length - (content.endsWith('\n') ? 1 : 0)), [content]);
+  const lines = useMemo(() => shownLines(content, colored && colored.content === content ? colored.nodes : null), [content, colored]);
+  const lineCount = lines.length;
+  const reading = prose && !asSource;
   const copy = async (): Promise<void> => {
     try {
       await navigator.clipboard.writeText(content);
@@ -223,6 +238,16 @@ function FileViewer({ project, path, onClose }: { project: Project; path: string
               <IconButton label={copied ? '복사됨' : '내용 복사'} disabled={!file.data || file.data.binary} onClick={() => void copy()}>
                 {copied ? <Check className="size-4 text-success" aria-hidden /> : <Copy className="size-4" aria-hidden />}
               </IconButton>
+              {prose ? (
+                <IconButton label={reading ? '원문 보기' : '문서로 보기'} disabled={!file.data || file.data.binary} onClick={() => setAsSource(reading)}>
+                  {reading ? <Code className="size-4" aria-hidden /> : <BookOpen className="size-4" aria-hidden />}
+                </IconButton>
+              ) : null}
+              {reading ? null : (
+                <IconButton label={wrapFiles ? '긴 줄 접지 않기' : '긴 줄 접기'} aria-pressed={wrapFiles} className={wrapFiles ? 'bg-sunken text-fg' : ''} disabled={!file.data || file.data.binary} onClick={() => setPrefs({ wrapFiles: !wrapFiles })}>
+                  <WrapText className="size-4" aria-hidden />
+                </IconButton>
+              )}
               <IconButton label="편집" disabled={!editable} onClick={() => setDraft(content)}>
                 <Pencil className="size-4" aria-hidden />
               </IconButton>
@@ -250,16 +275,25 @@ function FileViewer({ project, path, onClose }: { project: Project; path: string
         </Empty>
       ) : draft !== null ? (
         <textarea aria-label={`${path} 편집`} value={draft} onChange={(e) => setDraft(e.target.value)} spellCheck={false} autoCapitalize="none" className="code-view min-h-0 flex-1 resize-none bg-bg p-4 text-fg focus-visible:outline-hidden" />
+      ) : file.data && reading ? (
+        // A model may have written the file: the renderer builds elements from it and never injects markup.
+        <div className="pane-scroll min-h-0 flex-1 overflow-y-auto bg-bg px-6 py-5">
+          <div className="flex max-w-[72ch] flex-col gap-4 text-base">
+            <Markdown source={content} />
+          </div>
+        </div>
       ) : file.data ? (
-        <div className="pane-scroll min-h-0 flex-1 overflow-x-auto bg-bg">
-          <div className="code-view flex min-w-max">
-            {/* The gutter is a column of its own, so selecting code never picks up line numbers. */}
-            <pre aria-hidden className="sticky left-0 select-none border-r border-border bg-bg px-3 py-4 text-right text-fg-muted">
-              {Array.from({ length: lineCount }, (_, i) => i + 1).join('\n')}
-            </pre>
-            <pre className="px-4 py-4 text-fg">
-              <code>{colored && colored.content === content ? render(colored.nodes) : content}</code>
-            </pre>
+        <div className="pane-scroll min-h-0 flex-1 overflow-auto bg-bg">
+          {/* One row a line: the number in a column of its own (so selecting code never picks it up), the line beside it, wrapped or not. */}
+          <div role="presentation" className={`code-view grid grid-cols-[auto_minmax(0,1fr)] py-4 text-fg ${wrapFiles ? '' : 'min-w-max'}`}>
+            {lines.map((line, i) => (
+              <Fragment key={i}>
+                <span aria-hidden className="sticky left-0 select-none border-r border-border bg-bg px-3 text-right text-fg-muted">
+                  {i + 1}
+                </span>
+                <span className={`px-4 ${wrapFiles ? 'whitespace-pre-wrap [overflow-wrap:anywhere]' : 'whitespace-pre'}`}>{line.length > 0 ? render(line) : '\n'}</span>
+              </Fragment>
+            ))}
           </div>
         </div>
       ) : null}

@@ -354,7 +354,7 @@ const capexJob: KnowledgeJob = { id: 'job_capex', kind: 'research', title: '이�
 /** A small workspace for the file explorer: what a Vite project looks like after a couple of tasks. */
 const fileBodies: Record<string, string> = {
   'package.json': '{\n  "name": "ledger",\n  "private": true,\n  "type": "module",\n  "scripts": {\n    "dev": "vite",\n    "build": "tsc -b && vite build",\n    "typecheck": "tsc --noEmit"\n  },\n  "dependencies": {\n    "react": "^19.3.1",\n    "react-dom": "^19.3.1",\n    "zustand": "^5.0.8"\n  }\n}\n',
-  'README.md': '# Ledger\n\n미결제 청구서를 한 화면에서 보고 다시 보내는 앱입니다.\n',
+  'README.md': '# Ledger\n\n미결제 청구서를 한 화면에서 보고 다시 보내는 앱입니다. 받을 돈이 가장 오래된 순서로 놓이고, 한 줄을 누르면 그 청구서를 다시 보낼 수 있으며, 보낸 뒤에는 5초 동안 되돌릴 수 있습니다.\n\n## 화면\n\n- **미결제 목록**: 오래된 순서. 30일이 넘으면 줄 머리에 표시가 붙습니다.\n- **청구서**: 금액, 받는 사람, 보낸 기록.\n\n## 실행\n\n```\npnpm install\npnpm dev\n```\n',
   'tsconfig.json': '{\n  "compilerOptions": {\n    "strict": true,\n    "jsx": "react-jsx"\n  },\n  "include": ["src"]\n}\n',
   '.studio-zero/project.json': '{\n  "dev": { "command": "pnpm dev --host 0.0.0.0 --port 5173", "port": 5173 },\n  "routes": ["/", "/invoices/1"]\n}\n',
   'src/main.tsx': "import { StrictMode } from 'react';\nimport { createRoot } from 'react-dom/client';\nimport { App } from './App.tsx';\nimport './index.css';\n\ncreateRoot(document.getElementById('root')!).render(\n  <StrictMode>\n    <App />\n  </StrictMode>,\n);\n",
