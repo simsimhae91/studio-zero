@@ -16,9 +16,9 @@
   --sz-brand: oklch(40.84% 0.0828 168.0);
   --sz-on-brand: oklch(99.50% 0.0050 168.0);
   --sz-brand-soft: oklch(94.00% 0.0420 168.0);
-  --sz-second: oklch(40.84% 0.1200 348.0);
+  --sz-second: oklch(46.50% 0.1200 345.0);
   --sz-on-second: oklch(99.50% 0.0050 168.0);
-  --sz-second-soft: oklch(95.00% 0.0303 348.0);
+  --sz-second-soft: oklch(95.00% 0.0315 345.0);
   --sz-danger: oklch(43.94% 0.1700 27.0);
   --sz-success: oklch(40.69% 0.1071 152.0);
   --sz-warning: oklch(42.25% 0.0892 75.0);
@@ -27,7 +27,7 @@
   --sz-series-3: oklch(48.00% 0.1400 288.0);
   --sz-series-4: oklch(60.00% 0.1400 348.0);
   --sz-series-5: oklch(48.00% 0.1308 48.0);
-  --sz-series-6: oklch(60.00% 0.1294 108.0);
+  --sz-series-6: oklch(60.00% 0.1400 135.0);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -44,9 +44,9 @@
     --sz-brand: oklch(75.01% 0.1200 168.0);
     --sz-on-brand: oklch(13.00% 0.0050 168.0);
     --sz-brand-soft: oklch(26.00% 0.0420 168.0);
-    --sz-second: oklch(75.01% 0.1200 348.0);
-    --sz-on-second: oklch(13.00% 0.0050 168.0);
-    --sz-second-soft: oklch(26.00% 0.0420 348.0);
+    --sz-second: oklch(46.50% 0.1200 345.0);
+    --sz-on-second: oklch(99.50% 0.0050 168.0);
+    --sz-second-soft: oklch(26.00% 0.0420 345.0);
     --sz-danger: oklch(77.98% 0.1289 27.0);
     --sz-success: oklch(75.04% 0.1300 152.0);
     --sz-warning: oklch(77.00% 0.1300 75.0);
@@ -55,7 +55,7 @@
     --sz-series-3: oklch(70.00% 0.1400 288.0);
     --sz-series-4: oklch(82.00% 0.1234 348.0);
     --sz-series-5: oklch(70.00% 0.1400 48.0);
-    --sz-series-6: oklch(82.00% 0.1400 108.0);
+    --sz-series-6: oklch(82.00% 0.1400 135.0);
   }
 }
 
@@ -72,9 +72,9 @@
   --sz-brand: oklch(75.01% 0.1200 168.0);
   --sz-on-brand: oklch(13.00% 0.0050 168.0);
   --sz-brand-soft: oklch(26.00% 0.0420 168.0);
-  --sz-second: oklch(75.01% 0.1200 348.0);
-  --sz-on-second: oklch(13.00% 0.0050 168.0);
-  --sz-second-soft: oklch(26.00% 0.0420 348.0);
+  --sz-second: oklch(46.50% 0.1200 345.0);
+  --sz-on-second: oklch(99.50% 0.0050 168.0);
+  --sz-second-soft: oklch(26.00% 0.0420 345.0);
   --sz-danger: oklch(77.98% 0.1289 27.0);
   --sz-success: oklch(75.04% 0.1300 152.0);
   --sz-warning: oklch(77.00% 0.1300 75.0);
@@ -83,7 +83,7 @@
   --sz-series-3: oklch(70.00% 0.1400 288.0);
   --sz-series-4: oklch(82.00% 0.1234 348.0);
   --sz-series-5: oklch(70.00% 0.1400 48.0);
-  --sz-series-6: oklch(82.00% 0.1400 108.0);
+  --sz-series-6: oklch(82.00% 0.1400 135.0);
 }
 
 /* Scoped palettes: put one on any element to set that subtree in the other scheme (an ink side rail beside a
@@ -102,9 +102,9 @@
   --sz-brand: oklch(75.01% 0.1200 168.0);
   --sz-on-brand: oklch(13.00% 0.0050 168.0);
   --sz-brand-soft: oklch(26.00% 0.0420 168.0);
-  --sz-second: oklch(75.01% 0.1200 348.0);
-  --sz-on-second: oklch(13.00% 0.0050 168.0);
-  --sz-second-soft: oklch(26.00% 0.0420 348.0);
+  --sz-second: oklch(46.50% 0.1200 345.0);
+  --sz-on-second: oklch(99.50% 0.0050 168.0);
+  --sz-second-soft: oklch(26.00% 0.0420 345.0);
   --sz-danger: oklch(77.98% 0.1289 27.0);
   --sz-success: oklch(75.04% 0.1300 152.0);
   --sz-warning: oklch(77.00% 0.1300 75.0);
@@ -113,7 +113,7 @@
   --sz-series-3: oklch(70.00% 0.1400 288.0);
   --sz-series-4: oklch(82.00% 0.1234 348.0);
   --sz-series-5: oklch(70.00% 0.1400 48.0);
-  --sz-series-6: oklch(82.00% 0.1400 108.0);
+  --sz-series-6: oklch(82.00% 0.1400 135.0);
   color: var(--sz-fg);
 }
 .theme-light {
@@ -130,9 +130,9 @@
   --sz-brand: oklch(40.84% 0.0828 168.0);
   --sz-on-brand: oklch(99.50% 0.0050 168.0);
   --sz-brand-soft: oklch(94.00% 0.0420 168.0);
-  --sz-second: oklch(40.84% 0.1200 348.0);
+  --sz-second: oklch(46.50% 0.1200 345.0);
   --sz-on-second: oklch(99.50% 0.0050 168.0);
-  --sz-second-soft: oklch(95.00% 0.0303 348.0);
+  --sz-second-soft: oklch(95.00% 0.0315 345.0);
   --sz-danger: oklch(43.94% 0.1700 27.0);
   --sz-success: oklch(40.69% 0.1071 152.0);
   --sz-warning: oklch(42.25% 0.0892 75.0);
@@ -141,7 +141,7 @@
   --sz-series-3: oklch(48.00% 0.1400 288.0);
   --sz-series-4: oklch(60.00% 0.1400 348.0);
   --sz-series-5: oklch(48.00% 0.1308 48.0);
-  --sz-series-6: oklch(60.00% 0.1294 108.0);
+  --sz-series-6: oklch(60.00% 0.1400 135.0);
   color: var(--sz-fg);
 }
 

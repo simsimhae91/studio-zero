@@ -78,7 +78,7 @@ export function chosenTheme(choice: ThemeChoice): ThemeFiles & { report: string 
   const theme = createTheme(seed);
   const { brand, accent, bg } = theme.light;
   const moved = Math.abs(brand.l - choice.lightness) > 0.004 ? ` The brand was asked for at lightness ${choice.lightness} and set at ${brand.l.toFixed(2)}: at the lightness asked, neither dark nor light text holds on it.` : '';
-  const where = choice.second_hue === undefined ? `derived from the brand, at hue ${Math.round(secondHueFor(seed))} (its complement, kept clear of the red, amber and green that mean state): choose second_hue yourself only if the product has two sides or kinds` : 'at the hue you chose: the other side, as the brand is this one';
+  const where = choice.second_hue === undefined ? `derived from the brand, at hue ${Math.round(secondHueFor(seed))} (the clean hue furthest from the brand, never the red, amber or green that mean state): choose second_hue yourself only if the product has two sides or kinds` : 'at the hue you chose: the other side, as the brand is this one';
   const second = ` second ${formatOklch(theme.light.second)} carries text ${formatOklch(theme.light['on-second'])}, ${where}. series-1 to series-6 are the colours of data, used in that order.`;
   return {
     ...themeFiles(seed, choice.source),

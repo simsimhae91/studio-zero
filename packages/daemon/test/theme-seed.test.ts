@@ -57,7 +57,7 @@ test('a new project\'s theme is a placeholder that says so, and set_theme replac
     assert.equal((JSON.parse(await read(THEME_SEED_FILE)) as { lightness: number }).lightness, 0.55, 'the refused call left the theme as it was');
     assert.ok(toolbox.mutates('set_theme'));
     // A second colour is chosen only when the product has two sides; left out, it is derived, and the engine is told which.
-    assert.match(mid.content, /second oklch\([^)]+\) carries text oklch\([^)]+\)[^.]*derived[^.]*hue 228/, 'derived from the brand\'s complement');
+    assert.match(mid.content, /second oklch\([^)]+\) carries text oklch\([^)]+\)[^.]*derived[^.]*hue 215/, 'derived: for an orange brand, a sky blue');
     const sided = await toolbox.call(ctx, 'set_theme', { ...DIET, second_hue: 200 });
     assert.equal(sided.isError, false, sided.content);
     assert.match(sided.content, /second oklch\([\d.]+% [\d.]+ 200\.0\) carries text oklch\([^)]+\)[^.]*the hue you chose/);

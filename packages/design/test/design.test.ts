@@ -265,8 +265,10 @@ test('a second colour for the other side: derived clear of the state colours, a 
   for (let hue = 0; hue < 360; hue += 15) {
     for (const chroma of [0.12, 0.2, 0.28]) {
       const second = secondHueFor({ hue, chroma, neutralChroma: 0.005, corners: 'soft' });
-      for (const state of STATE_HUES) assert.ok(hueApart(second, state) >= 30, `brand hue ${hue}: the second colour at ${second} would read as the state colour at ${state}`);
-      assert.ok(hueApart(second, hue) >= 60, `brand hue ${hue}: the second colour at ${second} is too near the brand to be the other side`);
+      // One of five hues that stay clean as a fill, never the red, amber or green that mean state, and far from the brand.
+      assert.ok([50, 215, 255, 300, 345].includes(second), `brand hue ${hue}: ${second}`);
+      for (const state of STATE_HUES) assert.ok(hueApart(second, state) >= 20, `brand hue ${hue}: the second colour at ${second} would read as the state colour at ${state}`);
+      assert.ok(hueApart(second, hue) >= 90, `brand hue ${hue}: the second colour at ${second} is too near the brand to be the other side`);
       for (const lightness of [undefined, 0.4, 0.55, 0.75]) {
         const theme = createTheme({ hue, chroma, neutralChroma: 0.005, corners: 'soft', ...(lightness === undefined ? {} : { lightness }) });
         for (const mode of ['light', 'dark'] as const) {
@@ -276,16 +278,20 @@ test('a second colour for the other side: derived clear of the state colours, a 
           for (const token of TEXT_TOKENS) assert.ok(ratio(p, token, 'second-soft') >= contract.contrast.text, `${at}: ${token} on second-soft = ${ratio(p, token, 'second-soft').toFixed(2)}`);
           assert.equal(p.second.h, second, `${at}: the fill is at the derived hue`);
           assert.ok(p.second.c <= Math.min(chroma, 0.16) + 1e-9, `${at}: the second colour is no louder than the brand, and never past 0.16`);
-          assert.ok(Math.abs(p.second.l - p.brand.l) <= 0.17, `${at}: the two sides weigh about the same (${p.second.l.toFixed(2)} beside ${p.brand.l.toFixed(2)})`);
+          // A real build's first derivation gave a cobalt brand a dark olive for its other side: the complement, at the brand's lightness, where a yellow has no strength.
+          assert.ok(p.second.c >= Math.min(chroma, 0.16) - 0.045, `${at}: the second colour is a clean colour, not a mud (chroma ${p.second.c.toFixed(3)} at lightness ${p.second.l.toFixed(2)})`);
         }
       }
     }
   }
   // Where the complement is already clear it is the complement; where it is not, it moves by the least it takes.
-  assert.equal(secondHueFor({ hue: 60, chroma: 0.2, neutralChroma: 0, corners: 'soft' }), 240);
-  assert.equal(secondHueFor({ hue: 255, chroma: 0.2, neutralChroma: 0, corners: 'soft' }), 105, 'the complement at 75 is the warning hue: moved to the nearer clear side');
-  assert.equal(secondHueFor({ hue: 332, chroma: 0.2, neutralChroma: 0, corners: 'soft' }), 182, 'the complement at 152 is the success hue: as far to either side, and it goes on round');
-  assert.equal(secondHueFor({ hue: 320, chroma: 0.2, neutralChroma: 0, corners: 'soft' }), 122, 'and back when that is nearer');
+  assert.equal(secondHueFor({ hue: 258, chroma: 0.2, neutralChroma: 0, corners: 'soft' }), 50, 'a cobalt brand meets an orange');
+  assert.equal(secondHueFor({ hue: 28, chroma: 0.2, neutralChroma: 0, corners: 'soft' }), 215, 'a coral brand meets a sky blue');
+  assert.equal(secondHueFor({ hue: 168, chroma: 0.2, neutralChroma: 0, corners: 'soft' }), 345, 'a teal brand meets a magenta');
+  assert.equal(secondHueFor({ hue: 55, chroma: 0.2, neutralChroma: 0, corners: 'soft' }), 215, 'an amber brand meets a sky blue');
+  // An orange is only an orange when it is light, and a blue when it is deep: each is set where it is strong.
+  const cobalt = createTheme({ hue: 258, chroma: 0.22, lightness: 0.5, neutralChroma: 0.004, corners: 'sharp' }).light;
+  assert.ok(cobalt.second.l >= 0.7 && cobalt.second.c >= 0.14, `the other side of cobalt is a clear orange: ${cobalt.second.l.toFixed(2)} / ${cobalt.second.c.toFixed(3)}`);
   // A seed that names its second colour keeps it, whatever it is.
   const chosen = { hue: 48, chroma: 0.19, neutralChroma: 0.004, corners: 'round', secondHue: 200 } as const;
   assert.equal(secondHueFor(chosen), 200);
@@ -306,7 +312,11 @@ test('six colours for data: spread from the brand, seen on every surface, and to
         SERIES.forEach((token, i) => {
           // A mark of data is a meaningful graphic (WCAG 1.4.11) wherever it is drawn: on paper, on a surface, in a well, on a wash.
           for (const bg of [...BACKGROUNDS, 'brand-soft', 'second-soft'] as const) assert.ok(ratio(p, token, bg) >= contract.contrast.nonText, `${mode} hue ${hue}: ${token} on ${bg} = ${ratio(p, token, bg).toFixed(2)}`);
-          assert.equal(Math.round(hueApart(p[token].h, hue)), Math.min(i * 60, 360 - i * 60), `${token} is ${i} sixths of the way round`);
+          // A sixth of the way round each time, except that a hue which would land between amber and lime (a mud at
+          // the lightness a mark needs on paper) is the orange or the green beside it.
+          const even = (hue + i * 60) % 360;
+          const expected = i === 0 || even < 62 || even > 128 ? even : even < 95 ? 55 : 135;
+          assert.equal(Math.round(p[token].h), expected, `${token} is ${i} sixths of the way round, or beside the mud`);
           const next = p[SERIES[(i + 1) % SERIES.length]!];
           assert.ok(Math.abs(p[token].l - next.l) >= 0.1, `${mode} hue ${hue}: ${token} and its neighbour differ by ${Math.abs(p[token].l - next.l).toFixed(3)} in lightness`);
         });

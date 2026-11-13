@@ -101,29 +101,40 @@ function fillAndText(want: Oklch, ink: Oklch, paper: Oklch, target: number): { f
   throw new Error(`no fill near lightness ${want.l.toFixed(2)} carries text at ${target}:1`);
 }
 
-/** The hues that mean state: danger, warning, success. No other colour of a theme may be mistaken for one. */
+/** The hues that mean state: danger, warning, success. */
 const STATE_HUE = { danger: 27, warning: 75, success: 152 } as const;
-/** Two hues closer than this read as one colour. */
-const SAME_HUE_DEG = 30;
 const hueApart = (a: number, b: number): number => Math.min(Math.abs(a - b), 360 - Math.abs(a - b));
 
 /**
- * The hue of a theme's second colour: the seed's own when it names one, else the brand's complement, moved by the
- * least it takes to sit clear of the hues that mean state.
+ * Hues at which a fill is a clean, strong colour, each with the lightness where it is one: an orange is only an
+ * orange when it is light, a blue when it is deep. None is the red, amber or green that mean state.
+ */
+const SECOND_ANCHORS = [
+  { hue: 50, lightness: 0.74 },
+  { hue: 215, lightness: 0.7 },
+  { hue: 255, lightness: 0.52 },
+  { hue: 300, lightness: 0.52 },
+  { hue: 345, lightness: 0.52 },
+] as const;
+
+/**
+ * The hue of a theme's second colour: the seed's own when it names one, else the one of five clean hues that is
+ * furthest from the brand.
  *
  * A theme had one colour, so a screen with two sides (two players, in and out) drew one side in the brand and the
- * other in white, and one whole card turned blue. The complement is the hue furthest from the brand, which is
- * what "the other side" should be; a complement that lands on red, amber or green would say danger, warning or
- * success instead.
+ * other in white, and one whole card turned blue. The first derivation took the brand's complement at the
+ * brand's lightness, which gave a cobalt brand a dark olive for its other side: a yellow has no strength when it
+ * is dark. So the other side is chosen from hues that are strong somewhere, and set where each is.
  */
 export function secondHueFor(seed: ThemeSeed): number {
   if (seed.secondHue !== undefined) return seed.secondHue;
-  const complement = (seed.hue + 180) % 360;
-  const clear = (hue: number): boolean => Object.values(STATE_HUE).every((state) => hueApart(hue, state) >= SAME_HUE_DEG);
-  for (let move = 0; move <= 180; move++) {
-    for (const hue of [(complement + move) % 360, (complement - move + 360) % 360]) if (clear(hue)) return hue;
-  }
-  return complement;
+  return [...SECOND_ANCHORS].sort((a, b) => hueApart(b.hue, seed.hue) - hueApart(a.hue, seed.hue))[0]!.hue;
+}
+
+/** How light the second colour is asked to be: where its hue is strong when that is known, else as light as the brand. */
+function secondLightness(hue: number, brandLightness: number): number {
+  const anchor = SECOND_ANCHORS.find((a) => hueApart(a.hue, hue) <= 20);
+  return anchor ? anchor.lightness : brandLightness;
 }
 
 /** The second colour is never louder than this, however vivid the brand: it marks a side, it does not compete. */
@@ -152,11 +163,11 @@ function palette(seed: ThemeSeed, mode: 'light' | 'dark', c: DesignContract): Pa
   const accent = text(seed.hue, seed.chroma);
   // The brand is the same colour in both schemes: it is the product's, not the page's.
   const brand = fillAndText({ l: seed.lightness ?? text(seed.hue, seed.chroma).l, c: seed.chroma, h: seed.hue }, neutral(0.13), neutral(0.995), c.contrast.text + MARGIN);
-  // The second colour is a fill like the brand, as light as the brand so the two sides weigh the same, and solved
-  // the same way for the text it carries.
+  // The second colour is a fill like the brand, set where its hue is strong, and solved the same way for the text
+  // it carries.
   const secondHue = secondHueFor(seed);
   const secondChroma = Math.min(seed.chroma, SECOND_MAX_CHROMA);
-  const second = fillAndText({ l: brand.fill.l, c: secondChroma, h: secondHue }, neutral(0.13), neutral(0.995), c.contrast.text + MARGIN);
+  const second = fillAndText({ l: secondLightness(secondHue, brand.fill.l), c: secondChroma, h: secondHue }, neutral(0.13), neutral(0.995), c.contrast.text + MARGIN);
   // Its wash is one more background text sits on. Text was solved against the hardest background there was, so
   // this one is kept no harder than that: no darker than it on paper, no lighter than it in the dark. Nothing
   // that was solved before there was a second colour moves.
@@ -165,7 +176,13 @@ function palette(seed: ThemeSeed, mode: 'light' | 'dark', c: DesignContract): Pa
   for (let nudge = 0; nudge < 50 && (light ? luminance(secondSoft) < luminance(hardest) : luminance(secondSoft) > luminance(hardest)); nudge++) {
     secondSoft = toSrgbGamut({ ...secondSoft, l: secondSoft.l + (light ? 0.002 : -0.002) });
   }
-  const series = (n: number): Oklch => toSrgbGamut({ l: SERIES.lightness[mode][n % 2]!, c: SERIES.chroma, h: (seed.hue + (n * 360) / SERIES.count) % 360 });
+  // Between amber and lime a colour dark enough to be seen on paper is a mud. A series hue that lands there is moved
+  // to the orange or the green beside it; the first of the series stays the brand's own hue whatever it is.
+  const seriesHue = (n: number): number => {
+    const hue = (seed.hue + (n * 360) / SERIES.count) % 360;
+    return n === 0 || hue < 62 || hue > 128 ? hue : hue < 95 ? 55 : 135;
+  };
+  const series = (n: number): Oklch => toSrgbGamut({ l: SERIES.lightness[mode][n % 2]!, c: SERIES.chroma, h: seriesHue(n) });
   return {
     bg,
     surface,
