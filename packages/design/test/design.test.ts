@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
-import { referenceSeed, referenceThemePath } from '../src/build.ts';
-import { KOREAN_TEXT_SLOP_PATTERNS, colorTokens, contract, contractFamilies, contrastRatio, cornerRadii, createTheme, displayFaces, hostedFamilies, isAllowedDuration, isAllowedRadius, isDisplayInProportion, isOnTypeScale, lineHeightFor, lintInterfaceText, lintSources, mobileTokens, oklchToRgb, parseHex, renderThemeCss, seedFromName, textSlopScore, typeStepNames, type InterfaceText, type Palette } from '../src/index.ts';
+import { referenceSeed, referenceThemePath, renderReferenceTheme } from '../src/build.ts';
+import { KOREAN_TEXT_SLOP_PATTERNS, THEME_GENERATOR, colorTokens, contract, contractFamilies, contrastRatio, cornerRadii, createTheme, faceStack, faces, hostedFamilies, isAllowedDuration, isAllowedRadius, isDisplayInProportion, isOnTypeScale, lineHeightFor, lintInterfaceText, lintSources, mobileTokens, oklchToRgb, parseHex, renderThemeCss, seedFromName, textSlopScore, typeStepNames, type InterfaceText, type Palette } from '../src/index.ts';
 
 const TEXT_TOKENS = ['fg', 'fg-muted', 'accent', 'danger', 'success', 'warning'] as const;
 const BACKGROUNDS = ['bg', 'surface', 'sunken'] as const;
@@ -44,7 +44,12 @@ test('theme CSS replaces the Tailwind defaults and exposes exactly the contract 
   contract.typeScalePx.forEach((size, i) => assert.ok(css.includes(`--text-${typeStepNames[i]}: ${size / 16}rem;`), `text step ${size}px`));
   // The micro step sits below xs; the names above it keep their sizes (text-base is still 16px).
   for (const step of ['--text-2xs: 0.6875rem;', '--text-xs: 0.75rem;', '--text-sm: 0.875rem;', '--text-base: 1rem;', '--text-10xl: 10rem;']) assert.ok(css.includes(step), step);
-  assert.ok(css.includes('--font-sans: "Pretendard Variable", "Pretendard", "SUIT Variable", "SUIT", "SUITE Variable", "SUITE", "Geist", '), 'the Hangul faces lead the body stack; Geist and the system faces are fallbacks');
+  // One face sets the whole product: the body stack is that face and then the device's own, and titles share it.
+  assert.ok(css.includes('--font-sans: "Pretendard Variable", "Pretendard", -apple-system, '), 'the face, then the system fallback, and no second face between them');
+  assert.ok(css.includes('--font-display: "Pretendard Variable", "Pretendard", -apple-system, '), 'titles are the same face, heavier');
+  assert.equal(/--font-sans: ([^;]+);/.exec(css)![1], /--font-display: ([^;]+);/.exec(css)![1]);
+  assert.equal(css.split('\n')[1], `/* generator ${THEME_GENERATOR} */`, 'the sheet says which generator wrote it, so an older one can be told apart');
+  assert.equal(THEME_GENERATOR, 3);
   assert.ok(css.includes(`min-block-size: ${contract.touchTargetPx}px`));
   assert.ok(css.includes('prefers-reduced-motion'));
 });
@@ -73,7 +78,9 @@ test('a phone screen is a hierarchy of eight sizes down to 11px, on paper that n
 });
 
 test('the committed theme.css is the output of the generator', () => {
-  assert.equal(readFileSync(referenceThemePath, 'utf8'), renderThemeCss(createTheme(referenceSeed)), 'run `pnpm design:build`');
+  assert.equal(readFileSync(referenceThemePath, 'utf8'), renderReferenceTheme(), 'run `pnpm design:build`');
+  // The reference sheet ships without a fonts folder beside it, so it names the face and points at no file.
+  assert.equal(renderReferenceTheme(), renderThemeCss(createTheme(referenceSeed), contract, { fontFiles: false }));
 });
 
 test('project seeds are stable, distinct, and avoid the default-looking violet band', () => {
@@ -191,7 +198,10 @@ test('the contract admits what the reference sites ship: display type, tight lea
   for (const size of contract.typeScalePx.filter((s) => s > contract.display.fromPx)) assert.ok(lineHeightFor(size) >= 0.9 && lineHeightFor(size) <= 1, `the theme sets ${size}px tight`);
   for (const radius of GOLDEN.radiiPx) assert.ok(isAllowedRadius(radius), `${radius}px radius`);
   for (const ms of [...GOLDEN.entranceMs, ...GOLDEN.pageMs, ...contract.motion.durationsMs]) assert.ok(isAllowedDuration(ms), `${ms}ms`);
-  for (const family of ['Fraunces', 'Noto Serif KR', 'Instrument Serif', 'Gowun Batang', 'Bricolage Grotesque', 'Geist', 'Pretendard', 'SUIT', 'SUITE']) assert.ok(contractFamilies().includes(family) && hostedFamilies().includes(family), `${family} is a face a project loads`);
+  for (const family of ['Pretendard Variable', 'Pretendard', 'SUIT Variable', 'SUIT', 'SUITE Variable', 'SUITE', 'Geist Mono']) assert.ok(contractFamilies().includes(family) && hostedFamilies().includes(family), `${family} is a face a project loads`);
+  assert.equal(hostedFamilies().length, 7, 'the three faces under both their names, and the code face');
+  // The faces a product could once pick for its titles are no longer faces of the contract at all.
+  for (const family of ['Geist', 'Fraunces', 'Instrument Serif', 'Bricolage Grotesque', 'Noto Serif KR', 'Gowun Batang']) assert.ok(!contractFamilies().includes(family), `${family} is not a theme face`);
   for (const family of ['-apple-system', 'system-ui', 'sans-serif', 'Menlo', 'monospace']) assert.ok(contractFamilies().includes(family) && !hostedFamilies().includes(family), `${family} is the device's own`);
 });
 
@@ -208,21 +218,43 @@ test('the contract still refuses what is merely loud or arbitrary', () => {
   assert.ok(!isAllowedDuration(2000));
 });
 
-test('titles, corners and motion vary by seed and reach the generated theme', () => {
+test('the face, corners and motion vary by seed and reach the generated theme', () => {
   const names = Array.from({ length: 200 }, (_, i) => seedFromName(`project-${i}`));
-  assert.deepEqual([...new Set(names.map((s) => s.display))].sort(), [...displayFaces].sort(), 'every display pairing is reachable');
+  assert.deepEqual([...new Set(names.map((s) => s.face))].sort(), [...faces].sort(), 'every face is reachable');
   assert.deepEqual([...new Set(names.map((s) => s.corners))].sort(), ['round', 'sharp', 'soft']);
 
-  const serif = renderThemeCss(createTheme({ ...referenceSeed, corners: 'round', display: 'serif' }));
-  assert.ok(serif.includes('--font-display: "Fraunces", "Noto Serif KR", "Pretendard Variable", '), 'the display pairing leads the title stack, and the body face follows it');
-  assert.match(serif, /titles in Fraunces \+ Noto Serif KR/);
-  for (const [step, px] of Object.entries(cornerRadii.round)) assert.ok(serif.includes(`--radius-${step}: ${px}px;`), `round ${step}`);
+  const suite = renderThemeCss(createTheme({ ...referenceSeed, corners: 'round', face: 'suite' }));
+  assert.ok(suite.includes('--font-sans: "SUITE Variable", "SUITE", -apple-system, '), 'the chosen face leads the body stack');
+  assert.ok(suite.includes('--font-display: "SUITE Variable", "SUITE", -apple-system, '), 'and the title stack, which is the same one');
+  assert.ok(!/Pretendard|"SUIT"|"SUIT Variable"/.test(suite), 'a product names one face and no other');
+  for (const [step, px] of Object.entries(cornerRadii.round)) assert.ok(suite.includes(`--radius-${step}: ${px}px;`), `round ${step}`);
   assert.ok(Object.values(cornerRadii).every((r) => Object.values(r).every((px) => isAllowedRadius(px))));
-  const [entrance, page] = [/--duration-entrance: (\d+)ms/.exec(serif), /--duration-page: (\d+)ms/.exec(serif)].map((m) => Number(m![1]));
+  const [entrance, page] = [/--duration-entrance: (\d+)ms/.exec(suite), /--duration-page: (\d+)ms/.exec(suite)].map((m) => Number(m![1]));
   assert.ok(entrance! >= contract.motion.entranceMs[0] && entrance! <= contract.motion.entranceMs[1]);
   assert.ok(page! >= contract.motion.pageMs[0] && page! <= contract.motion.pageMs[1]);
-  // A seed that names no display face sets titles in the body face.
-  assert.ok(renderThemeCss(createTheme(referenceSeed)).includes('--font-display: "Pretendard Variable", "Pretendard", '));
+  // A seed that names no face is set in Pretendard.
+  assert.ok(renderThemeCss(createTheme(referenceSeed)).includes('--font-sans: "Pretendard Variable", "Pretendard", '));
+  assert.deepEqual(faceStack('suit'), ['SUIT Variable', 'SUIT', '-apple-system', 'BlinkMacSystemFont', 'system-ui', 'sans-serif']);
+});
+
+test('the sheet points at the one file of its face, beside itself, unless it is asked not to', () => {
+  const files = { pretendard: ['Pretendard Variable', 'PretendardVariable.woff2', '45 920'], suit: ['SUIT Variable', 'SUIT-Variable.woff2', '100 900'], suite: ['SUITE Variable', 'SUITE-Variable.woff2', '300 900'] } as const;
+  for (const face of faces) {
+    const theme = createTheme({ ...referenceSeed, face });
+    const css = renderThemeCss(theme);
+    const rules = [...css.matchAll(/@font-face \{([^}]+)\}/g)].map((m) => m[1]!);
+    assert.equal(rules.length, 1, `${face}: one face, one file`);
+    const [family, file, weight] = files[face];
+    assert.ok(rules[0]!.includes(`font-family: "${family}";`), `${face}: under the name the stack leads with`);
+    assert.ok(rules[0]!.includes(`src: url("./fonts/${file}") format("woff2-variations");`), `${face}: ${rules[0]}`);
+    assert.ok(rules[0]!.includes(`font-weight: ${weight};`) && rules[0]!.includes('font-display: swap;'), `${face}: the whole weight range, shown in the fallback until it arrives`);
+    assert.ok(css.indexOf('@font-face') < css.indexOf(':root {'), 'the face is declared before anything uses it');
+    // A page that carries its faces itself (a mock-up) takes the tokens without the pointer to a file it does not have.
+    const tokens = renderThemeCss(theme, contract, { fontFiles: false });
+    assert.ok(!tokens.includes('@font-face'));
+    assert.equal(tokens, css.replace(/@font-face \{[^}]+\}\n\n/, ''), 'and is otherwise the same sheet');
+    assert.deepEqual(lintSources([{ path: 'src/styles/theme.css', content: css }]), []);
+  }
 });
 
 const t = (role: InterfaceText['role'], text: string): InterfaceText => ({ role, text });

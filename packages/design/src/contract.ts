@@ -59,13 +59,15 @@ export interface DesignContract {
   clicheGradientHues: { from: number; to: number };
   fonts: {
     /**
-     * The body stack, and the set of families a page may set text in. The Hangul faces lead it: the first one a
-     * project self-hosts is what both scripts are set in. System faces are the last fallback, never the design.
+     * The faces a product may be set in, each under the family names its files go by (the variable file first).
+     * A product is set in one of them, titles included: a title is the same face, heavier. There is no serif, no
+     * second sans and no italic to pick, because every screen that picked one came out as two voices.
      */
-    sans: readonly string[];
+    face: Readonly<Record<Face, readonly string[]>>;
+    /** What follows the face in every stack: the device's own. It shows while the file loads, and is never the design. */
+    fallback: readonly string[];
+    /** For code only: inside code, pre, kbd and samp. Dates and figures are set in the face, with tabular numerals. */
     mono: readonly string[];
-    /** Title faces a project's seed may pick, each a Latin face with its Hangul partner. `sans` sets titles in the body face. */
-    display: Readonly<Record<DisplayFace, readonly string[]>>;
   };
   motion: {
     /** Interface feedback: fast, base, slow. */
@@ -78,8 +80,8 @@ export interface DesignContract {
   };
 }
 
-export const displayFaces = ['sans', 'serif', 'editorial', 'grotesk'] as const;
-export type DisplayFace = (typeof displayFaces)[number];
+export const faces = ['pretendard', 'suit', 'suite'] as const;
+export type Face = (typeof faces)[number];
 
 export const contract: DesignContract = {
   spacingUnitPx: 4,
@@ -96,16 +98,14 @@ export const contract: DesignContract = {
   touchTargetPx: 44,
   clicheGradientHues: { from: 215, to: 325 },
   fonts: {
-    // Pretendard sets both scripts; SUIT and SUITE are the other Hangul faces a project may self-host instead.
-    // Geist stays for what was set in it before; system faces are fallbacks only, never the design.
-    sans: ['Pretendard Variable', 'Pretendard', 'SUIT Variable', 'SUIT', 'SUITE Variable', 'SUITE', 'Geist', '-apple-system', 'BlinkMacSystemFont', 'system-ui', 'sans-serif'],
-    mono: ['Geist Mono', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
-    display: {
-      sans: [],
-      serif: ['Fraunces', 'Noto Serif KR'],
-      editorial: ['Instrument Serif', 'Gowun Batang'],
-      grotesk: ['Bricolage Grotesque', 'Pretendard Variable'],
+    // All three set Hangul and Latin alike, so a product never needs a second face for the other script.
+    face: {
+      pretendard: ['Pretendard Variable', 'Pretendard'],
+      suit: ['SUIT Variable', 'SUIT'],
+      suite: ['SUITE Variable', 'SUITE'],
     },
+    fallback: ['-apple-system', 'BlinkMacSystemFont', 'system-ui', 'sans-serif'],
+    mono: ['Geist Mono', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
   },
   motion: { durationsMs: [120, 200, 320], entranceMs: [600, 810], pageMs: [700, 1100], easing: 'cubic-bezier(0.16, 1, 0.3, 1)' },
 };
@@ -147,17 +147,24 @@ export function isAllowedDuration(ms: number, c: DesignContract = contract): boo
   return c.motion.durationsMs.includes(ms) || within(c.motion.entranceMs) || within(c.motion.pageMs);
 }
 
-/** Every family a page may set text in: the body and code stacks and each display pairing. */
-export function contractFamilies(c: DesignContract = contract): string[] {
-  return [...c.fonts.sans, ...c.fonts.mono, ...Object.values(c.fonts.display).flat()];
+/** The stack a product set in `face` uses for body and titles alike: the face's families, then the device's own. */
+export function faceStack(face: Face, c: DesignContract = contract): string[] {
+  return [...c.fonts.face[face], ...c.fonts.fallback];
 }
 
-/** The tail of the stacks: what a device has of its own. Never the design, and never something a project loads. */
-const SYSTEM_FAMILIES = new Set(['-apple-system', 'BlinkMacSystemFont', 'system-ui', 'sans-serif', 'serif', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace']);
+const faceFamilies = (c: DesignContract): string[] => faces.flatMap((face) => c.fonts.face[face]);
 
-/** The families a project has to load itself for them to show at all: the contract's faces, without the system tail. */
+/** Every family a page may set text in: the three faces, the code stack and the system fallback. */
+export function contractFamilies(c: DesignContract = contract): string[] {
+  return [...faceFamilies(c), ...c.fonts.mono, ...c.fonts.fallback];
+}
+
+/**
+ * The families a project has to load itself for them to show at all: the three faces and the code face. The rest
+ * of each stack is what a device has of its own, which is never the design and never something a project loads.
+ */
 export function hostedFamilies(c: DesignContract = contract): string[] {
-  return contractFamilies(c).filter((family) => !SYSTEM_FAMILIES.has(family));
+  return [...faceFamilies(c), ...c.fonts.mono.slice(0, 1)];
 }
 
 export function isLargeText(fontSizePx: number, fontWeight: number): boolean {

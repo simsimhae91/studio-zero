@@ -1,5 +1,5 @@
 import { contrastRatio, formatOklch, oklchToRgb, solveForContrast, toSrgbGamut, type Oklch } from './color.ts';
-import { contract as defaultContract, displayFaces, lineHeightFor, typeStepNames, type DesignContract, type DisplayFace } from './contract.ts';
+import { contract as defaultContract, faceStack, faces, lineHeightFor, typeStepNames, type DesignContract, type Face } from './contract.ts';
 
 /** What makes one project's skin different from another's. Everything else is derived. */
 export interface ThemeSeed {
@@ -14,8 +14,8 @@ export interface ThemeSeed {
    */
   neutralChroma: number;
   corners: Corners;
-  /** The face titles are set in. Left out: the body face. */
-  display?: DisplayFace;
+  /** The one face the product is set in, titles included. Left out: Pretendard. */
+  face?: Face;
   /**
    * How light the brand colour is, 0.4 (deep) – 0.75 (bright). The brand is a fill, not a text colour, so the text
    * that sits on it is solved; darker it reads as ink, lighter as a pastel wash, and neither is a punch. Left out:
@@ -137,18 +137,45 @@ export function seedFromName(name: string): ThemeSeed {
   let hue = hash % 360;
   if (hue >= 250 && hue <= 305) hue = (hue + 80) % 360;
   const corners = (['sharp', 'soft', 'round'] as const)[(hash >>> 17) % 3]!;
-  // Titles differ from project to project as palettes do: the seed picks the face, and one in four keeps the body face.
+  // The face differs from project to project as palettes do: the seed picks one of the three.
   // The top bits of this hash barely move between similar names, so the face is picked from a second mix of it.
   const mixed = Math.imul(hash ^ (hash >>> 15), 2246822507) >>> 0;
-  const display = displayFaces[(mixed >>> 13) % displayFaces.length]!;
+  const face = faces[(mixed >>> 13) % faces.length]!;
   // A name says nothing about a product, so this is a placeholder until someone chooses from the subject. It is
   // still spread over deep and bright brands, so two placeholders do not look like the same product, and it stays
   // inside the band the set_theme tool admits: a clear brand on near-white paper.
   const lightness = 0.4 + ((mixed >>> 5) % 4) * 0.1;
-  return { hue, chroma: 0.12 + ((hash >>> 9) % 7) * 0.01, neutralChroma: ((hash >>> 13) % 6) * 0.001, corners, display, lightness };
+  return { hue, chroma: 0.12 + ((hash >>> 9) % 7) * 0.01, neutralChroma: ((hash >>> 13) % 6) * 0.001, corners, face, lightness };
 }
 
 const px = (n: number): string => `${n / 16}rem`;
+
+/**
+ * Which generator wrote a stylesheet, said in its second line. A project keeps the sheet it was given, so when
+ * what a sheet must hold changes (one face and its file, where there were title pairings to install), the number
+ * goes up and the studio regenerates the older sheet from the project's stored seed instead of auditing it
+ * against rules it was never written for.
+ */
+export const THEME_GENERATOR = 3;
+const GENERATOR_LINE = /^\/\* generator (\d+) \*\/$/m;
+
+/** The generator a stylesheet says wrote it; 0 for a sheet from before sheets said. */
+export function themeGeneratorOf(css: string): number {
+  return Number(GENERATOR_LINE.exec(css)?.[1] ?? 0);
+}
+
+/**
+ * The one file of each face, as the sheet names it and as the studio writes it beside the sheet, with the weights
+ * the variable file covers. Whoever puts the files into a project reads the names from here, so the sheet never
+ * points at a file under another name.
+ */
+export const faceFiles: Readonly<Record<Face, { file: string; weight: string }>> = {
+  pretendard: { file: 'PretendardVariable.woff2', weight: '45 920' },
+  suit: { file: 'SUIT-Variable.woff2', weight: '100 900' },
+  suite: { file: 'SUITE-Variable.woff2', weight: '300 900' },
+};
+/** Where the face's file sits, relative to the stylesheet. */
+export const FACE_FILES_DIR = 'fonts';
 
 function vars(p: Palette, indent: string): string {
   return colorTokens.map((t) => `${indent}--sz-${t}: ${formatOklch(p[t])};`).join('\n');
@@ -160,11 +187,28 @@ function vars(p: Palette, indent: string): string {
  * It replaces Tailwind's default colour, type, radius and shadow scales outright (`--color-*: initial` and
  * friends). The stock palette is not merely discouraged: `bg-indigo-500` and `rounded-3xl` do not compile to
  * anything, so the look they produce is unavailable by construction.
+ *
+ * The sheet also brings the product's face: one `@font-face` pointing at the file the studio puts in `fonts/`
+ * beside the sheet, so no engine has to find and install it (one of the three is not on npm at all). A page that
+ * carries its faces inside itself, or a sheet shipped with no file beside it, asks for `fontFiles: false` and gets
+ * the same tokens without the pointer.
  */
-export function renderThemeCss(theme: Theme, c: DesignContract = defaultContract): string {
+export function renderThemeCss(theme: Theme, c: DesignContract = defaultContract, opts: { fontFiles?: boolean } = {}): string {
   const radii = cornerRadii[theme.seed.corners];
-  const face = theme.seed.display ?? 'sans';
-  const displayStack = [...c.fonts.display[face], ...c.fonts.sans].filter((family, i, all) => all.indexOf(family) === i);
+  const face = theme.seed.face ?? 'pretendard';
+  const stack = faceStack(face, c).map(quoteFamily).join(', ');
+  const fontFace =
+    opts.fontFiles === false
+      ? ''
+      : `@font-face {
+  font-family: ${quoteFamily(c.fonts.face[face][0]!)};
+  font-style: normal;
+  font-weight: ${faceFiles[face].weight};
+  font-display: swap;
+  src: url("./${FACE_FILES_DIR}/${faceFiles[face].file}") format("woff2-variations");
+}
+
+`;
   const mid = ([from, to]: readonly [number, number]): number => Math.round((from + to) / 20) * 10;
   const type = c.typeScalePx
     .map((size, i) => {
@@ -175,9 +219,10 @@ export function renderThemeCss(theme: Theme, c: DesignContract = defaultContract
     .join('\n');
 
   return `/* Generated by @studio-zero/design from the design contract. Edit the seed, not this file. */
-/* seed: hue ${theme.seed.hue}, chroma ${theme.seed.chroma},${theme.seed.lightness === undefined ? '' : ` brand lightness ${theme.seed.lightness},`} neutral chroma ${theme.seed.neutralChroma}${theme.seed.neutralHue === undefined ? '' : ` toward hue ${theme.seed.neutralHue}`}, ${theme.seed.corners} corners, ${face === 'sans' ? 'titles in the body face' : `titles in ${c.fonts.display[face].join(' + ')}`} */
+/* generator ${THEME_GENERATOR} */
+/* seed: hue ${theme.seed.hue}, chroma ${theme.seed.chroma},${theme.seed.lightness === undefined ? '' : ` brand lightness ${theme.seed.lightness},`} neutral chroma ${theme.seed.neutralChroma}${theme.seed.neutralHue === undefined ? '' : ` toward hue ${theme.seed.neutralHue}`}, ${theme.seed.corners} corners, set in ${c.fonts.face[face][0]} */
 
-:root {
+${fontFace}:root {
   color-scheme: light dark;
 ${vars(theme.light, '  ')}
 }
@@ -211,10 +256,11 @@ ${vars(theme.light, '  ')}
   --color-*: initial;
 ${colorTokens.map((t) => `  --color-${t}: var(--sz-${t});`).join('\n')}
 
-  --font-sans: ${c.fonts.sans.map(quoteFamily).join(', ')};
+  /* One face for the whole product. Titles are the same face, heavier: font-display is font-sans by another name. */
+  --font-sans: ${stack};
+  --font-display: ${stack};
+  /* For code only: inside code, pre, kbd and samp. */
   --font-mono: ${c.fonts.mono.map(quoteFamily).join(', ')};
-  /* Titles: font-display. Self-host the faces it names, as for the body face. */
-  --font-display: ${displayStack.map(quoteFamily).join(', ')};
 
   /* ${c.typeScalePx.length} sizes. The steps above ${c.display.fromPx}px are display type: one headline on an introduction screen, ${c.display.ratioToBody[0]} to ${c.display.ratioToBody[1]} times the body size. */
   --text-*: initial;

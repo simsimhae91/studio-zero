@@ -24,7 +24,8 @@ const block = ({ id, scheme, palette }) => `:root[data-preset="${id}"],
 ${colorTokens.map((token) => `  --sz-${token}: ${formatOklch(palette[token])};`).join('\n')}
 }`;
 
-const css = `${renderThemeCss(base)}
+// The app loads its faces itself (styles/app.css), so the sheet names the face and points at no file of its own.
+const css = `${renderThemeCss(base, undefined, { fontFiles: false })}
 /* Presets. Set as data-preset on <html> (Settings); the class form scopes one to a subtree, for the swatches. */
 ${presets.map(block).join('\n')}
 `;
