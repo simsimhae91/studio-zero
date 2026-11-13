@@ -134,6 +134,9 @@ function Receipt({ entry, task }: { entry: LedgerEntry; task: Task | null }) {
           <Row label="텍스트 슬롭">{design.textSlop === null ? '재지 않음' : design.textSlop === 0 ? '0건' : `${design.textSlop}건`}</Row>
           <Row label="AAA 대비">{pct(design.contrastAaa)}</Row>
           <Row label="터치 타깃">{pct(design.touchTargets)}</Row>
+          {/* Tried by hand in a browser: held down, tabbed through. Absent on receipts from before screens were tried. */}
+          <Row label="누름에 답함" tone={typeof design.pressAnswer === 'number' && design.pressAnswer < 1 ? 'warn' : undefined}>{pct(design.pressAnswer ?? null)}</Row>
+          <Row label="포커스 보임">{pct(design.focusVisible ?? null)}</Row>
           {/* The screen spec's core flow, carried out on the running app. Absent on receipts from before builds were walked. */}
           <Row label="핵심 흐름" tone={flow && flow.reached < flow.tasks ? 'warn' : undefined}>
             {flow ? `${flow.reached}/${flow.tasks} 완주, 누름 ${flow.presses}번${flow.scrolls > 0 ? `, 스크롤 ${flow.scrolls}번` : ''}${flow.presses > 0 ? `, 답함 ${flow.answered}/${flow.presses}` : ''}` : '걷지 않음'}

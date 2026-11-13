@@ -1,6 +1,7 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { Browser, BrowserContextOptions, Page } from 'playwright-core';
+import { z } from 'zod';
 import { contract } from '@studio-zero/design';
 import type { AuditReport, Finding, Project, ProjectTemplate, RedesignPatch, ReviewerId, Template, ViewportId, VisionCoverage } from '@studio-zero/protocol';
 import type { Config } from '../config.ts';
@@ -8,8 +9,9 @@ import type { Store } from '../db/Store.ts';
 import type { EventLog } from '../events/EventLog.ts';
 import { auditCopy, summariseCopy, type CopyAudit } from '../harness/TextSlopAuditor.ts';
 import { errorMessage, newId, type Clock, type Logger } from '../util/core.ts';
-import { COPY_RULE_PREFIX, SLOP_PASS_MAX, UNREVIEWED_SCORE_CAP, gradeAudit, measureAccess, runDomChecks, type AccessMeasures } from './checks.ts';
+import { COPY_RULE_PREFIX, SLOP_PASS_MAX, UNREVIEWED_SCORE_CAP, gradeAudit, interactionFindings, measureAccess, runDomChecks, type AccessMeasures } from './checks.ts';
 import { PageDigest, collectDigest } from './collector.ts';
+import { layoutShift, probeInteraction, type Touchability } from './InteractionProbe.ts';
 import type { QaBrowser } from './QaBrowser.ts';
 import { VisionUnavailableError, type QaVisionBridge } from './QaVisionBridge.ts';
 import { LIVING_VISUAL_RULE, RUBRIC_AXES, SLOP_FLOOR_ON_TRAP, isTrap, type ScreenReview } from './vision.ts';
@@ -44,6 +46,8 @@ export function auditViewports(template: ProjectTemplate, configured: readonly V
 
 /** After this many reviews in one audit have failed on every path, the rest are not attempted. */
 const MAX_REVIEW_FAILURES = 2;
+/** How many routes of one audit are tried by hand (pressed, tabbed through). Each costs a page load and some seconds. */
+const MAX_PROBED_ROUTES = 3;
 
 export interface AuditRequest {
   project: Project;
@@ -148,7 +152,7 @@ export class VisualAuditor {
     const screenshots: AuditReport['screenshots'] = [];
     const reviews: ScreenReview[] = [];
     const copy: CopyAudit[] = [];
-    const measures: AccessMeasures = { contrast: { passed: 0, total: 0 }, touchTargets: { passed: 0, total: 0 } };
+    const measures: AccessMeasures = { contrast: { passed: 0, total: 0 }, touchTargets: { passed: 0, total: 0 }, pressAnswer: { passed: 0, total: 0 }, focusVisible: { passed: 0, total: 0 }, layoutShift: null };
     // The studio's own repository has no template an owner could pick; its screens are a web application's.
     const template: Template = req.project.template === 'studio-core' ? 'web-vite-react' : req.project.template;
     const available = await this.#vision.availability();
@@ -166,7 +170,11 @@ export class VisualAuditor {
     await this.#browser.use(req.project, req.signal, async ({ browser, host, devices }) => {
       const viewports = viewportSpecs(devices);
       const subjects = subjectsFor(host);
-      for (const viewport of auditViewports(req.project.template, this.#config.audit.viewports)) {
+      const audited = auditViewports(req.project.template, this.#config.audit.viewports);
+      // Screens are tried by hand at one size: the one the product is first used at. A phone app under a thumb; a
+      // web product at a desk, where the pointer hovers and the keyboard is a way in.
+      const tried: ViewportId = req.project.template !== 'mobile-expo' && audited.includes('desktop-1440') ? 'desktop-1440' : (audited[0] ?? 'iphone-15-pro');
+      for (const viewport of audited) {
         const spec = viewports[viewport];
         for (const [routeIndex, subject] of subjects.entries()) {
           if (req.signal?.aborted) throw req.signal.reason;
@@ -190,6 +198,16 @@ export class VisualAuditor {
             measures[key].passed += access[key].passed;
             measures[key].total += access[key].total;
           }
+          if (light.shift !== null) measures.layoutShift = Math.max(measures.layoutShift ?? 0, light.shift);
+          // Tried by hand: pressed and held, tabbed through. On a page of its own, since trying leaves marks.
+          const probe = viewport === tried && routeIndex < MAX_PROBED_ROUTES ? await this.#probe(browser, spec, subject, mode.sealed) : null;
+          if (probe) {
+            measures.pressAnswer.passed += probe.press.answered;
+            measures.pressAnswer.total += probe.press.probed;
+            measures.focusVisible.passed += probe.focus.visible;
+            measures.focusVisible.total += probe.focus.probed;
+          }
+          findings.push(...interactionFindings(probe, viewport === tried ? light.shift : null, { viewport, route, touch: spec.touch }));
 
           const dir = join(this.#config.artifactsDir, req.project.id, auditId);
           await mkdir(dir, { recursive: true, mode: 0o700 });
@@ -284,15 +302,37 @@ export class VisualAuditor {
     return { report, slopByRoute: new Map(reviews.map((r) => [r.route, r.slopScore])) };
   }
 
-  async #capture(browser: Browser, spec: ViewportSpec, scheme: 'light' | 'dark', subject: Subject, screenshots: boolean, sealed: boolean): Promise<{ digest: PageDigest | null; folds: Buffer[]; error: string }> {
+  /**
+   * Tries one screen by hand (see `probeInteraction`). In a context of its own: motion is left as most people
+   * have it, because a press that is answered by movement has not failed just because the audit's other pages
+   * ask for less of it. Null when the page would not open; that is already a finding from the capture.
+   */
+  async #probe(browser: Browser, spec: ViewportSpec, subject: Subject, sealed: boolean): Promise<Touchability | null> {
+    const context = await browser.newContext({ ...spec.context, serviceWorkers: 'block', ...(sealed ? { javaScriptEnabled: false, offline: true } : {}) });
+    try {
+      const page = await context.newPage();
+      if ((await subject.open(page)) !== null) return null;
+      await settle(page, sealed);
+      return await probeInteraction(page, { touch: spec.touch });
+    } catch (err) {
+      this.#log.warn({ err: errorMessage(err), route: subject.route }, 'a screen could not be tried by hand');
+      return null;
+    } finally {
+      await context.close().catch(() => undefined);
+    }
+  }
+
+  async #capture(browser: Browser, spec: ViewportSpec, scheme: 'light' | 'dark', subject: Subject, screenshots: boolean, sealed: boolean): Promise<{ digest: PageDigest | null; folds: Buffer[]; shift: number | null; error: string }> {
     const context = await browser.newContext({ ...spec.context, colorScheme: scheme, reducedMotion: 'reduce', serviceWorkers: 'block', ...(sealed ? { javaScriptEnabled: false, offline: true } : {}) });
     try {
       const page = await context.newPage();
       const failed = await subject.open(page);
-      if (failed !== null) return { digest: null, folds: [], error: failed };
+      if (failed !== null) return { digest: null, folds: [], shift: null, error: failed };
       await settle(page, sealed);
       const digest = PageDigest.safeParse(await page.evaluate(collectDigest, 600));
-      if (!digest.success) return { digest: null, folds: [], error: 'the page returned measurements that failed validation' };
+      if (!digest.success) return { digest: null, folds: [], shift: null, error: 'the page returned measurements that failed validation' };
+      // A sealed page runs nothing that could be waited on, and has nothing arriving late to shift it.
+      const shift = sealed || !screenshots ? null : z.number().min(0).max(100).nullable().catch(null).parse(await page.evaluate(layoutShift).catch(() => null));
 
       const folds: Buffer[] = [];
       if (screenshots) {
@@ -301,9 +341,9 @@ export class VisualAuditor {
           folds.push(await page.screenshot({ type: 'png', fullPage: true, animations: 'disabled', clip: { x: 0, y: fold * height, width, height: Math.min(height, scrollHeight - fold * height) } }));
         }
       }
-      return { digest: digest.data, folds, error: '' };
+      return { digest: digest.data, folds, shift, error: '' };
     } catch (err) {
-      return { digest: null, folds: [], error: errorMessage(err).split('\n')[0] ?? 'navigation failed' };
+      return { digest: null, folds: [], shift: null, error: errorMessage(err).split('\n')[0] ?? 'navigation failed' };
     } finally {
       await context.close().catch(() => undefined);
     }

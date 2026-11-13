@@ -291,7 +291,7 @@ test('the sandwich: table committed before code, one red team, one acceptance wi
     // --- the receipt
     const [first] = r.d.daemon.studio.listLedger(project.id, 5) as [LedgerEntry];
     assert.deepEqual(first.code, { compilerErrors: 0, firstCompilerErrors: 3, verifyRounds: 3, checksPassed: 1, checksFailed: [], buildMs: 1200, bundleBytes: 307200 });
-    assert.deepEqual(first.design, { grade: 'S', score: 96, slopScore: 8, livingVisual: true, contrastAaa: 0.95, touchTargets: 1, textSlop: 0 });
+    assert.deepEqual(first.design, { grade: 'S', score: 96, slopScore: 8, livingVisual: true, contrastAaa: 0.95, touchTargets: 1, pressAnswer: null, focusVisible: null, copySlop: 0, textSlop: 0 }, 'what the scripted audit did not measure reads as not measured');
     assert.deepEqual(first.review, { plan: 'codex', acceptance: 'codex', verdict: 'patched' }, 'the reviewer said patch; the engine changed the workspace in answer and it verified again');
     assert.deepEqual([first.outcome, first.cost.modelCalls, first.cost.inputTokens, first.delta, first.proof], ['succeeded', 7, 7000, [], ''], 'six engine turns and the plan; the first entry has nothing to compare with');
     assert.equal(of(bodies, 'ledger.recorded').length, 1);

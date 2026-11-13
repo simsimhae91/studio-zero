@@ -40,17 +40,29 @@ export function haptic(kind: Haptic = 'selection'): void {
   fired.catch(() => undefined);
 }
 
+/** How far a pressed surface dims when it may not move. */
+const PRESSED_OPACITY = 0.72;
+
 /**
  * Press feedback as physics: the surface gives way under the thumb and springs back when it lifts. Spread
  * `handlers` on a Pressable and put `style` on an Animated.View around it.
  */
-export function usePressScale(to: number = mobileTokens.press.scale): { style: { transform: { scale: Animated.Value }[] }; handlers: { onPressIn: () => void; onPressOut: () => void } } {
+export function usePressScale(to: number = mobileTokens.press.scale): { style: { transform: { scale: Animated.Value }[]; opacity: Animated.Value }; handlers: { onPressIn: () => void; onPressOut: () => void } } {
   const scale = useRef(new Animated.Value(1)).current;
+  const opacity = useRef(new Animated.Value(1)).current;
   const reduced = useReducedMotion();
   const spring = (toValue: number): void => Animated.spring(scale, { toValue, ...mobileTokens.spring.press, useNativeDriver: NATIVE_DRIVER }).start();
   return {
-    style: { transform: [{ scale }] },
-    handlers: { onPressIn: () => (reduced ? undefined : spring(to)), onPressOut: () => spring(1) },
+    style: { transform: [{ scale }], opacity },
+    handlers: {
+      // With motion reduced the surface does not move, and a press is still answered: it dims at once and comes
+      // back at once. Before, a person who had asked for less motion got controls that gave nothing back at all.
+      onPressIn: () => (reduced ? opacity.setValue(PRESSED_OPACITY) : spring(to)),
+      onPressOut: () => {
+        opacity.setValue(1);
+        spring(1);
+      },
+    },
   };
 }
 

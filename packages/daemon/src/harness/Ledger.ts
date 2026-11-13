@@ -79,6 +79,8 @@ export function ledgerDelta(prev: Measured, next: Measured): LedgerDelta[] {
   }
   number('AAA 대비 통과율', prev.design.contrastAaa, next.design.contrastAaa, pct, false);
   number('터치 타깃 적합도', prev.design.touchTargets, next.design.touchTargets, pct, false);
+  number('누름에 답하는 컨트롤', prev.design.pressAnswer ?? null, next.design.pressAnswer ?? null, pct, false);
+  number('보이는 키보드 포커스', prev.design.focusVisible ?? null, next.design.focusVisible ?? null, pct, false);
   number('번들', prev.code.bundleBytes, next.code.bundleBytes, kb, true);
   number('빌드 시간', prev.code.buildMs, next.code.buildMs, secs, true);
   return deltas;
@@ -146,6 +148,9 @@ export class Ledger {
         livingVisual: audit?.livingVisual ?? null,
         contrastAaa: share(audit?.measures?.contrast),
         touchTargets: share(audit?.measures?.touchTargets),
+        pressAnswer: share(audit?.measures?.pressAnswer),
+        focusVisible: share(audit?.measures?.focusVisible),
+        copySlop: audit?.copy?.slopScore ?? null,
         textSlop: audit ? (audit.copy?.habits ?? audit.findings.filter((f) => f.rule.startsWith(COPY_RULE_PREFIX)).length) : null,
       },
       cost: { modelCalls: usage.calls, inputTokens: usage.inputTokens, outputTokens: usage.outputTokens, usdMicros: usage.usdMicros, wallMs: Math.max(0, (task.finishedAt ?? now) - (task.startedAt ?? task.createdAt)) },

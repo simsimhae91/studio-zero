@@ -33,7 +33,10 @@ const CLEAN_PAGE = `<!doctype html>
   h1 { font-size: 30px; line-height: 1.3; margin: 0; }
   p { font-size: 16px; line-height: 1.6; margin: 0; color: var(--sz-fg-muted); }
   section { background: var(--sz-surface); border: 1px solid var(--sz-border); border-radius: 8px; padding: 16px; display: grid; gap: 8px; }
-  a.action { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 0 16px; border-radius: 8px; background: var(--sz-accent); color: var(--sz-on-accent); font-size: 16px; text-decoration: none; }
+  a.action { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 0 16px; border-radius: 8px; background: var(--sz-accent); color: var(--sz-on-accent); font-size: 16px; text-decoration: none; transition: transform 120ms; }
+  /* A clean page answers the hand: held down it gives way, and the keyboard's focus can be seen. */
+  a.action:active { transform: translateY(2px); background: var(--sz-fg); }
+  a.action:focus-visible { outline: 3px solid var(--sz-fg); outline-offset: 2px; }
 </style>
 </head>
 <body>

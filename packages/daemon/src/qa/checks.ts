@@ -1,6 +1,7 @@
 import { blend, contractFamilies, contrastRatio, hueSaturation, isAllowedRadius, isDisplayInProportion, isLargeText, isOnTypeScale, type DesignContract, type Rgb } from '@studio-zero/design';
 import { UNREVIEWED_SCORE_CAP, type DesignGrade, type Finding, type FindingCategory, type Severity, type ViewportId } from '@studio-zero/protocol';
 import type { DigestElement, PageDigest } from './collector.ts';
+import type { ProbedControl, Touchability } from './InteractionProbe.ts';
 
 export interface CheckContext {
   viewport: ViewportId;
@@ -251,14 +252,68 @@ export function runDomChecks(digest: PageDigest, ctx: CheckContext, c: DesignCon
 export interface AccessMeasures {
   contrast: { passed: number; total: number };
   touchTargets: { passed: number; total: number };
+  /** Filled in by the interaction probe, on the routes it tried. */
+  pressAnswer: { passed: number; total: number };
+  focusVisible: { passed: number; total: number };
+  /** The largest layout shift a route had while loading; null when none was measured. */
+  layoutShift: number | null;
 }
 
-export function measureAccess(digest: PageDigest, ctx: Pick<CheckContext, 'touch'>, c: DesignContract): AccessMeasures {
+export function measureAccess(digest: PageDigest, ctx: Pick<CheckContext, 'touch'>, c: DesignContract): Pick<AccessMeasures, 'contrast' | 'touchTargets'> {
   const texts = digest.elements.filter((e) => e.text !== '' && e.fontSize > 0 && !e.backgroundIndeterminate);
   const clear = texts.filter((e) => contrastRatio(blend(rgbOf(e.color), e.color[3], rgbOf(e.background)), rgbOf(e.background)) >= (isLargeText(e.fontSize, e.fontWeight) ? c.contrast.largeText : c.contrast.text) - 0.05);
   const targets = ctx.touch ? digest.elements.filter((e) => e.interactive && !(e.inline && e.tag === 'a')) : [];
   const sized = targets.filter((e) => e.w >= c.touchTargetPx - 0.5 && e.h >= c.touchTargetPx - 0.5);
   return { contrast: { passed: clear.length, total: texts.length }, touchTargets: { passed: sized.length, total: targets.length } };
+}
+
+/** A page that shifts more than this as it loads is past what the web-vitals scale calls good. */
+export const LAYOUT_SHIFT_GOOD = 0.1;
+
+/**
+ * What trying a screen found, as findings. A control that gives nothing back while it is held, and a keyboard
+ * focus that cannot be seen, are each named with where they are. Like the rest of this file they are
+ * arithmetic on what the browser did: nobody judged them.
+ *
+ * `loadShift` is how far the page jumped while loading. It is reported and kept small in weight: the audit
+ * looks at a dev server, which may put its styles in a moment after the first paint, and that jump is the
+ * dev server's and not the product's.
+ */
+export function interactionFindings(probe: Touchability | null, loadShift: number | null, ctx: Pick<CheckContext, 'viewport' | 'route' | 'touch'>): Finding[] {
+  const findings: Finding[] = [];
+  const at = (rule: string, category: FindingCategory, severity: Severity, message: string, fix: string, control?: ProbedControl): void => {
+    findings.push({ rule, category, severity, source: 'dom', viewport: ctx.viewport, route: ctx.route, message, selector: control?.selector ?? null, bbox: control ? { x: round(control.x - control.w / 2), y: round(control.y - control.h / 2), w: round(control.w), h: round(control.h) } : null, fix, file: null, line: null });
+  };
+  const named = (control: ProbedControl): string => (control.text ? `"${control.text.slice(0, 30)}"` : 'A control');
+  if (probe) {
+    probe.press.silent.slice(0, 4).forEach((control, i) => {
+      const rest = i === Math.min(4, probe.press.silent.length) - 1 ? probe.press.silent.length - (i + 1) : 0;
+      at(
+        'touch/no-press-answer',
+        'tactility',
+        'major',
+        `${named(control)} gives nothing back while it is held: the screen around it looks the same pressed as at rest${rest > 0 ? `. ${rest} more control(s) on this screen are the same.` : '.'} (${probe.press.answered} of ${probe.press.probed} controls tried answered.)`,
+        'Give it a pressed state that can be seen: on the web an :active style on the control or on its row (a shift, a press-in, a change of surface) at --duration-fast; in a mobile project build it on Tactile or TactileButton instead of a bare Pressable.',
+        control,
+      );
+    });
+    probe.focus.hidden.slice(0, 4).forEach((control, i) => {
+      const rest = i === Math.min(4, probe.focus.hidden.length) - 1 ? probe.focus.hidden.length - (i + 1) : 0;
+      at(
+        'focus/not-visible',
+        'tactility',
+        // A phone is rarely driven by a keyboard; a desk is. Where a keyboard is the way in, an invisible focus locks its user out (WCAG 2.4.7).
+        ctx.touch ? 'minor' : 'major',
+        `${named(control)} takes the keyboard's focus without showing it: focused and unfocused look the same${rest > 0 ? `. ${rest} more stop(s) are the same.` : '.'} (${probe.focus.visible} of ${probe.focus.probed} stops showed their focus.)`,
+        'Leave the theme\'s :focus-visible ring on, or give the control one of its own: an outline of at least 2px in a colour that holds 3:1 against what is behind it. Do not set outline: none without a replacement.',
+        control,
+      );
+    });
+  }
+  if (loadShift !== null && loadShift > LAYOUT_SHIFT_GOOD) {
+    at('motion/layout-shift', 'responsive', 'minor', `The page jumps as it loads: cumulative layout shift ${loadShift.toFixed(2)} (${LAYOUT_SHIFT_GOOD} or less reads as steady).`, 'Reserve room for what arrives late: give pictures and embeds their width and height, keep a skeleton the size of the content it stands for, and load the fonts the theme names before first paint.');
+  }
+  return findings;
 }
 
 const PENALTY: Record<Severity, number> = { blocker: 14, major: 5, minor: 1.5 };

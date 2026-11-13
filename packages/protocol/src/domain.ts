@@ -356,6 +356,12 @@ export const AuditReport = z.object({
       contrast: z.object({ passed: z.number().int(), total: z.number().int() }),
       /** Controls measured on touch viewports, and how many met the target size. */
       touchTargets: z.object({ passed: z.number().int(), total: z.number().int() }),
+      /** Controls pressed and held by the probe, and how many looked different while held. Absent on audits from before screens were tried. */
+      pressAnswer: z.object({ passed: z.number().int(), total: z.number().int() }).optional(),
+      /** Stops of the keyboard's focus, and at how many the focus could be seen. */
+      focusVisible: z.object({ passed: z.number().int(), total: z.number().int() }).optional(),
+      /** The largest cumulative layout shift any audited route had while loading. Null when it was not measured (a sealed page). */
+      layoutShift: z.number().nullable().optional(),
     })
     .optional(),
   /**
@@ -531,6 +537,11 @@ export const LedgerEntry = z.object({
     contrastAaa: z.number().nullable(),
     /** Share of touch controls at the target size, 0 to 1. */
     touchTargets: z.number().nullable(),
+    /** Share of pressed controls that looked different while held, and of focus stops where the focus could be seen, 0 to 1. Absent on older entries. */
+    pressAnswer: z.number().nullable().optional(),
+    focusVisible: z.number().nullable().optional(),
+    /** The copy lint's slop score for the audited screens, 0 to 100, higher worse. Absent on older entries. */
+    copySlop: z.number().nullable().optional(),
     /** Copy habits the Korean text lint found. */
     textSlop: z.number().int().nullable(),
   }),
