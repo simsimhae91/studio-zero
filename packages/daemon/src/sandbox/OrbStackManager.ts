@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, symlinkSync, writeFileSync } from 'node:fs';
+import { isIPv4 } from 'node:net';
 import { homedir } from 'node:os';
 import { dirname, isAbsolute, join, posix } from 'node:path';
 import type { Checkpoint, Project, SandboxInfo } from '@studio-zero/protocol';
@@ -453,11 +454,23 @@ export class OrbStackManager {
   }
 
   /** Joins the QA browser to a project's network so it can load `http://<sandbox>:<port>`. Idempotent. */
+  /**
+   * Puts the QA browser on the project's network and returns where the project answers from there: the
+   * sandbox's address on that network, not its name.
+   *
+   * A dev server checks the Host header it is asked by. Vite (and webpack's dev server) answer a request
+   * addressed to an IP, and refuse one addressed to a name they were not told about with 403 "Blocked request.
+   * This host is not allowed." Opened as `http://sz-<slug>:<port>`, every Vite project answered the QA browser
+   * with that refusal, and the audit photographed and reviewed the refusal as if it were the product. The
+   * name stays as the fallback for an engine that will not say the address.
+   */
   async attachQaBrowser(project: Project): Promise<string> {
     const names = sandboxNames(project.slug);
     const res = await this.#docker(['network', 'connect', names.network, QA_BROWSER]);
     if (res.exitCode !== 0 && !/already exists/i.test(res.stderr)) throw new SandboxError('could not attach QA browser to project network', lastLine(res.stderr));
-    return names.container;
+    const found = await this.#docker(['container', 'inspect', '--format', `{{with index .NetworkSettings.Networks "${names.network}"}}{{.IPAddress}}{{end}}`, names.container], { timeoutMs: 15_000 });
+    const address = found.stdout.trim();
+    return found.exitCode === 0 && isIPv4(address) ? address : names.container;
   }
 
   async detachQaBrowser(project: Project): Promise<void> {

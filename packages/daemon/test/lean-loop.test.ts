@@ -253,6 +253,8 @@ test('smoke probe in a real browser: uncaught exceptions, console.error and 5xx 
     const path = (req.url ?? '/').split('?')[0]!;
     if (path === '/api/items') return void res.writeHead(500, { 'content-type': 'application/json' }).end('{"error":"db down"}');
     if (path === '/crash') return void res.writeHead(503).end('unavailable');
+    // What a Vite dev server answers a browser that asks for it by a name it was not told about.
+    if (path === '/refused') return void res.writeHead(403, { 'content-type': 'text/plain' }).end('Blocked request. This host ("sz-ledger") is not allowed.\nTo allow this host, add "sz-ledger" to `server.allowedHosts` in vite.config.js.');
     const html = pages[path];
     if (!html) return void res.writeHead(404).end('not found');
     res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }).end(html);
@@ -270,6 +272,10 @@ test('smoke probe in a real browser: uncaught exceptions, console.error and 5xx 
     assert.ok(issues.every((i) => i.route === '/broken'));
 
     assert.deepEqual((await probeRoute(browser, `${base}/crash`, '/crash')).map((i) => `${i.kind}: ${i.text}`), ['http: 503 GET /crash']);
+    // A route that answers with a refusal, or that is not there, has not loaded the app: the smoke gate says so
+    // instead of passing a page that is only the server's own message.
+    assert.deepEqual((await probeRoute(browser, `${base}/refused`, '/refused')).map((i) => `${i.kind}: ${i.text}`), ['http: 403 GET /refused: the route did not serve the app. The server said: Blocked request. This host ("sz-ledger") is not allowed. To allow this host, add "sz-ledger" to `server.allowedHosts` in vite.config.js.']);
+    assert.deepEqual((await probeRoute(browser, `${base}/nowhere`, '/nowhere')).map((i) => `${i.kind}: ${i.text}`), ['http: 404 GET /nowhere: the route did not serve the app. The server said: not found']);
     const dead = await probeRoute(browser, 'http://127.0.0.1:1/', '/');
     assert.deepEqual(dead.map((i) => i.kind), ['navigation']);
   } finally {

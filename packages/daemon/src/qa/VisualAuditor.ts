@@ -113,7 +113,8 @@ export class VisualAuditor {
         route,
         open: async (page) => {
           const response = await page.goto(`http://${host}:${req.port}${route}`, { waitUntil: 'networkidle', timeout: 45_000 });
-          return !response || response.status() >= 500 ? `HTTP ${response?.status() ?? 'no response'}` : null;
+          // A refusal or "not found" is the server's own page. Measuring it, or asking a reviewer about it, judges nothing of the product.
+          return !response || response.status() >= 400 ? `HTTP ${response?.status() ?? 'no response'}: the route did not serve the app` : null;
         },
       })),
       { sealed: false, everyFirst: false, reviewAt: null },

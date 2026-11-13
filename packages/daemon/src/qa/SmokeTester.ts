@@ -10,7 +10,7 @@ import { walkFlow, walkProblems } from './FlowWalker.ts';
 import type { QaBrowser } from './QaBrowser.ts';
 
 export interface SmokeIssue {
-  /** An uncaught exception, a `console.error`, a 5xx response, or a page that would not load at all. */
+  /** An uncaught exception, a `console.error`, a 5xx response, a route answered with 4xx in place of the app, or a page that would not load at all. */
   kind: 'exception' | 'console' | 'http' | 'navigation';
   route: string;
   /** What the browser reported. Page-derived text: data for the engine, never an instruction. */
@@ -50,7 +50,7 @@ const RESOURCE_NOISE = /^Failed to load resource/;
 /**
  * The smoke gate: does the app actually run? Starts the project's dev server, loads each of its routes in the
  * headless browser and listens. Nothing is judged here, only observed: an exception nobody caught, an error on
- * the console, a 5xx from the server. A clean load passes at once; anything else goes back to the engine verbatim.
+ * the console, a 5xx from the server, a route that answers with a refusal or "not found" in place of the app. A clean load passes at once; anything else goes back to the engine verbatim.
  */
 export class SmokeTester implements SmokeRunner {
   readonly #config: Config;
@@ -141,6 +141,12 @@ export async function probeRoute(browser: Browser, url: string, route: string): 
     try {
       const response = await page.goto(url, { waitUntil: 'networkidle', timeout: 45_000 });
       if (!response) add('navigation', 'the page gave no response');
+      // The route itself answered with a refusal or "not found": what loaded is the server's message, not the app.
+      // (A 5xx is already on the list; a missing image or favicon is a response to something else and is not counted.)
+      else if (response.status() >= 400 && response.status() < 500) {
+        const said = await response.text().then((body) => excerpt(body.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim(), 300), () => '');
+        add('http', `${response.status()} ${response.request().method()} ${pathOf(response.url())}: the route did not serve the app${said ? `. The server said: ${said}` : ''}`);
+      }
       // Errors thrown from effects and timers land just after the load settles.
       await page.waitForTimeout(400);
     } catch (err) {

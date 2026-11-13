@@ -15,7 +15,10 @@ const REAL_KEY = 'sk-ant-api03-integration-test-key';
 const SERVER_JS = `const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
+// Like Vite's dev server: a request addressed to a name it was not told about is refused; localhost and IP addresses are served.
+const known = (host) => { const name = String(host || '').replace(/:\\d+$/, ''); return name === 'localhost' || require('node:net').isIP(name) !== 0; };
 http.createServer((req, res) => {
+  if (!known(req.headers.host)) return res.writeHead(403).end('Blocked request. This host ("' + req.headers.host + '") is not allowed.');
   const file = path.join('/workspace', req.url === '/' ? 'index.html' : path.normalize(req.url.split('?')[0]));
   if (!file.startsWith('/workspace/') || !fs.existsSync(file)) return res.writeHead(404).end('not found');
   res.writeHead(200, { 'content-type': file.endsWith('.css') ? 'text/css' : 'text/html; charset=utf-8' }).end(fs.readFileSync(file));
@@ -66,7 +69,8 @@ test('real container engine', { skip: process.env.SZ_TEST_ENGINE !== '1' && 'set
   const home = tempDir('sz-engine-');
   const security = fakeSecurity();
   const config = testConfig(home.dir, { listen: { port: await freePort() }, gateway: { port: await freePort() }, engines: { claudeCode: { enabled: false } }, runtime: { memoryMb: 1024 } });
-  const daemon = await createDaemon(config, quietLog, { securityRun: security.run, anthropic: fakeModel(), gatewayUpstreams: { anthropic: upstream.url, openai: upstream.url } });
+  // Tests never ask a real provider whether a key is good: the key here is made up, and the upstream is a stand-in.
+  const daemon = await createDaemon(config, quietLog, { securityRun: security.run, anthropic: fakeModel(), gatewayUpstreams: { anthropic: upstream.url, openai: upstream.url }, checkKey: async () => 'accepted' });
   await daemon.start();
   const { studio, sandboxes, events, store } = daemon;
   const project = studio.createProject(OWNER, { name: 'Engine test', slug: `it-${randomBytes(4).toString('hex')}`, template: 'web-vite-react' });
@@ -113,7 +117,8 @@ test('real container engine', { skip: process.env.SZ_TEST_ENGINE !== '1' && 'set
       assert.equal(upstream.requests.at(-1)?.headers['x-api-key'], REAL_KEY, 'the provider saw the real key');
       assert.ok(!JSON.stringify(upstream.requests).includes(token), 'and never the sandbox token');
       assert.match(await call('szg_not-the-right-token-aaaaaaaaaaaaaaaaaaa'), /^401\n/);
-      assert.equal(store.projectTokensSince(project.id, 0), 195, 'metered into the ledger');
+      // 150 input (30 of them re-read from the prompt cache, which the budget counts at a tenth) and 45 output.
+      assert.equal(store.projectTokensSince(project.id, 0), 168, 'metered into the ledger');
     });
 
     await t.test('the control socket is not open to sandboxes', async () => {
@@ -169,7 +174,15 @@ test('real container engine', { skip: process.env.SZ_TEST_ENGINE !== '1' && 'set
     });
 
     await t.test('visual audit through the QA browser container', async () => {
+      // The dev server here refuses a request by container name, as Vite does. The QA browser asks by address,
+      // so what it measures is the page; a route that is not there is a load failure, not a screen to review.
+      const names = await sh('getent hosts $(hostname) | cut -d" " -f1');
+      t.diagnostic(`sandbox address on its network: ${names}`);
       const report = await studio.runAudit(OWNER, project.id, ['/']);
+      assert.ok(report.findings.every((f) => f.rule !== 'render/load-failed'), JSON.stringify(report.findings.map((f) => `${f.rule}: ${f.message}`)));
+      const missing = await studio.runAudit(OWNER, project.id, ['/no-such-page']);
+      assert.deepEqual([...new Set(missing.findings.map((f) => `${f.rule}: ${f.message}`))], ['render/load-failed: The page could not be loaded (HTTP 404: the route did not serve the app).']);
+      assert.deepEqual([missing.screenshots.length, missing.passed], [0, false]);
       const domRules = [...new Set(report.findings.filter((f) => f.source === 'dom').map((f) => f.rule))];
       assert.deepEqual([...new Set(report.screenshots.map((s) => s.viewport))], ['iphone-15-pro', 'ipad-pro-11', 'desktop-1440']);
       assert.deepEqual(domRules, ['type/font-not-loaded'], JSON.stringify(report.findings.map((f) => `${f.rule}: ${f.message}`)));
