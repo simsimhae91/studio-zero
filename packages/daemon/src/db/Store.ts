@@ -945,8 +945,14 @@ export class Store {
     return r ? toScratchpad(r) : null;
   }
 
-  listScratchpads(): Scratchpad[] {
-    return this.#all(`SELECT * FROM scratchpads WHERE state <> 'archived' ORDER BY updated_at DESC LIMIT 200`).map(toScratchpad);
+  /** The notes in use, or (`archived`) the ones put away. Never both: a list is one or the other. */
+  listScratchpads(archived = false): Scratchpad[] {
+    return this.#all(`SELECT * FROM scratchpads WHERE state ${archived ? '=' : '<>'} 'archived' ORDER BY updated_at DESC LIMIT 200`).map(toScratchpad);
+  }
+
+  /** Removes a note. Its entries, spec sections and decisions go with it (ON DELETE CASCADE); a knowledge job keeps its row and loses the link. */
+  deleteScratchpad(id: string): void {
+    this.#run('DELETE FROM scratchpads WHERE id = :id', { id });
   }
 
   updateScratchpad(id: string, patch: Partial<{ title: string; state: ScratchState; projectId: string }>, now: number): Scratchpad {

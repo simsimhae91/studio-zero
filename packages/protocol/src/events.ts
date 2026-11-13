@@ -129,6 +129,8 @@ export const EventBody = z.discriminatedUnion('type', [
   z.object({ type: z.literal('checkpoint.forked'), checkpointId: z.string(), branch: z.string() }),
   z.object({ type: z.literal('scratch.entry'), scratchId: z.string(), seq: z.number().int() }),
   z.object({ type: z.literal('scratch.state'), scratchId: z.string(), state: ScratchState }),
+  /** A note was renamed or deleted: what lists of notes reload on. */
+  z.object({ type: z.literal('scratch.changed'), scratchId: z.string(), change: z.enum(['renamed', 'deleted']) }),
   /** The agent is working on a scratchpad turn (true) or has finished it (false). */
   z.object({ type: z.literal('scratch.thinking'), scratchId: z.string(), active: z.boolean(), error: z.string().nullable() }),
   z.object({ type: z.literal('knowledge.state'), jobId: z.string(), state: z.enum(['running', 'succeeded', 'failed']), step: z.string().nullable() }),

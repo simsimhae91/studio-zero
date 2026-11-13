@@ -109,7 +109,7 @@ export function createHandlers(studio: Studio): Handlers {
     'kirby.reject': (p) => studio.kirbyReject(p.proposalId),
 
     'scratch.create': (p) => studio.createScratchpad(OWNER, p, 'desktop'),
-    'scratch.list': () => ({ scratchpads: studio.listScratchpads() }),
+    'scratch.list': (p) => ({ scratchpads: studio.listScratchpads(p.archived ?? false) }),
     'scratch.get': (p) => studio.scratchView(p.scratchId),
     'scratch.say': (p) => {
       studio.scratchSay(p.scratchId, p.text);
@@ -125,10 +125,16 @@ export function createHandlers(studio: Studio): Handlers {
     },
     'scratch.promote': (p) => studio.promoteScratchpad(OWNER, p, 'desktop'),
     'scratch.archive': (p) => studio.archiveScratchpad(p.scratchId),
+    'scratch.restore': (p) => studio.restoreScratchpad(p.scratchId),
+    'scratch.rename': (p) => studio.renameScratchpad(p.scratchId, p.title),
+    'scratch.delete': (p) => (studio.deleteScratchpad(p.scratchId), { deleted: true as const }),
+    'scratch.stop': (p) => ({ stopped: studio.stopScratchpad(p.scratchId) }),
 
     'research.start': (p) => studio.startResearch(OWNER, p, 'desktop'),
     'documents.compile': (p) => studio.compileDocument(OWNER, p, 'desktop'),
     'knowledge.list': () => ({ jobs: studio.listKnowledge() }),
+    'knowledge.cancel': (p) => (studio.cancelKnowledge(p.jobId), { accepted: true as const }),
+    'knowledge.retry': (p) => studio.retryKnowledge(OWNER, p.jobId),
     'knowledge.get': (p) => studio.getKnowledge(p.jobId),
     'documents.export': async (p) => ({ artifactId: await studio.exportDocument(p.jobId) }),
     'ax.calibration': () => studio.calibration(),

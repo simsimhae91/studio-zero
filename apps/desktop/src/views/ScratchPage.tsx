@@ -1,11 +1,12 @@
-import { Archive, FileDown, FileText } from 'lucide-react';
+import { Archive, Check, Copy, FileDown, FileText, MoreHorizontal, Pencil, RotateCw, Square, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import type { AxBlock, AxResponse, DocumentKind, KnowledgeJob, ScratchMove, Template } from '@studio-zero/protocol';
 import { Block, Markdown } from '@studio-zero/ax/react';
 import { creatableTemplates, tokens } from '../lib/format.ts';
 import { useAction, useQuery, useStudio } from '../lib/studio.tsx';
-import { Button, Problem, Segmented, Sheet, Status, TitlebarSpace } from '../ui.tsx';
+import { Button, Menu, MenuItem, MenuSeparator, Problem, Segmented, Sheet, Status, TitlebarSpace } from '../ui.tsx';
 import { EnginePicker, useEngineChoice } from './enginePicker.tsx';
+import { DeleteNoteModal, RenameNoteModal } from './noteActions.tsx';
 import { Composer, Entry, OwnWords, Working, useStickToEnd } from './page.tsx';
 import { scratchState, type Route } from './Shell.tsx';
 
@@ -29,7 +30,9 @@ const answerable = (block: AxBlock): block is Extract<AxBlock, { type: 'choice' 
 /** A worksheet: one page where the owner and the studio think something through, in order, top to bottom. */
 export function ScratchPage({ scratchId, onOpen, onChanged }: { scratchId: string; onOpen: (route: Route) => void; onChanged: () => void }) {
   const { backend, onEvent } = useStudio();
-  const view = useQuery('scratch.get', { scratchId }, ['scratch.entry', 'scratch.state', 'scratch.thinking', 'knowledge.state']);
+  const view = useQuery('scratch.get', { scratchId }, ['scratch.entry', 'scratch.state', 'scratch.thinking', 'scratch.changed', 'knowledge.state']);
+  const [renaming, setRenaming] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [turnError, setTurnError] = useState<string | null>(null);
   const [steps, setSteps] = useState<Record<string, string>>({});
   const [papers, setPapers] = useState(false);
@@ -58,12 +61,20 @@ export function ScratchPage({ scratchId, onOpen, onChanged }: { scratchId: strin
     onChanged();
     onOpen({ kind: 'home' });
   });
+  // Whatever the note has running can be stopped: its own turn, or a research or writing job.
+  const stop = useAction((jobId: string | null) => (jobId === null ? backend.call('scratch.stop', { scratchId }) : backend.call('knowledge.cancel', { jobId })));
 
   if (!data) {
     return (
-      <div className="page p-10">
+      <div className="page flex flex-col items-start gap-4 p-10">
         <TitlebarSpace />
-        {view.error ? <Problem>{view.error}</Problem> : null}
+        {view.error ? (
+          <>
+            <Problem>{view.error}</Problem>
+            {/* A note that was deleted, or that cannot be read: there is still a way out of this page. */}
+            <Button onClick={() => onOpen({ kind: 'home' })}>처음 화면으로</Button>
+          </>
+        ) : null}
       </div>
     );
   }
@@ -93,11 +104,26 @@ export function ScratchPage({ scratchId, onOpen, onChanged }: { scratchId: strin
                   프로젝트 열기
                 </Button>
               ) : null}
-              {open ? (
-                <Button busy={archive.busy} onClick={() => void archive.run()} icon={<Archive className="size-4" aria-hidden />}>
+              {/* In every state: a note that was handed off is as much in the way of the list as one that was abandoned. */}
+              <Menu
+                align="start"
+                trigger={
+                  <Button aria-label="노트 메뉴" icon={<MoreHorizontal className="size-4" aria-hidden />}>
+                    더 보기
+                  </Button>
+                }
+              >
+                <MenuItem onSelect={() => setRenaming(true)} icon={<Pencil className="size-4" aria-hidden />}>
+                  이름 변경
+                </MenuItem>
+                <MenuItem onSelect={() => void archive.run()} icon={<Archive className="size-4" aria-hidden />}>
                   보관
-                </Button>
-              ) : null}
+                </MenuItem>
+                <MenuSeparator />
+                <MenuItem danger onSelect={() => setDeleting(true)} icon={<Trash2 className="size-4" aria-hidden />}>
+                  노트 삭제
+                </MenuItem>
+              </Menu>
             </div>
             {archive.error ? <Problem>{archive.error}</Problem> : null}
           </header>
@@ -115,19 +141,26 @@ export function ScratchPage({ scratchId, onOpen, onChanged }: { scratchId: strin
                 </Entry>
               );
             })}
-            {data.thinking ? <Working>스튜디오가 생각하는 중</Working> : null}
+            {data.thinking ? (
+              <Working>
+                스튜디오가 생각하는 중
+                <StopButton busy={stop.busy} onStop={() => void stop.run(null)} />
+              </Working>
+            ) : null}
             {running.map((job) => (
               <Working key={job.id}>
                 {job.kind === 'research' ? '조사' : '문서 작성'}: {steps[job.id] ?? '시작'}
+                <StopButton busy={stop.busy} onStop={() => void stop.run(job.id)} />
               </Working>
             ))}
           </ol>
 
           <div className="flex flex-col gap-6 px-4 pt-8 md:px-10">
             {respond.error ? <Problem>{respond.error}</Problem> : null}
+            {stop.error ? <Problem>{stop.error}</Problem> : null}
             {turnError ? <Problem>스튜디오가 이 차례를 마치지 못했습니다. {turnError}</Problem> : null}
             {data.jobs.filter((j) => j.state !== 'running').map((job) => (
-              <JobResult key={job.id} job={job} />
+              <JobResult key={job.id} job={job} latest={job.id === data.jobs.at(-1)?.id} />
             ))}
             {pad.mode === 'think' && open ? (
               <Promote
@@ -169,6 +202,15 @@ export function ScratchPage({ scratchId, onOpen, onChanged }: { scratchId: strin
       <Sheet open={papers} onOpenChange={setPapers} title="명세와 결정 기록" description="만들기로 넘어갈 때 이 두 문서가 그대로 프로젝트에 들어갑니다." wide>
         <Papers spec={data.spec} decisionLog={data.decisionLog} />
       </Sheet>
+      <RenameNoteModal note={renaming ? pad : null} onOpenChange={(next) => !next && setRenaming(false)} onRenamed={() => (view.reload(), onChanged())} />
+      <DeleteNoteModal
+        note={deleting ? pad : null}
+        onOpenChange={(next) => !next && setDeleting(false)}
+        onDeleted={() => {
+          onChanged();
+          onOpen({ kind: 'home' });
+        }}
+      />
     </>
   );
 }
@@ -260,19 +302,47 @@ function Promote({ scratchId, ready, missing, busy, published, writing, onOpen, 
   );
 }
 
+/** Stops what is running, from where it says it is running. */
+function StopButton({ busy, onStop }: { busy: boolean; onStop: () => void }) {
+  return (
+    <button type="button" disabled={busy} onClick={onStop} className="inline-flex min-h-9 pointer-coarse:min-h-11 items-center gap-2 rounded-md border border-control-border px-3 text-sm font-medium text-fg hover:bg-sunken disabled:opacity-60">
+      <Square className="size-3" aria-hidden />
+      멈추기
+    </button>
+  );
+}
+
 /** A finished research or writing job: what it cost, why it failed if it did, and the document as a file. */
-function JobResult({ job }: { job: KnowledgeJob }) {
+function JobResult({ job, latest }: { job: KnowledgeJob; latest: boolean }) {
   const { backend } = useStudio();
   const [file, setFile] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const retry = useAction(() => backend.call('knowledge.retry', { jobId: job.id }));
+  // The document as text, for pasting somewhere else: the page shows it, and a PDF is not always what is wanted.
+  const copy = useAction(async () => {
+    const { markdown } = await backend.call('knowledge.get', { jobId: job.id });
+    await navigator.clipboard.writeText(markdown);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  });
   const exportPdf = useAction(async () => {
     const { artifactId } = await backend.call('documents.export', { jobId: job.id });
     setFile(await backend.artifactUrl(artifactId));
   });
   if (job.state === 'failed') {
     return (
-      <Problem>
-        {job.kind === 'research' ? '조사' : '문서 작성'}를 마치지 못했습니다. {job.error}
-      </Problem>
+      <div className="flex flex-col items-start gap-3">
+        <Problem>
+          {job.kind === 'research' ? '조사' : '문서 작성'}를 마치지 못했습니다. {job.error}
+        </Problem>
+        {retry.error ? <Problem>{retry.error}</Problem> : null}
+        {/* Only the latest attempt offers another: a job that was run again has its answer below. */}
+        {latest ? (
+          <Button busy={retry.busy} onClick={() => void retry.run()} icon={<RotateCw className="size-4" aria-hidden />}>
+            다시 시도
+          </Button>
+        ) : null}
+      </div>
     );
   }
   return (
@@ -280,7 +350,11 @@ function JobResult({ job }: { job: KnowledgeJob }) {
       <p className="text-base text-fg-muted">
         {job.kind === 'research' ? '조사' : '문서'} 완료, 토큰 {tokens(job.spentTokens)} 사용
       </p>
-      {exportPdf.error ? <Problem>{exportPdf.error}</Problem> : null}
+      {(exportPdf.error ?? copy.error) ? <Problem>{exportPdf.error ?? copy.error}</Problem> : null}
+      <div className="flex flex-wrap gap-2">
+      <Button busy={copy.busy} onClick={() => void copy.run()} icon={copied ? <Check className="size-4 text-success" aria-hidden /> : <Copy className="size-4" aria-hidden />}>
+        {copied ? '복사됨' : '글로 복사'}
+      </Button>
       {file ? (
         <a href={file} download={`${job.title}.pdf`} className="inline-flex min-h-11 items-center gap-2 rounded-md bg-accent px-4 text-sm font-medium text-on-accent">
           <FileDown className="size-4" aria-hidden />
@@ -291,6 +365,7 @@ function JobResult({ job }: { job: KnowledgeJob }) {
           PDF로 만들기
         </Button>
       )}
+      </div>
     </section>
   );
 }

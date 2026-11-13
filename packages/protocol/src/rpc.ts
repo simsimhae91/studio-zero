@@ -225,7 +225,8 @@ export const methods = {
 
   // Scratchpad: thinking, research and drafting without a sandbox. Promotion turns one into a project or a document.
   'scratch.create': { params: z.object({ opening: z.string().min(1).max(8000), mode: ScratchMode }), result: Scratchpad },
-  'scratch.list': { params: empty, result: z.object({ scratchpads: z.array(Scratchpad) }) },
+  // `archived: true` lists the notes that were put away, and only those.
+  'scratch.list': { params: z.object({ archived: z.boolean().optional() }), result: z.object({ scratchpads: z.array(Scratchpad) }) },
   'scratch.get': {
     params: z.object({ scratchId: z.string() }),
     result: z.object({ scratchpad: Scratchpad, entries: z.array(ScratchEntry), spec: z.string(), decisionLog: z.string(), readiness: Readiness, thinking: z.boolean(), jobs: z.array(KnowledgeJob) }),
@@ -248,6 +249,13 @@ export const methods = {
     result: PromotionResult,
   },
   'scratch.archive': { params: z.object({ scratchId: z.string() }), result: Scratchpad },
+  /** Brings an archived note back into the list. */
+  'scratch.restore': { params: z.object({ scratchId: z.string() }), result: Scratchpad },
+  'scratch.rename': { params: z.object({ scratchId: z.string(), title: z.string().trim().min(1).max(120) }), result: Scratchpad },
+  /** Removes a note with its conversation, spec and decisions. Refused while it is thinking or a job of its own is running. */
+  'scratch.delete': { params: z.object({ scratchId: z.string() }), result: z.object({ deleted: z.literal(true) }) },
+  /** Stops the turn a note is thinking through. `stopped` is false when there was none. */
+  'scratch.stop': { params: z.object({ scratchId: z.string() }), result: z.object({ stopped: z.boolean() }) },
 
   'research.start': { params: z.object({ question: z.string().min(4).max(2000), depth: z.enum(['brief', 'deep']), scratchId: z.string().optional() }), result: KnowledgeJob },
   'documents.compile': {
@@ -255,6 +263,10 @@ export const methods = {
     result: KnowledgeJob,
   },
   'knowledge.list': { params: empty, result: z.object({ jobs: z.array(KnowledgeJob) }) },
+  /** Stops a running research or document job. It ends as failed, with the reason saying it was stopped. */
+  'knowledge.cancel': { params: z.object({ jobId: z.string() }), result: z.object({ accepted: z.literal(true) }) },
+  /** Starts a failed job again from what it was asked. A new job; the failed one stays on record. */
+  'knowledge.retry': { params: z.object({ jobId: z.string() }), result: KnowledgeJob },
   'knowledge.get': { params: z.object({ jobId: z.string() }), result: z.object({ job: KnowledgeJob, markdown: z.string(), report: ResearchReport.nullable(), lint: z.array(TextFinding) }) },
   /** Renders a finished document as a styled PDF and returns the artifact that holds it. */
   'documents.export': { params: z.object({ jobId: z.string() }), result: z.object({ artifactId: z.string() }) },

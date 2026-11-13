@@ -753,8 +753,8 @@ export class Studio implements PromotionHost {
     return pad;
   }
 
-  listScratchpads(): Scratchpad[] {
-    return this.#d.scratch.list();
+  listScratchpads(archived = false): Scratchpad[] {
+    return this.#d.scratch.list(archived);
   }
 
   scratchView(scratchId: string): ScratchView {
@@ -796,6 +796,34 @@ export class Studio implements PromotionHost {
 
   archiveScratchpad(scratchId: string): Scratchpad {
     return this.#d.scratch.archive(scratchId);
+  }
+
+  restoreScratchpad(scratchId: string): Scratchpad {
+    return this.#d.scratch.restore(scratchId);
+  }
+
+  renameScratchpad(scratchId: string, title: string): Scratchpad {
+    return this.#d.scratch.rename(scratchId, title);
+  }
+
+  /** Removes a note for good. Not while something of its own is still running: that would finish into nothing. */
+  deleteScratchpad(scratchId: string): void {
+    if (this.#d.knowledge.busyFor(scratchId)) throw new ConflictError('이 노트의 조사나 문서 작업이 아직 진행 중입니다. 멈춘 뒤에 지울 수 있습니다.');
+    this.#d.scratch.remove(scratchId);
+  }
+
+  stopScratchpad(scratchId: string): boolean {
+    return this.#d.scratch.stop(scratchId);
+  }
+
+  cancelKnowledge(jobId: string): void {
+    this.#d.knowledge.cancel(jobId);
+  }
+
+  async retryKnowledge(actor: Actor, jobId: string): Promise<KnowledgeJob> {
+    const job = this.#d.knowledge.get(jobId).job;
+    await this.#d.policy.authorize(actor, { kind: 'knowledge.run', jobKind: job.kind });
+    return this.#d.knowledge.retry(jobId);
   }
 
   // -------------------------------------------------------------- knowledge

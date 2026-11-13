@@ -469,7 +469,8 @@ const handlers: Handlers = {
   'lessons.list': (p) => ({ lessons: lessons.filter((l) => p.projectId === undefined || l.projectId === p.projectId) }),
   'evals.list': (p) => ({ evals: evals.filter((e) => e.projectId === p.projectId) }),
   'kirby.proposals': (p) => ({ proposals: proposals.filter((c) => c.projectId === p.projectId) }),
-  'scratch.list': () => ({ scratchpads: pads }),
+  // One note was put away: it is listed apart, under its own heading.
+  'scratch.list': (p) => ({ scratchpads: p.archived ? [{ ...pads[0]!, id: 'scr_shelved', title: '견적서 자동 발송을 넣을지', state: 'archived' as const }] : pads }),
   'scratch.get': (p) =>
     p.scratchId === 'scr_capex'
       ? { scratchpad: pads[1]!, entries: capexEntries, spec: '', decisionLog: '', readiness: { ready: false, missing: ['기획 명세의 "문제" 항목'] }, thinking: false, jobs: [capexJob] }

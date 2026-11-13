@@ -42,6 +42,8 @@ export class ScratchService {
   readonly #log: Logger;
   readonly #running = new Map<string, Promise<void>>();
   readonly #queued = new Map<string, string[]>();
+  /** How to stop the turn each thinking note is in. */
+  readonly #stops = new Map<string, AbortController>();
 
   constructor(deps: { store: Store; events: EventLog; claude: ClaudeClient; calibration: ConfidenceCalibration; clock: Clock; log: Logger }) {
     this.#store = deps.store;
@@ -62,8 +64,8 @@ export class ScratchService {
     return pad;
   }
 
-  list(): Scratchpad[] {
-    return this.#store.listScratchpads();
+  list(archived = false): Scratchpad[] {
+    return this.#store.listScratchpads(archived);
   }
 
   view(scratchId: string): ScratchView {
@@ -114,9 +116,45 @@ export class ScratchService {
     if (this.#store.getScratchpad(scratchId)) this.#append(scratchId, { author: 'agent', text: null, response: null, blocks });
   }
 
+  /** Puts a note away, whatever state it is in: a finished one is as much in the way as an abandoned one. */
   archive(scratchId: string): Scratchpad {
     this.#pad(scratchId);
     return this.#setState(scratchId, 'archived');
+  }
+
+  /**
+   * Brings an archived note back. The state it had is not kept, and does not need to be: a note that became a
+   * project is that project again, and any other is one that can be talked to.
+   */
+  restore(scratchId: string): Scratchpad {
+    const pad = this.#pad(scratchId);
+    if (pad.state !== 'archived') throw new ConflictError('보관한 노트가 아닙니다.');
+    return this.#setState(scratchId, pad.projectId === null ? 'exploring' : 'promoted');
+  }
+
+  rename(scratchId: string, title: string): Scratchpad {
+    this.#pad(scratchId);
+    const pad = this.#store.updateScratchpad(scratchId, { title: title.trim().slice(0, 120) }, this.#clock());
+    this.#events.emit(SCOPE, { type: 'scratch.changed', scratchId, change: 'renamed' });
+    return pad;
+  }
+
+  /** Removes a note for good. Not while it is thinking: the turn would write into rows that are gone. */
+  remove(scratchId: string): void {
+    this.#pad(scratchId);
+    if (this.#running.has(scratchId)) throw new ConflictError('아직 생각하는 중인 노트입니다. 멈춘 뒤에 지울 수 있습니다.');
+    this.#store.deleteScratchpad(scratchId);
+    this.#events.emit(SCOPE, { type: 'scratch.changed', scratchId, change: 'deleted' });
+  }
+
+  /** Stops the turn a note is in, and drops what was queued behind it. False when it was not thinking. */
+  stop(scratchId: string): boolean {
+    this.#pad(scratchId);
+    const turn = this.#stops.get(scratchId);
+    if (!turn) return false;
+    this.#queued.delete(scratchId);
+    turn.abort();
+    return true;
   }
 
   /** The note became a project: from here on it is that project. */
@@ -168,11 +206,18 @@ export class ScratchService {
       while (next.length > 0) {
         this.#events.emit(SCOPE, { type: 'scratch.thinking', scratchId, active: true, error: null });
         let error: string | null = null;
+        const stop = new AbortController();
+        this.#stops.set(scratchId, stop);
         try {
-          await this.#turn(scratchId, next.filter(Boolean).join('\n\n'));
+          await this.#turn(scratchId, next.filter(Boolean).join('\n\n'), stop.signal);
         } catch (err) {
-          error = errorMessage(err);
-          this.#log.warn({ scratchId, err: error }, 'scratchpad turn failed');
+          // Stopped by the owner is not a failure: nothing is said about it beyond the thinking ending.
+          if (!stop.signal.aborted) {
+            error = errorMessage(err);
+            this.#log.warn({ scratchId, err: error }, 'scratchpad turn failed');
+          }
+        } finally {
+          this.#stops.delete(scratchId);
         }
         next = this.#queued.get(scratchId) ?? [];
         this.#queued.delete(scratchId);
@@ -186,7 +231,7 @@ export class ScratchService {
     this.#running.set(scratchId, run);
   }
 
-  async #turn(scratchId: string, instruction: string): Promise<void> {
+  async #turn(scratchId: string, instruction: string, signal: AbortSignal): Promise<void> {
     const pad = this.#pad(scratchId);
     const entries = this.#store.listScratchEntries(scratchId);
     const blocksById = new Map(entries.flatMap((e) => e.blocks.flatMap((b) => ('id' in b ? [[b.id, b] as const] : []))));
@@ -256,7 +301,7 @@ export class ScratchService {
       },
     });
 
-    const result = await runToolLoop(this.#claude, { scope: SCOPE, model: MODEL, effort: 'high', system: SCRATCH_SYSTEM_PROMPT, messages, tools: [present, recordDecision, updateSpec], maxTurns: 10 });
+    const result = await runToolLoop(this.#claude, { scope: SCOPE, model: MODEL, effort: 'high', system: SCRATCH_SYSTEM_PROMPT, messages, tools: [present, recordDecision, updateSpec], maxTurns: 10, signal });
     // Anything the model said outside `present` is still the owner's to read.
     if (result.finalText && !this.#store.listScratchEntries(scratchId).some((e) => e.seq > (entries.at(-1)?.seq ?? 0) && e.author === 'agent')) {
       this.#append(scratchId, { author: 'agent', text: null, response: null, blocks: [{ type: 'text', markdown: result.finalText.slice(0, 12_000) }] });

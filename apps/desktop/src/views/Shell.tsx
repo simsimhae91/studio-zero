@@ -1,11 +1,12 @@
-import { Coffee, Globe, Lightbulb, Menu as MenuIcon, Moon, MoreHorizontal, PenLine, Pencil, Plus, RotateCw, Settings as SettingsIcon, Smartphone, Star, Trash2 } from 'lucide-react';
+import { Archive, ArchiveRestore, Coffee, Globe, Lightbulb, Menu as MenuIcon, Moon, MoreHorizontal, PenLine, Pencil, Plus, RotateCw, Settings as SettingsIcon, Smartphone, Star, Trash2 } from 'lucide-react';
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
-import type { PowerMode, Project, SandboxState, SubscriptionQuota, Template } from '@studio-zero/protocol';
+import type { PowerMode, Project, SandboxState, Scratchpad, SubscriptionQuota, Template } from '@studio-zero/protocol';
 import { creatableTemplates, powerLabel, slugify, stamp, subscriptionLabel, tokens } from '../lib/format.ts';
 import { markTrayPower, onTrayPowerRequest } from '../lib/platform.ts';
 import { useAction, useQuery, useStudio } from '../lib/studio.tsx';
 import { Button, Field, IconButton, Menu, MenuItem, MenuSeparator, Modal, Problem, Segmented, Sheet, Status, TitlebarSpace, inputClass } from '../ui.tsx';
 import { Home } from './Home.tsx';
+import { DeleteNoteModal, RenameNoteModal } from './noteActions.tsx';
 import { DeleteProjectModal, RenameProjectModal, restartSandbox } from './projectActions.tsx';
 import { ProjectPage } from './ProjectPage.tsx';
 import { ScratchPage } from './ScratchPage.tsx';
@@ -30,7 +31,9 @@ function restore(): Route {
 export function Shell({ onDisconnect }: { onDisconnect: () => void }) {
   const { backend, link } = useStudio();
   const projects = useQuery('projects.list', {}, ['sandbox.state', 'task.state', 'project.changed']);
-  const pads = useQuery('scratch.list', {}, ['scratch.state', 'scratch.entry']);
+  const pads = useQuery('scratch.list', {}, ['scratch.state', 'scratch.entry', 'scratch.changed']);
+  // What was put away: listed apart, so that putting a note away is not the same as losing it.
+  const shelved = useQuery('scratch.list', { archived: true }, ['scratch.state', 'scratch.changed']);
   const approvals = useQuery('approvals.list', { state: 'pending' }, ['approval.requested', 'approval.resolved']);
   const [route, setRoute] = useState<Route>(restore);
   const [settings, setSettings] = useState(false);
@@ -38,6 +41,8 @@ export function Shell({ onDisconnect }: { onDisconnect: () => void }) {
   const [creating, setCreating] = useState(false);
   const [renaming, setRenaming] = useState<Project | null>(null);
   const [deleting, setDeleting] = useState<Project | null>(null);
+  const [renamingNote, setRenamingNote] = useState<Scratchpad | null>(null);
+  const [deletingNote, setDeletingNote] = useState<Scratchpad | null>(null);
 
   useEffect(() => localStorage.setItem(ROUTE_KEY, JSON.stringify(route)), [route]);
   const go = (next: Route): void => {
@@ -47,10 +52,16 @@ export function Shell({ onDisconnect }: { onDisconnect: () => void }) {
   const reload = (): void => {
     projects.reload();
     pads.reload();
+    shelved.reload();
   };
   const restart = useAction(async (projectId: string) => {
     await restartSandbox(backend, projectId);
     projects.reload();
+  });
+  const shelve = useAction(async (note: Scratchpad, away: boolean) => {
+    await backend.call(away ? 'scratch.archive' : 'scratch.restore', { scratchId: note.id });
+    reload();
+    if (away && route.kind === 'scratch' && route.id === note.id) go({ kind: 'home' });
   });
 
   const projectList = projects.data?.projects ?? [];
@@ -59,6 +70,7 @@ export function Shell({ onDisconnect }: { onDisconnect: () => void }) {
   for (const a of approvals.data?.approvals ?? []) if (a.projectId) waiting.set(a.projectId, (waiting.get(a.projectId) ?? 0) + 1);
   // A note that became a project lives on as that project; one that became a document keeps its page.
   const padList = (pads.data?.scratchpads ?? []).filter((p) => p.state !== 'archived' && !(p.state === 'promoted' && p.projectId));
+  const shelvedList = shelved.data?.scratchpads ?? [];
   const linkStatus = backend.demo ? <Status tone="warn">데모 데이터</Status> : link === 'connected' ? <Status tone="good">{backend.host}</Status> : <Status tone="warn">다시 연결하는 중</Status>;
 
   const index = (
@@ -94,9 +106,18 @@ export function Shell({ onDisconnect }: { onDisconnect: () => void }) {
         {restart.error ? <Problem>{restart.error}</Problem> : null}
         <Group title="작업 노트" empty="생각 정리, 조사, 문서가 여기에 쌓입니다">
           {padList.map((p) => (
-            <RailRow key={p.id} current={route.kind === 'scratch' && route.id === p.id} onClick={() => go({ kind: 'scratch', id: p.id })} title={p.title} meta={scratchState[p.state]} />
+            <NoteCard key={p.id} note={p} current={route.kind === 'scratch' && route.id === p.id} onOpen={() => go({ kind: 'scratch', id: p.id })} onRename={() => (setMenu(false), setRenamingNote(p))} onShelve={() => void shelve.run(p, true)} onDelete={() => (setMenu(false), setDeletingNote(p))} />
           ))}
         </Group>
+        {shelve.error ? <Problem>{shelve.error}</Problem> : null}
+        {shelvedList.length > 0 ? (
+          <details className="flex flex-col gap-1">
+            <summary className="flex min-h-11 cursor-default items-center rounded-md px-2 text-sm font-medium text-fg-muted hover:bg-bg hover:text-fg">보관한 노트 {shelvedList.length}개</summary>
+            {shelvedList.map((p) => (
+              <NoteCard key={p.id} note={p} current={false} onOpen={() => void shelve.run(p, false).then(() => go({ kind: 'scratch', id: p.id }))} onRename={() => (setMenu(false), setRenamingNote(p))} onShelve={() => void shelve.run(p, false)} onDelete={() => (setMenu(false), setDeletingNote(p))} />
+            ))}
+          </details>
+        ) : null}
       </nav>
     </>
   );
@@ -164,6 +185,15 @@ export function Shell({ onDisconnect }: { onDisconnect: () => void }) {
         }}
       />
       <RenameProjectModal project={renaming} onOpenChange={(open) => !open && setRenaming(null)} onRenamed={reload} />
+      <RenameNoteModal note={renamingNote} onOpenChange={(open) => !open && setRenamingNote(null)} onRenamed={reload} />
+      <DeleteNoteModal
+        note={deletingNote}
+        onOpenChange={(open) => !open && setDeletingNote(null)}
+        onDeleted={(note) => {
+          reload();
+          if (route.kind === 'scratch' && route.id === note.id) go({ kind: 'home' });
+        }}
+      />
       <DeleteProjectModal
         project={deleting}
         onOpenChange={(open) => !open && setDeleting(null)}
@@ -313,12 +343,37 @@ function Group({ title, empty, children }: { title: string; empty: string; child
   );
 }
 
-function RailRow({ title, meta, current, onClick }: { title: string; meta: string; current: boolean; onClick: () => void }) {
+/**
+ * A work note in the rail, with a menu for what can be done to it without opening it, as a project has.
+ * A note that was put away is listed under its own heading: opening it or "꺼내기" brings it back.
+ */
+function NoteCard({ note, current, onOpen, onRename, onShelve, onDelete }: { note: Scratchpad; current: boolean; onOpen: () => void; onRename: () => void; onShelve: () => void; onDelete: () => void }) {
+  const away = note.state === 'archived';
   return (
-    <button type="button" onClick={onClick} aria-current={current ? 'page' : undefined} title={title} className={`flex min-h-11 flex-col items-start justify-center rounded-md px-2 py-1 text-left ${current ? 'bg-bg' : 'hover:bg-bg'}`}>
-      <span className="line-clamp-2 break-words text-sm font-medium">{title}</span>
-      <span className="text-sm text-fg-muted">{meta}</span>
-    </button>
+    <div className={`rail-item flex items-center rounded-md ${current ? 'bg-bg' : 'hover:bg-bg'}`}>
+      <button type="button" onClick={onOpen} aria-current={current ? 'page' : undefined} title={note.title} className="flex min-h-11 min-w-0 flex-1 flex-col items-start justify-center rounded-md py-1 pl-2 text-left">
+        <span className="line-clamp-2 break-words text-sm font-medium">{note.title}</span>
+        <span className="text-sm text-fg-muted">{scratchState[note.state]}</span>
+      </button>
+      <Menu
+        trigger={
+          <button type="button" aria-label={`${note.title} 메뉴`} className="rail-menu inline-flex size-11 shrink-0 items-center justify-center rounded-md text-fg-muted hover:text-fg">
+            <MoreHorizontal className="size-4" aria-hidden />
+          </button>
+        }
+      >
+        <MenuItem onSelect={onRename} icon={<Pencil className="size-4" aria-hidden />}>
+          이름 변경
+        </MenuItem>
+        <MenuItem onSelect={onShelve} icon={away ? <ArchiveRestore className="size-4" aria-hidden /> : <Archive className="size-4" aria-hidden />}>
+          {away ? '다시 꺼내기' : '보관'}
+        </MenuItem>
+        <MenuSeparator />
+        <MenuItem danger onSelect={onDelete} icon={<Trash2 className="size-4" aria-hidden />}>
+          노트 삭제
+        </MenuItem>
+      </Menu>
+    </div>
   );
 }
 
