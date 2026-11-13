@@ -24,6 +24,7 @@ li button{min-height:44px;background:#555}
 <button id="opener">메뉴 열기</button>
 <button id="after" class="pressable">메뉴 다음 버튼</button>
 <button id="silent">조용한 버튼</button>
+<details style="display:flex"><summary class="pressable">접힌 목록</summary><button id="folded">접힌 목록 안의 버튼</button></details>
 <button id="hover">가리키면 밝아짐</button>
 <div id="js" class="pad" role="button" tabindex="0">스크립트로 답함</div>
 <label class="row" id="row"><input type="checkbox" id="cb"> 줄이 답함</label>
@@ -76,7 +77,7 @@ test('a screen tried by hand: which controls answer a press, which focus can be 
     assert.deepEqual(phone.after, { clicks: [], checked: false }, 'every control was pressed and none was clicked');
     const silent = phone.probe.press.silent.map((c) => c.selector);
     assert.deepEqual(silent, ['#silent', '#hover', '#ring', 'ul > li:nth-of-type(1) > button.item', 'ul > li:nth-of-type(2) > button.item'], 'the button with no pressed state, the one that only answers a hovering pointer, the link with only a focus ring, and of five alike rows the two that were tried');
-    assert.deepEqual([phone.probe.press.answered, phone.probe.press.probed], [5, 10], 'answered: the CSS press, the menu that opens under the pointer, the button after it (the menu was dismissed first, so it could be reached), the script press, the row that answers for its checkbox. Not tried: the disabled button, the link in running text, the field');
+    assert.deepEqual([phone.probe.press.answered, phone.probe.press.probed], [6, 11], 'the summary of a closed list answers and is counted; the button folded away inside it is not on the screen and is not. Answered: the CSS press, the menu that opens under the pointer, the button after it (the menu was dismissed first, so it could be reached), the script press, the row that answers for its checkbox. Not tried: the disabled button, the link in running text, the field');
     assert.equal(phone.probe.press.silent[0]!.text, '조용한 버튼');
 
     // ---- at a desk: the pointer hovers, and the keyboard is a way in
@@ -98,7 +99,7 @@ test('a screen tried by hand: which controls answer a press, which focus can be 
       ...phone.probe.focus.hidden.slice(0, 4).map((c) => ['focus/not-visible', 'minor', 'tactility', c.selector]),
       ['motion/layout-shift', 'minor', 'responsive', null],
     ]);
-    assert.match(findings[0]!.message, /^"조용한 버튼" gives nothing back while it is held: the screen around it looks the same pressed as at rest\. \(5 of 10 controls tried answered\.\)$/);
+    assert.match(findings[0]!.message, /^"조용한 버튼" gives nothing back while it is held: the screen around it looks the same pressed as at rest\. \(6 of 11 controls tried answered\.\)$/);
     assert.match(findings[3]!.message, /1 more control\(s\) on this screen are the same/);
     assert.deepEqual(findings[0]!.bbox && [findings[0]!.bbox.w, findings[0]!.bbox.h], [345, 56], 'located as the audit locates things: a box in page pixels');
     assert.equal(interactionFindings(desk.probe, null, { viewport: 'desktop-1440', route: '/', touch: false }).find((f) => f.rule === 'focus/not-visible')!.severity, 'major', 'where a keyboard is the way in, focus nobody can see is a major defect');

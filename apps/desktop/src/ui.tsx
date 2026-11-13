@@ -1,7 +1,7 @@
 import * as Dialog from '@radix-ui/react-dialog';
 import * as Dropdown from '@radix-ui/react-dropdown-menu';
 import { LoaderCircle, X } from 'lucide-react';
-import type { ButtonHTMLAttributes, ReactElement, ReactNode } from 'react';
+import { useState, type ButtonHTMLAttributes, type ReactElement, type ReactNode } from 'react';
 
 /** See `.titlebar-space` in app.css. Place it as the first child of a pane that reaches the top of the window. */
 export function TitlebarSpace() {
@@ -40,6 +40,35 @@ export function Button({ variant = 'quiet', busy = false, icon, children, classN
       {busy ? <LoaderCircle className="size-4 animate-spin" aria-hidden /> : icon}
       {children}
     </button>
+  );
+}
+
+/**
+ * Something that cannot be taken back, behind a second press: the first says what will happen and offers a way
+ * out. For the small cases, where a whole dialog would be more than the act (a stored key, a tool server).
+ */
+export function ConfirmButton({ label, confirm, busy = false, disabled = false, onConfirm }: { label: string; confirm: string; busy?: boolean; disabled?: boolean; onConfirm: () => void }) {
+  const [asking, setAsking] = useState(false);
+  if (!asking) {
+    return (
+      <Button variant="danger" busy={busy} disabled={disabled} onClick={() => setAsking(true)}>
+        {label}
+      </Button>
+    );
+  }
+  return (
+    <span className="flex flex-wrap gap-2">
+      <Button
+        variant="danger"
+        onClick={() => {
+          setAsking(false);
+          onConfirm();
+        }}
+      >
+        {confirm}
+      </Button>
+      <Button onClick={() => setAsking(false)}>취소</Button>
+    </span>
   );
 }
 

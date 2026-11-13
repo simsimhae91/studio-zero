@@ -1,5 +1,5 @@
 import { Archive, ArchiveRestore, Coffee, Globe, Lightbulb, Menu as MenuIcon, Moon, MoreHorizontal, PenLine, Pencil, Plus, RotateCw, Settings as SettingsIcon, Smartphone, Star, Trash2 } from 'lucide-react';
-import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import type { PowerMode, Project, SandboxState, Scratchpad, SubscriptionQuota, Template } from '@studio-zero/protocol';
 import { creatableTemplates, powerLabel, slugify, stamp, subscriptionLabel, tokens } from '../lib/format.ts';
 import { markTrayPower, onTrayPowerRequest } from '../lib/platform.ts';
@@ -45,6 +45,15 @@ export function Shell({ onDisconnect }: { onDisconnect: () => void }) {
   const [deletingNote, setDeletingNote] = useState<Scratchpad | null>(null);
 
   useEffect(() => localStorage.setItem(ROUTE_KEY, JSON.stringify(route)), [route]);
+  // The page the app was closed on may be gone (a note or project deleted since, or from another window). Looked at
+  // once, when the lists have first arrived: after that a route is only ever set to something that was just listed or made.
+  const restored = useRef(false);
+  useEffect(() => {
+    if (restored.current || !projects.data || !pads.data || !shelved.data) return;
+    restored.current = true;
+    const there = route.kind === 'home' || (route.kind === 'project' ? projects.data.projects.some((p) => p.id === route.id) : [...pads.data.scratchpads, ...shelved.data.scratchpads].some((p) => p.id === route.id));
+    if (!there) setRoute({ kind: 'home' });
+  }, [projects.data, pads.data, shelved.data, route]);
   const go = (next: Route): void => {
     setRoute(next);
     setMenu(false);
@@ -156,6 +165,13 @@ export function Shell({ onDisconnect }: { onDisconnect: () => void }) {
       </header>
 
       <main className="desk">
+        {/* The rail's status line is not on screen below the widest layout, and says nothing of what to do. */}
+        {link !== 'connected' && !backend.demo ? (
+          <div role="status" className="flex shrink-0 flex-wrap items-center justify-between gap-x-6 gap-y-2 border-b border-warning bg-surface px-4 py-2">
+            <p className="text-base">데몬과 연결이 끊겼습니다. 다시 연결하는 중이고, 연결되면 화면을 새로 읽습니다. 그동안 보낸 것은 전달되지 않습니다.</p>
+            <Button onClick={onDisconnect}>연결 설정으로</Button>
+          </div>
+        ) : null}
         {route.kind === 'home' ? (
           <Home scratchpads={padList} projects={projectList} onOpen={go} onCreated={reload} />
         ) : route.kind === 'scratch' ? (

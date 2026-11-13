@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { AxBlock, AxResponse, DocumentKind, KnowledgeJob, ScratchMove, Template } from '@studio-zero/protocol';
 import { Block, Markdown } from '@studio-zero/ax/react';
 import { creatableTemplates, tokens } from '../lib/format.ts';
+import { useDraft } from '../lib/drafts.ts';
 import { useAction, useQuery, useStudio } from '../lib/studio.tsx';
 import { Button, Menu, MenuItem, MenuSeparator, Problem, Segmented, Sheet, Status, TitlebarSpace } from '../ui.tsx';
 import { EnginePicker, useEngineChoice } from './enginePicker.tsx';
@@ -31,6 +32,7 @@ const answerable = (block: AxBlock): block is Extract<AxBlock, { type: 'choice' 
 export function ScratchPage({ scratchId, onOpen, onChanged }: { scratchId: string; onOpen: (route: Route) => void; onChanged: () => void }) {
   const { backend, onEvent } = useStudio();
   const view = useQuery('scratch.get', { scratchId }, ['scratch.entry', 'scratch.state', 'scratch.thinking', 'scratch.changed', 'knowledge.state']);
+  const draft = useDraft(`scratch:${scratchId}`);
   const [renaming, setRenaming] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [turnError, setTurnError] = useState<string | null>(null);
@@ -182,6 +184,7 @@ export function ScratchPage({ scratchId, onOpen, onChanged }: { scratchId: strin
         <Composer
           placeholder={pad.mode === 'think' ? '이어서 적거나, 방향을 바꿔 보세요' : '덧붙일 질문이나 요청'}
           sendLabel="보내기"
+          draft={draft}
           onSend={say.run}
           error={say.error ?? move.error}
           above={

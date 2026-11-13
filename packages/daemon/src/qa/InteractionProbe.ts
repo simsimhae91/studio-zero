@@ -85,6 +85,9 @@ function listControls(arg: { perGroup: number; max: number }): unknown {
     if (r.width < 8 || r.height < 8 || r.bottom > window.innerHeight || r.top < 0 || r.right > window.innerWidth || r.left < 0) continue;
     const cs = getComputedStyle(el);
     if (cs.visibility !== 'visible' || parseFloat(cs.opacity) === 0 || cs.pointerEvents === 'none') continue;
+    // What a closed <details> holds keeps its box and is not drawn: it is not on the screen, and there is no
+    // pressing it. Found on the studio's own client, where a closed list's row was counted as silent.
+    if (typeof el.checkVisibility === 'function' && !el.checkVisibility({ checkVisibilityCSS: true })) continue;
     // A link in running text is read, not thumbed: the target-size check leaves it out for the same reason.
     if (el.tagName === 'A' && cs.display === 'inline') continue;
     const cx = r.left + r.width / 2;

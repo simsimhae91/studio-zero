@@ -6,7 +6,7 @@ import { forgetToken } from '../lib/platform.ts';
 import { MONO_FONTS, THEME_PRESETS, fontInstalled, setPrefs, usePrefs } from '../lib/prefs.ts';
 import { EffortDefaults } from './enginePicker.tsx';
 import { useAction, useQuery, useStudio } from '../lib/studio.tsx';
-import { Button, Field, Problem, Segmented, Sheet, Status, inputClass } from '../ui.tsx';
+import { Button, ConfirmButton, Field, inputClass, Problem, Segmented, Sheet, Status } from '../ui.tsx';
 
 const BASE_CREDENTIALS: readonly { id: string; label: string }[] = [
   { id: 'provider/anthropic/api-key', label: 'Anthropic API 키' },
@@ -31,8 +31,10 @@ export function Settings({ open, onOpenChange, onDisconnect }: { open: boolean; 
   const CREDENTIALS = [...BASE_CREDENTIALS, ...(servers.data?.servers ?? []).filter((m) => m.auth === 'bearer').map((m) => ({ id: m.credentialId, label: `${m.name} 토큰` }))];
   const [credential, setCredential] = useState<string>(BASE_CREDENTIALS[0]!.id);
   const [secret, setSecret] = useState('');
+  const [saved, setSaved] = useState<string | null>(null);
   const save = useAction(async () => {
     await backend.call('vault.set', { id: credential, secret });
+    setSaved(credential);
     setSecret('');
     vault.reload();
     status.reload();
@@ -157,9 +159,8 @@ export function Settings({ open, onOpenChange, onDisconnect }: { open: boolean; 
           {CREDENTIALS.filter((c) => stored.has(c.id)).map((c) => (
             <li key={c.id} className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 border-t border-border py-2">
               <span className="text-base">{c.label}</span>
-              <Button variant="danger" disabled={remove.busy} onClick={() => void remove.run(c.id)}>
-                삭제
-              </Button>
+              {/* A stored value cannot be read back, so a stray press here would lose it for good. */}
+              <ConfirmButton label="삭제" confirm={`${c.label} 삭제 확인`} busy={remove.busy} onConfirm={() => void remove.run(c.id)} />
             </li>
           ))}
         </ul>
@@ -177,6 +178,7 @@ export function Settings({ open, onOpenChange, onDisconnect }: { open: boolean; 
             <input className={inputClass} type="password" value={secret} onChange={(e) => setSecret(e.target.value)} autoComplete="off" required />
           </Field>
           {save.error ? <Problem>{save.error}</Problem> : null}
+          {saved !== null && secret === '' && !save.busy ? <Status tone="good">{CREDENTIALS.find((c) => c.id === saved)?.label ?? '값'}을(를) 키체인에 저장했습니다</Status> : null}
           <Button type="submit" variant="primary" busy={save.busy} className="self-start" icon={<KeyRound className="size-4" aria-hidden />}>
             키체인에 저장
           </Button>
@@ -262,9 +264,7 @@ function ToolServer({ server, onToken, onChanged }: { server: McpServerInfo; onT
       <div className="flex flex-wrap gap-2">
         {server.state === 'needs-token' ? <Button onClick={onToken}>아래에서 토큰 저장</Button> : null}
         {server.builtin ? null : (
-          <Button variant="danger" busy={remove.busy} onClick={() => void remove.run()}>
-            서버 삭제
-          </Button>
+          <ConfirmButton label="서버 삭제" confirm={`${server.name} 삭제 확인`} busy={remove.busy} onConfirm={() => void remove.run()} />
         )}
       </div>
     </li>
@@ -336,9 +336,15 @@ function AddToolServer({ onAdded }: { onAdded: () => void }) {
         </>
       )}
       {add.error ? <Problem>{add.error}</Problem> : null}
-      <Button type="submit" variant="primary" busy={add.busy} className="self-start">
-        서버 추가
-      </Button>
+      <div className="flex flex-wrap gap-2">
+        <Button type="submit" variant="primary" busy={add.busy}>
+          서버 추가
+        </Button>
+        {/* Opening the form is not a promise to fill it in. */}
+        <Button disabled={add.busy} onClick={() => setOpen(false)}>
+          취소
+        </Button>
+      </div>
     </form>
   );
 }

@@ -51,11 +51,22 @@ export interface Query<T> {
  * Pass `params: null` to skip the call (for example while no project is selected).
  */
 export function useQuery<M extends MethodName>(method: M, params: ParamsOf<M> | null, refreshOn: readonly EventType[] = []): Query<ResultOf<M>> {
-  const { backend, onEvent } = useStudio();
+  const { backend, onEvent, link } = useStudio();
   const [state, setState] = useState<{ key: string; data: ResultOf<M> | undefined; error: string | null }>({ key: '', data: undefined, error: null });
   const [tick, setTick] = useState(0);
   const key = params === null ? '' : `${method}:${JSON.stringify(params)}`;
   const reload = useCallback(() => setTick((n) => n + 1), []);
+
+  // What was read before the link dropped may be stale when it comes back (a daemon that restarted has no
+  // events for what changed while it was down), and a read that failed during the outage never retried.
+  const dropped = useRef(false);
+  useEffect(() => {
+    if (link !== 'connected') dropped.current = true;
+    else if (dropped.current) {
+      dropped.current = false;
+      reload();
+    }
+  }, [link, reload]);
 
   useEffect(() => {
     if (params === null) return;

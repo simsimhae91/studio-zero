@@ -14,7 +14,7 @@ function explain(err: unknown, host: string): string {
 }
 
 /** First screen: where the daemon is and the token that proves this client belongs to its owner. */
-export function Connect({ onConnected, onLink }: { onConnected: (backend: Backend) => void; onLink: (state: LinkState) => void }) {
+export function Connect({ onConnected, onLink, notice = null }: { onConnected: (backend: Backend) => void; onLink: (state: LinkState) => void; notice?: string | null }) {
   const [address, setAddress] = useState(() => localStorage.getItem(ADDRESS_KEY) ?? 'localhost');
   const [token, setToken] = useState('');
   const [tokenSource, setTokenSource] = useState<'keychain' | 'typed'>('typed');
@@ -88,7 +88,9 @@ export function Connect({ onConnected, onLink }: { onConnected: (backend: Backen
           </Field>
         </div>
 
-        {problem ? <Problem>{problem}</Problem> : null}
+        {/* Why this screen is back, when the app was connected a moment ago. */}
+          {notice && !problem ? <Problem>{notice}</Problem> : null}
+          {problem ? <Problem>{problem}</Problem> : null}
 
         <div className="flex flex-wrap items-center gap-4">
           <Button type="submit" variant="primary" busy={busy} icon={<PlugZap className="size-4" aria-hidden />}>

@@ -1,6 +1,7 @@
 import { useId, useState, type FormEvent } from 'react';
 import type { Project, Scratchpad, Template } from '@studio-zero/protocol';
 import { ago, creatableTemplates, templateLabel } from '../lib/format.ts';
+import { useDraft } from '../lib/drafts.ts';
 import { useAction, useStudio } from '../lib/studio.tsx';
 import { Button, Problem, Segmented, TitlebarSpace } from '../ui.tsx';
 import { EnginePicker, useEngineChoice } from './enginePicker.tsx';
@@ -24,9 +25,14 @@ const STACKS: readonly { id: Stack; label: string }[] = [{ id: 'auto', label: 'ì
 export function Home({ scratchpads, projects, onOpen, onCreated }: { scratchpads: Scratchpad[]; projects: Project[]; onOpen: (route: Route) => void; onCreated: () => void }) {
   const { backend } = useStudio();
   const id = useId();
-  const [text, setText] = useState('');
-  const [mode, setMode] = useState<Mode>('fast');
-  const [stack, setStack] = useState<Stack>('auto');
+  // The idea, and how it was going to be started, are kept while the window is open: leaving this page to look
+  // at something else is not a reason to lose what was being written.
+  const { value: text, onChange: setText } = useDraft('home');
+  const kept = { mode: useDraft('home:mode'), stack: useDraft('home:stack') };
+  const mode: Mode = MODES.some((m) => m.id === kept.mode.value) ? (kept.mode.value as Mode) : 'fast';
+  const setMode = kept.mode.onChange as (next: Mode) => void;
+  const stack = (kept.stack.value || 'auto') as Stack;
+  const setStack = kept.stack.onChange as (next: Stack) => void;
   const current = MODES.find((m) => m.id === mode)!;
   const builds = mode === 'fast' || mode === 'deep';
   // The first task of a project is usually its largest: who runs it is chosen here, not one task later.
@@ -38,10 +44,13 @@ export function Home({ scratchpads, projects, onOpen, onCreated }: { scratchpads
     if (mode === 'fast' || mode === 'deep') {
       // The daemon names the project from the idea, picks the stack unless one was chosen here, and starts the first task.
       const { project } = await backend.call('projects.ignite', { idea: opening, track: mode, ...(stack === 'auto' ? {} : { template: stack }), ...choice.fields });
+      // It was sent: the field is empty for the next idea. Until then it is kept.
+      setText('');
       onCreated();
       return onOpen({ kind: 'project', id: project.id });
     }
     const pad = await backend.call('scratch.create', { opening, mode });
+    setText('');
     onCreated();
     onOpen({ kind: 'scratch', id: pad.id });
   });
