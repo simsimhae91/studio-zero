@@ -184,18 +184,18 @@ test('composition, read off a real page: a screen that keeps the handbook is cle
     const flat = runDomChecks(clean, first, contract);
     assert.deepEqual(rules(flat), ['material/nothing-drawn'], said(flat));
     assert.equal(flat[0]!.severity, 'major');
-    assert.match(flat[0]!.message, /^Nothing is drawn on the first screen besides text: no picture or drawing, and 0 icons\./);
+    assert.match(flat[0]!.message, /^Next to nothing is drawn on the first screen besides text: 0% of it is picture or drawing, and it has 0 icons\./);
     assert.ok(flat[0]!.fix!.startsWith('E1: '));
-    // A chart is a drawing, and so are eight faces: either is enough to say the screen is made of something.
+    // A chart is a drawing, and so are ten faces: either is enough to say the screen is made of something.
     assert.ok(charted.composition!.material!.drawnShare > 0.25);
     assert.deepEqual(rules(runDomChecks(charted, first, contract)), []);
     const FACE = '<svg class="face" viewBox="0 0 40 40" width="40" height="40" aria-hidden="true"><circle cx="20" cy="20" r="20" fill="#dbe7fb"/><circle cx="20" cy="16" r="7" fill="#0051b2"/></svg>';
-    const faces = await measure(screen({ css: '.faces{display:flex;gap:4px}', extra: `<div class="faces">${FACE.repeat(8)}</div>` }));
-    assert.deepEqual([faces.composition!.material!.icons, faces.composition!.material!.drawnShare], [8, 0]);
+    const faces = await measure(screen({ css: '.faces{display:flex;gap:4px}', extra: `<div class="faces">${FACE.repeat(10)}</div>` }));
+    assert.deepEqual([faces.composition!.material!.icons, faces.composition!.material!.drawnShare], [10, 0]);
     assert.deepEqual(rules(runDomChecks(faces, first, contract)), []);
-    assert.deepEqual(rules(runDomChecks(await measure(screen({ css: '.faces{display:flex;gap:4px}', extra: `<div class="faces">${FACE.repeat(7)}</div>` })), first, contract)), ['material/nothing-drawn'], 'seven are not yet a screen with faces on it');
+    assert.deepEqual(rules(runDomChecks(await measure(screen({ css: '.faces{display:flex;gap:4px}', extra: `<div class="faces">${FACE.repeat(9)}</div>` })), first, contract)), ['material/nothing-drawn'], 'nine are not yet a screen with faces on it');
     // Three boxes drawn with a hairline: the comparison block, the dock, and one more.
-    const BOXES = { css: '.box{padding:16px;min-height:80px;border:1px solid var(--sz-border);border-radius:8px;background:var(--sz-surface)}.faces{display:flex;gap:4px}', extra: `<div class="faces">${FACE.repeat(8)}</div><div class="box">오늘 미션</div>` };
+    const BOXES = { css: '.box{padding:16px;min-height:80px;border:1px solid var(--sz-border);border-radius:8px;background:var(--sz-surface)}.faces{display:flex;gap:4px}', extra: `<div class="faces">${FACE.repeat(10)}</div><div class="box">오늘 미션</div>` };
     const boxed = runDomChecks(await measure(screen(BOXES)), first, contract);
     assert.deepEqual(rules(boxed), ['material/ruled-boxes'], said(boxed));
     assert.match(boxed[0]!.message, /^3 of the 4 boxes on the first screen are drawn with a hairline/);
@@ -352,7 +352,7 @@ test('the page a real engine drew on 2026-11-13, which the check of its own page
     assert.deepEqual(rules(handbook), ['color/dark-band', 'layout/half-empty-card', 'material/nothing-drawn', 'material/ruled-boxes', 'type/end-aligned-block', 'type/micro-overuse', 'type/second-family', 'type/stacked-text'], said(found));
     for (const rule of ['color/dark-band', 'material/nothing-drawn', 'material/ruled-boxes']) assert.equal(found.find((f) => f.rule === rule)?.severity, 'major');
     const text = renderMockupCheck(file, check);
-    assert.match(text, /- \[major\] material\/nothing-drawn \(measured\)\n  iphone-15-pro \| docs\/mockups\/b\.html[^\n]*\n  Nothing is drawn on the first screen besides text: no picture or drawing, and \d icons?\./);
+    assert.match(text, /- \[major\] material\/nothing-drawn \(measured\)\n  iphone-15-pro \| docs\/mockups\/b\.html[^\n]*\n  Next to nothing is drawn on the first screen besides text: 0% of it is picture or drawing, and it has \d icons?\./);
     assert.match(text, /- \[major\] color\/dark-band \(measured\)\n  iphone-15-pro \| docs\/mockups\/b\.html \| selector: [^\n]*button\.board[^\n]*\n  \d\d% of this light screen is near-black/);
     assert.ok(!text.includes('Nothing here holds the page back'), 'the answer the engine stopped on is not given any more');
     assert.deepEqual(store.listAudits(phoneProject.id, 10), []);

@@ -37,7 +37,10 @@ test('the rules carry their numbers: one hero of strong colour, a budget for sma
   assert.match(says('mobile-expo', 'T1'), /Pretendard, SUIT or SUITE[\s\S]*no serif, no second sans, no italics[\s\S]*Monospace only inside code, pre and kbd/);
   assert.match(says('mobile-expo', 'T3'), /never a sentence[\s\S]*about a third of the text on a screen/);
   assert.match(says('mobile-expo', 'T5'), /no rotated labels, no Hangul stacked a syllable to a line, no numerals turned around a dial/);
-  assert.match(says('mobile-expo', 'C2'), /lives on one hero[\s\S]*up to about a third of the first screen[\s\S]*No second filled card: past 45% the audit calls it a flood/);
+  assert.match(says('mobile-expo', 'C2'), /lives on one hero, and a first screen has one[\s\S]*over a fifth to a third of the first screen[\s\S]*No second filled card: past 45% the audit calls it a flood/);
+  assert.match(says('web-vite-react', 'C2'), /lives on one hero\.[\s\S]*up to about a third of the first screen[\s\S]*past 45% the audit calls it a flood/);
+  // A floor, with its number, where the ruler was laid: the phone.
+  assert.match(says('mobile-expo', 'E1'), /Something drawn covers a fifth of it or more[\s\S]*a dozen or more icons and avatars/);
   assert.match(says('mobile-expo', 'C4'), /the second colour is the other[\s\S]*each side may fill its half[\s\S]*as marks[\s\S]*Never alone/);
   assert.match(says('mobile-expo', 'M3'), /one comparison block: one surface, the same size, the difference said once/);
   assert.match(says('mobile-expo', 'M5'), /No card in a card[\s\S]*as tall as its content, never stretched/);

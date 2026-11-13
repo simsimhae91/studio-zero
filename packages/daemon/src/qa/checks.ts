@@ -338,10 +338,14 @@ export const COLOUR_LIMITS = {
  * rules E: 12 to 43% drawn, 11 to 21 icons, no ruled box.
  */
 export const MATERIAL_LIMITS = {
-  /** Under this share of the first screen drawn, */
-  drawn: 0.05,
-  /** and fewer small drawings (icons, avatars) than this, the screen is text and rules. */
-  icons: 8,
+  /**
+   * Under this share of the first screen drawn, and fewer small drawings (icons, avatars) than `icons`, the
+   * screen is text and rules. The least drawn of the five products stands just inside both (0.086 and 11).
+   * First set at 0.05 and 8: the lab's engines then drew eight or nine icons and stopped, which is what a floor
+   * does, so the floor is where the references begin and the rule (E1) asks for more than the floor.
+   */
+  drawn: 0.08,
+  icons: 10,
   /** This many boxes drawn with a hairline box the screen in. */
   ruledBoxes: 3,
 } as const;
@@ -513,8 +517,8 @@ export function compositionFindings(digest: PageDigest, ctx: CheckContext): Find
         'material/nothing-drawn',
         'originality',
         'major',
-        `Nothing is drawn on the first screen besides text: no picture or drawing, and ${made.icons} icon${made.icons === 1 ? '' : 's'}. A screen of text and rules reads as a form.`,
-        'E1: Give the screen its material. People are avatars (E2: a drawn face on a tinted disc), the things the product names are small drawn objects, the state takes one hero drawing, and each row, tab and stat leads with its icon on a tinted tile (E3). Draw them in code as SVG in one style, from the theme\'s colours, and only this product\'s own nouns.',
+        `Next to nothing is drawn on the first screen besides text: ${Math.round(made.drawnShare * 100)}% of it is picture or drawing, and it has ${made.icons} icon${made.icons === 1 ? '' : 's'}. A screen of text and rules reads as a form.`,
+        'E1: Give the screen its material: a fifth of it drawn, a dozen icons and avatars. People are avatars (E2: a drawn face on a tinted disc), the things the product names are small drawn objects, the state takes one hero drawing on its hero (C2), and each row, tab and stat leads with its icon on a tinted tile (E3). Draw them in code as SVG in one style, from the theme\'s colours, and only this product\'s own nouns.',
       );
     }
     if (made.ruledBoxes >= MATERIAL_LIMITS.ruledBoxes) {
