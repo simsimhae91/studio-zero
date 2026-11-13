@@ -13,8 +13,9 @@ import { fileURLToPath } from 'node:url';
 import { chromium, devices, type Page } from 'playwright-core';
 import { contract } from '@studio-zero/design';
 import { auditCopy } from '@studio-zero/daemon/src/harness/TextSlopAuditor.ts';
-import { runDomChecks, scoreAudit } from '@studio-zero/daemon/src/qa/checks.ts';
+import { interactionFindings, runDomChecks, scoreAudit } from '@studio-zero/daemon/src/qa/checks.ts';
 import { PageDigest, collectDigest } from '@studio-zero/daemon/src/qa/collector.ts';
+import { probeInteraction } from '@studio-zero/daemon/src/qa/InteractionProbe.ts';
 import type { Finding, ViewportId } from '@studio-zero/protocol';
 
 const dist = fileURLToPath(new URL('../dist/', import.meta.url));
@@ -164,6 +165,7 @@ const screens: { name: string; url: string; go: (page: Page, narrow: boolean) =>
 
 const browser = await chromium.launch({ channel: 'chrome', headless: true });
 const all: (Finding & { screen: string; scheme: string })[] = [];
+const tried = { press: 0, answered: 0, stops: 0, visible: 0 };
 const copy: (Finding & { screen: string; scheme: string })[] = [];
 try {
   for (const viewport of viewports) {
@@ -195,6 +197,29 @@ try {
       await context.close();
     }
   }
+  // Each screen tried by hand, as the studio tries what it builds: every control of the first screenful held
+  // down, the keyboard's focus walked through. At the desk's size, where this interface is used, and with motion
+  // as most people have it: a press answered by movement has answered.
+  const desk = viewports.find((v) => v.id === 'desktop-1440')!;
+  const trying = await browser.newContext({ ...desk.context, colorScheme: 'light' });
+  await trying.addInitScript(() => {
+    localStorage.clear();
+    localStorage.setItem('studio-zero.prefs', JSON.stringify({ theme: 'system', mono: 'geist-mono' }));
+  });
+  for (const screen of screens) {
+    const page = await trying.newPage();
+    await page.goto(base + screen.url, { waitUntil: 'networkidle' });
+    await screen.go(page, false);
+    await page.waitForTimeout(350);
+    const probe = await probeInteraction(page, { touch: false });
+    tried.press += probe.press.probed;
+    tried.answered += probe.press.answered;
+    tried.stops += probe.focus.probed;
+    tried.visible += probe.focus.visible;
+    all.push(...interactionFindings(probe, null, { viewport: desk.id, route: screen.name, touch: false }).map((f) => ({ ...f, screen: screen.name, scheme: 'light' })));
+    await page.close();
+  }
+  await trying.close();
 } finally {
   await browser.close();
   server.close();
@@ -203,6 +228,7 @@ try {
 for (const f of all) console.log(`[${f.severity}] ${f.screen} ${f.viewport} ${f.scheme} ${f.rule}: ${f.message}${f.selector ? `\n    at ${f.selector}` : ''}`);
 const result = scoreAudit(all, null, 85);
 console.log(`\n${screens.length} screens × ${viewports.length} viewports × 2 schemes. Distinct defects: ${result.blockers} blocker, ${result.majors} major, ${result.minors} minor.`);
+console.log(`Tried by hand at the desk's size: ${tried.answered} of ${tried.press} controls answered a press, ${tried.visible} of ${tried.stops} focus stops could be seen.`);
 const habits = [...new Set(copy.filter((f) => f.severity !== 'minor').map((f) => `${f.rule}: ${f.message}`))];
 console.log(`Copy lint (reported, not gating): ${habits.length} distinct habit(s) in this interface's own wording.${habits.map((h) => `\n  ${h}`).join('')}`);
 process.exit(result.blockers + result.majors > 0 ? 1 : 0);

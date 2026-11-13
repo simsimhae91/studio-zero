@@ -373,3 +373,12 @@ body {
     block-size: 2.75rem;
   }
 }
+
+/* What can be pressed gives way while it is held. One rule for the whole interface, so that no control is left
+   inert; the audit this client is held to presses each one and looks. */
+@layer base {
+  :where(button, [role="button"], [role="tab"], [role="radio"], [role="menuitem"], [role="option"], [role="treeitem"], a[href], summary):where(:not(:disabled, [aria-disabled="true"])):active {
+    transform: translateY(1px);
+    opacity: 0.78;
+  }
+}

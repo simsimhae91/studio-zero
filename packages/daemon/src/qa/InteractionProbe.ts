@@ -41,7 +41,7 @@ const PER_GROUP = 2;
 
 const Control = z.object({ selector: z.string().max(300), text: z.string().max(60), x: z.number(), y: z.number(), w: z.number().min(0).max(100_000), h: z.number().min(0).max(100_000) });
 const Controls = z.array(Control).max(60);
-const FocusStop = Control.extend({ index: z.number().int().min(0).max(100_000) }).nullable();
+const FocusStop = Control.extend({ index: z.number().int().min(0).max(100_000), control: z.boolean() }).nullable();
 
 /**
  * Runs in the page: the controls of the first screenful that a press should mean something on. Text fields are
@@ -100,9 +100,23 @@ function listControls(arg: { perGroup: number; max: number }): unknown {
     const seen = perGroup.get(group) ?? 0;
     if (seen >= arg.perGroup) continue;
     perGroup.set(group, seen + 1);
+    // Marked, so that it can be found again once presses on the controls before it have changed the screen; and
+    // how the pointer reaches it (on it, or on something around it such as its label) is kept with the mark.
+    el.setAttribute('data-sz-probe', String(found.length));
+    el.setAttribute('data-sz-probe-hit', top === el || el.contains(top) ? 'on' : 'around');
     found.push({ selector, text: (el.textContent ?? '').replace(/\s+/g, ' ').trim().slice(0, 60), x: cx, y: cy, w: r.width, h: r.height });
   }
   return found;
+}
+
+/** Runs in the page: is the control that was listed as number `i` still what a press at its place would reach. */
+function reachable(arg: { i: number; x: number; y: number }): boolean {
+  const el = document.querySelector(`[data-sz-probe="${arg.i}"]`);
+  const top = document.elementFromPoint(arg.x, arg.y);
+  // The control itself or something inside it, as it was when it was listed. With a modal layer open the page
+  // behind takes no pointer at all and the hit lands on the document: that is not reaching the control.
+  if (el === null || top === null) return false;
+  return top === el || el.contains(top) || (el.getAttribute('data-sz-probe-hit') === 'around' && top.contains(el) && top !== document.documentElement && top !== document.body);
 }
 
 /** Runs in the page: what holds the focus now, and which element it is among everything, so it can be found again. */
@@ -124,7 +138,11 @@ function focusedNow(): unknown {
     parts.unshift(`${tag.toLowerCase()}${same.length > 1 ? `:nth-of-type(${same.indexOf(node) + 1})` : ''}`);
     node = parent;
   }
-  return { index: Array.from(document.querySelectorAll('*')).indexOf(el), selector: parts.join(' > ').slice(0, 300), text: (el.textContent ?? '').replace(/\s+/g, ' ').trim().slice(0, 60), x: r.left + r.width / 2, y: r.top + r.height / 2, w: r.width, h: r.height };
+  // A container that holds the focus for what is inside it (a menu, a dialog, a scrolling region) is not a stop a
+  // person acts on: its items are, and they are reached from it.
+  const role = el.getAttribute('role') ?? '';
+  const control = ['A', 'BUTTON', 'INPUT', 'SELECT', 'TEXTAREA', 'SUMMARY'].includes(el.tagName) || ['button', 'link', 'tab', 'menuitem', 'checkbox', 'radio', 'switch', 'option', 'textbox', 'combobox', 'slider', 'treeitem'].includes(role) || (el as HTMLElement).isContentEditable;
+  return { control, index: Array.from(document.querySelectorAll('*')).indexOf(el), selector: parts.join(' > ').slice(0, 300), text: (el.textContent ?? '').replace(/\s+/g, ' ').trim().slice(0, 60), x: r.left + r.width / 2, y: r.top + r.height / 2, w: r.width, h: r.height };
 }
 
 /**
@@ -144,7 +162,22 @@ export async function probeInteraction(page: Page, opts: { touch: boolean }): Pr
 
   // ---- pressed
   const controls = Controls.catch([]).parse(await page.evaluate(listControls, { perGroup: PER_GROUP, max: MAX_PRESSED }).catch(() => []));
-  for (const control of controls) {
+  for (const [i, control] of controls.entries()) {
+    // A press may open something without a click (a menu opens when the pointer goes down), and what it opened then
+    // lies over the controls still to be tried. It is dismissed the way a person would; a control that is still
+    // out of reach after that is left out, not counted as giving nothing back.
+    const at = { i, x: control.x, y: control.y };
+    const inReach = (): Promise<boolean> => page.evaluate(reachable, at).catch(() => false);
+    if (!(await inReach())) {
+      await page.keyboard.press('Escape');
+      // What was opened may take a moment to go, and the page behind a moment more to take the pointer again.
+      let back = false;
+      for (let wait = 0; wait < 6 && !back; wait++) {
+        await page.waitForTimeout(100);
+        back = await inReach();
+      }
+      if (!back) continue;
+    }
     const rest = await around(control, AROUND_PX);
     await page.mouse.move(control.x, control.y);
     const hovered = await around(control, AROUND_PX);
@@ -176,7 +209,13 @@ export async function probeInteraction(page: Page, opts: { touch: boolean }): Pr
   }
 
   // ---- focused, by the keyboard: that is the focus a person has to be able to see
-  // The presses left the focus on whatever was pressed last. The walk starts where a person's would: at the top.
+  // The presses left the focus on whatever was pressed last, and perhaps something open. The walk starts where a
+  // person's would: with nothing in the way, at the top.
+  const first = controls[0];
+  if (first && !(await page.evaluate(reachable, { i: 0, x: first.x, y: first.y }).catch(() => true))) {
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(120);
+  }
   await page
     .evaluate(() => {
       (document.activeElement as HTMLElement | null)?.blur();
@@ -191,6 +230,7 @@ export async function probeInteraction(page: Page, opts: { touch: boolean }): Pr
     const stop = FocusStop.catch(null).parse(await page.evaluate(focusedNow).catch(() => null));
     if (!stop || seen.has(stop.index)) break;
     seen.add(stop.index);
+    if (!stop.control) continue;
     const focused = await around(stop, 12);
     await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur()).catch(() => undefined);
     const rest = await around(stop, 12);

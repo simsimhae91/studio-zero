@@ -254,6 +254,13 @@ ${c.motion.durationsMs.map((ms, i) => `  --duration-${['fast', 'base', 'slow'][i
 
   :focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
 
+  /* What can be pressed gives way while it is held, so no control is inert by default. A component may answer
+     more fully (a change of surface, a deeper press); it should not answer less. */
+  :where(button, [role="button"], a[class], summary, label[for]):where(:not(:disabled, [aria-disabled="true"])):active {
+    transform: translateY(1px);
+    opacity: 0.78;
+  }
+
   /* Touch devices get ${c.touchTargetPx}px targets without every component having to remember. */
   @media (pointer: coarse) {
     :where(button, [role="button"], a[class], input:not([type="checkbox"], [type="radio"]), select, summary) {

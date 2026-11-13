@@ -11,7 +11,8 @@ import { layoutShift, probeInteraction } from '../src/qa/InteractionProbe.ts';
 const APP = `<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>장부</title><style>
 body{margin:0;font:16px system-ui;padding:24px;display:flex;flex-direction:column;gap:16px}
 button,.pad,.row{display:flex;align-items:center;justify-content:center;min-height:56px;min-width:200px;background:#246;color:#fff;border:0;border-radius:12px}
-#css:active{transform:scale(.96);background:#123}
+#css:active,.pressable:active{transform:scale(.96);background:#123}
+#layer{position:fixed;inset:0;pointer-events:auto}#layer div{position:absolute;left:24px;top:150px;padding:16px;background:#fff;border:1px solid #333}
 #hover:hover{background:#468}
 .row:has(input:active){background:#c33}
 #silent,#hover{outline:none}
@@ -20,6 +21,8 @@ ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px
 li button{min-height:44px;background:#555}
 </style></head><body>
 <button id="css">도장 찍기</button>
+<button id="opener">메뉴 열기</button>
+<button id="after" class="pressable">메뉴 다음 버튼</button>
 <button id="silent">조용한 버튼</button>
 <button id="hover">가리키면 밝아짐</button>
 <div id="js" class="pad" role="button" tabindex="0">스크립트로 답함</div>
@@ -35,6 +38,17 @@ document.addEventListener('click', (e) => window.clicks.push(e.target.id || e.ta
 const js = document.getElementById('js');
 js.addEventListener('pointerdown', () => { js.style.background = '#c33'; });
 for (const type of ['pointerup', 'pointercancel', 'pointerleave']) js.addEventListener(type, () => { js.style.background = ''; });
+// A menu in the manner of a component library: it opens when the pointer goes down, not on the click, puts a
+// layer over the page and takes the pointer away from everything behind it until Escape.
+document.getElementById('opener').addEventListener('pointerdown', () => {
+  if (document.getElementById('layer')) return;
+  const layer = document.createElement('div');
+  layer.id = 'layer';
+  layer.innerHTML = '<div>메뉴</div>';
+  document.body.appendChild(layer);
+  document.body.style.pointerEvents = 'none';
+});
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { document.getElementById('layer')?.remove(); document.body.style.pointerEvents = ''; } });
 if (location.search === '?jump') setTimeout(() => { const d = document.createElement('div'); d.style.cssText = 'height:240px;background:#ddd'; document.body.insertBefore(d, document.body.firstChild); }, 250);
 </script></body></html>`;
 
@@ -62,7 +76,7 @@ test('a screen tried by hand: which controls answer a press, which focus can be 
     assert.deepEqual(phone.after, { clicks: [], checked: false }, 'every control was pressed and none was clicked');
     const silent = phone.probe.press.silent.map((c) => c.selector);
     assert.deepEqual(silent, ['#silent', '#hover', '#ring', 'ul > li:nth-of-type(1) > button.item', 'ul > li:nth-of-type(2) > button.item'], 'the button with no pressed state, the one that only answers a hovering pointer, the link with only a focus ring, and of five alike rows the two that were tried');
-    assert.deepEqual([phone.probe.press.answered, phone.probe.press.probed], [3, 8], 'answered: the CSS press, the script press, the row that answers for its checkbox. Not tried: the disabled button, the link in running text, the field');
+    assert.deepEqual([phone.probe.press.answered, phone.probe.press.probed], [5, 10], 'answered: the CSS press, the menu that opens under the pointer, the button after it (the menu was dismissed first, so it could be reached), the script press, the row that answers for its checkbox. Not tried: the disabled button, the link in running text, the field');
     assert.equal(phone.probe.press.silent[0]!.text, '조용한 버튼');
 
     // ---- at a desk: the pointer hovers, and the keyboard is a way in
@@ -84,7 +98,7 @@ test('a screen tried by hand: which controls answer a press, which focus can be 
       ...phone.probe.focus.hidden.slice(0, 4).map((c) => ['focus/not-visible', 'minor', 'tactility', c.selector]),
       ['motion/layout-shift', 'minor', 'responsive', null],
     ]);
-    assert.match(findings[0]!.message, /^"조용한 버튼" gives nothing back while it is held: the screen around it looks the same pressed as at rest\. \(3 of 8 controls tried answered\.\)$/);
+    assert.match(findings[0]!.message, /^"조용한 버튼" gives nothing back while it is held: the screen around it looks the same pressed as at rest\. \(5 of 10 controls tried answered\.\)$/);
     assert.match(findings[3]!.message, /1 more control\(s\) on this screen are the same/);
     assert.deepEqual(findings[0]!.bbox && [findings[0]!.bbox.w, findings[0]!.bbox.h], [345, 56], 'located as the audit locates things: a box in page pixels');
     assert.equal(interactionFindings(desk.probe, null, { viewport: 'desktop-1440', route: '/', touch: false }).find((f) => f.rule === 'focus/not-visible')!.severity, 'major', 'where a keyboard is the way in, focus nobody can see is a major defect');
