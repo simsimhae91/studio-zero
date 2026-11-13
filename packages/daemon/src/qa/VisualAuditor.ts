@@ -12,6 +12,7 @@ import { errorMessage, newId, type Clock, type Logger } from '../util/core.ts';
 import { COPY_RULE_PREFIX, SLOP_PASS_MAX, UNREVIEWED_SCORE_CAP, gradeAudit, interactionFindings, measureAccess, runDomChecks, type AccessMeasures } from './checks.ts';
 import { PageDigest, collectDigest } from './collector.ts';
 import { layoutShift, probeInteraction, type Touchability } from './InteractionProbe.ts';
+import { colourShares, type ColourShares } from './pixels.ts';
 import type { QaBrowser } from './QaBrowser.ts';
 import { VisionUnavailableError, type QaVisionBridge } from './QaVisionBridge.ts';
 import { summariseReference } from './RefKit.ts';
@@ -185,7 +186,8 @@ export class VisualAuditor {
   /**
    * What the audit would measure on these pages, without the audit: the same checks against the same contract
    * at the same sizes, the same copy lint, the same pressing and tabbing. No reviewer is asked, nothing is
-   * stored and nothing is announced. It is what an engine is given to look at its own page with while it is
+   * stored and nothing is announced: the first screenful is photographed so that its colours can be counted,
+   * and the picture is let go. It is what an engine is given to look at its own page with while it is
    * still drawing it, so that it does not have to guess what the measurement will say, or build a browser of
    * its own to find out.
    */
@@ -279,7 +281,7 @@ export class VisualAuditor {
           const state = subject.state;
           if (state !== undefined && viewport !== tried) continue;
           const first = state === undefined && (mode.everyFirst || routeIndex === 0);
-          const light = await this.#capture(browser, spec, 'light', subject, mode.record, mode.sealed);
+          const light = await this.#capture(browser, spec, 'light', subject, mode.record ? 'kept' : 'counted', mode.sealed);
           if (!light.digest) {
             findings.push(loadFailure(viewport, route, light.error));
             continue;
@@ -292,7 +294,7 @@ export class VisualAuditor {
             findings.push(stateFinding('states/same-as-default', viewport, route, `The route listed for the state "${state}" shows the same screen as ${req.routes[0]}: nothing reads the state from it.`, 'Have the route put the screen into that state (from the fixtures: no items, a failed request, the limit reached), so that what a person would see then is what loads.'));
           }
           const viewportWidth = spec.context.viewport?.width ?? light.digest.width;
-          const measured = runDomChecks(light.digest, { viewport, viewportWidth, route, touch: spec.touch, scope: 'full' }, contract);
+          const measured = runDomChecks(light.digest, { viewport, viewportWidth, route, touch: spec.touch, scope: 'full', template, ...(light.shares ? { shares: light.shares } : {}) }, contract);
           findings.push(...measured);
           // The words, read apart from how they are set. The design reviewer below is not shown these findings as
           // measured defects to skip: copy is on its rubric too, and it reads the page as a picture.
@@ -327,7 +329,7 @@ export class VisualAuditor {
 
           // Dark scheme: one more render per viewport, checked only for what a colour scheme can break.
           if (first) {
-            const dark = await this.#capture(browser, spec, 'dark', subject, false, mode.sealed);
+            const dark = await this.#capture(browser, spec, 'dark', subject, 'none', mode.sealed);
             if (dark.digest) {
               const darkFindings = runDomChecks(dark.digest, { viewport, viewportWidth, route, touch: spec.touch, scope: 'color-only' }, contract);
               findings.push(...darkFindings.map((f) => ({ ...f, rule: `${f.rule}@dark`, message: `In dark mode: ${f.message}` })));
@@ -423,30 +425,55 @@ export class VisualAuditor {
     }
   }
 
-  async #capture(browser: Browser, spec: ViewportSpec, scheme: 'light' | 'dark', subject: Subject, screenshots: boolean, sealed: boolean): Promise<{ digest: PageDigest | null; folds: Buffer[]; shift: number | null; error: string }> {
+  /**
+   * One screen, opened and measured. `pictures` says what is photographed: every screenful, to be kept
+   * (`kept`, an audit's light pass); the first screenful only, to count its colours and then let go (`counted`,
+   * a measurement that is nobody's record); or nothing (`none`, the dark pass, which re-checks contrast alone).
+   */
+  async #capture(browser: Browser, spec: ViewportSpec, scheme: 'light' | 'dark', subject: Subject, pictures: 'kept' | 'counted' | 'none', sealed: boolean): Promise<{ digest: PageDigest | null; folds: Buffer[]; shares: ColourShares | null; shift: number | null; error: string }> {
     const context = await browser.newContext({ ...spec.context, colorScheme: scheme, reducedMotion: 'reduce', serviceWorkers: 'block', ...(sealed ? { javaScriptEnabled: false, offline: true } : {}) });
     try {
       const page = await context.newPage();
       const failed = await subject.open(page);
-      if (failed !== null) return { digest: null, folds: [], shift: null, error: failed };
+      if (failed !== null) return { digest: null, folds: [], shares: null, shift: null, error: failed };
       await settle(page, sealed);
       const digest = PageDigest.safeParse(await page.evaluate(collectDigest, 600));
-      if (!digest.success) return { digest: null, folds: [], shift: null, error: 'the page returned measurements that failed validation' };
+      if (!digest.success) return { digest: null, folds: [], shares: null, shift: null, error: 'the page returned measurements that failed validation' };
       // A sealed page runs nothing that could be waited on, and has nothing arriving late to shift it.
-      const shift = sealed || !screenshots ? null : z.number().min(0).max(100).nullable().catch(null).parse(await page.evaluate(layoutShift).catch(() => null));
+      const shift = sealed || pictures !== 'kept' ? null : z.number().min(0).max(100).nullable().catch(null).parse(await page.evaluate(layoutShift).catch(() => null));
 
       const folds: Buffer[] = [];
-      if (screenshots) {
+      let first: Buffer | null = null;
+      if (pictures !== 'none') {
         const { width, height, scrollHeight } = digest.data;
-        for (let fold = 0; fold < this.#config.audit.maxFolds && fold * height < scrollHeight; fold++) {
-          folds.push(await page.screenshot({ type: 'png', fullPage: true, animations: 'disabled', clip: { x: 0, y: fold * height, width, height: Math.min(height, scrollHeight - fold * height) } }));
+        // The first screenful is photographed whenever the page is measured: its colours are counted off it.
+        const kept = pictures === 'kept' ? this.#config.audit.maxFolds : 0;
+        for (let fold = 0; fold < Math.max(1, kept) && fold * height < scrollHeight; fold++) {
+          const png = await page.screenshot({ type: 'png', fullPage: true, animations: 'disabled', clip: { x: 0, y: fold * height, width, height: Math.min(height, scrollHeight - fold * height) } });
+          if (fold === 0) first = png;
+          if (fold < kept) folds.push(png);
         }
       }
-      return { digest: digest.data, folds, shift, error: '' };
+      return { digest: digest.data, folds, shares: first ? await this.#shares(browser, first, spec, digest.data, subject.route) : null, shift, error: '' };
     } catch (err) {
-      return { digest: null, folds: [], shift: null, error: errorMessage(err).split('\n')[0] ?? 'navigation failed' };
+      return { digest: null, folds: [], shares: null, shift: null, error: errorMessage(err).split('\n')[0] ?? 'navigation failed' };
     } finally {
       await context.close().catch(() => undefined);
+    }
+  }
+
+  /**
+   * How the pixels of a first screenful divide, with the page's pictures left out. Null when the count could
+   * not be made (the page's composition was not read, so where its pictures are is not known; the picture
+   * would not decode): the colour rules then say nothing, and everything else measured still stands.
+   */
+  async #shares(browser: Browser, png: Buffer, spec: ViewportSpec, digest: PageDigest, route: string): Promise<ColourShares | null> {
+    if (!digest.composition) return null;
+    try {
+      return await colourShares(browser, png, { mask: digest.composition.mediaBoxes, scale: spec.context.deviceScaleFactor ?? 1 });
+    } catch (err) {
+      this.#log.warn({ err: errorMessage(err).split('\n')[0], route }, 'the colours of a screen could not be counted');
+      return null;
     }
   }
 }

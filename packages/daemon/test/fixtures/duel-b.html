@@ -1,0 +1,978 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>라인전 · 14라운드 중계 전광판</title>
+<meta name="description" content="체중은 내 쪽 무대 뒤에서 기록하고, 경기장에는 라운드 칸 하나가 점수만큼 차오르며 큰 점수가 굴러가고 중계 자막이 방금 일을 알려 주는 스코어보드 방식.">
+<meta name="theme-seed" content='{"hue":258,"chroma":0.22,"lightness":0.5,"neutral_hue":250,"neutral_chroma":0.004,"corners":"sharp","display":"grotesk","source":"야구장과 e스포츠 중계의 코발트 전광판과 하단 자막 띠에서 왔고, 라운드 칸이 줄 맞춰 서는 각진 판이 그 모양이다."}'>
+<style>
+:root {
+  color-scheme: light dark;
+  --sz-bg: oklch(98.50% 0.0040 250.0);
+  --sz-surface: oklch(99.80% 0.0012 250.0);
+  --sz-sunken: oklch(96.20% 0.0040 250.0);
+  --sz-border: oklch(90.00% 0.0040 250.0);
+  --sz-control-border: oklch(60.47% 0.0040 258.0);
+  --sz-fg: oklch(20.00% 0.0040 250.0);
+  --sz-fg-muted: oklch(41.51% 0.0040 258.0);
+  --sz-accent: oklch(42.07% 0.1559 258.0);
+  --sz-on-accent: oklch(99.50% 0.0026 250.0);
+  --sz-brand: oklch(45.50% 0.1685 258.0);
+  --sz-on-brand: oklch(99.50% 0.0026 250.0);
+  --sz-brand-soft: oklch(94.00% 0.0290 258.0);
+  --sz-danger: oklch(43.58% 0.1700 27.0);
+  --sz-success: oklch(40.34% 0.1062 152.0);
+  --sz-warning: oklch(41.89% 0.0884 75.0);
+
+  --font-sans: "Pretendard Variable", "Pretendard", -apple-system, system-ui, sans-serif;
+  --font-display: "Bricolage Grotesque", "Pretendard Variable", "Pretendard", -apple-system, system-ui, sans-serif;
+
+  --text-2xs: 0.6875rem;
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.25rem;
+  --text-2xl: 1.5rem;
+  --text-3xl: 1.875rem;
+  --text-4xl: 2.25rem;
+  --text-5xl: 3rem;
+  --text-6xl: 3.75rem;
+  --text-7xl: 4.5rem;
+
+  --radius-sm: 0px;
+  --radius-md: 4px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-full: 9999px;
+
+  --shadow-sm: 0 1px 2px oklch(0% 0 0 / 0.06), 0 1px 1px oklch(0% 0 0 / 0.04);
+  --shadow-md: 0 8px 24px -8px oklch(0% 0 0 / 0.16), 0 2px 4px oklch(0% 0 0 / 0.05);
+
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --duration-fast: 120ms;
+  --duration-base: 200ms;
+  --duration-slow: 320ms;
+  --duration-entrance: 710ms;
+  --duration-page: 900ms;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --sz-bg: oklch(16.50% 0.0040 250.0);
+    --sz-surface: oklch(20.50% 0.0040 250.0);
+    --sz-sunken: oklch(13.50% 0.0040 250.0);
+    --sz-border: oklch(29.00% 0.0040 250.0);
+    --sz-control-border: oklch(55.32% 0.0040 258.0);
+    --sz-fg: oklch(96.00% 0.0040 250.0);
+    --sz-fg-muted: oklch(76.01% 0.0040 258.0);
+    --sz-accent: oklch(76.09% 0.1234 258.0);
+    --sz-on-accent: oklch(13.00% 0.0040 250.0);
+    --sz-brand: oklch(45.50% 0.1685 258.0);
+    --sz-on-brand: oklch(99.50% 0.0026 250.0);
+    --sz-brand-soft: oklch(26.00% 0.0500 258.0);
+    --sz-danger: oklch(77.53% 0.1322 27.0);
+    --sz-success: oklch(74.54% 0.1300 152.0);
+    --sz-warning: oklch(76.51% 0.1300 75.0);
+  }
+}
+/* The board is a stadium panel: always the dark palette, on paper or on night. */
+.theme-dark {
+  color-scheme: dark;
+  --sz-bg: oklch(16.50% 0.0040 250.0);
+  --sz-surface: oklch(20.50% 0.0040 250.0);
+  --sz-sunken: oklch(13.50% 0.0040 250.0);
+  --sz-border: oklch(29.00% 0.0040 250.0);
+  --sz-control-border: oklch(55.32% 0.0040 258.0);
+  --sz-fg: oklch(96.00% 0.0040 250.0);
+  --sz-fg-muted: oklch(76.01% 0.0040 258.0);
+  --sz-accent: oklch(76.09% 0.1234 258.0);
+  --sz-on-accent: oklch(13.00% 0.0040 250.0);
+  --sz-brand: oklch(45.50% 0.1685 258.0);
+  --sz-on-brand: oklch(99.50% 0.0026 250.0);
+  --sz-brand-soft: oklch(26.00% 0.0500 258.0);
+  color: var(--sz-fg);
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html {
+  font-family: var(--font-sans);
+  font-size: 100%;
+  line-height: 1.6;
+  color: var(--sz-fg);
+  background: var(--sz-bg);
+  -webkit-text-size-adjust: 100%;
+  scroll-padding-top: 88px;
+  scroll-padding-bottom: calc(232px + env(safe-area-inset-bottom));
+}
+body { margin: 0; min-height: 100dvh; background: var(--sz-bg); }
+:lang(ko) { word-break: keep-all; overflow-wrap: anywhere; }
+h1, h2, h3, p, ol, ul { margin: 0; }
+ol, ul { padding: 0; list-style: none; }
+button { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--sz-accent); outline-offset: 2px; }
+label:has(input:focus-visible), body:has(#mis:focus-visible) .next { outline: 2px solid var(--sz-accent); outline-offset: 2px; }
+.num { font-variant-numeric: tabular-nums; }
+.vh {
+  position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; border: 0;
+  overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+}
+/* state inputs live inside the labels that set them */
+.st { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; pointer-events: none; }
+
+/* ───────── frame ───────── */
+.app {
+  max-width: 720px;
+  margin: 0 auto;
+  padding-bottom: calc(272px + env(safe-area-inset-bottom));
+}
+.bar {
+  position: sticky; top: 0; z-index: 5;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: calc(8px + env(safe-area-inset-top)) 16px 8px;
+  background: var(--sz-bg);
+  border-bottom: 1px solid var(--sz-border);
+}
+.bar h1 {
+  font-family: var(--font-display);
+  font-size: var(--text-lg); line-height: 1.3; font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.bar .sub { font-size: var(--text-xs); color: var(--sz-fg-muted); line-height: 1.5; }
+.iconbtn {
+  display: inline-grid; place-items: center;
+  width: 44px; height: 44px; padding: 0;
+  background: transparent; border: 1px solid var(--sz-border); border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: background-color var(--duration-fast) var(--ease-out), scale var(--duration-fast) var(--ease-out);
+}
+.iconbtn:hover { background: var(--sz-sunken); }
+.iconbtn:active { scale: 0.92; background: var(--sz-sunken); }
+.iconbtn svg { width: 20px; height: 20px; fill: currentColor; }
+
+main { padding: 16px 16px 0; display: grid; gap: 16px; }
+
+/* ───────── head to head ───────── */
+.h2h {
+  display: grid;
+  grid-template-columns: 1fr 48px 1fr;
+  align-items: stretch;
+}
+.side {
+  --pbg: var(--sz-surface); --pfg: var(--sz-fg); --pmu: var(--sz-fg-muted); --pbd: var(--sz-border);
+  display: flex; flex-direction: column; gap: 4px;
+  padding: 12px;
+  background: var(--pbg); color: var(--pfg);
+  border: 1px solid var(--pbd);
+  transition: background-color var(--duration-slow) var(--ease-out), color var(--duration-slow) var(--ease-out), border-color var(--duration-slow) var(--ease-out);
+}
+.side.opp { text-align: right; align-items: flex-end; }
+/* who leads stands on the cobalt plate */
+.opp, body:has(#rec:checked):has(#mis:checked) .me {
+  --pbg: var(--sz-brand); --pfg: var(--sz-on-brand); --pmu: var(--sz-on-brand); --pbd: var(--sz-brand);
+}
+body:has(#rec:checked):has(#mis:checked) .opp {
+  --pbg: var(--sz-surface); --pfg: var(--sz-fg); --pmu: var(--sz-fg-muted); --pbd: var(--sz-border);
+}
+.side .who { font-size: var(--text-base); font-weight: 700; line-height: 1.5; }
+.side .meta { font-size: var(--text-2xs); color: var(--pmu); line-height: 1.5; font-variant-numeric: tabular-nums; }
+.score {
+  font-family: var(--font-display);
+  font-size: var(--text-6xl); line-height: 1; font-weight: 800;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+  margin-top: 8px;
+  min-height: 1em;
+}
+.today {
+  font-size: var(--text-xs); line-height: 1.5; font-weight: 600; color: var(--pmu);
+  font-variant-numeric: tabular-nums;
+}
+.cheerline { font-size: var(--text-xs); line-height: 1.5; color: var(--pmu); margin-top: 4px; }
+
+.axis {
+  position: relative;
+  display: grid; place-items: center;
+}
+.axis::before {
+  content: ""; position: absolute; top: 0; bottom: 0; left: 50%; width: 1px; background: var(--sz-border);
+}
+.diff {
+  position: relative;
+  min-width: 44px; padding: 4px 4px;
+  background: var(--sz-bg); border: 1px solid var(--sz-control-border);
+  font-size: var(--text-sm); font-weight: 800; line-height: 1.5; text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.gap {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+  font-size: var(--text-xl); font-weight: 700; line-height: 1.3;
+  margin-top: -4px;
+}
+.gap .left { font-variant-numeric: tabular-nums; }
+.gap .round { font-size: var(--text-xs); font-weight: 500; color: var(--sz-fg-muted); font-variant-numeric: tabular-nums; }
+
+/* cheer control */
+.cheerbtn {
+  display: inline-flex; align-items: center; gap: 8px;
+  min-height: 44px; padding: 8px 12px; margin-top: 8px;
+  background: transparent; color: var(--pfg);
+  border: 1px solid currentColor; border-radius: var(--radius-sm);
+  font-size: var(--text-sm); font-weight: 700; line-height: 1.5;
+  cursor: pointer;
+  transition: scale var(--duration-fast) var(--ease-out), background-color var(--duration-fast) var(--ease-out);
+}
+.cheerbtn .left { font-size: var(--text-2xs); font-weight: 600; font-variant-numeric: tabular-nums; }
+.cheerbtn:hover { background: color-mix(in oklch, currentColor 12%, transparent); }
+.cheerbtn:active { scale: 0.95; background: color-mix(in oklch, currentColor 20%, transparent); }
+.sent { display: none; flex-direction: column; align-items: flex-end; margin-top: 8px; font-size: var(--text-xs); line-height: 1.5; color: var(--pfg); }
+.sent b { font-size: var(--text-sm); }
+body:has(input[name="cheer"]:checked) .cheerbtn { display: none; }
+body:has(input[name="cheer"]:checked) .sent { display: flex; }
+
+/* ───────── scoreboard ───────── */
+.board {
+  display: block; width: calc(100% + 32px); margin: 0 -16px;
+  padding: 12px 12px 12px;
+  background: var(--sz-sunken);
+  border: 0; border-block: 1px solid var(--sz-border);
+  text-align: left; cursor: pointer;
+  transition: scale var(--duration-fast) var(--ease-out);
+}
+.board:active { scale: 0.99; }
+.board .head {
+  display: flex; justify-content: space-between; align-items: baseline;
+  font-size: var(--text-xs); line-height: 1.5; color: var(--sz-fg-muted);
+  margin-bottom: 8px;
+}
+.board .head b { color: var(--sz-fg); font-weight: 700; }
+.board .open { color: var(--sz-accent); font-weight: 700; }
+.grid {
+  display: grid; grid-template-columns: repeat(14, minmax(0, 1fr));
+  border-left: 1px solid var(--sz-border);
+}
+.grid > span { border-right: 1px solid var(--sz-border); }
+.rn {
+  display: grid; place-items: center;
+  height: 20px;
+  font-size: var(--text-2xs); line-height: 1; font-weight: 600; color: var(--sz-fg-muted);
+  font-variant-numeric: tabular-nums;
+}
+.rn.now { background: var(--sz-brand); color: var(--sz-on-brand); }
+.rowname {
+  display: flex; justify-content: space-between;
+  font-size: var(--text-xs); font-weight: 700; line-height: 1.5;
+  margin: 8px 0 4px;
+}
+.rowname .t { color: var(--sz-fg-muted); font-weight: 500; font-variant-numeric: tabular-nums; }
+.cell { display: flex; flex-direction: column; }
+.cell .n {
+  height: 16px; text-align: center;
+  font-size: var(--text-2xs); line-height: 16px; font-weight: 600;
+  font-variant-numeric: tabular-nums; letter-spacing: -0.02em;
+}
+.well {
+  position: relative;
+  height: 72px;
+  margin: 0 2px;
+  background: var(--sz-surface);
+  overflow: hidden;
+}
+.fill {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  height: calc(var(--v, 0) * 1%);
+  background: var(--sz-accent);
+  transform-origin: bottom;
+  animation: rise var(--duration-entrance) var(--ease-out) both;
+  animation-delay: calc(var(--i, 0) * 40ms);
+}
+.them .fill { background: var(--sz-fg-muted); }
+.later .well { background: transparent; outline: 1px dashed var(--sz-border); outline-offset: -1px; }
+.now-col { background: var(--sz-brand-soft); }
+.wait {
+  position: absolute; inset: 4px 0 auto; margin: 0 auto;
+  writing-mode: vertical-rl; text-orientation: upright;
+  font-size: var(--text-2xs); line-height: 1; font-weight: 700; color: var(--sz-accent);
+  letter-spacing: 0;
+  display: grid; place-items: center; width: 100%;
+}
+.them .wait { color: var(--sz-fg-muted); }
+@keyframes rise { from { scale: 1 0; } to { scale: 1 1; } }
+
+.me-row .cell:nth-child(1) { --v: 96; --i: 0; }
+.me-row .cell:nth-child(2) { --v: 97; --i: 1; }
+.me-row .cell:nth-child(3) { --v: 53; --i: 2; }
+.me-row .cell:nth-child(4) { --v: 99; --i: 3; }
+.me-row .cell:nth-child(5) { --v: 88; --i: 4; }
+.them .cell:nth-child(1) { --v: 98; --i: 0; }
+.them .cell:nth-child(2) { --v: 100; --i: 1; }
+.them .cell:nth-child(3) { --v: 99; --i: 2; }
+.them .cell:nth-child(4) { --v: 100; --i: 3; }
+.them .cell:nth-child(5) { --v: 99; --i: 4; }
+
+/* today's own cell fills by what was earned */
+body { --wv: 0; --mv: 0; }
+body:has(#mis:checked) { --mv: 40; }
+body:has(#rec:checked):has(#w674:checked),
+body:has(#rec:checked):has(#w675:checked),
+body:has(#rec:checked):has(#w676:checked) { --wv: 60; }
+body:has(#rec:checked):has(#w677:checked) { --wv: 58; }
+body:has(#rec:checked):has(#w678:checked) { --wv: 56; }
+body:has(#rec:checked):has(#w679:checked) { --wv: 54; }
+body:has(#rec:checked):has(#w680:checked) { --wv: 52; }
+.me-row .today-cell .fill {
+  height: calc((var(--wv) + var(--mv)) * 1%);
+  background: var(--sz-accent);
+  animation: none;
+  transition: height var(--duration-entrance) var(--ease-out);
+}
+body:has(#rec:checked) .me-row .today-cell .wait { display: none; }
+
+/* ───────── mission ───────── */
+.mission {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 0;
+  background: var(--sz-surface); border: 1px solid var(--sz-border);
+  transition: background-color var(--duration-slow) var(--ease-out), border-color var(--duration-slow) var(--ease-out);
+}
+body:has(#rec:checked):not(:has(#mis:checked)) .mission { background: var(--sz-brand-soft); border-color: var(--sz-accent); }
+.mission .what {
+  grid-column: 1 / -1;
+  display: flex; justify-content: space-between; align-items: baseline; gap: 8px;
+  padding: 12px 12px 8px;
+}
+.mission .what h2 { font-size: var(--text-lg); font-weight: 700; line-height: 1.3; }
+.mission .what .k1 { font-size: var(--text-2xs); color: var(--sz-fg-muted); display: block; line-height: 1.5; font-weight: 600; }
+.mission .pts { font-size: var(--text-sm); font-weight: 700; color: var(--sz-accent); font-variant-numeric: tabular-nums; }
+.check {
+  display: flex; align-items: center; gap: 12px;
+  min-height: 56px; margin: 0 12px 12px 12px; padding: 8px 12px;
+  background: var(--sz-bg);
+  border: 1px solid var(--sz-control-border);
+  font-size: var(--text-base); font-weight: 700; line-height: 1.5;
+  cursor: pointer; user-select: none;
+  transition: scale var(--duration-fast) var(--ease-out), background-color var(--duration-base) var(--ease-out), border-color var(--duration-base) var(--ease-out);
+}
+.check:hover { border-color: var(--sz-fg); }
+.check:active { scale: 0.96; background: var(--sz-sunken); }
+.box {
+  flex: none; width: 24px; height: 24px;
+  border: 2px solid var(--sz-control-border);
+  display: grid; place-items: center;
+  transition: background-color var(--duration-base) var(--ease-out), border-color var(--duration-base) var(--ease-out);
+}
+.box svg { width: 16px; height: 16px; fill: none; stroke: var(--sz-on-brand); stroke-width: 3; opacity: 0; scale: 0.4; transition: opacity var(--duration-base) var(--ease-out), scale var(--duration-slow) var(--ease-out); }
+.check:has(:checked) { background: var(--sz-surface); border-color: var(--sz-accent); }
+.check:has(:checked) .box { background: var(--sz-brand); border-color: var(--sz-brand); }
+.check:has(:checked) .box svg { opacity: 1; scale: 1; }
+.check .on { display: none; }
+.check:has(:checked) .on { display: inline; }
+.check:has(:checked) .off { display: none; }
+.foe {
+  display: flex; flex-direction: column; justify-content: center; align-items: flex-end;
+  min-height: 56px; margin: 0 12px 12px 0;
+  font-size: var(--text-sm); line-height: 1.5; text-align: right;
+}
+.foe b { font-size: var(--text-base); }
+.foe .meta { font-size: var(--text-2xs); color: var(--sz-fg-muted); }
+
+/* ───────── ticker ───────── */
+.ticker {
+  border-top: 2px solid var(--sz-fg);
+}
+.ticker h2 {
+  display: flex; justify-content: space-between;
+  font-size: var(--text-xs); font-weight: 700; line-height: 1.5;
+  padding: 8px 0;
+}
+.ticker h2 span { color: var(--sz-fg-muted); font-weight: 500; }
+.ticker ol { display: flex; flex-direction: column; }
+.ticker li {
+  display: grid; grid-template-columns: 72px 1fr; gap: 8px; align-items: baseline;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--sz-border);
+}
+.ticker time { font-size: var(--text-xs); line-height: 1.5; color: var(--sz-fg-muted); font-variant-numeric: tabular-nums; font-weight: 600; }
+.ticker li > span { font-size: var(--text-base); line-height: 1.5; }
+.ticker li b { font-weight: 700; font-variant-numeric: tabular-nums; }
+.ticker li.new { display: none; }
+.ticker li.new { animation: cue 1800ms var(--ease-out) both; }
+@keyframes cue {
+  0% { translate: -24px 0; opacity: 0; background: var(--sz-brand-soft); }
+  25% { translate: 0 0; opacity: 1; background: var(--sz-brand-soft); }
+  100% { translate: 0 0; opacity: 1; background: transparent; }
+}
+
+/* ───────── dock ───────── */
+.dock {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 10;
+  display: flex; justify-content: center;
+  background: var(--sz-surface);
+  border-top: 1px solid var(--sz-border);
+  box-shadow: var(--shadow-md);
+  padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+}
+.dock-in { width: 100%; max-width: 688px; }
+.dock .hint {
+  display: flex; justify-content: space-between;
+  font-size: var(--text-xs); color: var(--sz-fg-muted); line-height: 1.5; margin-bottom: 8px;
+}
+.dock .hint b { color: var(--sz-fg); }
+.primary {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  width: 100%; min-height: 56px; padding: 12px 16px;
+  background: var(--sz-brand); color: var(--sz-on-brand);
+  border: 0; border-radius: var(--radius-md);
+  font-size: var(--text-lg); font-weight: 700; line-height: 1.3;
+  cursor: pointer;
+  box-shadow: inset 0 -4px 0 oklch(0% 0 0 / 0.22);
+  transition: scale var(--duration-fast) var(--ease-out), box-shadow var(--duration-fast) var(--ease-out), translate var(--duration-fast) var(--ease-out);
+}
+.primary:hover { box-shadow: inset 0 -4px 0 oklch(0% 0 0 / 0.32); }
+.primary:active { translate: 0 2px; box-shadow: inset 0 0 0 oklch(0% 0 0 / 0.22); scale: 0.985; }
+.result { display: none; }
+body:has(#rec:checked) .before { display: none; }
+body:has(#rec:checked) .result { display: block; }
+.result .top { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.result .kg { font-size: var(--text-xl); font-weight: 700; line-height: 1.3; font-variant-numeric: tabular-nums; }
+.result .kg small { font-size: var(--text-sm); font-weight: 500; color: var(--sz-fg-muted); }
+.result .parts { font-size: var(--text-xs); line-height: 1.5; color: var(--sz-fg-muted); font-variant-numeric: tabular-nums; }
+.result .plus {
+  font-family: var(--font-display);
+  font-size: var(--text-3xl); font-weight: 800; line-height: 1.3; font-variant-numeric: tabular-nums;
+  color: var(--sz-on-brand); background: var(--sz-brand);
+  padding: 0 12px;
+}
+.result .note { font-size: var(--text-base); line-height: 1.5; margin-top: 4px; }
+.result .next { margin-top: 12px; justify-content: space-between; }
+.result .next .tag { font-family: var(--font-display); font-size: var(--text-xl); font-weight: 800; font-variant-numeric: tabular-nums; }
+.result .next .on { display: none; }
+body:has(#mis:checked) .result .next { background: var(--sz-surface); color: var(--sz-fg); box-shadow: inset 0 0 0 1px var(--sz-control-border); }
+body:has(#mis:checked) .result .next .on { display: inline; }
+body:has(#mis:checked) .result .next .off { display: none; }
+body:has(#mis:checked) .result .next .tag { color: var(--sz-accent); }
+
+/* ───────── state-dependent figures ───────── */
+.k, .v, .d, .q, .c { display: none; }
+body:not(:has(#rec:checked)):not(:has(#mis:checked)) .k-p0,
+body:not(:has(#rec:checked)):has(#mis:checked) .k-p1,
+body:has(#rec:checked):has(#w674:checked):not(:has(#mis:checked)) .k-674-0,
+body:has(#rec:checked):has(#w675:checked):not(:has(#mis:checked)) .k-675-0,
+body:has(#rec:checked):has(#w676:checked):not(:has(#mis:checked)) .k-676-0,
+body:has(#rec:checked):has(#w677:checked):not(:has(#mis:checked)) .k-677-0,
+body:has(#rec:checked):has(#w678:checked):not(:has(#mis:checked)) .k-678-0,
+body:has(#rec:checked):has(#w679:checked):not(:has(#mis:checked)) .k-679-0,
+body:has(#rec:checked):has(#w680:checked):not(:has(#mis:checked)) .k-680-0,
+body:has(#rec:checked):has(#w674:checked):has(#mis:checked) .k-674-1,
+body:has(#rec:checked):has(#w675:checked):has(#mis:checked) .k-675-1,
+body:has(#rec:checked):has(#w676:checked):has(#mis:checked) .k-676-1,
+body:has(#rec:checked):has(#w677:checked):has(#mis:checked) .k-677-1,
+body:has(#rec:checked):has(#w678:checked):has(#mis:checked) .k-678-1,
+body:has(#rec:checked):has(#w679:checked):has(#mis:checked) .k-679-1,
+body:has(#rec:checked):has(#w680:checked):has(#mis:checked) .k-680-1 { display: inline-block; }
+
+body:has(#rec:checked):has(#w674:checked) .v-674,
+body:has(#rec:checked):has(#w675:checked) .v-675,
+body:has(#rec:checked):has(#w676:checked) .v-676,
+body:has(#rec:checked):has(#w677:checked) .v-677,
+body:has(#rec:checked):has(#w678:checked) .v-678,
+body:has(#rec:checked):has(#w679:checked) .v-679,
+body:has(#rec:checked):has(#w680:checked) .v-680 { display: block; }
+.ticker li.v { display: none; }
+body:has(#rec:checked):has(#w674:checked) .ticker li.v-674,
+body:has(#rec:checked):has(#w675:checked) .ticker li.v-675,
+body:has(#rec:checked):has(#w676:checked) .ticker li.v-676,
+body:has(#rec:checked):has(#w677:checked) .ticker li.v-677,
+body:has(#rec:checked):has(#w678:checked) .ticker li.v-678,
+body:has(#rec:checked):has(#w679:checked) .ticker li.v-679,
+body:has(#rec:checked):has(#w680:checked) .ticker li.v-680 { display: grid; }
+body:has(#mis:checked) .ticker li.m-new { display: grid; }
+body:has(#c1:checked) .ticker li.c-1,
+body:has(#c2:checked) .ticker li.c-2,
+body:has(#c3:checked) .ticker li.c-3,
+body:has(#c4:checked) .ticker li.c-4 { display: grid; }
+body:has(#c1:checked) .sent .c-1,
+body:has(#c2:checked) .sent .c-2,
+body:has(#c3:checked) .sent .c-3,
+body:has(#c4:checked) .sent .c-4 { display: inline; }
+
+body:has(#w674:checked) .d-674,
+body:has(#w675:checked) .d-675,
+body:has(#w676:checked) .d-676,
+body:has(#w677:checked) .d-677,
+body:has(#w678:checked) .d-678,
+body:has(#w679:checked) .d-679,
+body:has(#w680:checked) .d-680 { display: inline; }
+
+body:not(:has(#rec:checked)):not(:has(#mis:checked)) .q-00,
+body:not(:has(#rec:checked)):has(#mis:checked) .q-01,
+body:has(#rec:checked):not(:has(#mis:checked)) .q-10,
+body:has(#rec:checked):has(#mis:checked) .q-11 { display: inline; }
+
+/* the figures that change roll in when they change */
+.k { transition: opacity var(--duration-slow) var(--ease-out), translate var(--duration-slow) var(--ease-out); }
+@starting-style {
+  body:has(#rec:checked) .k, body:has(#mis:checked) .k { opacity: 0; translate: 0 0.5em; }
+}
+.today .k:not(.k-p0) { animation: earned 1500ms var(--ease-out) both; padding: 0 4px; margin-left: -4px; }
+@keyframes earned {
+  0%, 60% { background: var(--sz-sunken); color: var(--sz-fg); }
+  100% { background: transparent; }
+}
+
+/* ───────── sheets ───────── */
+.sheet {
+  position: fixed; inset: auto 0 0 0;
+  width: 100%; max-width: 720px; margin: 0 auto;
+  max-height: calc(100dvh - 24px);
+  padding: 0; border: 0; border-top: 1px solid var(--sz-border);
+  background: var(--sz-surface); color: var(--sz-fg);
+  box-shadow: var(--shadow-md);
+  overflow-y: auto; overscroll-behavior: contain;
+  translate: 0 100%;
+  transition:
+    translate var(--duration-slow) var(--ease-out),
+    overlay var(--duration-slow) allow-discrete,
+    display var(--duration-slow) allow-discrete;
+}
+.sheet:popover-open { translate: 0 0; }
+@starting-style { .sheet:popover-open { translate: 0 100%; } }
+.sheet::backdrop {
+  background: oklch(0% 0 0 / 0);
+  transition: background-color var(--duration-slow) var(--ease-out), overlay var(--duration-slow) allow-discrete, display var(--duration-slow) allow-discrete;
+}
+.sheet:popover-open::backdrop { background: oklch(0% 0 0 / 0.45); }
+@starting-style { .sheet:popover-open::backdrop { background: oklch(0% 0 0 / 0); } }
+.sheet .grab { display: block; width: 40px; height: 4px; margin: 8px auto 0; background: var(--sz-border); border-radius: var(--radius-full); }
+.sheet header {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 8px 16px 8px;
+}
+.sheet h2 { font-size: var(--text-xl); font-weight: 700; line-height: 1.3; }
+.sheet .body { padding: 0 16px 16px; }
+.textbtn {
+  min-height: 44px; min-width: 44px; padding: 8px 12px;
+  background: transparent; border: 1px solid var(--sz-border); border-radius: var(--radius-md);
+  font-size: var(--text-sm); font-weight: 700; line-height: 1.5; cursor: pointer;
+  transition: scale var(--duration-fast) var(--ease-out), background-color var(--duration-fast) var(--ease-out);
+}
+.textbtn:hover { background: var(--sz-sunken); }
+.textbtn:active { scale: 0.94; background: var(--sz-sunken); }
+
+/* weigh sheet: the readout and the scale's ruler */
+#weigh { height: calc(100dvh - 24px); display: none; }
+#weigh:popover-open { display: flex; flex-direction: column; }
+body:has(#rec:checked) #weigh { display: none; }
+body:has(#rec:checked) #weigh::backdrop { background: oklch(0% 0 0 / 0); pointer-events: none; }
+.readout {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+  padding: 8px 16px 12px;
+  border-bottom: 1px solid var(--sz-border);
+}
+.readout .big {
+  font-family: var(--font-display);
+  font-size: var(--text-7xl); line-height: 1; font-weight: 800; letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+}
+.readout .big small { font-family: var(--font-sans); font-size: var(--text-xl); font-weight: 600; letter-spacing: 0; margin-left: 4px; }
+.readout .delta { text-align: right; font-size: var(--text-sm); line-height: 1.5; color: var(--sz-fg-muted); font-variant-numeric: tabular-nums; }
+.readout .delta b { display: block; font-size: var(--text-lg); color: var(--sz-fg); }
+.ruler {
+  flex: 1; overflow-y: auto; scroll-snap-type: y proximity;
+  padding: 8px 0;
+  background: var(--sz-sunken);
+}
+.tick {
+  position: relative;
+  display: grid; grid-template-columns: 72px 1fr 56px; align-items: center; gap: 12px;
+  min-height: 52px; padding: 0 16px;
+  scroll-snap-align: center;
+  font-size: var(--text-xl); font-weight: 600; line-height: 1.3; font-variant-numeric: tabular-nums;
+  cursor: pointer; user-select: none;
+  transition: background-color var(--duration-fast) var(--ease-out), scale var(--duration-fast) var(--ease-out);
+}
+.tick .line { height: 2px; background: var(--sz-control-border); transition: height var(--duration-base) var(--ease-out), background-color var(--duration-base) var(--ease-out); }
+.tick .line.half { width: 60%; }
+.tick .tag { font-size: var(--text-xs); font-weight: 600; color: var(--sz-fg-muted); text-align: right; line-height: 1.5; }
+.tick:hover { background: var(--sz-surface); }
+.tick:active { scale: 0.98; background: var(--sz-surface); }
+.tick:has(:checked) { background: var(--sz-surface); color: var(--sz-accent); font-weight: 800; box-shadow: inset 4px 0 0 var(--sz-brand); }
+.tick:has(:checked) .line { height: 4px; background: var(--sz-brand); }
+.weigh-foot { padding: 12px 16px calc(16px + env(safe-area-inset-bottom)); border-top: 1px solid var(--sz-border); background: var(--sz-surface); }
+.weigh-foot .hint { display: flex; justify-content: space-between; font-size: var(--text-xs); line-height: 1.5; color: var(--sz-fg-muted); margin-bottom: 8px; }
+.weigh-foot .hint b { color: var(--sz-fg); }
+
+/* cheer sheet */
+.phr {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  min-height: 56px; padding: 8px 16px; margin-top: 8px;
+  background: var(--sz-bg); border: 1px solid var(--sz-border);
+  font-size: var(--text-lg); font-weight: 600; line-height: 1.5;
+  cursor: pointer; user-select: none;
+  transition: scale var(--duration-fast) var(--ease-out), background-color var(--duration-fast) var(--ease-out), border-color var(--duration-fast) var(--ease-out);
+}
+.phr .go { font-size: var(--text-sm); color: var(--sz-accent); font-weight: 700; }
+.phr:hover { border-color: var(--sz-control-border); }
+.phr:active { scale: 0.97; background: var(--sz-brand-soft); border-color: var(--sz-accent); }
+.left-note { font-size: var(--text-sm); color: var(--sz-fg-muted); line-height: 1.5; font-variant-numeric: tabular-nums; }
+body:has(input[name="cheer"]:checked) #cheer { display: none; }
+body:has(input[name="cheer"]:checked) #cheer::backdrop { background: oklch(0% 0 0 / 0); pointer-events: none; }
+
+/* score detail sheet (D-02) */
+.days li {
+  display: grid; grid-template-columns: 56px 1fr auto; gap: 4px 12px; align-items: baseline;
+  padding: 12px 0; border-bottom: 1px solid var(--sz-border);
+}
+.days .dn { font-size: var(--text-sm); font-weight: 700; line-height: 1.5; font-variant-numeric: tabular-nums; }
+.days .vs { font-family: var(--font-display); font-size: var(--text-2xl); font-weight: 800; line-height: 1.3; font-variant-numeric: tabular-nums; text-align: right; }
+.days .vs span { color: var(--sz-fg-muted); font-size: var(--text-base); font-weight: 600; }
+.days .why { grid-column: 2 / -1; font-size: var(--text-sm); line-height: 1.5; color: var(--sz-fg-muted); font-variant-numeric: tabular-nums; }
+.days .wt { grid-column: 2 / -1; font-size: var(--text-xs); line-height: 1.5; color: var(--sz-fg-muted); font-variant-numeric: tabular-nums; }
+.days .low { color: var(--sz-danger); font-weight: 700; }
+details.how { margin-top: 16px; border: 1px solid var(--sz-border); background: var(--sz-bg); }
+details.how summary {
+  display: flex; align-items: center; justify-content: space-between;
+  min-height: 48px; padding: 8px 12px; cursor: pointer; list-style: none;
+  font-size: var(--text-base); font-weight: 700;
+  transition: background-color var(--duration-fast) var(--ease-out);
+}
+details.how summary::-webkit-details-marker { display: none; }
+details.how summary:active { background: var(--sz-sunken); }
+details.how summary::after { content: "+"; font-size: var(--text-xl); font-weight: 500; }
+details.how[open] summary::after { content: "−"; }
+details.how .in { padding: 0 12px 12px; font-size: var(--text-base); line-height: 1.6; }
+details.how .in p + p { margin-top: 8px; }
+
+/* more menu */
+.menu-row {
+  display: flex; justify-content: space-between; align-items: center;
+  min-height: 52px; padding: 8px 0; border-bottom: 1px solid var(--sz-border);
+  font-size: var(--text-base); line-height: 1.5;
+}
+.menu-row b { font-variant-numeric: tabular-nums; }
+details.quit summary {
+  display: flex; align-items: center; min-height: 52px; cursor: pointer; list-style: none;
+  font-size: var(--text-base); font-weight: 700; color: var(--sz-danger);
+  transition: background-color var(--duration-fast) var(--ease-out);
+}
+details.quit summary::-webkit-details-marker { display: none; }
+details.quit summary:active { background: var(--sz-sunken); }
+details.quit p { font-size: var(--text-base); line-height: 1.5; margin-bottom: 12px; }
+.danger {
+  width: 100%; min-height: 52px;
+  background: transparent; color: var(--sz-danger);
+  border: 1px solid var(--sz-danger); border-radius: var(--radius-md);
+  font-size: var(--text-base); font-weight: 700; cursor: pointer;
+  transition: scale var(--duration-fast) var(--ease-out);
+}
+.danger:active { scale: 0.97; }
+
+/* ───────── wider screens ───────── */
+@media (min-width: 600px) {
+  main { padding: 24px 24px 0; gap: 20px; }
+  .bar { padding-inline: 24px; }
+  .board { width: 100%; margin: 0; border: 1px solid var(--sz-border); padding: 16px; }
+  .h2h { grid-template-columns: 1fr 72px 1fr; }
+  .side { padding: 16px; }
+  .score { font-size: var(--text-7xl); }
+  .well { height: 112px; margin: 0 4px; }
+  .cell .n { font-size: var(--text-xs); }
+  .rn { font-size: var(--text-xs); height: 24px; }
+  .sheet { border: 1px solid var(--sz-border); border-bottom: 0; }
+  #weigh { height: min(calc(100dvh - 48px), 760px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0s !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0s !important;
+  }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="bar">
+    <div>
+      <h1>라운드 6 / 14</h1>
+      <p class="sub num">11월 18일 수요일 · 남은 최대 <span class="q q-00">900</span><span class="q q-01">860</span><span class="q q-10">840</span><span class="q q-11">800</span>점</p>
+    </div>
+    <button class="iconbtn" popovertarget="more" aria-label="대결 설정">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
+    </button>
+  </header>
+
+  <main>
+    <section class="h2h" aria-label="대결 점수">
+      <div class="side me">
+        <span class="who">서연</span>
+        <span class="meta">등급 1,000 배치 · 주 0.75%</span>
+        <span class="score" aria-live="polite">
+          <span class="k k-p0">433</span><span class="k k-p1">473</span>
+          <span class="k k-674-0">493</span><span class="k k-675-0">493</span><span class="k k-676-0">493</span><span class="k k-677-0">491</span><span class="k k-678-0">489</span><span class="k k-679-0">487</span><span class="k k-680-0">485</span>
+          <span class="k k-674-1">533</span><span class="k k-675-1">533</span><span class="k k-676-1">533</span><span class="k k-677-1">531</span><span class="k k-678-1">529</span><span class="k k-679-1" data-done="mission">527</span><span class="k k-680-1">525</span>
+        </span>
+        <span class="today">
+          <span class="k k-p0">오늘 0점 · 기록 대기</span><span class="k k-p1">오늘 +40 · 기록 대기</span>
+          <span class="k k-674-0">오늘 +60</span><span class="k k-675-0">오늘 +60</span><span class="k k-676-0">오늘 +60</span><span class="k k-677-0">오늘 +58</span><span class="k k-678-0">오늘 +56</span><span class="k k-679-0">오늘 +54</span><span class="k k-680-0">오늘 +52</span>
+          <span class="k k-674-1">오늘 +100</span><span class="k k-675-1">오늘 +100</span><span class="k k-676-1">오늘 +100</span><span class="k k-677-1">오늘 +98</span><span class="k k-678-1">오늘 +96</span><span class="k k-679-1">오늘 +94</span><span class="k k-680-1">오늘 +92</span>
+        </span>
+      </div>
+
+      <div class="axis" aria-hidden="true">
+        <span class="diff">
+          <span class="k k-p0">−63</span><span class="k k-p1">−23</span>
+          <span class="k k-674-0">−3</span><span class="k k-675-0">−3</span><span class="k k-676-0">−3</span><span class="k k-677-0">−5</span><span class="k k-678-0">−7</span><span class="k k-679-0">−9</span><span class="k k-680-0">−11</span>
+          <span class="k k-674-1">+37</span><span class="k k-675-1">+37</span><span class="k k-676-1">+37</span><span class="k k-677-1">+35</span><span class="k k-678-1">+33</span><span class="k k-679-1">+31</span><span class="k k-680-1">+29</span>
+        </span>
+      </div>
+
+      <div class="side opp">
+        <span class="who">새벽등산</span>
+        <span class="meta">등급 1,040 · 보통 07:40 기록</span>
+        <span class="score">496</span>
+        <span class="today">오늘 아직 기록 전</span>
+        <span class="cheerline">어제 받은 응원 ‘끝까지 가요’</span>
+        <button class="cheerbtn" popovertarget="cheer" data-step="cheer:1">응원 보내기 <span class="left">3번</span></button>
+        <span class="sent" data-done="cheer">
+          <b>보냄 · <span class="c c-1">좋은 아침이에요</span><span class="c c-2">오늘도 기록했어요</span><span class="c c-3">따라잡을게요</span><span class="c c-4">끝까지 가요</span></b>
+          <span class="num">남은 응원 2번</span>
+        </span>
+      </div>
+    </section>
+
+    <p class="gap">
+      <span class="left">
+        <span class="k k-p0">63점 뒤져 있어요</span><span class="k k-p1">23점 뒤져 있어요</span>
+        <span class="k k-674-0">3점 뒤져 있어요</span><span class="k k-675-0">3점 뒤져 있어요</span><span class="k k-676-0">3점 뒤져 있어요</span><span class="k k-677-0">5점 뒤져 있어요</span><span class="k k-678-0">7점 뒤져 있어요</span><span class="k k-679-0">9점 뒤져 있어요</span><span class="k k-680-0">11점 뒤져 있어요</span>
+        <span class="k k-674-1">37점 앞서 있어요</span><span class="k k-675-1">37점 앞서 있어요</span><span class="k k-676-1">37점 앞서 있어요</span><span class="k k-677-1">35점 앞서 있어요</span><span class="k k-678-1">33점 앞서 있어요</span><span class="k k-679-1" data-done="mission">31점 앞서 있어요</span><span class="k k-680-1">29점 앞서 있어요</span>
+      </span>
+      <span class="round">6일차 / 14일</span>
+    </p>
+
+    <button class="board theme-dark" popovertarget="detail" aria-label="라운드별 점수 전광판, 날짜별 내역 열기">
+      <span class="head"><b>라운드별 점수</b><span class="open">날짜별 내역</span></span>
+      <span class="grid" aria-hidden="true">
+        <span class="rn">1</span><span class="rn">2</span><span class="rn">3</span><span class="rn">4</span><span class="rn">5</span><span class="rn now">6</span><span class="rn">7</span><span class="rn">8</span><span class="rn">9</span><span class="rn">10</span><span class="rn">11</span><span class="rn">12</span><span class="rn">13</span><span class="rn">14</span>
+      </span>
+      <span class="rowname" aria-hidden="true"><span>서연</span><span class="t">하루 최대 100</span></span>
+      <span class="grid me-row" aria-hidden="true">
+        <span class="cell"><span class="n">96</span><span class="well"><span class="fill"></span></span></span>
+        <span class="cell"><span class="n">97</span><span class="well"><span class="fill"></span></span></span>
+        <span class="cell"><span class="n">53</span><span class="well"><span class="fill"></span></span></span>
+        <span class="cell"><span class="n">99</span><span class="well"><span class="fill"></span></span></span>
+        <span class="cell"><span class="n">88</span><span class="well"><span class="fill"></span></span></span>
+        <span class="cell today-cell now-col"><span class="n">
+          <span class="k k-p0">0</span><span class="k k-p1">40</span>
+          <span class="k k-674-0">60</span><span class="k k-675-0">60</span><span class="k k-676-0">60</span><span class="k k-677-0">58</span><span class="k k-678-0">56</span><span class="k k-679-0">54</span><span class="k k-680-0">52</span>
+          <span class="k k-674-1">100</span><span class="k k-675-1">100</span><span class="k k-676-1">100</span><span class="k k-677-1">98</span><span class="k k-678-1">96</span><span class="k k-679-1">94</span><span class="k k-680-1">92</span>
+        </span><span class="well"><span class="fill"></span><span class="wait">기록대기</span></span></span>
+        <span class="cell later"><span class="n"></span><span class="well"></span></span>
+        <span class="cell later"><span class="n"></span><span class="well"></span></span>
+        <span class="cell later"><span class="n"></span><span class="well"></span></span>
+        <span class="cell later"><span class="n"></span><span class="well"></span></span>
+        <span class="cell later"><span class="n"></span><span class="well"></span></span>
+        <span class="cell later"><span class="n"></span><span class="well"></span></span>
+        <span class="cell later"><span class="n"></span><span class="well"></span></span>
+        <span class="cell later"><span class="n"></span><span class="well"></span></span>
+      </span>
+      <span class="rowname" aria-hidden="true"><span>새벽등산</span><span class="t">kg는 서로 보이지 않아요</span></span>
+      <span class="grid them" aria-hidden="true">
+        <span class="cell"><span class="n">98</span><span class="well"><span class="fill"></span></span></span>
+        <span class="cell"><span class="n">100</span><span class="well"><span class="fill"></span></span></span>
+        <span class="cell"><span class="n">99</span><span class="well"><span class="fill"></span></span></span>
+        <span class="cell"><span class="n">100</span><span class="well"><span class="fill"></span></span></span>
+        <span class="cell"><span class="n">99</span><span class="well"><span class="fill"></span></span></span>
+        <span class="cell now-col"><span class="n">0</span><span class="well"><span class="wait">기록전</span></span></span>
+        <span class="cell later"><span class="n"></span><span class="well"></span></span>
+        <span class="cell later"><span class="n"></span><span class="well"></span></span>
+        <span class="cell later"><span class="n"></span><span class="well"></span></span>
+        <span class="cell later"><span class="n"></span><span class="well"></span></span>
+        <span class="cell later"><span class="n"></span><span class="well"></span></span>
+        <span class="cell later"><span class="n"></span><span class="well"></span></span>
+        <span class="cell later"><span class="n"></span><span class="well"></span></span>
+        <span class="cell later"><span class="n"></span><span class="well"></span></span>
+      </span>
+    </button>
+
+    <section class="mission" aria-label="오늘 미션">
+      <div class="what">
+        <h2><span class="k1">오늘 미션 · 두 사람 같음</span>걸음 8,000보</h2>
+        <span class="pts">40점</span>
+      </div>
+      <label class="check">
+        <input class="st" type="checkbox" id="mis" name="mission">
+        <span class="box"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5l3.2 3L13 4.5"/></svg></span>
+        <span class="off">다 걸었어요</span>
+        <span class="on" data-done="mission">완료 +40</span>
+      </label>
+      <div class="foe">
+        <b>새벽등산</b>
+        <span class="meta">아직 체크 전</span>
+      </div>
+    </section>
+
+    <section class="ticker" aria-label="중계">
+      <h2>중계 <span>최근</span></h2>
+      <ol aria-live="polite">
+        <li class="new c-1"><time>07:13</time><span>서연 → 새벽등산 응원 보냄 ‘좋은 아침이에요’</span></li>
+        <li class="new c-2"><time>07:13</time><span>서연 → 새벽등산 응원 보냄 ‘오늘도 기록했어요’</span></li>
+        <li class="new c-3"><time>07:13</time><span>서연 → 새벽등산 응원 보냄 ‘따라잡을게요’</span></li>
+        <li class="new c-4"><time>07:13</time><span>서연 → 새벽등산 응원 보냄 ‘끝까지 가요’</span></li>
+        <li class="new m-new"><time>07:13</time><span>서연 미션 걸음 8,000보 <b>+40</b></span></li>
+        <li class="new v v-674"><time>07:12</time><span>서연 기록 <b>+60</b> · 3일 평균이 라인 아래</span></li>
+        <li class="new v v-675"><time>07:12</time><span>서연 기록 <b>+60</b> · 3일 평균이 라인 아래</span></li>
+        <li class="new v v-676"><time>07:12</time><span>서연 기록 <b>+60</b> · 3일 평균이 라인에 붙음</span></li>
+        <li class="new v v-677"><time>07:12</time><span>서연 기록 <b>+58</b> · 늘어난 날이지만 3일 평균은 라인 근처</span></li>
+        <li class="new v v-678"><time>07:12</time><span>서연 기록 <b>+56</b> · 늘어난 날이지만 3일 평균은 라인 근처</span></li>
+        <li class="new v v-679"><time>07:12</time><span>서연 기록 <b>+54</b> · 늘어난 날이지만 3일 평균은 라인 근처</span></li>
+        <li class="new v v-680"><time>07:12</time><span>서연 기록 <b>+52</b> · 늘어난 날이지만 3일 평균은 라인 근처</span></li>
+        <li><time>00:00</time><span>6라운드 시작 · 미션 걸음 8,000보</span></li>
+        <li><time>어제 23:59</time><span>5라운드 끝 · 서연 <b>88</b>, 새벽등산 <b>99</b></span></li>
+        <li><time>어제 21:40</time><span>새벽등산 → 서연 응원 ‘끝까지 가요’</span></li>
+        <li><time>어제 13:20</time><span>서연 늦은 기록 <b>+10</b> · 12시가 지나 기록 점수 절반</span></li>
+      </ol>
+    </section>
+  </main>
+</div>
+
+<div class="dock">
+  <div class="dock-in">
+    <div class="before">
+      <p class="hint"><span>어제 67.6kg</span><b>12시 전에 기록하면 20점</b></p>
+      <button class="primary" popovertarget="weigh" data-step="weigh:1">오늘 체중 기록</button>
+    </div>
+    <div class="result">
+      <div class="v v-674"><div class="top"><div><p class="kg">67.4kg <small>· 07:12</small></p><p class="parts">기록 20 · 라인 40 · 07:22까지 고칠 수 있어요</p></div><span class="plus">+60</span></div><p class="note">어제보다 0.2kg 줄었고 3일 평균이 라인 아래예요</p></div>
+      <div class="v v-675"><div class="top"><div><p class="kg">67.5kg <small>· 07:12</small></p><p class="parts">기록 20 · 라인 40 · 07:22까지 고칠 수 있어요</p></div><span class="plus">+60</span></div><p class="note">어제보다 0.1kg 줄었고 3일 평균이 라인 아래예요</p></div>
+      <div class="v v-676"><div class="top"><div><p class="kg">67.6kg <small>· 07:12</small></p><p class="parts">기록 20 · 라인 40 · 07:22까지 고칠 수 있어요</p></div><span class="plus">+60</span></div><p class="note">어제와 같아요. 3일 평균이 라인에 붙어 있어요</p></div>
+      <div class="v v-677"><div class="top"><div><p class="kg">67.7kg <small>· 07:12</small></p><p class="parts">기록 20 · 라인 38 · 07:22까지 고칠 수 있어요</p></div><span class="plus">+58</span></div><p class="note">어제보다 0.1kg 늘었지만 3일 평균은 라인 근처예요</p></div>
+      <div class="v v-678"><div class="top"><div><p class="kg">67.8kg <small>· 07:12</small></p><p class="parts">기록 20 · 라인 36 · 07:22까지 고칠 수 있어요</p></div><span class="plus">+56</span></div><p class="note">어제보다 0.2kg 늘었지만 3일 평균은 라인 근처예요</p></div>
+      <div class="v v-679" data-done="weigh"><div class="top"><div><p class="kg">67.9kg <small>· 07:12</small></p><p class="parts">기록 20 · 라인 34 · 07:22까지 고칠 수 있어요</p></div><span class="plus">+54</span></div><p class="note">어제보다 0.3kg 늘었지만 3일 평균은 라인 근처예요</p></div>
+      <div class="v v-680"><div class="top"><div><p class="kg">68.0kg <small>· 07:12</small></p><p class="parts">기록 20 · 라인 32 · 07:22까지 고칠 수 있어요</p></div><span class="plus">+52</span></div><p class="note">어제보다 0.4kg 늘었지만 3일 평균은 라인 근처예요</p></div>
+      <label class="primary next" for="mis" data-step="mission:1"><span class="off">걸음 8,000보 다 걸었어요</span><span class="on">걸음 8,000보 완료 · 누르면 풀려요</span><span class="tag">+40</span></label>
+    </div>
+  </div>
+</div>
+
+<!-- W-01 체중 기록 -->
+<div id="weigh" class="sheet" popover aria-label="오늘 체중">
+  <span class="grab" aria-hidden="true"></span>
+  <header>
+    <h2>오늘 체중</h2>
+    <button class="textbtn" popovertarget="weigh" popovertargetaction="hide">닫기</button>
+  </header>
+  <div class="readout">
+    <p class="big"><span class="d d-674">67.4</span><span class="d d-675">67.5</span><span class="d d-676">67.6</span><span class="d d-677">67.7</span><span class="d d-678">67.8</span><span class="d d-679">67.9</span><span class="d d-680">68.0</span><small>kg</small></p>
+    <p class="delta">
+      <b><span class="d d-674">−0.2kg</span><span class="d d-675">−0.1kg</span><span class="d d-676">어제와 같아요</span><span class="d d-677">+0.1kg</span><span class="d d-678">+0.2kg</span><span class="d d-679">+0.3kg</span><span class="d d-680">+0.4kg</span></b>
+      어제 67.6kg보다
+    </p>
+  </div>
+  <div class="ruler" role="radiogroup" aria-label="체중 0.1kg 단위">
+    <label class="tick"><input class="st" type="radio" name="w" id="w680" value="68.0">68.0<span class="line"></span><span class="tag">+0.4</span></label>
+    <label class="tick" data-step="weigh:2"><input class="st" type="radio" name="w" id="w679" value="67.9">67.9<span class="line half"></span><span class="tag">+0.3</span></label>
+    <label class="tick"><input class="st" type="radio" name="w" id="w678" value="67.8">67.8<span class="line half"></span><span class="tag">+0.2</span></label>
+    <label class="tick"><input class="st" type="radio" name="w" id="w677" value="67.7">67.7<span class="line half"></span><span class="tag">+0.1</span></label>
+    <label class="tick"><input class="st" type="radio" name="w" id="w676" value="67.6" checked>67.6<span class="line"></span><span class="tag">어제</span></label>
+    <label class="tick"><input class="st" type="radio" name="w" id="w675" value="67.5">67.5<span class="line half"></span><span class="tag">−0.1</span></label>
+    <label class="tick"><input class="st" type="radio" name="w" id="w674" value="67.4">67.4<span class="line half"></span><span class="tag">−0.2</span></label>
+  </div>
+  <div class="weigh-foot">
+    <p class="hint"><span>6일차 · 07:12</span><b>지금 기록하면 20점</b></p>
+    <label class="primary" data-step="weigh:3"><input class="st" type="checkbox" id="rec" name="record">기록</label>
+  </div>
+</div>
+
+<!-- 응원 -->
+<div id="cheer" class="sheet" popover aria-label="새벽등산에게 응원">
+  <span class="grab" aria-hidden="true"></span>
+  <header>
+    <h2>새벽등산에게 응원</h2>
+    <button class="textbtn" popovertarget="cheer" popovertargetaction="hide">닫기</button>
+  </header>
+  <div class="body">
+    <p class="left-note">오늘 3번 남았어요</p>
+    <label class="phr" data-step="cheer:2"><input class="st" type="radio" name="cheer" id="c1">좋은 아침이에요<span class="go">보내기</span></label>
+    <label class="phr"><input class="st" type="radio" name="cheer" id="c2">오늘도 기록했어요<span class="go">보내기</span></label>
+    <label class="phr"><input class="st" type="radio" name="cheer" id="c3">따라잡을게요<span class="go">보내기</span></label>
+    <label class="phr"><input class="st" type="radio" name="cheer" id="c4">끝까지 가요<span class="go">보내기</span></label>
+  </div>
+</div>
+
+<!-- D-02 날짜별 점수 -->
+<div id="detail" class="sheet" popover aria-label="날짜별 점수">
+  <span class="grab" aria-hidden="true"></span>
+  <header>
+    <h2>날짜별 점수</h2>
+    <button class="textbtn" popovertarget="detail" popovertargetaction="hide">닫기</button>
+  </header>
+  <div class="body">
+    <ol class="days">
+      <li>
+        <span class="dn">6일차</span>
+        <span class="wt">오늘 · 새벽등산 기록 전</span>
+        <span class="vs"><span class="k k-p0">0</span><span class="k k-p1">40</span><span class="k k-674-0">60</span><span class="k k-675-0">60</span><span class="k k-676-0">60</span><span class="k k-677-0">58</span><span class="k k-678-0">56</span><span class="k k-679-0">54</span><span class="k k-680-0">52</span><span class="k k-674-1">100</span><span class="k k-675-1">100</span><span class="k k-676-1">100</span><span class="k k-677-1">98</span><span class="k k-678-1">96</span><span class="k k-679-1">94</span><span class="k k-680-1">92</span> <span>: 0</span></span>
+      </li>
+      <li>
+        <span class="dn">5일차</span>
+        <span class="wt">67.6kg · 13:20 · 3일 평균 67.67 · 라인 67.64</span>
+        <span class="vs">88 <span>: 99</span></span>
+        <span class="why">기록 <span class="low">10</span> + 라인 38 + 미션 40</span>
+      </li>
+      <li>
+        <span class="dn">4일차</span>
+        <span class="wt">67.5kg · 3일 평균 67.73 · 라인 67.71</span>
+        <span class="vs">99 <span>: 100</span></span>
+        <span class="why">기록 20 + 라인 39 + 미션 40</span>
+      </li>
+      <li>
+        <span class="dn">3일차</span>
+        <span class="wt">67.9kg · 3일 평균 67.90 · 라인 67.78</span>
+        <span class="vs">53 <span>: 99</span></span>
+        <span class="why">기록 20 + 라인 33 + 미션 <span class="low">0</span></span>
+      </li>
+      <li>
+        <span class="dn">2일차</span>
+        <span class="wt">67.8kg · 2일 평균 67.90 · 라인 67.85</span>
+        <span class="vs">97 <span>: 100</span></span>
+        <span class="why">기록 20 + 라인 37 + 미션 40</span>
+      </li>
+      <li>
+        <span class="dn">1일차</span>
+        <span class="wt">68.0kg · 라인 67.93</span>
+        <span class="vs">96 <span>: 98</span></span>
+        <span class="why">기록 20 + 라인 36 + 미션 40</span>
+      </li>
+    </ol>
+    <details class="how">
+      <summary>점수는 이렇게 매겨요</summary>
+      <div class="in">
+        <p>기록 20점, 12시가 지나면 10점.</p>
+        <p>라인 40점. 3일 평균이 라인에서 0.68kg(시작 체중 68.0kg의 1%) 위로 가면 0점, 라인 아래는 40점까지.</p>
+        <p>미션 40점. 23:59까지 체크하면 받아요.</p>
+      </div>
+    </details>
+  </div>
+</div>
+
+<!-- 더보기 -->
+<div id="more" class="sheet" popover aria-label="대결 설정">
+  <span class="grab" aria-hidden="true"></span>
+  <header>
+    <h2>대결 설정</h2>
+    <button class="textbtn" popovertarget="more" popovertargetaction="hide">닫기</button>
+  </header>
+  <div class="body">
+    <p class="menu-row"><span>아침 알림</span><b>07:00</b></p>
+    <details class="quit">
+      <summary>대결 그만두기</summary>
+      <p>그만두면 이 대결은 패배로 기록돼요.</p>
+      <button class="danger" popovertarget="more" popovertargetaction="hide">그만두기</button>
+    </details>
+  </div>
+</div>
+</body>
+</html>

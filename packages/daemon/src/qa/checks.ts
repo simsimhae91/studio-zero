@@ -2,6 +2,7 @@ import { blend, contractFamilies, contrastRatio, hostedFamilies, hueSaturation, 
 import { UNREVIEWED_SCORE_CAP, type DesignGrade, type Finding, type FindingCategory, type Severity, type Template, type ViewportId } from '@studio-zero/protocol';
 import type { DigestElement, PageDigest } from './collector.ts';
 import type { ProbedControl, Touchability } from './InteractionProbe.ts';
+import { pixelKind } from './pixels.ts';
 
 export interface CheckContext {
   viewport: ViewportId;
@@ -14,6 +15,8 @@ export interface CheckContext {
   scope: 'full' | 'color-only';
   /** What the product is built as, when the caller knows: some rules hold for a phone app and not for a web page. */
   template?: Template;
+  /** How the pixels of the first screenful divide (`colourShares`), when a picture of it was taken. */
+  shares?: { saturated: number; dark: number };
 }
 
 const GENERIC_FAMILIES = new Set(['serif', 'sans-serif', 'monospace', 'system-ui', 'ui-sans-serif', 'ui-serif', 'ui-monospace', 'cursive', 'fantasy', '-apple-system', 'blinkmacsystemfont']);
@@ -259,8 +262,59 @@ export function runDomChecks(digest: PageDigest, ctx: CheckContext, c: DesignCon
   // 9. How the first screen is put together -----------------------------------------------------------
   findings.push(...compositionFindings(digest, ctx));
 
+  // 10. Colour, by the pixel ----------------------------------------------------------------------------
+  if (ctx.shares) {
+    /** The largest surface on the first screenful painted in that kind of colour: where most of the count came from, when it is a box at all. */
+    const largest = (kind: 'saturated' | 'dark'): DigestElement | undefined => {
+      const seen = (e: DigestElement): number => Math.max(0, Math.min(e.x + e.w, digest.width) - Math.max(e.x, 0)) * Math.max(0, Math.min(e.y + e.h, digest.height) - Math.max(e.y, 0));
+      return digest.elements.filter((e) => e.ownBackground[3] > 0.5 && pixelKind(rgbOf(e.ownBackground)) === kind && seen(e) > 0).sort((a, b) => seen(b) - seen(a))[0];
+    };
+    const percent = (share: number): number => Math.round(share * 100);
+    if (ctx.shares.saturated > COLOUR_LIMITS.flood) {
+      add(
+        'color/flood',
+        'color',
+        'major',
+        `${percent(ctx.shares.saturated)}% of the first screen is colour at full strength. About 10% is the budget, and ${percent(COLOUR_LIMITS.flood)}% the limit.`,
+        'C2: bg-brand is for the main action, the mark of what is selected, the plate of the one figure and the fill of a progress bar. Take it off cards, panels, columns, header bands and section backgrounds: set those on bg-surface or bg-bg, and show a side or a category with the colour of its figure, a 4px edge or a dot.',
+        largest('saturated'),
+      );
+    }
+    // A band is dark against a light screen. A product that is dark all over, or a viewer laid over the whole
+    // screen, has dark paper, and is not counted. A web page may carry one inverted section, and nothing
+    // measured tells a page from an app, so this is held on the phone app's phone screen only.
+    const paper = digest.composition?.paper;
+    const onLightPaper = paper !== undefined && (Math.max(...paper) + Math.min(...paper)) / 2 > 0.5;
+    if (ctx.template === 'mobile-expo' && ctx.viewport === 'iphone-15-pro' && onLightPaper && ctx.shares.dark > COLOUR_LIMITS.darkBand) {
+      add(
+        'color/dark-band',
+        'color',
+        'major',
+        `${percent(ctx.shares.dark)}% of this light screen is near-black: a dark band across paper. ${percent(COLOUR_LIMITS.darkBand)}% is the limit.`,
+        'C3: No inverted band in the middle of a light screen. Set that section on bg-surface or bg-sunken with text-fg, like the rest of the screen. Dark is the whole screen\'s scheme, which the theme\'s dark tokens already give, and not one zone\'s decoration.',
+        largest('dark'),
+      );
+    }
+  }
+
   return findings;
 }
+
+/**
+ * Where a share of the first screen's pixels becomes a finding. First values, as `COMPOSITION_LIMITS` are, for
+ * the design lab to set. They are shares of the screenful the audit photographs, which for a phone is 393 by
+ * 659: shorter than the 393 by 852 a mock-up is shown at, so the same page measures differently on each.
+ */
+export const COLOUR_LIMITS = {
+  /** Colour at strength over more of the screen than this is a flood: the handbook's budget is about a tenth. */
+  flood: 0.15,
+  /**
+   * Near-black over more of a light phone screen than this is a band. The page that showed the need for the
+   * rule measures 0.20 here (its band runs on below the first screenful) and 0.30 at the taller size; pages
+   * with no band measure under 0.02 at either.
+   */
+  darkBand: 0.15,
+} as const;
 
 /**
  * Where a number read of a screen's composition becomes a finding. In one object so that the design lab can

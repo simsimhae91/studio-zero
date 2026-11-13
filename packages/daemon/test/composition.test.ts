@@ -1,14 +1,25 @@
 // How a first screen is put together, measured in a real browser: how much of its text is small, how many
 // faces it is set in, what competes at the largest size, text that is turned or stacked, cards, controls, and a
 // figure said twice. One page per rule that breaks that rule and no other, and one page that breaks none.
+// Then colour, counted by the pixel off a picture of the first screenful: how much of it is colour at strength
+// and how much is near-black, through the auditor as an engine's own check of its page gets it.
 import assert from 'node:assert/strict';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { test } from 'node:test';
 import { chromium, devices, type Browser } from 'playwright-core';
 import { contract } from '@studio-zero/design';
-import type { Finding } from '@studio-zero/protocol';
-import { COMPOSITION_LIMITS, compositionFindings, runDomChecks, type CheckContext } from '../src/qa/checks.ts';
-import { PageDigest, collectDigest } from '../src/qa/collector.ts';
+import type { Finding, Project } from '@studio-zero/protocol';
+import { COLOUR_LIMITS, COMPOSITION_LIMITS, compositionFindings, runDomChecks, type CheckContext } from '../src/qa/checks.ts';
+import { PageDigest, collectDigest, type Composition } from '../src/qa/collector.ts';
 import { withFaces } from '../src/qa/mockupFaces.ts';
+import { MOCKUP_DIR, MockupRenderer, renderMockupCheck } from '../src/qa/MockupRenderer.ts';
+import { colourShares } from '../src/qa/pixels.ts';
+import type { QaBrowser, QaSession } from '../src/qa/QaBrowser.ts';
+import type { QaVisionBridge } from '../src/qa/QaVisionBridge.ts';
+import { VisualAuditor } from '../src/qa/VisualAuditor.ts';
+import type { OrbStackManager } from '../src/sandbox/OrbStackManager.ts';
+import { quietLog, sampleProject, testDaemon } from './helpers.ts';
 
 async function launch(): Promise<Browser | null> {
   try {
@@ -49,29 +60,29 @@ const ROWS = [
 function screen(change: Change = {}): string {
   const rows = ROWS.map(([day, what, score], i) => `<li><a href="#r${i}"><span class="what"><span class="t">${day}</span><span class="m">${what}</span></span><span class="v">${score}</span></a></li>`).join('');
   return `<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>라운드</title><style>
-:root{--bg:#f8fafd;--surface:#ffffff;--fg:#15161a;--muted:#4a4d57;--border:#d9dde3;--brand:#0051b2;--on-brand:#ffffff}
+:root{--sz-bg:#f8fafd;--sz-surface:#ffffff;--sz-fg:#15161a;--sz-fg-muted:#4a4d57;--sz-border:#d9dde3;--sz-brand:#0051b2;--sz-on-brand:#ffffff}
 *{box-sizing:border-box}
-html{font-family:"Pretendard Variable",Pretendard,sans-serif;font-size:16px;line-height:1.5;color:var(--fg);background:var(--bg)}
+html{font-family:"Pretendard Variable",Pretendard,sans-serif;font-size:16px;line-height:1.5;color:var(--sz-fg);background:var(--sz-bg)}
 body{margin:0}h1,h2,p,ul{margin:0;padding:0}ul{list-style:none}
-.bar{padding:12px 16px;border-bottom:1px solid var(--border)}
+.bar{padding:12px 16px;border-bottom:1px solid var(--sz-border)}
 .bar h1{font-size:18px;line-height:1.3;font-weight:700}
-.bar p{font-size:14px;color:var(--muted)}
+.bar p{font-size:14px;color:var(--sz-fg-muted)}
 code{font-family:ui-monospace,monospace;font-size:14px}
 main{padding:24px 16px 120px;display:flex;flex-direction:column;gap:24px}
-.compare{display:grid;grid-template-columns:1fr 1fr;background:var(--surface);border:1px solid var(--border);border-radius:8px}
+.compare{display:grid;grid-template-columns:1fr 1fr;background:var(--sz-surface);border:1px solid var(--sz-border);border-radius:8px}
 .compare div{padding:16px;display:flex;flex-direction:column;gap:4px}
-.compare div+div{border-left:1px solid var(--border)}
+.compare div+div{border-left:1px solid var(--sz-border)}
 .who{align-self:flex-start;font-size:14px;font-weight:600}
 .fig{font-size:36px;line-height:1.1;font-weight:800;font-variant-numeric:tabular-nums}
 .gap{font-weight:600}
-.note,.diff{font-size:14px;color:var(--muted)}
+.note,.diff{font-size:14px;color:var(--sz-fg-muted)}
 h2{font-size:18px;line-height:1.3;font-weight:700}
-.rows a{display:flex;align-items:center;justify-content:space-between;min-height:64px;padding:8px 0;border-bottom:1px solid var(--border);color:inherit;text-decoration:none}
-.what{display:flex;flex-direction:column}.t,.v{font-weight:600}.m{font-size:14px;color:var(--muted)}
+.rows a{display:flex;align-items:center;justify-content:space-between;min-height:64px;padding:8px 0;border-bottom:1px solid var(--sz-border);color:inherit;text-decoration:none}
+.what{display:flex;flex-direction:column}.t,.v{font-weight:600}.m{font-size:14px;color:var(--sz-fg-muted)}
 .chips{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
-.chips button{min-height:44px;padding:0 8px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--fg);font:inherit;font-size:14px;font-weight:600}
-.dock{position:fixed;left:0;right:0;bottom:0;padding:12px 16px 16px;background:var(--bg);border-top:1px solid var(--border)}
-.dock button{width:100%;min-height:52px;padding:0 16px;border:0;border-radius:8px;background:var(--brand);color:var(--on-brand);font:inherit;font-size:18px;font-weight:700}
+.chips button{min-height:44px;padding:0 8px;border:1px solid var(--sz-border);border-radius:8px;background:var(--sz-surface);color:var(--sz-fg);font:inherit;font-size:14px;font-weight:600}
+.dock{position:fixed;left:0;right:0;bottom:0;padding:12px 16px 16px;background:var(--sz-bg);border-top:1px solid var(--sz-border)}
+.dock button{width:100%;min-height:52px;padding:0 16px;border:0;border-radius:8px;background:var(--sz-brand);color:var(--sz-on-brand);font:inherit;font-size:18px;font-weight:700}
 ${change.css ?? ''}</style></head><body>
 <header class="bar"><h1>라운드 여섯</h1><p>수요일 아침 · 초대 코드 <code>SEOYEON7</code></p></header>
 <main>
@@ -106,7 +117,7 @@ const CASES: readonly { rule: string; severity: 'major' | 'minor'; id: string; c
   { rule: 'type/end-aligned-block', severity: 'minor', id: 'T6', change: { css: '.note{text-align:right}' }, says: /"정오 전에 기록하면[^"]*" is aligned to the end side/ },
   { rule: 'layout/competing-figures', severity: 'major', id: 'M3', change: { css: '.gap{font-size:36px;line-height:1.1;font-weight:800}' }, says: /3 things are set at the largest size on the first screen: "433", "496", "63점 뒤져 있어요"/ },
   { rule: 'layout/half-empty-card', severity: 'minor', id: 'M5', change: { css: '.compare{min-height:280px}' }, says: /A 361×280px card is filled to 2\d% of its height/ },
-  { rule: 'layout/nested-cards', severity: 'minor', id: 'M5', change: { css: '.compare div{margin:8px;border:1px solid var(--border);border-radius:8px}' }, says: /2 cards sit inside another card/ },
+  { rule: 'layout/nested-cards', severity: 'minor', id: 'M5', change: { css: '.compare div{margin:8px;border:1px solid var(--sz-border);border-radius:8px}' }, says: /2 cards sit inside another card/ },
   { rule: 'layout/too-many-controls', severity: 'major', id: 'M7', change: { extra: CHIPS }, says: new RegExp(`^1\\d controls can be pressed on the first screen; ${COMPOSITION_LIMITS.controls} is the limit`) },
   { rule: 'copy/figure-twice', severity: 'minor', id: 'M4', change: { extra: '<p class="diff">격차 63</p>' }, says: /The same figure is stated more than once on the first screen: 63 x2/ },
 ];
@@ -183,4 +194,154 @@ test('composition, read off a real page: a screen that keeps the handbook is cle
   } finally {
     await browser.close();
   }
+});
+
+// ------------------------------------------------------------------ colour, by the pixel
+
+const localBrowser = (browser: Browser): QaBrowser => ({ use: async <T>(_project: Project, _signal: AbortSignal | undefined, fn: (session: QaSession) => Promise<T>) => fn({ browser, host: '127.0.0.1', devices }) }) as unknown as QaBrowser;
+/** A sandbox whose workspace holds exactly these files: a page is read with a command that first tests for it, and the screen spec as a file. */
+const sandboxWith = (files: Record<string, string>): OrbStackManager =>
+  ({
+    exec: async (_project: Project, script: string) => {
+      const file = Object.keys(files).find((name) => script.includes(`${name} ]`));
+      return { exitCode: file ? 0 : 1, stdout: file ? files[file]! : '', stderr: '', timedOut: false, durationMs: 1 };
+    },
+    readFile: async (_project: Project, path: string) => {
+      if (files[path] === undefined) throw new Error(`no such file: ${path}`);
+      return { content: files[path], truncated: false };
+    },
+  }) as unknown as OrbStackManager;
+const NOBODY = { availability: async () => ({ status: 'off', paths: [], reason: 'no reviewer in this test' }), review: async () => Promise.reject(new Error('nobody is asked')) } as unknown as QaVisionBridge;
+const phoneProject = { ...sampleProject('duel'), template: 'mobile-expo' } as const;
+const BOTH = ['color/dark-band', 'color/flood'];
+
+/** A picture that is one strong colour all over, carried inside the page: to a count of pixels, what a photograph is. */
+const PICTURE = `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="40" height="20"><rect width="40" height="20" fill="#0051b2"/></svg>')}`;
+const HELD = 'display:flex;flex-direction:column;justify-content:space-between;padding:16px;font-weight:600';
+const PANEL = { css: `.panel{${HELD};height:200px;border-radius:8px;background:var(--sz-brand);color:var(--sz-on-brand)}`, extra: '<div class="panel"><span>새벽등산이 앞서 있어요</span><span>응원을 보내면 따라잡을 수 있어요</span></div>' };
+const BAND = { css: `.band{${HELD};height:240px;margin:0 -16px;background:#0b0c0e;color:#f4f5f7}`, extra: '<div class="band"><span>라운드별 점수</span><span>하루에 백 점까지 받아요</span></div>' };
+const DARK_TOKENS = ':root{--sz-bg:#0e0f12;--sz-surface:#17181c;--sz-fg:#f4f5f7;--sz-fg-muted:#b6bac4;--sz-border:#2a2c33}';
+
+test('the pixel count: the shares of a picture that are colour at strength and near-black, with what is under a mask left out', async (t) => {
+  const browser = await launch();
+  if (!browser) return t.skip('headless Chrome cannot be launched here');
+  try {
+    // 200 by 200: the top half brand blue, then a quarter black, then paper. Photographed at twice the size.
+    const context = await browser.newContext({ viewport: { width: 200, height: 200 }, deviceScaleFactor: 2 });
+    const page = await context.newPage();
+    await page.setContent('<body style="margin:0;background:#f8fafd"><div style="height:100px;background:#0051b2"></div><div style="height:50px;background:#000"></div></body>');
+    const png = await page.screenshot({ type: 'png' });
+    await context.close();
+    assert.deepEqual(await colourShares(browser, png, { mask: [], scale: 2 }), { saturated: 0.5, dark: 0.25 });
+    assert.deepEqual(await colourShares(browser, png, { mask: [[0, 0, 200, 100]], scale: 2 }), { saturated: 0, dark: 0.5 }, 'shares are of the pixels left when the mask is taken out');
+    assert.deepEqual(await colourShares(browser, png, { mask: [[-50, -50, 900, 900]], scale: 2 }), { saturated: 0, dark: 0 }, 'a picture that is all mask has nothing to count');
+    await assert.rejects(colourShares(browser, Buffer.from('not a picture'), { mask: [], scale: 1 }), 'a picture that cannot be read is an error, not a clean count');
+    assert.equal(browser.contexts().length, 0, 'the page the count was made on is closed');
+  } finally {
+    await browser.close();
+  }
+});
+
+test('colour by the pixel, through the auditor: a flood of brand and a dark band are found, and a photograph, a dark product and a viewer are not', async (t) => {
+  const browser = await launch();
+  if (!browser) return t.skip('headless Chrome cannot be launched here');
+  const d = await testDaemon();
+  try {
+    const { store, events } = d.daemon;
+    store.insertProject(phoneProject);
+    const auditor = new VisualAuditor({ config: d.config, store, events, browser: localBrowser(browser), vision: NOBODY, clock: () => 1000, log: quietLog });
+    const measured = async (change: Change, project: Project = phoneProject): Promise<Finding[]> => (await auditor.measurePages({ project, taskId: null, pages: [{ route: `${MOCKUP_DIR}/a.html`, html: withFaces(screen(change)) }] })).findings.filter((f) => f.rule.startsWith('color/'));
+    const atPhone = (findings: readonly Finding[]): string[] => rules(findings.filter((f) => f.viewport === 'iphone-15-pro'));
+
+    assert.deepEqual(rules(await measured({})), [], 'the dock\'s one button is colour where colour belongs');
+
+    // A brand panel over a quarter of the first screen.
+    const flooded = await measured(PANEL);
+    assert.deepEqual(atPhone(flooded), ['color/flood']);
+    const flood = flooded.find((f) => f.viewport === 'iphone-15-pro')!;
+    assert.equal(flood.severity, 'major');
+    assert.match(flood.message, /^3\d% of the first screen is colour at full strength\. About 10% is the budget, and \d\d% the limit\.$/);
+    assert.ok(flood.fix!.startsWith('C2: '), flood.fix!);
+    assert.equal(flood.selector, 'main > div.panel', 'the finding points at the largest surface of that colour');
+    // Review Focus 4: the same panel as a photograph, and as a picture behind a box. What a picture holds is not the interface's colour.
+    assert.deepEqual(rules(await measured({ css: '.panel{display:block;width:100%;height:200px;border-radius:8px}', extra: `<img class="panel" alt="새벽 산길" src="${PICTURE}">` })), []);
+    assert.deepEqual(rules(await measured({ css: `${PANEL.css}.panel{background:url("${PICTURE}") center/cover}`, extra: PANEL.extra })), []);
+
+    // A black band over a third of a paper screen.
+    const banded = await measured(BAND);
+    assert.deepEqual(atPhone(banded), ['color/dark-band']);
+    const band = banded[0]!;
+    assert.equal(band.severity, 'major');
+    assert.match(band.message, /^3\d% of this light screen is near-black/);
+    assert.ok(band.fix!.startsWith('C3: '), band.fix!);
+    assert.equal(band.selector, 'main > div.band');
+    assert.deepEqual(rules(banded.filter((f) => f.viewport !== 'iphone-15-pro')), [], 'it is a rule of the phone screen: on the tablet the same band is not said again');
+    // Review Focus 2: a product that is dark by design, its paper dark in the light scheme too, and a screen
+    // that is a viewer laid over the paper. Dark all over is a way for a screen to be; neither is a band.
+    assert.deepEqual(rules(await measured({ css: `${DARK_TOKENS}${BAND.css}`, extra: BAND.extra })), []);
+    assert.deepEqual(rules(await measured({ css: '.viewer{position:fixed;inset:0;display:flex;align-items:center;background:#000}.viewer img{display:block;width:100%;height:240px}', extra: `<div class="viewer"><img alt="새벽 산길" src="${PICTURE}"></div>` })), []);
+    // A web page may carry one inverted section: the band is a rule of the phone app.
+    const web = { ...sampleProject('quote'), id: 'prj_quote_web' };
+    store.insertProject(web);
+    assert.deepEqual(rules(await measured(BAND, web)), []);
+
+    // A measurement is not an audit: the picture it counted is not kept, and nothing is recorded.
+    assert.deepEqual(store.listAudits(phoneProject.id, 10), []);
+    const kept = (project: Project): string[] => (existsSync(join(d.config.artifactsDir, project.id)) ? (readdirSync(join(d.config.artifactsDir, project.id), { recursive: true }) as string[]).filter((name) => name.endsWith('.png')) : []);
+    assert.deepEqual(kept(phoneProject), []);
+    // An audit counts the picture it keeps anyway.
+    const { report } = await auditor.auditPages({ project: phoneProject, taskId: null, pages: [{ route: `${MOCKUP_DIR}/a.html`, html: withFaces(screen(PANEL)) }] });
+    assert.deepEqual(atPhone(report.findings.filter((f) => f.rule.startsWith('color/'))), ['color/flood']);
+    assert.ok(report.screenshots.length > 0 && kept(phoneProject).length === report.screenshots.length);
+  } finally {
+    await d.cleanup();
+    await browser.close();
+  }
+});
+
+test('the page a real engine drew on 2026-11-13, which the check of its own page called clean: a brand panel, a black band, and six more', async (t) => {
+  const browser = await launch();
+  if (!browser) return t.skip('headless Chrome cannot be launched here');
+  const d = await testDaemon();
+  try {
+    const { store, events } = d.daemon;
+    store.insertProject(phoneProject);
+    const auditor = new VisualAuditor({ config: d.config, store, events, browser: localBrowser(browser), vision: NOBODY, clock: () => 1000, log: quietLog });
+    const file = `${MOCKUP_DIR}/b.html`;
+    const renderer = new MockupRenderer({ config: d.config, store, clock: Date.now, log: quietLog, browser: localBrowser(browser), sandboxes: sandboxWith({ [file]: readFileSync(new URL('./fixtures/duel-b.html', import.meta.url), 'utf8') }), auditor });
+    const check = await renderer.check(phoneProject, file);
+    assert.equal(check.status, 'measured');
+    if (check.status !== 'measured') return;
+    const found = check.findings!.filter((f) => f.viewport === 'iphone-15-pro');
+    const handbook = found.filter((f) => /^[A-Z]\d+: /.test(f.fix ?? ''));
+    assert.deepEqual(rules(handbook), ['color/dark-band', 'color/flood', 'copy/figure-twice', 'layout/half-empty-card', 'type/end-aligned-block', 'type/micro-overuse', 'type/second-family', 'type/stacked-text'], said(found));
+    for (const rule of BOTH) assert.equal(found.find((f) => f.rule === rule)?.severity, 'major');
+    const text = renderMockupCheck(file, check);
+    assert.match(text, /- \[major\] color\/flood \(measured\)\n  iphone-15-pro \| docs\/mockups\/b\.html \| selector: [^\n]*div\.side\.opp[^\n]*\n  \d\d% of the first screen is colour at full strength/);
+    assert.match(text, /- \[major\] color\/dark-band \(measured\)\n  iphone-15-pro \| docs\/mockups\/b\.html \| selector: [^\n]*button\.board[^\n]*\n  \d\d% of this light screen is near-black/);
+    assert.ok(!text.includes('Nothing here holds the page back'), 'the answer the engine stopped on is not given any more');
+    assert.deepEqual(store.listAudits(phoneProject.id, 10), []);
+  } finally {
+    await d.cleanup();
+    await browser.close();
+  }
+});
+
+test('where a share of pixels becomes a finding: over the limit, on a phone app laid on light paper', () => {
+  const composition: Composition = { microShare: 0, microSentences: [], families: ['Pretendard Variable'], monoOutsideCode: [], figuresAtLargest: [], turnedText: [], stackedText: [], endAlignedText: [], controls: 1, halfEmptyCards: [], nestedCards: 0, figuresTwice: [], mediaBoxes: [], paper: [0.97, 0.98, 0.99] };
+  const text = { id: 'e1', tag: 'p', role: '', selector: 'p', text: '오늘 체중 기록', textLength: 8, interactive: false, inline: false, x: 16, y: 16, w: 300, h: 24, color: [0.1, 0.1, 0.1, 1], background: [1, 1, 1, 1], backgroundIndeterminate: false, ownBackground: [0, 0, 0, 0], backgroundImage: 'none', fontSize: 16, fontWeight: 400, fontFamily: 'Pretendard Variable', lineHeight: 1.5, letterSpacingEm: 0, uppercase: false, radius: 0, padding: [0, 0, 0, 0], margin: [0, 0, 0, 0], gap: 0, shadow: 'none', hasBorder: false, clipped: false, charsPerLine: 0, siblingKey: 'main|P' } satisfies PageDigest['elements'][number];
+  const digest = (over: Partial<Composition> = {}): PageDigest => ({ title: 't', lang: 'ko', width: 393, height: 659, scrollWidth: 393, scrollHeight: 1200, loadedFonts: ['Pretendard Variable'], elements: [text], composition: { ...composition, ...over } });
+  const found = (shares: { saturated: number; dark: number }, ctx: Partial<CheckContext> = {}, over: Partial<Composition> = {}): string[] => rules(runDomChecks(digest(over), { ...phone, shares, ...ctx }, contract));
+
+  assert.deepEqual(found({ saturated: COLOUR_LIMITS.flood, dark: COLOUR_LIMITS.darkBand }), [], 'at the limit is inside it');
+  assert.deepEqual(found({ saturated: COLOUR_LIMITS.flood + 0.001, dark: COLOUR_LIMITS.darkBand + 0.001 }), BOTH);
+  assert.deepEqual(rules(runDomChecks(digest(), phone, contract)), [], 'with no picture counted, nothing is said about colour');
+  // A flood is a flood on any product at any size. The band is the phone app's rule, on its phone screen, on light paper.
+  assert.deepEqual(found({ saturated: 0.4, dark: 0.4 }, { template: 'web-vite-react', viewport: 'desktop-1440', viewportWidth: 1440, touch: false }), ['color/flood']);
+  assert.deepEqual(found({ saturated: 0, dark: 0.4 }, { viewport: 'ipad-pro-11', viewportWidth: 834 }), []);
+  assert.deepEqual(found({ saturated: 0, dark: 0.4 }, { template: undefined }), [], 'a caller that does not say what the product is gets no rule that depends on it');
+  assert.deepEqual(found({ saturated: 0, dark: 0.9 }, {}, { paper: [0.05, 0.06, 0.07] }), []);
+  assert.deepEqual(found({ saturated: 0.4, dark: 0.4 }, { scope: 'color-only' }), [], 'the dark pass is not where a light screen is counted');
+  const { composition: _unread, ...old } = digest();
+  assert.deepEqual(rules(runDomChecks(old, { ...phone, shares: { saturated: 0, dark: 0.4 } }, contract)), [], 'without the paper read off the page there is no saying the screen is light');
 });
