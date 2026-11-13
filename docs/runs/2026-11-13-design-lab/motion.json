@@ -551,5 +551,59 @@
     "answered": true
    }
   ]
+ },
+ "build-dues-draft": {
+  "where": "http://127.0.0.1:33034/",
+  "frameAtMs": [
+   151,
+   403,
+   888,
+   1503,
+   3002,
+   5003
+  ],
+  "changedShare": [
+   0.585,
+   0.219,
+   0.007,
+   0.001,
+   0.002
+  ],
+  "withTransition": 0,
+  "pressables": 12,
+  "pressablesWithTransition": 0,
+  "keyframed": 0,
+  "transitionMs": [],
+  "easing": [],
+  "running": 0,
+  "looping": 0,
+  "runningMs": [],
+  "video": 0,
+  "presses": [
+   {
+    "text": "통장 계좌번호 보기",
+    "answered": true
+   },
+   {
+    "text": "17/22명 냄",
+    "answered": true
+   },
+   {
+    "text": "미납 임소율",
+    "answered": true
+   },
+   {
+    "text": "미납 남궁하늘빛나래",
+    "answered": true
+   },
+   {
+    "text": "미납 황보유진",
+    "answered": true
+   },
+   {
+    "text": "영수증 올리기",
+    "answered": true
+   }
+  ]
  }
 }

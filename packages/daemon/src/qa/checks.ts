@@ -200,7 +200,7 @@ export function runDomChecks(digest: PageDigest, ctx: CheckContext, c: DesignCon
   const intended = families.filter((f) => hosted.includes(f));
   const missing = intended.filter((f) => !digest.loadedFonts.includes(f));
   if (missing.length > 0 && !intended.some((f) => digest.loadedFonts.includes(f))) {
-    add('type/font-not-loaded', 'typography', 'major', `${missing.join(', ')} is requested but no theme font was loaded, so a system fallback is what users see.`, 'T1: the face\'s file is in .studio-zero/fonts and the theme stylesheet points at it with @font-face: import the theme stylesheet as it is, from where it is, so that the file loads. Do not rely on the face being installed on the device.');
+    add('type/font-not-loaded', 'typography', 'major', `${missing.join(', ')} is requested but no theme font was loaded, so a system fallback is what users see.`, 'T1: the face\'s file is in the project (.studio-zero/fonts, or public/fonts in an Expo project) and the theme stylesheet points at it with @font-face: import the theme stylesheet as it is, from where it is, so that the file loads. Do not rely on the face being installed on the device.');
   }
 
   // 6. Spacing rhythm -----------------------------------------------------------------------------------

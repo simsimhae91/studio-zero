@@ -49,7 +49,7 @@ test('theme CSS replaces the Tailwind defaults and exposes exactly the contract 
   assert.ok(css.includes('--font-display: "Pretendard Variable", "Pretendard", -apple-system, '), 'titles are the same face, heavier');
   assert.equal(/--font-sans: ([^;]+);/.exec(css)![1], /--font-display: ([^;]+);/.exec(css)![1]);
   assert.equal(css.split('\n')[1], `/* generator ${THEME_GENERATOR} */`, 'the sheet says which generator wrote it, so an older one can be told apart');
-  assert.equal(THEME_GENERATOR, 4);
+  assert.equal(THEME_GENERATOR, 5);
   assert.ok(css.includes(`min-block-size: ${contract.touchTargetPx}px`));
   assert.ok(css.includes('prefers-reduced-motion'));
 });

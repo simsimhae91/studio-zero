@@ -2603,5 +2603,56 @@
   "bodyBg": "oklch(0.962 0.005 248)",
   "colourPct": 21.2,
   "greyPct": 75.9
+ },
+ "build-dues-draft": {
+  "where": "http://127.0.0.1:33034/",
+  "title": "망원 새벽런 장부",
+  "picturePct": 12.6,
+  "iconPct": 5.1,
+  "tintPct": 0,
+  "textPct": 22.6,
+  "pictures": 2,
+  "icons": 16,
+  "chars": 145,
+  "boxes": 10,
+  "roundedBoxes": 8,
+  "shadowedBoxes": 8,
+  "borderedBoxes": 1,
+  "radii": [
+   [
+    30,
+    7
+   ],
+   [
+    0,
+    2
+   ],
+   [
+    9999,
+    1
+   ]
+  ],
+  "hueFamilies": 0,
+  "topSizes": [
+   [
+    14,
+    63
+   ],
+   [
+    16,
+    22
+   ],
+   [
+    24,
+    16
+   ],
+   [
+    18,
+    15
+   ]
+  ],
+  "bodyBg": "lab(95.5702 0.82615 0.663579)",
+  "colourPct": 25.1,
+  "greyPct": 71.9
  }
 }

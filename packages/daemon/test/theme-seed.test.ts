@@ -6,7 +6,8 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import { THEME_GENERATOR, faceFiles, faces, seedFromName } from '@studio-zero/design';
 import { FONT_DIR, fontFile } from '../src/harness/fontKit.ts';
-import { PLACEHOLDER_SOURCE, THEME_SEED_FILE, ThemeChoice, chosenTheme } from '../src/harness/themeSeed.ts';
+import type { Project } from '@studio-zero/protocol';
+import { PLACEHOLDER_SOURCE, THEME_SEED_FILE, ThemeChoice, chosenTheme, faceHome, writeProjectTheme } from '../src/harness/themeSeed.ts';
 import { codingSystemPrompt, directionBrief, IDEATION_BRIEF, MOCKUP_RULES, THEME_FILE } from '../src/harness/prompts.ts';
 import { sampleProject, testDaemon } from './helpers.ts';
 
@@ -192,4 +193,20 @@ test('the engines are given the scale down to its micro step; what goes where on
     assert.doesNotMatch(prompt, /body text is Geist/);
   }
   assert.doesNotMatch(MOCKUP_RULES, /Hangul falls to the reader's own system face/);
+});
+
+test('the face goes where the project\'s own server gives it out: beside the sheet, or in an Expo project\'s public folder', async () => {
+  const written = (template: Project['template']): Promise<Map<string, string | Uint8Array>> => {
+    const files = new Map<string, string | Uint8Array>();
+    const sandboxes = { exec: async () => ({ stdout: '', stderr: '', exitCode: 0, timedOut: false, durationMs: 1 }), writeFile: async (_p: Project, path: string, content: string | Uint8Array) => void files.set(path, content) } as unknown as Parameters<typeof writeProjectTheme>[0];
+    return writeProjectTheme(sandboxes, { ...sampleProject('faces'), template }, chosenTheme({ hue: 30, chroma: 0.19, lightness: 0.6, neutral_chroma: 0.004, corners: 'soft', face: 'suite', source: 'a test' })).then(() => files);
+  };
+  const web = await written('web-vite-react');
+  assert.match(String(web.get('.studio-zero/theme.css')), /src: url\("\.\/fonts\/SUITE-Variable\.woff2"\)/);
+  assert.ok(web.has('.studio-zero/fonts/SUITE-Variable.woff2') && !web.has('public/fonts/SUITE-Variable.woff2'));
+  // An Expo project's web server gives out public/ and nothing under .studio-zero.
+  const phone = await written('mobile-expo');
+  assert.match(String(phone.get('.studio-zero/theme.css')), /src: url\("\/fonts\/SUITE-Variable\.woff2"\)/);
+  assert.ok(phone.has('public/fonts/SUITE-Variable.woff2') && !phone.has('.studio-zero/fonts/SUITE-Variable.woff2'));
+  assert.deepEqual([faceHome('mobile-expo'), faceHome('web-next')], [{ dir: 'public/fonts', url: '/fonts' }, { dir: '.studio-zero/fonts', url: './fonts' }]);
 });

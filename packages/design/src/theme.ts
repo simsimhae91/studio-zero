@@ -250,7 +250,7 @@ const px = (n: number): string => `${n / 16}rem`;
  * goes up and the studio regenerates the older sheet from the project's stored seed instead of auditing it
  * against rules it was never written for.
  */
-export const THEME_GENERATOR = 4;
+export const THEME_GENERATOR = 5;
 const GENERATOR_LINE = /^\/\* generator (\d+) \*\/$/m;
 
 /** The generator a stylesheet says wrote it; 0 for a sheet from before sheets said. */

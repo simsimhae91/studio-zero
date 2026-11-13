@@ -66,7 +66,8 @@ function printEvent(e: EventEnvelope): void {
       case 'eval.result':
         return `eval ${b.name}: ${b.passed ? 'passed' : 'FAILED'}`;
       case 'audit.completed':
-        return `visual audit ${b.score}/100 ${b.passed ? 'passed' : 'FAILED'} (blockers ${b.blockers}, majors ${b.majors}, minors ${b.minors})`;
+        // An audit no reviewer saw has not failed: it was measured, and its score is capped for that reason alone.
+        return `visual audit ${b.visionReviewed === false ? 'measured only, no design review' : `${b.score}/100 ${b.passed ? 'passed' : 'FAILED'}`} (blockers ${b.blockers}, majors ${b.majors}, minors ${b.minors})`;
       case 'approval.requested':
         return `APPROVAL NEEDED ${b.approvalId}: ${b.summary}`;
       case 'approval.resolved':

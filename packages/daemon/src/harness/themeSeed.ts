@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { contract, createTheme, faceFiles, faces, formatOklch, renderThemeCss, secondHueFor, seedFromName, type Face, type ThemeSeed } from '@studio-zero/design';
+import { FACE_FILES_DIR, contract, createTheme, faceFiles, faces, formatOklch, renderThemeCss, secondHueFor, seedFromName, type Face, type ThemeSeed } from '@studio-zero/design';
 import type { Project } from '@studio-zero/protocol';
 import type { OrbStackManager } from '../sandbox/OrbStackManager.ts';
 import { FONT_DIR, fontFile } from './fontKit.ts';
@@ -140,11 +140,25 @@ export function regeneratedTheme(storedJson: string): ThemeFiles | null {
  * in over stdin. It is written only when it is missing, since it never changes; the files of the other faces
  * are taken away, so a project that changed its face carries one face and not every face it ever tried.
  */
+/**
+ * Where a project's own server gives out the face, and what the sheet calls it there. A Vite or Next project
+ * resolves the sheet's relative address at build time, so the file sits beside the sheet. An Expo project's web
+ * server gives out `public/` at its root and nothing under `.studio-zero`: in the first real Expo draft built
+ * under these rules the engine found that out for itself, copied the file there and declared the face a second
+ * time. So for an Expo project the file goes into `public/fonts` and the sheet points at `/fonts`.
+ * (On a device the face is still not loaded: React Native takes fonts through expo-font, and not as woff2.)
+ */
+export function faceHome(template: Project['template']): { dir: string; url: string } {
+  return template === 'mobile-expo' ? { dir: `public/${FACE_FILES_DIR}`, url: `/${FACE_FILES_DIR}` } : { dir: FONT_DIR, url: `./${FACE_FILES_DIR}` };
+}
+
 export async function writeProjectTheme(sandboxes: Pick<OrbStackManager, 'exec' | 'writeFile'>, project: Project, theme: Pick<ThemeFiles, 'json' | 'css' | 'face'>): Promise<void> {
+  const home = faceHome(project.template);
   await sandboxes.writeFile(project, THEME_SEED_FILE, theme.json);
-  await sandboxes.writeFile(project, THEME_SHEET_FILE, theme.css);
+  await sandboxes.writeFile(project, THEME_SHEET_FILE, theme.css.replace(`url("./${FACE_FILES_DIR}/`, `url("${home.url}/`));
   const file = fontFile(theme.face);
-  const others = faces.filter((face) => face !== theme.face).map((face) => `${FONT_DIR}/${faceFiles[face].file}`);
-  const held = await sandboxes.exec(project, `rm -f ${others.join(' ')}; test -s ${FONT_DIR}/${file.name} && echo held; true`, { timeoutSec: 15 });
-  if (!held.stdout.includes('held')) await sandboxes.writeFile(project, `${FONT_DIR}/${file.name}`, await file.read());
+  // The files of the other faces go, wherever a face was ever put, so a project carries the one it is set in.
+  const others = [...new Set([FONT_DIR, home.dir])].flatMap((dir) => faces.filter((face) => face !== theme.face).map((face) => `${dir}/${faceFiles[face].file}`));
+  const held = await sandboxes.exec(project, `rm -f ${others.join(' ')}; test -s ${home.dir}/${file.name} && echo held; true`, { timeoutSec: 15 });
+  if (!held.stdout.includes('held')) await sandboxes.writeFile(project, `${home.dir}/${file.name}`, await file.read());
 }
