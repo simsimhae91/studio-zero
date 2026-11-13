@@ -19,6 +19,7 @@ export function Learning({ project }: { project: Project }) {
     evals.reload();
   });
   const visible = (lessons.data?.lessons ?? []).filter((l) => l.state !== 'retired');
+  const retired = (lessons.data?.lessons ?? []).filter((l) => l.state === 'retired');
 
   return (
     <div className="flex flex-col gap-8 p-4">
@@ -56,6 +57,27 @@ export function Learning({ project }: { project: Project }) {
             </li>
           ))}
         </ul>
+        {/* Retiring a lesson is one press, so it has to be possible to see what was retired and take it back. */}
+        {retired.length > 0 ? (
+          <details className="flex flex-col border-t border-border">
+            <summary className="flex min-h-11 cursor-default items-center text-base font-medium text-fg-muted hover:text-fg">폐기한 교훈 {retired.length}개</summary>
+            <ul className="flex flex-col">
+              {retired.map((l) => (
+                <li key={l.id} className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 border-t border-border py-3">
+                  <div className="flex min-w-0 flex-col gap-1">
+                    <h3 className="text-base font-medium">{l.title}</h3>
+                    <p className="text-base text-fg-muted">
+                      {l.trigger}: {l.guidance}
+                    </p>
+                  </div>
+                  <Button busy={setLesson.busy} onClick={() => void setLesson.run(l, 'active')}>
+                    다시 적용
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          </details>
+        ) : null}
       </section>
 
       <section className="flex flex-col gap-4">

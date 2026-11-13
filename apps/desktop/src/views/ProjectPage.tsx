@@ -1,5 +1,5 @@
 import * as Tabs from '@radix-ui/react-tabs';
-import { Check, ChevronDown, FileText, Film, FolderTree, GitFork, GitMerge, Globe, History as HistoryIcon, KeyRound, Lightbulb, Maximize2, MessageCircleQuestion, Monitor, MoreHorizontal, Pencil, Plus, ReceiptText, RotateCw, ScanEye, Smartphone, Sparkles, Square, SquareTerminal, Star, Trash2, X } from 'lucide-react';
+import { Check, ChevronDown, FileText, Film, FolderTree, GitFork, GitMerge, Globe, History as HistoryIcon, KeyRound, Lightbulb, Maximize2, MessageCircleQuestion, Monitor, MoreHorizontal, Pencil, Plus, ReceiptText, RotateCw, ScanEye, Smartphone, Sparkles, Square, SquareTerminal, Star, Trash2, X, Power } from 'lucide-react';
 import { Suspense, lazy, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { ReviewerPref, type AdvisorId, type Approval, type Project, type Session, type Task, type TaskKind, type TaskState, type TaskTrack } from '@studio-zero/protocol';
 import { Markdown } from '@studio-zero/ax/react';
@@ -222,6 +222,11 @@ function Workbench({ project, onOpen, onChanged }: { project: Project; onOpen: (
     await restartSandbox(backend, project.id);
     sandbox.reload();
   });
+  // Off and on by themselves: a sandbox that is not being used need not keep running, and one that is off can be started without a task.
+  const power = useAction(async (on: boolean) => {
+    await backend.call(on ? 'sandbox.start' : 'sandbox.stop', { projectId: project.id });
+    sandbox.reload();
+  });
   const addSession = useAction(async (name: string) => {
     const created = await backend.call('sessions.create', { projectId: project.id, name });
     sessions.reload();
@@ -297,6 +302,7 @@ function Workbench({ project, onOpen, onChanged }: { project: Project; onOpen: (
           <History
             project={project}
             focus={focus}
+            busy={busy}
             onFork={(branch) => {
               setFork(branch);
               setPane('chat');
@@ -363,6 +369,15 @@ function Workbench({ project, onOpen, onChanged }: { project: Project; onOpen: (
             <MenuItem onSelect={() => void restart.run()} disabled={restart.busy} icon={<RotateCw className="size-4" aria-hidden />}>
               샌드박스 재기동
             </MenuItem>
+            {sandbox.data?.state === 'running' ? (
+              <MenuItem onSelect={() => void power.run(false)} disabled={power.busy || busy} icon={<Power className="size-4" aria-hidden />}>
+                샌드박스 끄기
+              </MenuItem>
+            ) : (
+              <MenuItem onSelect={() => void power.run(true)} disabled={power.busy} icon={<Power className="size-4" aria-hidden />}>
+                샌드박스 켜기
+              </MenuItem>
+            )}
             {core ? null : (
               <MenuItem onSelect={() => setKeys(true)} icon={<KeyRound className="size-4" aria-hidden />}>
                 외부 API 키
@@ -379,7 +394,7 @@ function Workbench({ project, onOpen, onChanged }: { project: Project; onOpen: (
           </Menu>
         </div>
       </header>
-      {rename.error ?? restart.error ?? tasks.error ? <Problem>{rename.error ?? restart.error ?? tasks.error}</Problem> : null}
+      {rename.error ?? restart.error ?? power.error ?? rerun.error ?? tasks.error ? <Problem>{rename.error ?? restart.error ?? power.error ?? rerun.error ?? tasks.error}</Problem> : null}
 
       <div className="workbench" data-pane={pane}>
         <section className="pane-chat flex flex-col border-border lg:border-r" aria-label="에이전트와의 대화">

@@ -1,4 +1,4 @@
-import { ExternalLink, Monitor, MousePointerClick, Play, RefreshCw, Smartphone, Tablet } from 'lucide-react';
+import { ExternalLink, Monitor, MousePointerClick, Play, Power, RefreshCw, RotateCw, Smartphone, Tablet } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { Project } from '@studio-zero/protocol';
 import { mockupName } from '../../lib/steps.ts';
@@ -39,6 +39,18 @@ export function Preview({ project, busy, ready }: { project: Project; busy: bool
     const preview = await backend.call('preview.start', { projectId: project.id });
     setUrl(preview.localhost);
     setReloads((n) => n + 1);
+  });
+  // The frame can be reloaded by itself; a dev server that died or hung has to be started again, and a preview
+  // that is not wanted can be switched off. Neither was possible from here.
+  const restart = useAction(async () => {
+    await backend.call('preview.stop', { projectId: project.id });
+    const preview = await backend.call('preview.start', { projectId: project.id });
+    setUrl(preview.localhost);
+    setReloads((n) => n + 1);
+  });
+  const stop = useAction(async () => {
+    await backend.call('preview.stop', { projectId: project.id });
+    setUrl(null);
   });
   const remote = !backend.demo && !['localhost', '127.0.0.1', '[::1]'].includes(backend.host);
   const desk = useMockupDesk();
@@ -114,6 +126,12 @@ export function Preview({ project, busy, ready }: { project: Project; busy: bool
               <IconButton label="새로 고침" onClick={() => setReloads((n) => n + 1)}>
                 <RefreshCw className="size-4" aria-hidden />
               </IconButton>
+              <IconButton label="개발 서버 다시 켜기" disabled={busy || restart.busy || stop.busy} onClick={() => void restart.run()}>
+                <RotateCw className={`size-4 ${restart.busy ? 'animate-spin' : ''}`} aria-hidden />
+              </IconButton>
+              <IconButton label="프리뷰 끄기" disabled={busy || restart.busy || stop.busy} onClick={() => void stop.run()}>
+                <Power className="size-4" aria-hidden />
+              </IconButton>
               <a className="inline-flex size-11 items-center justify-center rounded-md text-fg-muted hover:bg-sunken hover:text-fg" href={url} target="_blank" rel="noreferrer" aria-label="브라우저에서 열기" title="브라우저에서 열기">
                 <ExternalLink className="size-4" aria-hidden />
               </a>
@@ -122,6 +140,8 @@ export function Preview({ project, busy, ready }: { project: Project; busy: bool
         </div>
       </div>
 
+      {/* A failure after the preview was up has nowhere else to be said. */}
+      {showing && (start.error ?? restart.error ?? stop.error) ? <Problem>{start.error ?? restart.error ?? stop.error}</Problem> : null}
       {!showing ? (
         <Empty title={start.busy ? '프리뷰를 켜는 중입니다' : ready ? '프리뷰가 꺼져 있습니다' : '아직 보여 줄 화면이 없습니다'}>
           <p>{start.busy ? '샌드박스에서 개발 서버가 응답하기를 기다리고 있습니다.' : ready ? '샌드박스에서 개발 서버를 켜면 만들어진 화면이 여기에 뜹니다.' : '첫 작업이 끝나면 만들어진 화면이 여기에 바로 뜹니다.'}</p>

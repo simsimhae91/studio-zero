@@ -1,4 +1,4 @@
-import { BookOpen, Check, ChevronRight, Code, Copy, File, FileCode, FileJson, FileText, Folder, FolderOpen, Image, Palette, Pencil, RefreshCw, Save, WrapText, X } from 'lucide-react';
+import { BookOpen, Check, ChevronRight, Code, Copy, File, Link2, FileCode, FileJson, FileText, Folder, FolderOpen, Image, Palette, Pencil, RefreshCw, Save, WrapText, X } from 'lucide-react';
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Markdown } from '@studio-zero/ax/react';
 import type { FileEntry, Project } from '@studio-zero/protocol';
@@ -6,7 +6,7 @@ import { isMarkdown, shownLines } from '../../lib/codeLines.ts';
 import type { CodeNode } from '../../lib/highlight.ts';
 import { setPrefs, usePrefs } from '../../lib/prefs.ts';
 import { errorText, useAction, useQuery, useStudio } from '../../lib/studio.tsx';
-import { Button, Empty, IconButton, Problem } from '../../ui.tsx';
+import { Button, Empty, IconButton, Modal, Problem } from '../../ui.tsx';
 
 const ROOT = '.';
 /** Above this many characters a file is shown without colour: highlighting it would stall the window. */
@@ -45,6 +45,17 @@ export function FileTree({ project, openPath = null }: { project: Project; openP
   const [dirs, setDirs] = useState<Record<string, FileEntry[]>>({});
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
   const [selected, setSelected] = useState<string | null>(openPath);
+  // An edit that has not been saved, and where the owner was about to go when asked about it.
+  const dirty = useRef(false);
+  const [leaving, setLeaving] = useState<{ to: string | null } | null>(null);
+  const markDirty = useCallback((changed: boolean): void => void (dirty.current = changed), []);
+  const [cut, setCut] = useState<ReadonlySet<string>>(new Set());
+  /** Opens another file, or none: asks first when what is open has changes that were not saved. */
+  const leave = (to: string | null): void => {
+    if (to === selected) return;
+    if (dirty.current) setLeaving({ to });
+    else setSelected(to);
+  };
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const loaded = useRef<Set<string>>(new Set([ROOT]));
@@ -52,8 +63,14 @@ export function FileTree({ project, openPath = null }: { project: Project; openP
   const load = useCallback(
     async (path: string): Promise<void> => {
       try {
-        const { entries } = await backend.call('files.list', { projectId: project.id, ...(path === ROOT ? {} : { path }) });
+        const { entries, truncated } = await backend.call('files.list', { projectId: project.id, ...(path === ROOT ? {} : { path }) });
         setDirs((prev) => ({ ...prev, [path]: entries }));
+        setCut((prev) => {
+          const next = new Set(prev);
+          if (truncated) next.add(path);
+          else next.delete(path);
+          return next;
+        });
         setError(null);
       } catch (err) {
         // A directory that has since been removed just drops out of the tree; the root failing is worth saying.
@@ -83,7 +100,9 @@ export function FileTree({ project, openPath = null }: { project: Project; openP
     });
   }, [onEvent, project.id, reload]);
   useEffect(() => {
-    if (openPath) setSelected(openPath);
+    if (openPath) leave(openPath);
+    // Only when another file is asked for from outside: `leave` reads the present selection and need not re-run this.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openPath]);
 
   const toggle = (path: string): void => {
@@ -108,7 +127,7 @@ export function FileTree({ project, openPath = null }: { project: Project; openP
             role="treeitem"
             aria-expanded={entry.type === 'directory' ? open : undefined}
             aria-selected={current}
-            onClick={() => (entry.type === 'directory' ? toggle(entry.path) : setSelected(entry.path))}
+            onClick={() => (entry.type === 'directory' ? toggle(entry.path) : leave(entry.path))}
             style={{ paddingInlineStart: 8 + depth * 16 }}
             className={`flex min-h-8 pointer-coarse:min-h-11 w-full items-center gap-2 rounded-sm pr-2 text-left text-sm ${current ? 'bg-sunken font-medium text-fg' : 'text-fg hover:bg-sunken'}`}
           >
@@ -141,10 +160,11 @@ export function FileTree({ project, openPath = null }: { project: Project; openP
           <ul role="tree" aria-label={`${project.name} 파일`} className="flex flex-col">
             {rows(ROOT, 0)}
           </ul>
+          {cut.size > 0 ? <p className="p-3 text-sm text-fg-muted">파일이 많은 폴더는 앞부분만 보입니다 ({[...cut].map((path) => (path === ROOT ? '/workspace' : path)).join(', ')}). 나머지는 터미널에서 볼 수 있습니다.</p> : null}
         </div>
       </div>
       {selected ? (
-        <FileViewer key={selected} project={project} path={selected} onClose={() => setSelected(null)} />
+        <FileViewer key={selected} project={project} path={selected} onClose={() => leave(null)} onDirty={markDirty} />
       ) : (
         <div className="hidden min-h-0 flex-1 md:flex">
           <Empty title="파일을 고르면 여기에서 열립니다">
@@ -152,6 +172,22 @@ export function FileTree({ project, openPath = null }: { project: Project; openP
           </Empty>
         </div>
       )}
+      <Modal open={leaving !== null} onOpenChange={(open) => !open && setLeaving(null)} title="저장하지 않은 변경이 있습니다" description={selected ?? ''}>
+        <p className="text-base text-fg-muted">이 파일에 고친 내용을 아직 저장하지 않았습니다. 다른 곳으로 가면 사라집니다.</p>
+        <div className="flex flex-wrap justify-end gap-2">
+          <Button onClick={() => setLeaving(null)}>계속 편집</Button>
+          <Button
+            variant="danger"
+            onClick={() => {
+              dirty.current = false;
+              setSelected(leaving!.to);
+              setLeaving(null);
+            }}
+          >
+            버리고 이동
+          </Button>
+        </div>
+      </Modal>
     </div>
   );
 }
@@ -175,7 +211,7 @@ function render(nodes: readonly CodeNode[]): ReactNode {
  * off, and a markdown file opens as the document it is, with its source one press away: the design documents
  * of a project are read here before a build is approved, and they are paragraphs, not code.
  */
-function FileViewer({ project, path, onClose }: { project: Project; path: string; onClose: () => void }) {
+function FileViewer({ project, path, onClose, onDirty }: { project: Project; path: string; onClose: () => void; onDirty: (changed: boolean) => void }) {
   const { backend } = useStudio();
   const { wrapFiles } = usePrefs();
   const prose = isMarkdown(path);
@@ -184,6 +220,7 @@ function FileViewer({ project, path, onClose }: { project: Project; path: string
   const file = useQuery('files.read', { projectId: project.id, path }, ['checkpoint.created', 'checkpoint.restored']);
   const [draft, setDraft] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [pathCopied, setPathCopied] = useState(false);
   const [colored, setColored] = useState<{ content: string; nodes: CodeNode[] } | null>(null);
   const content = file.data?.content ?? '';
   const save = useAction(async () => {
@@ -218,6 +255,18 @@ function FileViewer({ project, path, onClose }: { project: Project; path: string
     }
   };
   const editable = file.data !== undefined && !file.data.binary && !file.data.truncated;
+  // The tree asks before it lets an unsaved edit go.
+  useEffect(() => onDirty(draft !== null && draft !== content), [draft, content, onDirty]);
+  useEffect(() => () => onDirty(false), [onDirty]);
+  const copyPath = async (): Promise<void> => {
+    try {
+      await navigator.clipboard.writeText(path);
+      setPathCopied(true);
+      setTimeout(() => setPathCopied(false), 1500);
+    } catch {
+      // No clipboard permission: the path is on screen and can be selected.
+    }
+  };
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -235,6 +284,9 @@ function FileViewer({ project, path, onClose }: { project: Project; path: string
         <div className="flex items-center">
           {draft === null ? (
             <>
+              <IconButton label={pathCopied ? '경로 복사됨' : '경로 복사'} onClick={() => void copyPath()}>
+                {pathCopied ? <Check className="size-4 text-success" aria-hidden /> : <Link2 className="size-4" aria-hidden />}
+              </IconButton>
               <IconButton label={copied ? '복사됨' : '내용 복사'} disabled={!file.data || file.data.binary} onClick={() => void copy()}>
                 {copied ? <Check className="size-4 text-success" aria-hidden /> : <Copy className="size-4" aria-hidden />}
               </IconButton>
