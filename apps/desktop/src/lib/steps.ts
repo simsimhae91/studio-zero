@@ -1,7 +1,7 @@
 import type { AdvisorId, EventEnvelope, FlowStop, FlowWalk, MockupMeasures } from '@studio-zero/protocol';
 import { duration, evalLabel, reviewerLabel } from './format.ts';
 
-export type StepKind = 'plan' | 'reference' | 'anchor' | 'review' | 'scaffold' | 'install' | 'write' | 'read' | 'check' | 'run' | 'tool' | 'verify';
+export type StepKind = 'plan' | 'reference' | 'anchor' | 'review' | 'scaffold' | 'install' | 'write' | 'read' | 'check' | 'measure' | 'run' | 'tool' | 'verify';
 export type StepState = 'done' | 'active' | 'failed';
 
 /** One line inside an opened step: a command, a planned step, a check and how it went. */
@@ -111,6 +111,8 @@ export type Item =
   | { kind: 'note'; at: number; text: string }
   /** A design task's directions as pictures. The card that ends the task shows them; `title` and `idea` are a model's words. */
   | { kind: 'mockups'; at: number; options: Mockup[] }
+  /** Directions as they stand while the task is still drawing them: what the studio drew each time the engine had a page measured. Gone once the finished set arrives. */
+  | { kind: 'drafts'; at: number; options: Mockup[] }
   | { kind: 'advisor'; at: number; advisor: AdvisorId; question: string; answer: string; ok: boolean; durationMs: number };
 
 const SCAFFOLD = /\b(?:pnpm|npm|npx|yarn|bun|bunx)\s+(?:create|dlx|init)\b|\bcreate-(?:vite|next-app|expo-app|expo|react-app)\b/;
@@ -123,6 +125,7 @@ export function classify(tool: string, input: string): StepKind {
   if (tool === 'write_file' || tool === 'edit_file') return 'write';
   if (tool === 'read_file') return 'read';
   if (tool === 'find_tools' || tool === 'use_tool') return 'tool';
+  if (tool === 'check_mockup') return 'measure';
   if (tool !== 'bash') return 'run';
   if (SCAFFOLD.test(input)) return 'scaffold';
   if (INSTALL.test(input)) return 'install';
@@ -169,6 +172,8 @@ interface Call {
   exitCode: number | null;
   ms: number | null;
   preview: string;
+  /** Which of the task's engines made the call, when several work at once: a design task's "a", "b", "c". */
+  lane: string | null;
 }
 
 interface Building {
@@ -196,6 +201,11 @@ function describe(kind: StepKind, calls: readonly Call[], active: boolean): { ti
       return { title: active ? '코드 확인 중' : '코드 확인', detail: `${calls.length}건` };
     case 'check':
       return { title: active ? '타입 검사·빌드 실행 중' : `타입 검사·빌드${failed > 0 ? `, ${failed}건 실패` : ' 통과'}`, detail: inputs.at(-1) ?? '' };
+    case 'measure': {
+      // The engine asking the studio to measure a page it is drawing. What was drawn for it is shown as a draft.
+      const pages = [...new Set(inputs.map(mockupName))];
+      return { title: active ? '시안 측정 중' : `시안 측정 ${calls.length}회`, detail: pages.join(', ') };
+    }
     case 'tool':
       return { title: active ? '외부 도구 사용 중' : '외부 도구 사용', detail: inputs.at(-1) ?? '' };
     default:
@@ -210,13 +220,16 @@ function refresh(group: Building): void {
   group.step.detail = detail;
   group.step.state = active ? 'active' : group.step.kind === 'check' && group.calls.at(-1)?.ok === false ? 'failed' : 'done';
   group.step.lines = group.calls.map((c) => ({
-    text: c.tool === 'bash' ? c.input : `${c.tool} ${c.input}`,
+    text: `${c.lane ? `${laneName(c.lane)} · ` : ''}${c.tool === 'bash' ? c.input : `${c.tool} ${c.input}`}`,
     mono: true,
     tone: c.ok === false ? 'bad' : 'plain',
     meta: c.ok === null ? '실행 중' : `${c.ok ? '완료' : `실패${c.exitCode === null ? '' : `, 종료 코드 ${c.exitCode}`}`}${c.ms === null ? '' : `, ${duration(c.ms)}`}`,
     output: c.ok === false ? c.preview : '',
   }));
 }
+
+/** A lane as the owner reads it: a direction's engine is named by its direction. */
+const laneName = (lane: string): string => (/^[abc]$/.test(lane) ? `${lane.toUpperCase()}안` : lane);
 
 const gateLabel = { compiler: '컴파일', smoke: '스모크 테스트', anchor: '고정표', build: '프로덕션 빌드', screens: '화면 명세', flow: '시안에서 핵심 흐름 걷기' } as const;
 
@@ -297,7 +310,7 @@ export function narrate(events: readonly EventEnvelope[]): Item[] {
           pushStep(group.step);
         }
         group.step.notes.push(...notes);
-        const call: Call = { id: b.callId, tool: b.tool, input: b.input, ok: null, exitCode: null, ms: null, preview: '' };
+        const call: Call = { id: b.callId, tool: b.tool, input: b.input, ok: null, exitCode: null, ms: null, preview: '', lane: b.lane ?? null };
         group.calls.push(call);
         calls.set(b.callId, { call, group });
         refresh(group);
@@ -361,10 +374,21 @@ export function narrate(events: readonly EventEnvelope[]): Item[] {
         });
         break;
       }
-      case 'mockups.rendered':
+      case 'mockups.drafted': {
+        // One entry for the task's drafts, each page replaced by its latest measurement, in the order a, b, c.
+        let drafts = items.find((item): item is Extract<Item, { kind: 'drafts' }> => item.kind === 'drafts');
+        if (!drafts) items.push((drafts = { kind: 'drafts', at: e.at, options: [] }));
+        drafts.options = [...drafts.options.filter((o) => o.file !== b.option.file), b.option].sort((x, y) => x.file.localeCompare(y.file));
+        break;
+      }
+      case 'mockups.rendered': {
         closeWork();
+        // The finished, judged set takes the drafts' place.
+        const drafts = items.findIndex((item) => item.kind === 'drafts');
+        if (drafts >= 0) items.splice(drafts, 1);
         items.push({ kind: 'mockups', at: e.at, options: b.options });
         break;
+      }
       case 'image.generated':
         closeWork();
         // The purpose is the engine's own sentence: shown as text beside the path.

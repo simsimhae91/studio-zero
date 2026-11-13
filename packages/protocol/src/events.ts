@@ -2,6 +2,18 @@ import { z } from 'zod';
 import { ScratchState } from './ax.ts';
 import { AdvisorId, ApprovalState, DesignGrade, FlowWalk, LessonState, MockupMeasures, Origin, Phase, PowerMode, ProposalState, ReviewerId, ReviewerPref, SandboxState, TaskKind, TaskState } from './domain.ts';
 
+/** One direction of a design task as the owner sees it: a picture, the page's own name and idea, and what was measured on it. */
+const MockupOption = z.object({
+  file: z.string(),
+  title: z.string(),
+  idea: z.string(),
+  artifactId: z.string(),
+  width: z.number(),
+  height: z.number(),
+  flow: FlowWalk.nullable().optional(),
+  measures: MockupMeasures.nullable().optional(),
+});
+
 /**
  * Every state change in the daemon is an append-only event with a monotonically increasing `seq`.
  * Clients render from the stream and resume with `sinceSeq` after a reconnect, so a flaky tunnel never loses state.
@@ -25,7 +37,9 @@ export const EventBody = z.discriminatedUnion('type', [
     appliedLessonIds: z.array(z.string()),
   }),
   z.object({ type: z.literal('agent.text'), text: z.string() }),
-  z.object({ type: z.literal('tool.call'), callId: z.string(), tool: z.string(), input: z.string() }),
+  // `lane` names which of a task's engines made the call, when more than one is working at once (a design
+  // task draws its directions side by side: "a", "b", "c"). Absent on the task's one main conversation.
+  z.object({ type: z.literal('tool.call'), callId: z.string(), tool: z.string(), input: z.string(), lane: z.string().optional() }),
   z.object({
     type: z.literal('tool.result'),
     callId: z.string(),
@@ -150,21 +164,13 @@ export const EventBody = z.discriminatedUnion('type', [
    * to. Both are the daemon's own counts; they are absent on events from before mock-ups were measured, and
    * null when that measurement could not be had.
    */
-  z.object({
-    type: z.literal('mockups.rendered'),
-    options: z.array(
-      z.object({
-        file: z.string(),
-        title: z.string(),
-        idea: z.string(),
-        artifactId: z.string(),
-        width: z.number(),
-        height: z.number(),
-        flow: FlowWalk.nullable().optional(),
-        measures: MockupMeasures.nullable().optional(),
-      }),
-    ),
-  }),
+  z.object({ type: z.literal('mockups.rendered'), options: z.array(MockupOption) }),
+  /**
+   * One direction as it stands while the task is still drawing: the engine asked the studio to measure the page,
+   * and what the studio drew to do that is shown to the owner at once. Not a verdict and not the set to choose
+   * from: `measures` has no reviewer's score, and the page may be changed again. `mockups.rendered` replaces these.
+   */
+  z.object({ type: z.literal('mockups.drafted'), option: MockupOption }),
   /** A picture made for the product by a subscription's image tool and written into the workspace. `purpose` is the engine's own sentence. */
   z.object({ type: z.literal('image.generated'), path: z.string(), purpose: z.string(), width: z.number().int(), height: z.number().int(), bytes: z.number().int(), durationMs: z.number() }),
   z.object({ type: z.literal('ledger.recorded'), entryId: z.string(), proof: z.string() }),

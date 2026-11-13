@@ -83,8 +83,13 @@ interface Mode {
   sealed: boolean;
   /** Every subject is a first screen in its own right (each mock-up is one). Otherwise only the first route is. */
   everyFirst: boolean;
-  /** The sizes a design reviewer is asked about. Null: all that are measured. */
+  /** The sizes a design reviewer is asked about. Null: all that are measured. Empty: nobody is asked. */
   reviewAt: readonly ViewportId[] | null;
+  /**
+   * Whether this run is an audit of the project: its pictures kept, its report stored and announced. False for
+   * a measurement an engine asked for while it was still working, which is nobody's verdict on anything.
+   */
+  record: boolean;
 }
 
 /**
@@ -127,7 +132,7 @@ export class VisualAuditor {
         return !response || response.status() >= 400 ? `HTTP ${response?.status() ?? 'no response'}: the route did not serve the app` : null;
       },
     });
-    return this.#run(req, (host) => [...req.routes.map((route) => subject(host, route)), ...(req.states ?? []).map((s) => subject(host, s.route, s.label))], { sealed: false, everyFirst: false, reviewAt: null }).then((ran) => ran.report);
+    return this.#run(req, (host) => [...req.routes.map((route) => subject(host, route)), ...(req.states ?? []).map((s) => subject(host, s.route, s.label))], { sealed: false, everyFirst: false, reviewAt: null, record: true }).then((ran) => ran.report);
   }
 
   /**
@@ -145,8 +150,20 @@ export class VisualAuditor {
     return this.#run(
       { ...req, routes: req.pages.map((p) => p.route) },
       () => req.pages.map(({ route, html }) => ({ route, open: async (page) => (await page.setContent(html, { waitUntil: 'load', timeout: 20_000 }), null) })),
-      { sealed: true, everyFirst: true, reviewAt: [measured.includes(primary) ? primary : (measured[0] ?? primary)] },
+      { sealed: true, everyFirst: true, reviewAt: [measured.includes(primary) ? primary : (measured[0] ?? primary)], record: true },
     );
+  }
+
+  /**
+   * What the audit would measure on these pages, without the audit: the same checks against the same contract
+   * at the same sizes, the same copy lint, the same pressing and tabbing. No reviewer is asked, nothing is
+   * stored and nothing is announced. It is what an engine is given to look at its own page with while it is
+   * still drawing it, so that it does not have to guess what the measurement will say, or build a browser of
+   * its own to find out.
+   */
+  async measurePages(req: PageAuditRequest): Promise<{ findings: Finding[]; viewports: ViewportId[] }> {
+    const ran = await this.#run({ ...req, routes: req.pages.map((p) => p.route) }, () => req.pages.map(({ route, html }) => ({ route, open: async (page) => (await page.setContent(html, { waitUntil: 'load', timeout: 20_000 }), null) })), { sealed: true, everyFirst: true, reviewAt: [], record: false });
+    return { findings: ran.report.findings, viewports: auditViewports(req.project.template, this.#config.audit.viewports) };
   }
 
   /**
@@ -168,7 +185,7 @@ export class VisualAuditor {
     const measures: AccessMeasures = { contrast: { passed: 0, total: 0 }, touchTargets: { passed: 0, total: 0 }, pressAnswer: { passed: 0, total: 0 }, focusVisible: { passed: 0, total: 0 }, layoutShift: null };
     // The studio's own repository has no template an owner could pick; its screens are a web application's.
     const template: Template = req.project.template === 'studio-core' ? 'web-vite-react' : req.project.template;
-    const available = await this.#vision.availability();
+    const available: Awaited<ReturnType<QaVisionBridge['availability']>> = mode.record ? await this.#vision.availability() : { status: 'off', paths: [], reason: 'a measurement, not an audit: no reviewer is asked' };
     /** Captured screens (viewport × route): what a complete review has to cover. */
     let screens = 0;
     let failures = 0;
@@ -203,7 +220,7 @@ export class VisualAuditor {
           const state = subject.state;
           if (state !== undefined && viewport !== tried) continue;
           const first = state === undefined && (mode.everyFirst || routeIndex === 0);
-          const light = await this.#capture(browser, spec, 'light', subject, true, mode.sealed);
+          const light = await this.#capture(browser, spec, 'light', subject, mode.record, mode.sealed);
           if (!light.digest) {
             findings.push(loadFailure(viewport, route, light.error));
             continue;
@@ -325,6 +342,7 @@ export class VisualAuditor {
       // Only a reviewer who saw the first screen can say whether there was anything on it to look at.
       livingVisual: reviews.some((r) => mode.everyFirst || r.route === req.routes[0]) ? !findings.some((f) => f.rule === LIVING_VISUAL_RULE && f.severity === 'blocker') : null,
     };
+    if (!mode.record) return { report, slopByRoute: new Map() };
     this.#store.insertAudit(report);
     if (!visionReviewed) {
       this.#events.emit(scope, { type: 'notice', level: 'warn', message: `Design review ${reviewed > 0 ? `covered ${reviewed} of ${screens} screens` : 'did not run'} (${vision.reason}). The design is not verified: the audit score is capped at ${UNREVIEWED_SCORE_CAP} and the audit does not pass.` });
@@ -415,16 +433,21 @@ function loadFailure(viewport: ViewportId, route: string, error: string): Findin
   };
 }
 
-/** Renders an audit as the feedback a coding engine receives. Page-derived text stays inside the caller's data block. */
-export function renderAuditFeedback(report: AuditReport, limit = 30): string {
+/** Findings as the lines an engine reads, worst first: where each is, what is wrong, and the fix. */
+export function findingLines(findings: readonly Finding[], limit = 30): string[] {
   const order = { blocker: 0, major: 1, minor: 2 } as const;
-  const lines = [...report.findings]
+  return [...findings]
     .sort((a, b) => order[a.severity] - order[b.severity])
     .slice(0, limit)
     .map((f) => {
       const where = [f.viewport, f.route, f.selector ? `selector: ${f.selector}` : null, f.bbox ? `box: x=${Math.round(f.bbox.x)} y=${Math.round(f.bbox.y)} ${Math.round(f.bbox.w)}×${Math.round(f.bbox.h)}px` : null].filter(Boolean).join(' | ');
       return `- [${f.severity}] ${f.rule} (${f.rule.startsWith(COPY_RULE_PREFIX) ? 'copy lint' : f.source === 'dom' ? 'measured' : 'design review'})\n  ${where}\n  ${f.message}\n  Fix: ${f.fix ?? 'n/a'}`;
     });
+}
+
+/** Renders an audit as the feedback a coding engine receives. Page-derived text stays inside the caller's data block. */
+export function renderAuditFeedback(report: AuditReport, limit = 30): string {
+  const lines = findingLines(report.findings, limit);
 
   const scores = report.rubric ? `Design review scores (0-10): ${Object.entries(report.rubric).map(([k, v]) => `${k} ${v}`).join(', ')}.` : null;
   const review = report.visionReviewed

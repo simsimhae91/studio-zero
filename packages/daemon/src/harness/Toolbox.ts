@@ -8,6 +8,7 @@ import { SandboxError, type OrbStackManager } from '../sandbox/OrbStackManager.t
 import { untrusted, type UntrustedSource } from '../trust/dataBlock.ts';
 import { errorMessage, excerpt, newId } from '../util/core.ts';
 import type { ImageDesk } from '../qa/ImageDesk.ts';
+import { MOCKUP_DIR, MOCKUP_FILES, renderMockupCheck, type MockupRenderer } from '../qa/MockupRenderer.ts';
 import { THEME_SEED_FILE, ThemeChoice, chosenTheme } from './themeSeed.ts';
 
 export interface ToolContext {
@@ -15,6 +16,8 @@ export interface ToolContext {
   taskId: string;
   signal?: AbortSignal;
   onWaiting?: (waiting: boolean) => void;
+  /** Which of the task's engines this is, when several work at once. Shown beside its calls. */
+  lane?: string;
 }
 
 export interface ToolOutcome {
@@ -50,6 +53,7 @@ function define<Schema extends z.ZodObject>(def: ToolDef<Schema>): ToolDef {
 export class Toolbox {
   readonly #sandboxes: OrbStackManager;
   #images: Pick<ImageDesk, 'make'> | null = null;
+  #mockups: Pick<MockupRenderer, 'check'> | null = null;
   readonly #policy: PolicyEngine;
   readonly #events: EventLog;
   readonly #mcp: McpRegistry;
@@ -77,7 +81,7 @@ export class Toolbox {
     const scope = { projectId: ctx.project.id, taskId: ctx.taskId };
     const callId = newId('call');
     const actor: Actor = { type: 'agent', taskId: ctx.taskId };
-    this.#events.emit(scope, { type: 'tool.call', callId, tool: name, input: tool.summarize(parsed.data).slice(0, 2000) });
+    this.#events.emit(scope, { type: 'tool.call', callId, tool: name, input: tool.summarize(parsed.data).slice(0, 2000), ...(ctx.lane === undefined ? {} : { lane: ctx.lane }) });
 
     const started = Date.now();
     let result: { text: string; ok: boolean; exitCode: number | null };
@@ -127,9 +131,16 @@ export class Toolbox {
     this.#images = images;
   }
 
+  /** The mock-up renderer is built after the engines too. */
+  useMockups(mockups: Pick<MockupRenderer, 'check'>): void {
+    this.#mockups = mockups;
+  }
+
   #buildTools(): ToolDef[] {
     const sandboxes = this.#sandboxes;
+    const events = this.#events;
     const images = (): Pick<ImageDesk, 'make'> | null => this.#images;
+    const mockups = (): Pick<MockupRenderer, 'check'> | null => this.#mockups;
     const mcp = this.#mcp;
     return [
       define({
@@ -218,6 +229,26 @@ export class Toolbox {
             if (ctx.signal?.aborted) throw err;
             return { text: `The picture was not made: ${errorMessage(err)}. Design without it, or ask once more with a different description.`, ok: false, exitCode: null };
           }
+        },
+      }),
+      define({
+        name: 'check_mockup',
+        description:
+          `Have the studio open one mock-up page of a design task (${MOCKUP_FILES.map((name) => `${MOCKUP_DIR}/${name}`).join(', ')}) exactly as it will be shown and judged, and tell you what it finds: whether each task of the core flow in docs/screens.json can be carried out by pressing the marked controls, and every measured defect at every size in light and in dark (contrast, control size, overflow, clipped text, type and spacing off the scale, copy habits, controls that give nothing back while held, focus that cannot be seen), each with its selector and a fix. Call it after writing or changing a page and repeat until nothing holds the page back. The owner is shown the page as it stands each time you check it. This is the only browser you need: do not install one, and do not write scripts to look at the pages.`,
+        schema: z.object({ file: z.enum(MOCKUP_FILES.map((name) => `${MOCKUP_DIR}/${name}`) as [string, ...string[]]).describe('The page to check, relative to /workspace.') }),
+        action: (input, project) => ({ kind: 'sandbox.exec', projectId: project.id, command: `check ${input.file}` }),
+        // The page's own words come back in the findings.
+        source: 'browser-page',
+        summarize: (input) => input.file,
+        run: async (input, ctx) => {
+          const renderer = mockups();
+          if (!renderer) return { text: 'The studio has no browser to check pages with here. Read the page against the rules yourself.', ok: false, exitCode: null };
+          const check = await renderer.check(ctx.project, input.file, ctx.signal);
+          if (check.status === 'missing') return { text: `${input.file} does not exist, or is empty.`, ok: false, exitCode: null };
+          if (check.status === 'not-drawn') return { text: 'The studio could not open the page this time (its browser did not answer). That says nothing about the page; carry on, it is measured when you stop.', ok: false, exitCode: null };
+          // What was drawn to measure it is what the owner sees while the task is still running.
+          events.emit({ projectId: ctx.project.id, taskId: ctx.taskId }, { type: 'mockups.drafted', option: check.option });
+          return { text: renderMockupCheck(input.file, check), ok: true, exitCode: null };
         },
       }),
       define({

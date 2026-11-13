@@ -221,6 +221,34 @@ test('what happens before the build and after the checks reads as steps too: ref
   assert.equal(steps(skipped)[0]!.lines[0]!.tone, 'warn');
 });
 
+test('directions are shown as drafts while they are drawn: each page as last measured, by whichever engine drew it, until the finished set replaces them', () => {
+  const draft = (file: string, title: string, blockers: number) => ({ file, title, idea: '', artifactId: `art_${title}`, width: 393, height: 852, flow: null, measures: { blockers, majors: 0, copyHabits: 0, slopScore: null } });
+  const laned = (callId: string, lane: string, file: string): EventBody => ({ type: 'tool.call', callId, tool: 'check_mockup', input: file, lane });
+  const running = narrate(
+    envelopes([
+      { type: 'task.phase', phase: 'execute', round: 1 },
+      laned('c1', 'b', 'docs/mockups/b.html'),
+      { type: 'mockups.drafted', option: draft('docs/mockups/b.html', 'B 첫 측정', 2) },
+      done('c1'),
+      laned('c2', 'a', 'docs/mockups/a.html'),
+      { type: 'mockups.drafted', option: draft('docs/mockups/a.html', 'A 첫 측정', 0) },
+      done('c2'),
+      laned('c3', 'b', 'docs/mockups/b.html'),
+      { type: 'mockups.drafted', option: draft('docs/mockups/b.html', 'B 다시 측정', 0) },
+      done('c3'),
+    ]),
+  );
+  assert.deepEqual(running.map((item) => item.kind), ['steps', 'drafts']);
+  const drafts = running.find((item) => item.kind === 'drafts');
+  assert.deepEqual(drafts?.kind === 'drafts' ? drafts.options.map((o) => [o.file, o.title, o.measures?.blockers]) : null, [['docs/mockups/a.html', 'A 첫 측정', 0], ['docs/mockups/b.html', 'B 다시 측정', 0]], 'one entry per page, the latest measurement of each, in the order a, b');
+  const step = running[0]?.kind === 'steps' ? running[0].steps.at(-1) : null;
+  assert.deepEqual([step?.kind, step?.title, step?.detail], ['measure', '시안 측정 3회', 'B안, A안']);
+  assert.deepEqual(step?.lines.map((line) => line.text), ['B안 · check_mockup docs/mockups/b.html', 'A안 · check_mockup docs/mockups/a.html', 'B안 · check_mockup docs/mockups/b.html'], 'each call says whose it was');
+
+  const finished = narrate(envelopes([laned('c1', 'a', 'docs/mockups/a.html'), { type: 'mockups.drafted', option: draft('docs/mockups/a.html', 'A', 0) }, done('c1'), { type: 'mockups.rendered', options: [draft('docs/mockups/a.html', 'A', 0)] }]));
+  assert.deepEqual(finished.map((item) => item.kind), ['steps', 'mockups'], 'the judged set takes the drafts\' place');
+});
+
 test('a design task ends with its drawn directions, and the build request names the picked one by its file alone', () => {
   const options = [
     { file: 'docs/mockups/a.html', title: '흐름 한 줄', idea: '화살표 한 줄이 먼저입니다.', artifactId: 'art_a', width: 1440, height: 900 },

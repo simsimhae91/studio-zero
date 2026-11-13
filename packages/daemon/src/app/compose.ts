@@ -188,6 +188,7 @@ export async function createDaemon(config: Config, log: PinoLogger, overrides: D
   const reviewer = new SandwichReviewer({ desk, router, events, log: log.child({ mod: 'review' }) });
   const ledger = new Ledger({ config, store, events, clock, log: log.child({ mod: 'ledger' }) });
   const mockups = new MockupRenderer({ config, store, sandboxes, browser: qaBrowser, auditor, clock, log: log.child({ mod: 'mockups' }) });
+  toolbox.useMockups(mockups);
   const harness = new Harness({ config, store, events, policy, sandboxes, provisioner, router, claude, evals, compiler, smoke, lessons, reflection, refkit, reviewer, ledger, build: new BuildMeter({ sandboxes }), mockups, selfHosting, clock, log: log.child({ mod: 'harness' }) });
   const queue = new TaskQueue({ store, events, execute: (task, signal) => harness.run(task, signal), clock, log: log.child({ mod: 'queue' }) });
   // Tasks suspended for want of a design reviewer are queued again when one answers.

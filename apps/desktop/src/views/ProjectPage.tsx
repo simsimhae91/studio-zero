@@ -716,6 +716,8 @@ function Passage({ task, items, pending, onShow, onCheckpoint, onFile, onBuild, 
   const [merged, setMerged] = useState<string | null>(null);
   // Drawn once at the end of a design task; a re-run draws again, and the latest set is the one on offer.
   const mockups = items.findLast((item) => item.kind === 'mockups')?.options ?? [];
+  // Shown from the first page the engine has measured, long before the task ends.
+  const drafts = items.find((item) => item.kind === 'drafts')?.options ?? [];
   const merge = useAction(async () => {
     const result = await backend.call('git.merge', { projectId: task.projectId, branch: task.branch! });
     setMerged(result.into);
@@ -760,12 +762,17 @@ function Passage({ task, items, pending, onShow, onCheckpoint, onFile, onBuild, 
           case 'mockups':
             // Shown on the card that ends the task, where the choice is made.
             return null;
+          case 'drafts':
+            // Shown below, beside what the task is doing now.
+            return null;
         }
       })}
 
       {pending.filter((a) => a.taskId === null || a.taskId === task.id).map((approval) => (
         <ApprovalCard key={approval.id} approval={approval} />
       ))}
+
+      {drafts.length > 0 ? <DraftMockups mockups={drafts} running={live(task.state)} /> : null}
 
       {task.state === 'running' || task.state === 'queued' ? (
         <Working>
@@ -1029,6 +1036,37 @@ function DesignDecision({ task, mockups, onFile, onBuild }: { task: Task; mockup
 }
 
 /** One line of what the daemon measured on a mock-up. Plain when it is fine; marked when it found something. */
+/**
+ * A design task's directions before it has finished: each page as the studio last drew it, when the engine asked
+ * for it to be measured. Pictures and counts only. Nothing is chosen here: the page may still change, and no
+ * design reviewer has seen it.
+ */
+function DraftMockups({ mockups, running }: { mockups: Mockup[]; running: boolean }) {
+  return (
+    <section aria-label="그리는 중인 시안" className="flex flex-col gap-3 rounded-lg border border-border bg-surface px-4 py-3">
+      <div className="flex flex-col gap-1">
+        <p className="text-base font-semibold">{running ? `시안 ${mockups.length}개를 그리는 중입니다` : `끝나기 전에 그린 시안 ${mockups.length}개`}</p>
+        <p className="text-sm text-fg-muted">엔진이 측정을 맡길 때마다 그때의 화면으로 바뀝니다. 아직 고치는 중이고 디자인 심사 전입니다. 고르는 것은 작업이 끝난 뒤입니다.</p>
+      </div>
+      <div className={`grid grid-cols-2 gap-3 ${mockups.length > 2 ? '@xl:grid-cols-3' : ''}`}>
+        {mockups.map((m) => {
+          const found = m.measures ? m.measures.blockers + m.measures.majors + m.measures.copyHabits : null;
+          return (
+            <div key={m.file} className="flex flex-col gap-2 rounded-lg border border-border p-2">
+              <MockupImage mockup={m} className="w-full rounded-md border border-border" />
+              <span className="text-sm font-semibold">{mockupName(m.file)}</span>
+              {/* The page's own title: a model's words, shown as text. */}
+              <span className="break-words text-sm font-medium">{m.title}</span>
+              {m.flow ? <Measured {...flowLine(m.flow)} /> : null}
+              {found === null ? null : <Measured ok={found === 0} text={found === 0 ? '측정된 결함 없음' : `측정된 결함 ${found}건, 고치는 중`} />}
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 function Measured({ ok, text }: { ok: boolean; text: string }) {
   return <span className={`break-words text-sm ${ok ? 'text-fg-muted' : 'font-medium text-warning'}`}>{text}</span>;
 }

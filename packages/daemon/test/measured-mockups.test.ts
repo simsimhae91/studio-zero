@@ -10,7 +10,7 @@ import { chromium, devices, type Browser } from 'playwright-core';
 import type { AuditReport, Project } from '@studio-zero/protocol';
 import { walkFlow, walkProblems } from '../src/qa/FlowWalker.ts';
 import { SUPPLIED_FACES, withFaces } from '../src/qa/mockupFaces.ts';
-import { MOCKUP_ASSET_DIR, MOCKUP_DIR, MockupRenderer } from '../src/qa/MockupRenderer.ts';
+import { MOCKUP_ASSET_DIR, MOCKUP_DIR, MockupRenderer, renderMockupCheck } from '../src/qa/MockupRenderer.ts';
 import type { QaBrowser, QaSession } from '../src/qa/QaBrowser.ts';
 import type { QaVisionBridge } from '../src/qa/QaVisionBridge.ts';
 import { walkApp } from '../src/qa/SmokeTester.ts';
@@ -37,6 +37,10 @@ const sandboxWith = (files: Record<string, string>): { sandboxes: OrbStackManage
       scripts.push(script);
       const file = Object.keys(files).find((name) => script.includes(`${name} ]`));
       return file ? { exitCode: 0, stdout: files[file]!, stderr: '', timedOut: false, durationMs: 1 } : { exitCode: 1, stdout: '', stderr: '', timedOut: false, durationMs: 1 };
+    },
+    readFile: async (_project: Project, path: string) => {
+      if (files[path] === undefined) throw new Error(`no such file: ${path}`);
+      return { content: files[path], truncated: false };
     },
   } as unknown as OrbStackManager;
   return { sandboxes, scripts };
@@ -263,6 +267,72 @@ test('measuring a design task\'s mock-ups: each drawn, walked and filmed, the au
     const bare = await new MockupRenderer({ config: d.config, store, clock: Date.now, log: quietLog, browser: localBrowser(browser), sandboxes: fake.sandboxes }).measure(phoneProject, { taskId: null, tasks: FLOW_TASKS });
     assert.deepEqual([bare.audit, bare.options.map((o) => o.measures), bare.options[0]!.flow!.tasks.length], [null, [null, null], 2]);
     assert.deepEqual(await new MockupRenderer({ config: d.config, store, clock: Date.now, log: quietLog, browser: localBrowser(browser), sandboxes: sandboxWith({}).sandboxes, auditor }).measure(phoneProject, { taskId: null, tasks: FLOW_TASKS }), { options: [], audit: null, flowProblems: [] });
+  } finally {
+    await d.cleanup();
+    await browser.close();
+  }
+});
+
+test('an engine checks its own page: the studio measures it as it will be judged, asks no reviewer, records no audit, and shows the owner what it drew', async (t) => {
+  const browser = await launch();
+  if (!browser) return t.skip('headless Chrome cannot be launched here');
+  const d = await testDaemon();
+  try {
+    const { store, events, toolbox, studio } = d.daemon;
+    const project = studio.createProject({ type: 'owner', via: 'desktop' }, { name: 'Chores', slug: 'chores-check', template: 'mobile-expo' });
+    const task = await studio.submitTask({ type: 'owner', via: 'desktop' }, { projectId: project.id, kind: 'ideate', prompt: '집안일 기록' }, 'desktop');
+    let asked = 0;
+    const vision = { availability: async () => ((asked += 1), { status: 'ready', paths: ['codex'], reason: null }), review: async () => ((asked += 1), Promise.reject(new Error('no reviewer is asked by a check'))) } as unknown as QaVisionBridge;
+    const auditor = new VisualAuditor({ config: d.config, store, events, browser: localBrowser(browser), vision, clock: () => 1000, log: quietLog });
+    const faint = OPERABLE.replace('<p>설거지 · 보통 매일 · 20분</p>', '<p style="color:#b9b9bd">설거지 · 보통 매일 · 20분</p>');
+    const fake = sandboxWith({ [`${MOCKUP_DIR}/a.html`]: OPERABLE, [`${MOCKUP_DIR}/b.html`]: faint, [`${MOCKUP_DIR}/c.html`]: FROZEN, [SCREEN_SPEC_FILE]: JSON.stringify(SCREEN_SPEC) });
+    const renderer = new MockupRenderer({ config: d.config, store, clock: Date.now, log: quietLog, browser: localBrowser(browser), sandboxes: fake.sandboxes, auditor });
+
+    const a = await renderer.check(project, `${MOCKUP_DIR}/a.html`);
+    assert.equal(a.status, 'measured');
+    if (a.status !== 'measured') return;
+    assert.deepEqual([a.specProblems, a.flowProblems], [[], []]);
+    assert.deepEqual(a.option.flow!.tasks.map((walked) => [walked.id, walked.reached]), [['log', true], ['undo', true]], 'the flow walked is the one the screen spec in the workspace states');
+    assert.deepEqual(a.viewports, ['iphone-15-pro', 'ipad-pro-11']);
+    assert.deepEqual(a.findings!.filter((f) => f.severity !== 'minor').map((f) => f.rule), []);
+    assert.deepEqual(a.option.measures, { blockers: 0, majors: 0, copyHabits: 0, slopScore: null }, 'no reviewer saw it, so there is no score');
+    const clean = renderMockupCheck(a.option.file, a);
+    assert.match(clean, /^docs\/mockups\/a\.html as the studio shows and measures it: scripts off, network off, at iphone-15-pro, ipad-pro-11, in light and in dark\./);
+    assert.match(clean, /Core flow: every task was carried out to its outcome \(log: 1 press; undo: 1 press\)\./);
+    assert.match(clean, /Nothing here holds the page back\.[\s\S]*a design reviewer looks at the page once, after you stop\.$/);
+
+    const b = await renderer.check(project, `${MOCKUP_DIR}/b.html`);
+    assert.ok(b.status === 'measured' && b.findings!.some((f) => f.rule.startsWith('contrast/text') && f.severity === 'blocker'));
+    if (b.status !== 'measured') return;
+    assert.equal(b.findings!.filter((f) => f.rule.startsWith('contrast/text') && !f.rule.endsWith('@dark')).length, 1, 'one defect, however many sizes show it');
+    const said = renderMockupCheck(b.option.file, b);
+    assert.match(said, /Measured: 2 blocker, \d+ major, \d+ minor\.\n- \[blocker\] contrast\/text[^\n]* \(measured\)\n  [^\n]*selector: [^\n]+\n/);
+    assert.match(said, /Fix these in the page itself and check it again\./);
+
+    const c = await renderer.check(project, `${MOCKUP_DIR}/c.html`);
+    assert.ok(c.status === 'measured' && c.flowProblems.length === 2, 'a page frozen after the act cannot be walked, and is told so');
+    if (c.status === 'measured') assert.match(renderMockupCheck(c.option.file, c), /Core flow: 0 of 1 task\(s\) could be carried out to their outcome\.\n- /);
+
+    assert.equal(asked, 0, 'no reviewer was asked, or even looked for');
+    assert.deepEqual(store.listAudits(project.id, 10), [], 'a check is not an audit of the project');
+
+    // The same check as the tool an engine calls: the text comes back as data, and the owner is shown the page.
+    toolbox.useMockups(renderer);
+    const out = await toolbox.call({ project, taskId: task.id, lane: 'b' }, 'check_mockup', { file: `${MOCKUP_DIR}/b.html` });
+    assert.equal(out.isError, false);
+    assert.match(out.content, /<untrusted-data[^>]*source="browser-page"[\s\S]*\[blocker\] contrast\/text/);
+    const seen = store.listEvents({ taskId: task.id }, 0, 50).map((e) => e.body);
+    const call = seen.find((e) => e.type === 'tool.call');
+    assert.deepEqual(call?.type === 'tool.call' ? [call.tool, call.input, call.lane] : null, ['check_mockup', `${MOCKUP_DIR}/b.html`, 'b']);
+    const drafted = seen.find((e) => e.type === 'mockups.drafted');
+    assert.ok(drafted?.type === 'mockups.drafted' && drafted.option.file === `${MOCKUP_DIR}/b.html` && drafted.option.title === 'A · 이름 도장을 찍는 장부' && drafted.option.measures?.blockers === 2 && store.getArtifact(drafted.option.artifactId));
+
+    // A page that is not there, a path that is not a mock-up, and a studio without a browser.
+    assert.match((await toolbox.call({ project, taskId: task.id }, 'check_mockup', { file: `${MOCKUP_DIR}/a.html` })).content, /Nothing here holds the page back/);
+    assert.equal((await toolbox.call({ project, taskId: task.id }, 'check_mockup', { file: 'docs/prd.md' })).isError, true);
+    toolbox.useMockups(new MockupRenderer({ config: d.config, store, clock: Date.now, log: quietLog, browser: localBrowser(browser), sandboxes: sandboxWith({}).sandboxes, auditor }));
+    const none = await toolbox.call({ project, taskId: task.id }, 'check_mockup', { file: `${MOCKUP_DIR}/c.html` });
+    assert.ok(none.isError && /does not exist/.test(none.content));
   } finally {
     await d.cleanup();
     await browser.close();

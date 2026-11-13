@@ -27,6 +27,8 @@ export class QaBrowser {
   readonly #config: Config;
   readonly #sandboxes: OrbStackManager;
   #active = 0;
+  /** How many uses each project has open. The browser leaves a project's network when the last of them ends. */
+  readonly #attached = new Map<string, number>();
   #idleTimer: NodeJS.Timeout | null = null;
 
   constructor(deps: { config: Config; sandboxes: OrbStackManager }) {
@@ -43,14 +45,22 @@ export class QaBrowser {
       // 57 MB resident), and a daemon that is only relaying approvals should not carry it.
       const { chromium, devices } = await import('playwright-core');
       const endpoint = await this.#sandboxes.ensureQaBrowser(PLAYWRIGHT_VERSION, this.#config.audit.browserImage);
-      const host = await this.#sandboxes.attachQaBrowser(project);
+      this.#attached.set(project.id, (this.#attached.get(project.id) ?? 0) + 1);
       let browser: Browser | null = null;
       try {
+        const host = await this.#sandboxes.attachQaBrowser(project);
         browser = await this.#connect(chromium, endpoint, signal);
         return await fn({ browser, host, devices });
       } finally {
         await browser?.close().catch(() => undefined);
-        await this.#sandboxes.detachQaBrowser(project).catch(() => undefined);
+        // Several engines may be measuring pages of one project at once: the first to finish must not take the
+        // browser off the network the others are still looking through.
+        const left = (this.#attached.get(project.id) ?? 1) - 1;
+        if (left > 0) this.#attached.set(project.id, left);
+        else {
+          this.#attached.delete(project.id);
+          await this.#sandboxes.detachQaBrowser(project).catch(() => undefined);
+        }
       }
     } finally {
       this.#active -= 1;

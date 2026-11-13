@@ -1,18 +1,18 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { Browser, Page } from 'playwright-core';
-import type { AuditReport, FlowWalk, MockupMeasures, Project } from '@studio-zero/protocol';
+import type { AuditReport, Finding, FlowWalk, MockupMeasures, Project, ViewportId } from '@studio-zero/protocol';
 import type { Config } from '../config.ts';
 import type { Store } from '../db/Store.ts';
 import type { OrbStackManager } from '../sandbox/OrbStackManager.ts';
-import type { FlowTask } from '../scratch/ScreenSpec.ts';
+import { SCREEN_SPEC_FILE, readScreenSpec, type FlowTask } from '../scratch/ScreenSpec.ts';
 import { errorMessage, newId, type Clock, type Logger } from '../util/core.ts';
 import { COPY_RULE_PREFIX, distinctDefects } from './checks.ts';
 import { contactSheet, type Tile } from './filmstrip.ts';
 import { walkFlow, walkProblems } from './FlowWalker.ts';
 import { withFaces } from './mockupFaces.ts';
 import type { QaBrowser } from './QaBrowser.ts';
-import type { VisualAuditor } from './VisualAuditor.ts';
+import { findingLines, type VisualAuditor } from './VisualAuditor.ts';
 
 /** Where a design task leaves its mock-ups: one self-contained page per direction. */
 export const MOCKUP_DIR = 'docs/mockups';
@@ -62,6 +62,50 @@ export interface MockupMeasurement {
 }
 
 /**
+ * One page as the studio's measurement sees it, for the engine that is still drawing it. `missing`: there is
+ * no such page. `not-drawn`: the browser could not be had; that is the studio's failure and says nothing of the page.
+ */
+export type MockupCheck =
+  | { status: 'missing' }
+  | { status: 'not-drawn' }
+  | {
+      status: 'measured';
+      option: MockupOption;
+      /** Why the core flow was not walked, when it was not: the screen spec does not hold. */
+      specProblems: string[];
+      flowProblems: string[];
+      /** Distinct defects over every size. Null when the page was drawn but could not be measured. */
+      findings: Finding[] | null;
+      viewports: ViewportId[];
+    };
+
+/** A check as the text its engine reads. The page's own words appear in it: callers fence it as data. */
+export function renderMockupCheck(file: string, check: Extract<MockupCheck, { status: 'measured' }>): string {
+  const lines = [`${file} as the studio shows and measures it: scripts off, network off${check.viewports.length > 0 ? `, at ${check.viewports.join(', ')}, in light and in dark` : ''}.`, ''];
+  const walked = check.option.flow?.tasks ?? [];
+  if (check.specProblems.length > 0) {
+    lines.push(`Core flow: not walked. ${SCREEN_SPEC_FILE} does not hold as the screen spec, so there is no flow to carry out:`, ...check.specProblems.slice(0, 6).map((line) => `- ${line}`));
+  } else if (check.flowProblems.length > 0) {
+    lines.push(`Core flow: ${walked.filter((t) => t.reached).length} of ${walked.length} task(s) could be carried out to their outcome.`, ...check.flowProblems.map((line) => `- ${line}`));
+  } else if (walked.length > 0) {
+    lines.push(`Core flow: every task was carried out to its outcome (${walked.map((t) => `${t.id}: ${t.presses} press${t.presses === 1 ? '' : 'es'}${t.scrolls > 0 ? `, ${t.scrolls} scrolled to` : ''}`).join('; ')}).`);
+  } else {
+    lines.push('Core flow: could not be walked on this page.');
+  }
+  lines.push('');
+  if (check.findings === null) {
+    lines.push('The page was drawn but could not be measured this time. It is measured again when you stop.');
+  } else {
+    const count = (severity: Finding['severity']): number => check.findings!.filter((f) => f.severity === severity).length;
+    lines.push(`Measured: ${count('blocker')} blocker, ${count('major')} major, ${count('minor')} minor.`, ...findingLines(check.findings, 24));
+    if (check.findings.length > 24) lines.push(`(${check.findings.length - 24} more, of lower severity)`);
+  }
+  const clean = check.specProblems.length === 0 && check.flowProblems.length === 0 && check.findings !== null && !check.findings.some((f) => f.severity !== 'minor');
+  lines.push('', clean ? 'Nothing here holds the page back. What is left is a judgement this check does not make: a design reviewer looks at the page once, after you stop.' : 'Fix these in the page itself and check it again. Blockers and majors hold a page back; minors do not.');
+  return lines.join('\n');
+}
+
+/**
  * Draws a design task's directions so the owner can choose with their eyes, and measures them so the choice is
  * not only by eye.
  *
@@ -86,11 +130,11 @@ export class MockupRenderer {
   readonly #store: Store;
   readonly #sandboxes: OrbStackManager;
   readonly #browser: QaBrowser;
-  readonly #auditor: Pick<VisualAuditor, 'auditPages'> | null;
+  readonly #auditor: (Pick<VisualAuditor, 'auditPages'> & Partial<Pick<VisualAuditor, 'measurePages'>>) | null;
   readonly #clock: Clock;
   readonly #log: Logger;
 
-  constructor(deps: { config: Config; store: Store; sandboxes: OrbStackManager; browser: QaBrowser; auditor?: Pick<VisualAuditor, 'auditPages'> | null; clock: Clock; log: Logger }) {
+  constructor(deps: { config: Config; store: Store; sandboxes: OrbStackManager; browser: QaBrowser; auditor?: (Pick<VisualAuditor, 'auditPages'> & Partial<Pick<VisualAuditor, 'measurePages'>>) | null; clock: Clock; log: Logger }) {
     this.#config = deps.config;
     this.#store = deps.store;
     this.#sandboxes = deps.sandboxes;
@@ -227,6 +271,44 @@ export class MockupRenderer {
     } finally {
       await sheets.close().catch(() => undefined);
     }
+  }
+
+  /**
+   * One page, as its engine asks to see it while still drawing: drawn, its core flow walked and filmed, and
+   * measured at every size, with no reviewer asked and nothing recorded as an audit. The same browser, the same
+   * checks and the same contract the finished set is held to, so what this says is what that will say.
+   */
+  async check(project: Project, file: string, signal?: AbortSignal): Promise<MockupCheck> {
+    const page = await this.page(project, file, signal);
+    if (!page) return { status: 'missing' };
+    let specProblems: string[] = [];
+    let tasks: FlowTask[] = [];
+    try {
+      const spec = readScreenSpec((await this.#sandboxes.readFile(project, SCREEN_SPEC_FILE, 400_000)).content);
+      if (spec.ok) tasks = spec.spec.tasks.map(({ id, goal, outcome }) => ({ id, goal, outcome }));
+      else specProblems = spec.problems;
+    } catch (err) {
+      if (signal?.aborted) throw err;
+      specProblems = [`${SCREEN_SPEC_FILE} is missing.`];
+    }
+    const [option] = await this.#draw(project, [page], tasks, signal);
+    if (!option) return { status: 'not-drawn' };
+    const touch = project.template === 'mobile-expo';
+    const flowProblems = tasks.length === 0 ? [] : option.flow ? walkProblems(option.flow, tasks, { touch }) : ['the page could not be walked: the browser gave up on it before the first press.'];
+    let findings: Finding[] | null = null;
+    let viewports: ViewportId[] = [];
+    if (this.#auditor?.measurePages) {
+      try {
+        const measured = await this.#auditor.measurePages({ project, taskId: null, pages: [{ route: page.file, html: page.html }], signal });
+        findings = distinctDefects(measured.findings);
+        viewports = measured.viewports;
+      } catch (err) {
+        if (signal?.aborted) throw err;
+        this.#log.warn({ projectId: project.id, file, err: errorMessage(err) }, 'a mock-up could not be measured for its engine');
+      }
+    }
+    const measures: MockupMeasures | null = findings === null ? null : { blockers: findings.filter((f) => f.severity === 'blocker').length, majors: findings.filter((f) => f.severity === 'major').length, copyHabits: findings.filter((f) => f.rule.startsWith(COPY_RULE_PREFIX) && f.severity !== 'minor').length, slopScore: null };
+    return { status: 'measured', option: { ...option, measures }, specProblems, flowProblems, findings, viewports };
   }
 
   /**
