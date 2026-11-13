@@ -15,13 +15,13 @@ function el(over: Partial<DigestElement>): DigestElement {
   return {
     id: `e${++n}`, tag: 'p', role: '', selector: `p:nth-of-type(${n})`, text: 'Readable text', textLength: 13, interactive: false, inline: false,
     x: 16, y: 16 * n, w: 300, h: 24, color: [...INK], background: [...WHITE], backgroundIndeterminate: false, ownBackground: [0, 0, 0, 0], backgroundImage: 'none',
-    fontSize: 16, fontWeight: 400, fontFamily: 'Geist', lineHeight: 1.6, letterSpacingEm: 0, uppercase: false, radius: 0, padding: [0, 0, 0, 0], margin: [0, 0, 0, 0], gap: 0,
+    fontSize: 16, fontWeight: 400, fontFamily: 'Pretendard Variable', lineHeight: 1.6, letterSpacingEm: 0, uppercase: false, radius: 0, padding: [0, 0, 0, 0], margin: [0, 0, 0, 0], gap: 0,
     shadow: 'none', hasBorder: false, clipped: false, charsPerLine: 0, siblingKey: 'main|P', ...over,
   };
 }
 
 function digest(elements: DigestElement[], over: Partial<PageDigest> = {}): PageDigest {
-  return { title: 't', lang: 'en', width: 393, height: 659, scrollWidth: 393, scrollHeight: 1200, loadedFonts: ['Geist'], elements, ...over };
+  return { title: 't', lang: 'en', width: 393, height: 659, scrollWidth: 393, scrollHeight: 1200, loadedFonts: ['Pretendard Variable'], elements, ...over };
 }
 
 const phone = { viewport: 'iphone-15-pro', viewportWidth: 393, route: '/', touch: true, scope: 'full' } as const;
@@ -131,7 +131,7 @@ async function launch(): Promise<Browser | null> {
 
 const theme = renderThemeCss(createTheme(seedFromName('ledger')));
 const CLEAN = `<!doctype html><html lang="ko"><head><meta name="viewport" content="width=device-width, initial-scale=1"><style>${theme}</style><style>
-  body { margin: 0; font-family: Geist, sans-serif; background: var(--sz-bg); color: var(--sz-fg); }
+  body { margin: 0; font-family: "Pretendard Variable", sans-serif; background: var(--sz-bg); color: var(--sz-fg); }
   main { padding: 24px; display: grid; gap: 24px; }
   h1 { font-size: 30px; line-height: 1.3; margin: 0; }
   p { font-size: 16px; line-height: 1.6; margin: 0; color: var(--sz-fg-muted); }
@@ -171,7 +171,7 @@ test('collector + checks against real rendering (Chrome)', async (t) => {
       const action = page.elements.find((e) => e.tag === 'a')!;
       assert.ok(action.interactive && action.h >= 44, `action height ${action.h}`);
       assert.equal(scheme === 'dark', heading.background[0]! < 0.3, 'the dark palette is what gets measured in dark mode');
-      // Geist is requested but no font file is served in this test, which the audit is right to point out.
+      // Pretendard is requested but no font file is served in this test, which the audit is right to point out.
       assert.deepEqual(rules(runDomChecks(page, phone, contract)), ['type/font-not-loaded'], scheme);
     }
 

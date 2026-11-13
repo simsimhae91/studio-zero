@@ -66,7 +66,10 @@ if (mode === 'draw') {
     writeFileSync(join(ws, DIRECTIONS_FILE), raw);
     writeFileSync(join(ws, '.lab-template'), `${template}\n`);
     // As the harness does before anyone draws: each row's theme in its own file, and the project's theme the recommended row's.
-    for (const other of table.directions) writeFileSync(join(ws, directionThemeFile(other.id)), chosenTheme(other.theme).css);
+    // A direction's file holds what its engine copies into the page. A tree whose sheet also points at a font file
+    // gives the tokens apart from it (tokensCss), as its harness does; a tree from before that has only the sheet.
+    const tokens = (theme: { css: string; tokensCss?: string }): string => theme.tokensCss ?? theme.css;
+    for (const other of table.directions) writeFileSync(join(ws, directionThemeFile(other.id)), tokens(chosenTheme(other.theme)));
     const recommended = chosenTheme(table.directions[0]!.theme);
     writeFileSync(join(ws, THEME_SEED_FILE), recommended.json);
     writeFileSync(join(ws, THEME_FILE), recommended.css);

@@ -83,7 +83,7 @@ test('mock-ups on a real engine: pages in a sandbox are drawn in the QA browser 
     await write('b.html', FROZEN);
     const shown = await mockups.page(project, 'docs/mockups/a.html');
     assert.ok(shown?.html.includes(`<img src="data:image/png;base64,${dot}" alt="도장"`), 'the picture travels inside the page');
-    assert.match(shown!.html, /<style data-studio-faces>@font-face\{font-family:"Geist"/);
+    assert.match(shown!.html, /<style data-studio-faces>@font-face\{font-family:"Pretendard Variable"/);
 
     const measured = await mockups.measure(project, { taskId: null, tasks: FLOW_TASKS });
     assert.deepEqual(measured.options.map((o) => [o.file, o.flow?.tasks.map((t) => [t.id, t.reached, t.stopped, t.presses])]), [

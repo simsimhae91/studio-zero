@@ -1,4 +1,5 @@
-import { THEME_SEED_FILE, placeholderTheme } from './themeSeed.ts';
+import { THEME_GENERATOR, themeGeneratorOf } from '@studio-zero/design';
+import { THEME_SEED_FILE, placeholderTheme, regeneratedTheme, writeProjectTheme } from './themeSeed.ts';
 import type { Project, SandboxInfo } from '@studio-zero/protocol';
 import { EXTERNAL_ENV_FILE, type ExternalApis } from '../app/ExternalApis.ts';
 import type { OrbStackManager } from '../sandbox/OrbStackManager.ts';
@@ -19,6 +20,10 @@ import type { SelfHosting } from './SelfHosting.ts';
  *
  * Each file set is checked on the branch that is checked out. The harness calls this again once a task's branch
  * exists, so a kit introduced after a project was created reaches the branch the engine is about to work on.
+ *
+ * The theme's stylesheet is the one file that is brought up to date: it is generated, never edited, and says
+ * which generator wrote it. A sheet from an older generator is written again from the seed the project stores, so
+ * a project made before the faces were fixed is not audited against a sheet that names faces it may no longer use.
  *
  * The studio's own repository (the Core project) is the exception: its workspace is a clone of that repository,
  * filled by `SelfHosting`, and none of these files are written into it.
@@ -46,18 +51,26 @@ export class WorkspaceProvisioner {
         await this.#core?.sync(project, { onlyIfEmpty: true });
         return info;
       }
-      // One round trip answers both questions; each file set is written only when it is missing.
-      const present = await this.#sandboxes.exec(project, `test -f ${THEME_FILE} && echo theme; test -f ${AX_ENTRY} && echo kit; test -f ${MOBILE_KIT_ENTRY} && echo mobile; true`, { timeoutSec: 15 });
+      // One round trip answers every question; each file set is written only when it is missing. The sheet's
+      // second line says which generator wrote it.
+      const present = await this.#sandboxes.exec(project, `test -f ${THEME_FILE} && echo theme; test -f ${AX_ENTRY} && echo kit; test -f ${MOBILE_KIT_ENTRY} && echo mobile; sed -n '2p' ${THEME_FILE} 2>/dev/null; true`, { timeoutSec: 15 });
       const has = new Set(present.stdout.split('\n').map((line) => line.trim()));
       const added: string[] = [];
       if (!has.has('theme')) {
-        // An existing theme is never overwritten: after the first commit it belongs to the project.
+        // An existing theme's choices are never overwritten: after the first commit they belong to the project.
         // A placeholder, and it says so: the first design task replaces it with a choice made from the subject.
-        const theme = placeholderTheme(project.slug);
-        await this.#sandboxes.writeFile(project, THEME_FILE, theme.css);
-        await this.#sandboxes.writeFile(project, THEME_SEED_FILE, theme.json);
+        await writeProjectTheme(this.#sandboxes, project, placeholderTheme(project.slug));
         await this.#sandboxes.writeFile(project, PROJECT_FILE, `${JSON.stringify(defaultProjectFile(project.template), null, 2)}\n`);
         added.push('theme', 'project file');
+      } else if (themeGeneratorOf(present.stdout) < THEME_GENERATOR) {
+        // The same choices, written by this generator. A project with no seed beside its sheet, or one this
+        // generator cannot render, keeps the sheet it has.
+        const stored = await this.#sandboxes.exec(project, `cat ${THEME_SEED_FILE} 2>/dev/null`, { timeoutSec: 15 });
+        const theme = regeneratedTheme(stored.stdout);
+        if (theme) {
+          await writeProjectTheme(this.#sandboxes, project, theme);
+          added.push('theme (regenerated)');
+        }
       }
       if (!has.has('kit')) {
         // The same holds for the kits: once one is in the repository the project may change it.

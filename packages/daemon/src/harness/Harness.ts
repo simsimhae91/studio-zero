@@ -24,8 +24,8 @@ import { visualOutcome, type EvalRunner } from './EvalRunner.ts';
 import type { EngineResult, EngineSession } from './engines/Engine.ts';
 import { countCompilerErrors, emptyRun, renderEvidence, type Ledger, type RunRecord } from './Ledger.ts';
 import type { LessonBook } from './LessonBook.ts';
-import { ANCHOR_BRIEF, DEEP_DIVE_BRIEF, DRAFT_BRIEF, DRAW_ALL_BRIEF, IDEATION_BRIEF, IDEATION_REQUIRED_FILES, IDEATION_REVISION_BRIEF, PLANNER_SYSTEM_PROMPT, SCREEN_SPEC_RULES, THEME_FILE, codingSystemPrompt, directionBrief } from './prompts.ts';
-import { THEME_SEED_FILE, chosenTheme } from './themeSeed.ts';
+import { ANCHOR_BRIEF, DEEP_DIVE_BRIEF, DRAFT_BRIEF, DRAW_ALL_BRIEF, IDEATION_BRIEF, IDEATION_REQUIRED_FILES, IDEATION_REVISION_BRIEF, PLANNER_SYSTEM_PROMPT, SCREEN_SPEC_RULES, codingSystemPrompt, directionBrief } from './prompts.ts';
+import { chosenTheme, writeProjectTheme } from './themeSeed.ts';
 import type { ReflectionAgent } from './ReflectionAgent.ts';
 import { renderCritique, renderPatch, type Acceptance, type PlanCritique, type SandwichReviewer } from './SandwichReviewer.ts';
 import type { SelfHosting } from './SelfHosting.ts';
@@ -878,13 +878,12 @@ export class Harness {
     }
 
     const { scene, directions } = read.table;
-    // Each direction's theme is generated here, from its row, and left in a file only that direction reads.
-    for (const row of directions) await this.#sandboxes.writeFile(project, directionThemeFile(row.id), chosenTheme(row.theme).css);
+    // Each direction's theme is generated here, from its row, and left in a file only that direction reads. It
+    // is the tokens alone: a mock-up carries its face inside itself, so there is no font file for it to point at.
+    for (const row of directions) await this.#sandboxes.writeFile(project, directionThemeFile(row.id), chosenTheme(row.theme).tokensCss);
     // The project's own theme is the recommended direction's, as it was when one engine drew them all. It is
     // set before anyone draws: an engine that finds a placeholder there is told to choose a theme itself.
-    const recommended = chosenTheme(directions[0]!.theme);
-    await this.#sandboxes.writeFile(project, THEME_SEED_FILE, recommended.json);
-    await this.#sandboxes.writeFile(project, THEME_FILE, recommended.css);
+    await writeProjectTheme(this.#sandboxes, project, chosenTheme(directions[0]!.theme));
     const draw = async (row: Direction): Promise<void> => {
       const session = await p.openLane(row.id);
       const others = directions.filter((other) => other.id !== row.id).map((other) => `${other.id}: ${other.concept.trim()}`).join('\n');

@@ -20,11 +20,11 @@ function el(over: Partial<DigestElement>): DigestElement {
   return {
     id: `e${n}`, tag: 'p', role: '', selector: `main > *:nth-child(${n})`, text: '', textLength: over.text?.length ?? 0, interactive: false, inline: false,
     x: 24, y: 40 * n, w: 600, h: 28, color: [0.1, 0.1, 0.1, 1], background: [1, 1, 1, 1], backgroundIndeterminate: false, ownBackground: [0, 0, 0, 0], backgroundImage: 'none',
-    fontSize: 16, fontWeight: 400, fontFamily: 'Geist', lineHeight: 1.6, letterSpacingEm: 0, uppercase: false, radius: 0, padding: [0, 0, 0, 0], margin: [0, 0, 0, 0], gap: 0,
+    fontSize: 16, fontWeight: 400, fontFamily: 'Pretendard Variable', lineHeight: 1.6, letterSpacingEm: 0, uppercase: false, radius: 0, padding: [0, 0, 0, 0], margin: [0, 0, 0, 0], gap: 0,
     shadow: 'none', hasBorder: false, clipped: false, charsPerLine: 0, siblingKey: 'main|P', ...over,
   };
 }
-const page = (elements: DigestElement[], over: Partial<PageDigest> = {}): PageDigest => ({ title: 't', lang: 'ko', width: 1440, height: 900, scrollWidth: 1440, scrollHeight: 2400, loadedFonts: ['Geist'], elements, ...over });
+const page = (elements: DigestElement[], over: Partial<PageDigest> = {}): PageDigest => ({ title: 't', lang: 'ko', width: 1440, height: 900, scrollWidth: 1440, scrollHeight: 2400, loadedFonts: ['Pretendard Variable'], elements, ...over });
 const desktop = { viewport: 'desktop-1440', route: '/' } as const;
 
 test('a reference must be a public https page: nothing that could be an address inside this Mac or its network', () => {

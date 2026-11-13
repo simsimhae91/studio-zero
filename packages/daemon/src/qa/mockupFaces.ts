@@ -1,54 +1,77 @@
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
+import { contract, faceFiles, type Face } from '@studio-zero/design';
+import { fontPath } from '../harness/fontKit.ts';
 
 /**
  * The theme's faces, as files a mock-up page can carry inside itself.
  *
  * A mock-up names its fonts by family and is shown with the network off, in a browser container and in the
- * owner's app. Neither has Fraunces or Geist installed, so until the studio supplied the files every title a
- * direction had chosen a face for was drawn in the fallback: the look the theme decided on never reached the
- * page, on either screen. A built product installs and self-hosts these faces; a mock-up has no build, so the
- * studio puts the files in for it.
+ * owner's app. Neither has the theme's faces installed, so until the studio supplied the files every page was
+ * drawn in the fallback: the look the theme decided on never reached the page, on either screen. A built
+ * product gets its face's file with its theme; a mock-up has no build, so the studio puts the file in for it.
  *
- * The Hangul face comes in pieces. Pretendard whole is 2 MB, more than a page may carry, so it is shipped as its
- * publisher splits it: one file per range of code points. A page gets the pieces its own characters fall in and
- * no others, each rule carrying its range, which is also how a browser decides which piece to use. A short page
- * carries a few hundred kilobytes; a page with no Hangul carries the Latin piece alone. The serif Hangul partners
- * (Noto Serif KR, Gowun Batang) are not supplied: Hangul under a serif title is set in Pretendard, in the
- * container and in the owner's app alike, which is what the page is told.
+ * There are three faces and a page is set in one. Pretendard comes in pieces. Whole it is 2 MB, more than a page
+ * may carry, so it is shipped as its publisher splits it: one file per range of code points. A page gets the
+ * pieces its own characters fall in and no others, each rule carrying its range, which is also how a browser
+ * decides which piece to use. A short page carries a few hundred kilobytes; a page with no Hangul carries the
+ * Latin piece alone. SUIT and SUITE are a quarter of that size and are not published in pieces, so they go in
+ * whole. The Latin title faces the studio once supplied (Geist, Fraunces, Instrument Serif, Bricolage Grotesque)
+ * are no longer faces a theme can name, and are no longer put in.
  */
-const FACES: readonly { family: string; file: string; weight: string }[] = [
-  { family: 'Geist', file: '@fontsource-variable/geist/files/geist-latin-wght-normal.woff2', weight: '100 900' },
-  { family: 'Fraunces', file: '@fontsource-variable/fraunces/files/fraunces-latin-wght-normal.woff2', weight: '100 900' },
-  { family: 'Instrument Serif', file: '@fontsource/instrument-serif/files/instrument-serif-latin-400-normal.woff2', weight: '400' },
-  { family: 'Bricolage Grotesque', file: '@fontsource-variable/bricolage-grotesque/files/bricolage-grotesque-latin-wght-normal.woff2', weight: '200 800' },
-];
-
 const HANGUL_FAMILY = 'Pretendard Variable';
 /** The publisher's split of the variable face: one `@font-face` per piece, each with its `unicode-range`. */
 const HANGUL_CSS = 'pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css';
-const HANGUL_WEIGHT = '45 920';
+const HANGUL_WEIGHT = faceFiles.pretendard.weight;
+/** The faces that go in whole. */
+const WHOLE_FACES: readonly Exclude<Face, 'pretendard'>[] = ['suit', 'suite'];
 
-/** The families this module can supply. */
-export const SUPPLIED_FACES: readonly string[] = [HANGUL_FAMILY, ...FACES.map((face) => face.family)];
+/** The families this module can supply: each face under the name of its variable file. */
+export const SUPPLIED_FACES: readonly string[] = [HANGUL_FAMILY, ...WHOLE_FACES.map((face) => contract.fonts.face[face][0]!)];
 
 const require = createRequire(import.meta.url);
 const loaded = new Map<string, string | null>();
 
-/** One face as an `@font-face` rule with the file inside it; null when its package is not installed here. */
-function rule(face: (typeof FACES)[number]): string | null {
-  if (!loaded.has(face.family)) {
-    let css: string | null = null;
+/** A face's whole file as base64; null when the file is not installed here. */
+function wholeFile(face: Face): string | null {
+  const key = `whole:${face}`;
+  if (!loaded.has(key)) {
+    let data: string | null = null;
     try {
-      const data = readFileSync(require.resolve(face.file)).toString('base64');
-      css = `@font-face{font-family:"${face.family}";font-style:normal;font-weight:${face.weight};font-display:block;src:url(data:font/woff2;base64,${data}) format("woff2")}`;
+      data = readFileSync(fontPath(face)).toString('base64');
     } catch {
-      css = null;
+      data = null;
     }
-    loaded.set(face.family, css);
+    loaded.set(key, data);
   }
-  return loaded.get(face.family) ?? null;
+  return loaded.get(key) ?? null;
+}
+
+/**
+ * Whether a page's styling names `family` as a font. Only where a page sets type is read (its style elements,
+ * its style attributes and the font-family attribute an SVG text takes), and only the family as a whole name:
+ * "suite" is a word a page may say and a class it may use, and SUITE is not SUIT with a letter added.
+ */
+function names(styling: string, family: string): boolean {
+  return new RegExp(`(?<![\\w.#-])${family}(?![\\w-])`, 'i').test(styling);
+}
+
+/** Everything in a page that can set a font: the contents of its style elements and of its style and font-family attributes. */
+function stylingOf(html: string): string {
+  const sheets = [...html.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style\s*>/gi)].map((m) => m[1]!);
+  const attributes = [...html.matchAll(/\s(?:style|font-family)\s*=\s*(?:"([^"]*)"|'([^']*)')/gi)].map((m) => m[1] ?? m[2] ?? '');
+  return [...sheets, ...attributes].join('\n');
+}
+
+/** The rule for a face that goes in whole, under the family name the page uses: the variable name, or the plain one. */
+function wholeRule(styling: string, face: Exclude<Face, 'pretendard'>): string[] {
+  const [variable, plain] = contract.fonts.face[face] as readonly [string, string];
+  if (!names(styling, plain)) return [];
+  const data = wholeFile(face);
+  if (!data) return [];
+  const family = names(styling, variable) ? variable : plain;
+  return [`@font-face{font-family:"${family}";font-style:normal;font-weight:${faceFiles[face].weight};font-display:block;src:url(data:font/woff2;base64,${data}) format("woff2-variations")}`];
 }
 
 interface Piece {
@@ -144,7 +167,8 @@ export function withFaces(html: string): string {
   const lower = html.toLowerCase();
   // The page may name the variable face or the plain family; the pieces go in under whichever it uses.
   const hangul = lower.includes('pretendard') ? hangulRules(html, lower.includes('pretendard variable') ? HANGUL_FAMILY : 'Pretendard') : [];
-  const rules = [...hangul, ...FACES.filter((face) => lower.includes(face.family.toLowerCase())).flatMap((face) => rule(face) ?? [])];
+  const styling = stylingOf(html);
+  const rules = [...hangul, ...WHOLE_FACES.flatMap((face) => wholeRule(styling, face))];
   if (rules.length === 0) return html;
   const style = `<style data-studio-faces>${rules.join('')}</style>`;
   const head = /<head[^>]*>/i.exec(html);

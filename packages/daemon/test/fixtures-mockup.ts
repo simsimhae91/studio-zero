@@ -3,7 +3,7 @@
 const head = (title: string, idea: string, css: string): string =>
   `<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${title}</title><meta name="description" content="${idea}"><style>
 :root{--bg:#fbfaf6;--fg:#1b1b1d;--muted:#4a4a52;--brand:#1f4f3a;--on-brand:#ffffff;--surface:#ffffff;--border:#8b8b93}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.5 Geist,system-ui,sans-serif}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.5 "Pretendard Variable",Pretendard,system-ui,sans-serif}
 main{padding:24px;display:flex;flex-direction:column;gap:16px}h1{font-size:36px;line-height:1.2;margin:0}p{margin:0}
 .state{display:none;flex-direction:column;gap:16px}
 .btn{display:inline-flex;align-items:center;justify-content:center;min-height:56px;padding:0 24px;border-radius:16px;background:var(--brand);color:var(--on-brand);font-size:18px;font-weight:600;transition:transform 120ms ease-out,background-color 120ms ease-out}

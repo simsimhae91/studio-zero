@@ -88,12 +88,24 @@ test('the screen spec check: a spec that holds, and what each miss says', () => 
 });
 
 test('a mock-up page is given what it points at: its pictures from the asset folder and the theme faces it names, and nothing else', async () => {
-  assert.deepEqual(SUPPLIED_FACES, ['Pretendard Variable', 'Geist', 'Fraunces', 'Instrument Serif', 'Bricolage Grotesque']);
-  const titled = withFaces('<!doctype html><html><head><title>t</title><style>h1{font-family:Fraunces,"Noto Serif KR",serif}body{font-family:Geist,sans-serif}</style></head><body></body></html>');
-  assert.match(titled, /^<!doctype html><html><head><style data-studio-faces>@font-face\{font-family:"Geist";[^}]*src:url\(data:font\/woff2;base64,[A-Za-z0-9+/=]{1000,}\) format\("woff2"\)\}@font-face\{font-family:"Fraunces";/, 'the faces go in after <head>, where they cannot change how the page is parsed');
-  assert.ok(!titled.includes('Instrument Serif') && !titled.includes('Bricolage') && !titled.includes('Pretendard'), 'a face the page does not name is not added');
+  assert.deepEqual(SUPPLIED_FACES, ['Pretendard Variable', 'SUIT Variable', 'SUITE Variable']);
+  // SUIT and SUITE go in whole, each under the family name the page uses, with the weights its variable file covers.
+  const whole = (html: string): [string, string, number][] => [...html.matchAll(/@font-face\{font-family:"([^"]+)";font-style:normal;font-weight:([\d ]+);font-display:block;src:url\(data:font\/woff2;base64,([A-Za-z0-9+/=]+)\) format\("woff2-variations"\)\}/g)].map((m) => [m[1]!, m[2]!, m[3]!.length]);
+  const suite = withFaces('<!doctype html><html><head><title>t</title><style>:root{--font-sans:"SUITE Variable","SUITE",-apple-system,sans-serif}body{font-family:var(--font-sans)}</style></head><body><p>A suit of cards</p></body></html>');
+  assert.match(suite, /^<!doctype html><html><head><style data-studio-faces>@font-face\{font-family:"SUITE Variable";/, 'the faces go in after <head>, where they cannot change how the page is parsed');
+  const [carried] = whole(suite);
+  assert.equal(whole(suite).length, 1, 'one rule, for the one face the page names: SUITE is not SUIT, and a word in the text is not a font');
+  assert.deepEqual(carried!.slice(0, 2), ['SUITE Variable', '300 900']);
+  assert.ok(carried![2] > 100_000, `the whole file is in the page: ${carried![2]} base64 characters`);
+  assert.ok(!suite.includes('font-family:"SUIT Variable"') && !suite.includes('font-family:"Pretendard'), 'a face the page does not name is not added');
+  assert.deepEqual(whole(withFaces('<!DOCTYPE html><p style="font-family:SUIT, sans-serif">x</p>')).map((rule) => rule.slice(0, 2)), [['SUIT', '100 900']], 'under the family name the page uses');
+  assert.match(withFaces('<!DOCTYPE html><p style="font-family:SUIT">x</p>'), /^<!DOCTYPE html><style data-studio-faces>/, 'with no <head>, after the doctype: never before it');
+  assert.deepEqual(whole(withFaces('<svg><text font-family="SUIT Variable">72.4</text></svg>')).map((rule) => rule[0]), ['SUIT Variable'], 'a drawn instrument names its face in an attribute');
+  // What the studio no longer supplies is no longer put in, and what only reads like a face is left alone.
+  const serif = '<!doctype html><html><head><title>t</title><style>h1{font-family:Fraunces,"Noto Serif KR",serif}body{font-family:Geist,sans-serif}</style></head><body></body></html>';
+  assert.equal(withFaces(serif), serif, 'Fraunces and Geist are not faces of the studio any more');
   assert.equal(withFaces('<p>system-ui only</p>'), '<p>system-ui only</p>');
-  assert.match(withFaces('<!DOCTYPE html><p style="font-family:Geist">x</p>'), /^<!DOCTYPE html><style data-studio-faces>/, 'with no <head>, after the doctype: never before it');
+  for (const prose of ['<p class="suite">Suite 301, a suit of armour</p>', '<style>.suit-row{gap:8px}.suite{margin:0}#suit{padding:0}</style><p>x</p>']) assert.equal(withFaces(prose), prose);
 
   // The Hangul face is too large to carry whole (2 MB), so a page gets the pieces its own characters need: the
   // file is split by code point range, and only the ranges the page uses go in, with the range on each rule.
@@ -230,7 +242,7 @@ test('mock-ups are audited as a built screen is: sealed, each page a first scree
 
     const contrast = report.findings.filter((f) => f.rule.startsWith('contrast/text'));
     assert.ok(contrast.length > 0 && contrast.every((f) => f.route === `${MOCKUP_DIR}/b.html`), `the faint line is found on page b, by its file: ${JSON.stringify(report.findings.map((f) => [f.rule, f.route]))}`);
-    assert.ok(report.findings.every((f) => f.rule !== 'type/font-not-loaded'), 'Geist is in the page, so it is what was measured');
+    assert.ok(report.findings.every((f) => f.rule !== 'type/font-not-loaded'), 'Pretendard is in the page, so it is what was measured');
     assert.equal(report.passed, false);
     assert.equal(store.getAudit(report.id)?.id, report.id, 'the audit is kept like any other, and shows in the audit pane');
     // Each page was also tried by hand, at the phone's size: its one button held down, with nothing clicked.

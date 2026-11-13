@@ -31,7 +31,7 @@ const PAGE = `<!doctype html>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="stylesheet" href="/.studio-zero/theme.css">
 <style>
-  body { margin: 0; font-family: Geist, sans-serif; background: var(--sz-bg); color: var(--sz-fg); }
+  body { margin: 0; font-family: "Pretendard Variable", sans-serif; background: var(--sz-bg); color: var(--sz-fg); }
   main { padding: 24px; display: grid; gap: 24px; }
   h1 { font-size: 30px; line-height: 1.3; margin: 0; }
   p { font-size: 16px; line-height: 1.6; margin: 0; color: var(--sz-fg-muted); }

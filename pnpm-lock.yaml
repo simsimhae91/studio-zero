@@ -151,6 +151,9 @@ importers:
       '@studio-zero/protocol':
         specifier: workspace:*
         version: link:../protocol
+      '@sun-typeface/suit':
+        specifier: ^2.0.5
+        version: 2.0.5
       fastify:
         specifier: ^5.12.8
         version: 5.12.8
@@ -858,6 +861,9 @@ packages:
 
   '@stablelib/base64@1.0.1':
     resolution: {integrity: sha512-1bnPQqSxSuc3Ii6MhBysoWCg58j97aUjuCSZrGSmDxNqtytIi0k8utUenAwTZN4V5mXXYGsVUI9zeBqy+jBOSQ==}
+
+  '@sun-typeface/suit@2.0.5':
+    resolution: {integrity: sha512-NJ0hxmQgDjDBFkocQ7rxx3wPahJbj3uATfXudN3oj6hh/rAedElhdYBbsSwz4qJsdjac6aW6cqK6R1bpsNGOaQ==}
 
   '@tailwindcss/node@4.3.5':
     resolution: {integrity: sha512-yT53FzV4ke0cr/BguDxhWMpm5MJu1O2muzk+tKw6lKHjODAsYArBbWwFbJiaksfzFv1tpkO9QHGzmfs1hJT66g==}
@@ -2574,6 +2580,8 @@ snapshots:
   '@rolldown/pluginutils@1.1.0': {}
 
   '@stablelib/base64@1.0.1': {}
+
+  '@sun-typeface/suit@2.0.5': {}
 
   '@tailwindcss/node@4.3.5':
     dependencies:

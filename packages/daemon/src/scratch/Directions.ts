@@ -49,7 +49,8 @@ const SAME_HUE_DEG = 30;
  * the one before it, and nothing checked that they had come apart. Now each direction is drawn from its own
  * row by an engine that has seen no other page, so what is checked here is what can be checked without a
  * judge: that there are two or three, that each says what it is built on, how it is operated and how it is
- * laid out, that no two say nearly the same thing, and that no two share a look.
+ * laid out, that no two say nearly the same thing, and that no two share a look. A look is the colour, the
+ * shape and the face: two rows are one look only when all three are the same.
  */
 export function checkDirections(table: Directions): string[] {
   const problems: string[] = [];
@@ -64,7 +65,7 @@ export function checkDirections(table: Directions): string[] {
     for (let j = i + 1; j < rows.length; j++) {
       const [x, y] = [rows[i]!, rows[j]!];
       if (overlap(`${x.concept} ${x.operation} ${x.composition}`, `${y.concept} ${y.operation} ${y.composition}`) > 0.7) problems.push(`directions ${x.id} and ${y.id} say nearly the same thing: make them differ in what the product is built on, in how it is operated and in what leads on the screen, not in wording.`);
-      if (hueApart(x.theme.hue, y.theme.hue) < SAME_HUE_DEG && x.theme.corners === y.theme.corners && x.theme.display === y.theme.display) problems.push(`directions ${x.id} and ${y.id} share a look (hues ${x.theme.hue} and ${y.theme.hue}, ${x.theme.corners} corners, ${x.theme.display} titles): give each a palette and a shape of its own, taken from the subject read a different way.`);
+      if (hueApart(x.theme.hue, y.theme.hue) < SAME_HUE_DEG && x.theme.corners === y.theme.corners && x.theme.face === y.theme.face) problems.push(`directions ${x.id} and ${y.id} share a look (hues ${x.theme.hue} and ${y.theme.hue}, ${x.theme.corners} corners, the ${x.theme.face} face): give each a palette and a shape of its own, taken from the subject read a different way.`);
     }
   }
   return problems.slice(0, 16);

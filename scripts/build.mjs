@@ -30,6 +30,9 @@ await build({
 // The mobile kit goes the same way into every mobile project.
 cpSync(fileURLToPath(new URL('../packages/ax/src/', import.meta.url)), `${daemon}dist/ax-kit`, { recursive: true, filter: (src) => !basename(src).startsWith('.') });
 cpSync(fileURLToPath(new URL('../packages/design/src/mobile/', import.meta.url)), `${daemon}dist/mobile-kit`, { recursive: true, filter: (src) => !basename(src).startsWith('.') });
+// The one face that is not on npm (SUITE) is carried in the design package with its licence, and goes beside the
+// bundle too: the daemon writes a project's face into the project with its theme.
+cpSync(fileURLToPath(new URL('../packages/design/fonts/', import.meta.url)), `${daemon}dist/fonts`, { recursive: true, filter: (src) => !basename(src).startsWith('.') });
 
 // A daemon started from the previous bundle still holds its main chunk in memory but loads the rest on demand,
 // from files this build has just replaced. If the LaunchAgent is loaded, say so instead of leaving it half-stale.

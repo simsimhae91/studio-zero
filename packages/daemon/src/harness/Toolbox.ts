@@ -10,7 +10,7 @@ import { errorMessage, excerpt, newId } from '../util/core.ts';
 import type { ImageDesk } from '../qa/ImageDesk.ts';
 import { MOCKUP_DIR, MOCKUP_FILES, renderMockupCheck, type MockupRenderer } from '../qa/MockupRenderer.ts';
 import { WEB_GUIDANCE_VERSION } from './houseBar.ts';
-import { THEME_SEED_FILE, ThemeChoice, chosenTheme } from './themeSeed.ts';
+import { THEME_SEED_FILE, ThemeChoice, chosenTheme, writeProjectTheme } from './themeSeed.ts';
 
 export interface ToolContext {
   project: Project;
@@ -197,14 +197,13 @@ export class Toolbox {
       define({
         name: 'set_theme',
         description:
-          `Set the project's palette and shape from its subject. Give the brand colour (hue, chroma, lightness), how the neutrals lean, the corners, the title face, and one sentence on where they come from. The studio writes ${THEME_SEED_FILE} and regenerates .studio-zero/theme.css from it, with every text and background pair solved for contrast: bg-brand with text-on-brand is the colour at full strength, bg-brand-soft its wash, text-accent its hue as text. Use this instead of editing the stylesheet. Do it once, before drawing or building, and again only when the owner asks for a different look.`,
+          `Set the project's palette and shape from its subject. Give the brand colour (hue, chroma, lightness), how the neutrals lean, the corners, the face, and one sentence on where they come from. The studio writes ${THEME_SEED_FILE}, regenerates .studio-zero/theme.css from it and puts the face's font file beside it, with every text and background pair solved for contrast: bg-brand with text-on-brand is the colour at full strength, bg-brand-soft its wash, text-accent its hue as text. Use this instead of editing the stylesheet. Do it once, before drawing or building, and again only when the owner asks for a different look.`,
         schema: ThemeChoice,
         action: (_input, project) => ({ kind: 'sandbox.write', projectId: project.id, path: THEME_SEED_FILE }),
-        summarize: (input) => `hue ${input.hue}, chroma ${input.chroma}, lightness ${input.lightness}, ${input.corners} corners, ${input.display} titles`,
+        summarize: (input) => `hue ${input.hue}, chroma ${input.chroma}, lightness ${input.lightness}, ${input.corners} corners, set in ${input.face}`,
         run: async (input, ctx) => {
           const theme = chosenTheme(input);
-          await sandboxes.writeFile(ctx.project, THEME_SEED_FILE, theme.json);
-          await sandboxes.writeFile(ctx.project, '.studio-zero/theme.css', theme.css);
+          await writeProjectTheme(sandboxes, ctx.project, theme);
           return { text: theme.report, ok: true, exitCode: null };
         },
       }),

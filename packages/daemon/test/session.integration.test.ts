@@ -102,7 +102,7 @@ test('with no API key the daemon thinks through the Claude subscription', { skip
  */
 const PARCEL = encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 345 220"><rect width="345" height="220" fill="#e8eef0"/><path d="M92 86l80-34 82 34v78l-82 36-80-36z" fill="#c9a26b"/><path d="M92 86l80 34 82-34M172 120v80" stroke="#8b6b3d" stroke-width="5" fill="none"/><rect x="150" y="60" width="44" height="26" fill="#f4ead8"/></svg>');
 const SLOPPY_PHONE_SCREEN = `<!doctype html><html lang="ko"><head><meta name="viewport" content="width=device-width, initial-scale=1"><style>${renderThemeCss(createTheme(seedFromName('garim')))}</style><style>
-  body { margin: 0; font-family: Geist, sans-serif; background: var(--sz-bg); color: var(--sz-fg); }
+  body { margin: 0; font-family: "Pretendard Variable", sans-serif; background: var(--sz-bg); color: var(--sz-fg); }
   main { padding: 24px; display: grid; gap: 24px; text-align: center; }
   h1 { font-size: 30px; line-height: 1.3; margin: 0; }
   p { font-size: 18px; line-height: 1.6; margin: 0; color: var(--sz-fg-muted); }

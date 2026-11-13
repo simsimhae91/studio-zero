@@ -24,7 +24,7 @@ function el(over: Partial<DigestElement>): DigestElement {
   return {
     id: `e${++n}`, tag: 'div', role: '', selector: `main > div:nth-of-type(${n})`, text: '', textLength: 0, interactive: false, inline: false,
     x: 24, y: 24 * n, w: 345, h: 24, color: [0.1, 0.1, 0.1, 1], background: [1, 1, 1, 1], backgroundIndeterminate: false, ownBackground: [0, 0, 0, 0], backgroundImage: 'none',
-    fontSize: 16, fontWeight: 400, fontFamily: 'Geist', lineHeight: 1.6, letterSpacingEm: 0, uppercase: false, radius: 0, padding: [0, 0, 0, 0], margin: [0, 0, 0, 0], gap: 0,
+    fontSize: 16, fontWeight: 400, fontFamily: 'Pretendard Variable', lineHeight: 1.6, letterSpacingEm: 0, uppercase: false, radius: 0, padding: [0, 0, 0, 0], margin: [0, 0, 0, 0], gap: 0,
     shadow: 'none', hasBorder: false, clipped: false, charsPerLine: 0, siblingKey: 'main|DIV', ...over,
   };
 }
@@ -34,7 +34,7 @@ const HEADLINE = el({ id: 'e1', tag: 'h1', selector: 'main > h1', text: '올리�
 const PITCH = el({ id: 'e2', tag: 'p', selector: 'main > p', text: '사진에서 집을 알려 주는 글자를 찾아 가려요.', textLength: 24, y: 192, h: 58, fontSize: 18 });
 const PARCEL = el({ id: 'e3', selector: 'main > div.hero-art', y: 282, h: 241, radius: 12, ownBackground: [0.92, 0.96, 0.96, 1], backgroundImage: 'url("/assets/preview-label.jpg")' });
 const BUTTON = el({ id: 'e4', tag: 'button', role: 'button', selector: 'footer > button.submit', text: '사진 선택', textLength: 5, interactive: true, y: 571, h: 56, fontSize: 18, fontWeight: 600, radius: 8 });
-const SCREEN: PageDigest = { title: '가림', lang: 'ko', width: 393, height: 659, scrollWidth: 393, scrollHeight: 659, loadedFonts: ['Geist'], elements: [HEADLINE, PITCH, PARCEL, BUTTON] };
+const SCREEN: PageDigest = { title: '가림', lang: 'ko', width: 393, height: 659, scrollWidth: 393, scrollHeight: 659, loadedFonts: ['Pretendard Variable'], elements: [HEADLINE, PITCH, PARCEL, BUTTON] };
 
 /** What a reviewer says about that screen. It under-rates both traps as "major": code does not leave that to it. */
 const SLOP_REPLY: VisionReply = {
