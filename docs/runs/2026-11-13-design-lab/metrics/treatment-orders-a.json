@@ -1,0 +1,266 @@
+{
+ "file": "/Users/hosoo/project/conclave/.design-lab/runs/treatment/orders/a//ws/docs/mockups/a.html",
+ "template": "web-vite-react",
+ "desktop": {
+  "title": "출고 장부",
+  "headline": {
+   "text": "남은 상자",
+   "px": 30,
+   "lines": 3,
+   "weight": 700
+  },
+  "seed": "{\"hue\":29,\"chroma\":0.19,\"lightness\":0.53,\"neutral_hue\":82,\"neutral_chroma\":0.005,\"corners\":\"sharp\",\"face\":\"pretendard\",\"source\":\"손으로 쓰던 출고 장부의 붉은 괘선과 주문서에 찍는 주홍 확인 도장, 누렇게 바랜 장부 종이에서 왔고, 모서리는 장부 칸처럼 각졌다.\"}",
+  "tokens": {
+   "--sz-brand": [
+    174,
+    10,
+    8
+   ],
+   "--sz-brand-soft": [
+    255,
+    228,
+    224
+   ],
+   "--sz-accent": [
+    156,
+    0,
+    1
+   ],
+   "--sz-bg": [
+    252,
+    250,
+    246
+   ],
+   "--sz-surface": [
+    255,
+    254,
+    253
+   ],
+   "--sz-fg": [
+    23,
+    22,
+    20
+   ],
+   "--sz-brand-2": null,
+   "--sz-second": [
+    0,
+    177,
+    206
+   ]
+  },
+  "viewport": {
+   "vw": 1440,
+   "vh": 900
+  },
+  "screensLong": 1.4,
+  "type": {
+   "families": [
+    [
+     "Pretendard Variable",
+     1541
+    ]
+   ],
+   "sizesFirstScreen": [
+    [
+     12,
+     47
+    ],
+    [
+     14,
+     596
+    ],
+    [
+     16,
+     451
+    ],
+    [
+     18,
+     9
+    ],
+    [
+     20,
+     23
+    ],
+    [
+     30,
+     5
+    ]
+   ],
+   "distinctSizes": 6,
+   "distinctSizesFirstScreen": 6,
+   "microSharePct": 3,
+   "microSharePctFirstScreen": 4.2,
+   "sentencesAtMicro": [],
+   "bodySharePct": 31.8,
+   "largestPx": 30,
+   "figuresAtLargest": [
+    "남은 상자"
+   ],
+   "heavyWeightSharePct": 18,
+   "turnedText": [],
+   "stackedText": [],
+   "endAlignedText": [],
+   "monoOutsideCode": []
+  },
+  "layout": {
+   "controlsFirstScreen": 9,
+   "cards": 6,
+   "cardsFirstScreen": 6,
+   "halfEmptyCards": [],
+   "nestedCards": 1,
+   "saidTwice": [
+    "오수민 x2",
+    "카페24 x4",
+    "그대로 보내기 x2",
+    "스마트스토어 x12"
+   ],
+   "figuresTwice": [
+    "23 x2",
+    "11 x3",
+    "13 x2",
+    "20 x3",
+    "24 x4",
+    "500 x7",
+    "24,000 x3",
+    "21 x4",
+    "22 x3",
+    "12 x2",
+    "6890 x9",
+    "1234 x9",
+    "200 x6"
+   ]
+  },
+  "colour": {
+   "saturatedPct": 1.1,
+   "darkPct": 1.1,
+   "brandPct": 1.1,
+   "secondPct": 0,
+   "blankLeftPct": 46.2,
+   "blankRightPct": 43.1
+  }
+ },
+ "phone": {
+  "title": "출고 장부",
+  "headline": {
+   "text": "남은 상자",
+   "px": 24,
+   "lines": 2,
+   "weight": 700
+  },
+  "seed": "{\"hue\":29,\"chroma\":0.19,\"lightness\":0.53,\"neutral_hue\":82,\"neutral_chroma\":0.005,\"corners\":\"sharp\",\"face\":\"pretendard\",\"source\":\"손으로 쓰던 출고 장부의 붉은 괘선과 주문서에 찍는 주홍 확인 도장, 누렇게 바랜 장부 종이에서 왔고, 모서리는 장부 칸처럼 각졌다.\"}",
+  "tokens": {
+   "--sz-brand": [
+    174,
+    10,
+    8
+   ],
+   "--sz-brand-soft": [
+    255,
+    228,
+    224
+   ],
+   "--sz-accent": [
+    156,
+    0,
+    1
+   ],
+   "--sz-bg": [
+    252,
+    250,
+    246
+   ],
+   "--sz-surface": [
+    255,
+    254,
+    253
+   ],
+   "--sz-fg": [
+    23,
+    22,
+    20
+   ],
+   "--sz-brand-2": null,
+   "--sz-second": [
+    0,
+    177,
+    206
+   ]
+  },
+  "viewport": {
+   "vw": 393,
+   "vh": 852
+  },
+  "screensLong": 2.6,
+  "type": {
+   "families": [
+    [
+     "Pretendard Variable",
+     930
+    ]
+   ],
+   "sizesFirstScreen": [
+    [
+     12,
+     5
+    ],
+    [
+     14,
+     87
+    ],
+    [
+     16,
+     184
+    ],
+    [
+     18,
+     7
+    ],
+    [
+     20,
+     18
+    ],
+    [
+     24,
+     5
+    ]
+   ],
+   "distinctSizes": 6,
+   "distinctSizesFirstScreen": 6,
+   "microSharePct": 2.4,
+   "microSharePctFirstScreen": 1.6,
+   "sentencesAtMicro": [],
+   "bodySharePct": 52.7,
+   "largestPx": 24,
+   "figuresAtLargest": [],
+   "heavyWeightSharePct": 29,
+   "turnedText": [],
+   "stackedText": [],
+   "endAlignedText": [],
+   "monoOutsideCode": []
+  },
+  "layout": {
+   "controlsFirstScreen": 5,
+   "cards": 6,
+   "cardsFirstScreen": 3,
+   "halfEmptyCards": [],
+   "nestedCards": 1,
+   "saidTwice": [],
+   "figuresTwice": [
+    "11 x3",
+    "500 x3",
+    "24,000 x3",
+    "21 x4",
+    "22 x3",
+    "12 x2"
+   ]
+  },
+  "colour": {
+   "saturatedPct": 2.7,
+   "darkPct": 2.6,
+   "brandPct": 2.6,
+   "secondPct": 0,
+   "blankLeftPct": 60.2,
+   "blankRightPct": 68.5
+  }
+ }
+}

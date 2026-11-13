@@ -1,0 +1,52 @@
+<design_handbook>
+How a screen is put together here. Each rule is a default with its numbers: depart from one only for a reason that comes from this product's subject, and say so when you finish. The audit measures several and the reviewer judges by all, each by its number.
+
+Type.
+T1. One typeface. The product is set in the one face its theme names (Pretendard, SUIT or SUITE), Latin and Hangul alike, and the theme already loads its file: install and name no other. A title is that face made heavier: no serif, no second sans, no italics. Monospace only inside code, pre and kbd; dates and figures are the body face with tabular-nums.
+T2. Every size has a role. The one figure: text-3xl to text-5xl (30 to 48px) at weight 800, tabular. Screen title: text-xl or text-2xl at 700. Section heading: text-lg at 700. Body: text-base (16px) at 400 or 500. Secondary: text-sm. Caption: text-xs at 500. Micro: text-2xs (11px) at 600.
+T3. Small text has a budget. text-xs and text-2xs are for timestamps, units, badges, stat labels and column headers: never a sentence, never what the screen exists to say, and at most about a third of the text on a screen. A screen of mostly small grey labels has no body: promote what matters.
+T4. Three weights a screen at most: 400 for reading, 600 or 700 for names, titles and values, 800 for the one figure.
+T5. Text is upright and horizontal: no rotated labels, no Hangul stacked a syllable to a line, no numerals turned around a dial or laid along a curve.
+T6. Text aligns to the start. Only numbers in a column align to the end; only a lone figure with its caption, or an empty state, is centred. A block of words never aligns to the end.
+T7. Leading: body 1.5 to 1.6, titles 1.2 to 1.3, the figure 1.0 to 1.1. A label never runs to a third line.
+
+Colour.
+C1. Colours have roles, and only these exist: paper (bg-bg), surfaces (bg-surface, bg-sunken, border-border), ink (text-fg, text-fg-muted), the brand (bg-brand with text-on-brand, text-accent, bg-brand-soft), a second colour (bg-second with text-on-second, bg-second-soft), a data series (series-1 to series-6) and state (danger, success, warning). Invent no colour and dim none with opacity.
+C2. Strong colour has a budget: about a tenth of the first screen, and the audit measures it. A brand fill belongs on the primary action, the mark of what is selected, a plate under the one figure, the fill of a meter. Never on a card, a panel, a column, a header bar or a section.
+C3. No dark band across a light screen. On a phone or app screen, dark is the scheme of the whole screen, which the theme provides, never a panel dropped into a paper one. A web page may carry one inverse section, full width, below its first screen.
+C4. Two sides, or several kinds. The brand is this side (me, ours, the current one) and the second colour is the other. More than two kinds take series-1, series-2 and on, in order. They are applied as marks: the colour of a number, a 4px edge, a dot, one segment of a bar. Never as the fill of a whole card, and never alone: a name or a position says the same thing.
+C5. A soft wash (bg-brand-soft, bg-second-soft) marks one region at most: the selected row, today's column.
+C6. State colours mean state and nothing else.
+C7. No gradient on a control or a surface.
+C8. Choosing a palette: the hue from the subject's own thing; chroma 0.12 to 0.16 for tools and money, 0.17 to 0.22 for consumer products, 0.23 to 0.28 for play and sport; second_hue only when the product has two sides or kinds; corners sharp for tools and data, soft by default, round for friendly consumer products; Pretendard for neutral, dense products, SUIT for crisp geometric ones, SUITE for soft, wide ones.
+
+Composing a phone screen.
+M1. Frame. An app bar (a title of 14 characters or fewer, one line of context, up to two actions), a one-column body with 16px gutters, and at the bottom either a dock holding the one primary action or, on a top-level screen, a tab bar of three to five. Never a dock on a tab bar.
+M2. The first screenful answers three things, in this order: where I stand (the state), what I do now (the action), what it rests on (the first evidence). The state takes a third of the height at most; the action is always in view, in the dock; the rest scrolls.
+M3. One figure. One thing on the screen is at figure size. Two values compared sit in one comparison block: one surface, the same size, the difference said once.
+M4. Say it once. A date, a round, a gap, a name with its score appears once on a screen. The app bar's title is not repeated in the body.
+M5. Containers. Sections on paper are the default: a text-lg heading and its content, 24 to 32px apart. A card (bg-surface, a hairline, 16px padding) is only for an object pressed as a whole, something that floats, or the comparison block. No card in a card. No twin cards of equal height: one surface with a divider. A container is as tall as its content, never stretched.
+M6. Lists. Things of one kind are rows, not cards: 56 to 72px tall, a 40px leading mark, a text-base title at 600, one text-sm line of meta, a trailing value or chevron, hairlines inset to the text. Five to eight rows show on the first screen.
+M7. Density. Besides rows and the app bar, at most seven things can be pressed on the first screenful, and a block has at most two lines of meta.
+M8. Stats. A label (text-xs at 500) with its value (text-xl to text-3xl at 700, tabular) and the unit at about 60% of the value's size. Three in a row at most.
+M9. Charts and instruments. When the product is about a trend or a measure, its instrument is the focal block. Draw the periods that have data and the next one: no grid of empty future. Label a line on the line, not in a floating box. One accent series; the rest ink, muted or the second colour.
+M10. Input. Three fields or more: one question a screen. A field is 48 to 52px tall, label above (text-sm at 600), help below; numbers get the number pad; a small set is a segmented control or a stepper, not a dropdown; pickers open in a sheet.
+M11. Answering back. A toast sits above the dock for three to five seconds with undo; an error appears beside its cause; a skeleton has the shape of what is loading.
+M12. Empty, and first run. Show one muted example of what will be here and the one action. No illustration and no onboarding cards.
+M13. Moving around. Push to go deeper (back at top left), a sheet for a side task, a full screen for long writing, tabs for three to five peers, a segmented control for two to four views of one data set.
+M14. The hand. Primary action at the bottom; targets 44px or more, 8px apart or more.
+M15. Motion. One entrance, an answer to each press, and the moment the outcome lands, once.
+M16. Dark, and large text. Tokens only, so dark follows. At 130% text rows grow and nothing is clipped.
+
+Parts.
+K. Parts. Compose a screen from these, each built the same way everywhere: AppBar, Dock, TabBar, Segmented, Section, Row, Stat, CompareBlock, Card, Sheet, Field, Chip, Badge, Toast, Empty, Skeleton, Meter, Chart. A part that is none of them needs a reason.
+
+Pictures.
+I1. Decide in this order. If it is the product's own working thing or its data, draw it in code. If the subject has a look people come for (food, a place, a room, goods, a face, the world of a game), its picture is content: have a small matching set made with generate_image. Otherwise, no picture.
+I2. Never made: a decorative illustration, a stock scene, a 3D blob, abstract gradient art, a drawing of an interface, an emoji as an icon, a picture for an empty state or onboarding.
+I3. Proportions: a thumbnail 1:1, a card picture 4:3 or 3:2, a hero 16:9 or 3:2. A person is initials on a disc unless people are the subject.
+I4. One set, one direction: the same light and distance, colours toward the theme, no words in the picture.
+I5. How many: one for a mock-up direction; for a build, six for the fixtures and one hero at most.
+I6. Words on a photograph sit on a plate or a scrim, never on the bare picture.
+I7. Icons come from one set (lucide), at 20 or 24px with a 1.5 to 2px stroke, in ink; the accent only when active.
+</design_handbook>

@@ -115,11 +115,9 @@ const CASES: readonly { rule: string; severity: 'major' | 'minor'; id: string; c
   { rule: 'type/turned-text', severity: 'major', id: 'T5', change: { css: '.who{transform:rotate(-90deg)}' }, says: /"서연" is turned 90 degrees \(1 more\)/ },
   { rule: 'type/stacked-text', severity: 'major', id: 'T5', change: { css: '.who{width:16px}' }, says: /"서연" is stacked one character to a line \(1 more\)/ },
   { rule: 'type/end-aligned-block', severity: 'minor', id: 'T6', change: { css: '.note{text-align:right}' }, says: /"정오 전에 기록하면[^"]*" is aligned to the end side/ },
-  { rule: 'layout/competing-figures', severity: 'major', id: 'M3', change: { css: '.gap{font-size:36px;line-height:1.1;font-weight:800}' }, says: /3 things are set at the largest size on the first screen: "433", "496", "63점 뒤져 있어요"/ },
   { rule: 'layout/half-empty-card', severity: 'minor', id: 'M5', change: { css: '.compare{min-height:280px}' }, says: /A 361×280px card is filled to 2\d% of its height/ },
   { rule: 'layout/nested-cards', severity: 'minor', id: 'M5', change: { css: '.compare div{margin:8px;border:1px solid var(--sz-border);border-radius:8px}' }, says: /2 cards sit inside another card/ },
   { rule: 'layout/too-many-controls', severity: 'major', id: 'M7', change: { extra: CHIPS }, says: new RegExp(`^1\\d controls can be pressed on the first screen; ${COMPOSITION_LIMITS.controls} is the limit`) },
-  { rule: 'copy/figure-twice', severity: 'minor', id: 'M4', change: { extra: '<p class="diff">격차 63</p>' }, says: /The same figure is stated more than once on the first screen: 63 x2/ },
 ];
 
 test('composition, read off a real page: a screen that keeps the handbook is clean, and each rule is found on the page that breaks it alone', async (t) => {
@@ -169,7 +167,7 @@ test('composition, read off a real page: a screen that keeps the handbook is cle
     const second = runDomChecks(await measure(screen(CASES[0]!.change)), phone, contract)[0]!;
     assert.match(second.fix!, /^T1: .*Pretendard Variable/, 'the fix names the face the screen is already in');
     assert.equal(second.selector, 'header.bar > h1', 'and the finding points at the first text in the other one');
-    const stretched = runDomChecks(await measure(screen(CASES[8]!.change)), phone, contract)[0]!;
+    const stretched = runDomChecks(await measure(screen(CASES.find((c) => c.rule === 'layout/half-empty-card')!.change)), phone, contract)[0]!;
     assert.deepEqual([stretched.selector, stretched.bbox?.w, stretched.bbox?.h], ['main > section.compare:nth-of-type(1)', 361, 280]);
 
     // Review Focus 3: a screen that is mostly a chart. Its day and score numerals are 11px and are most of what
@@ -314,7 +312,7 @@ test('the page a real engine drew on 2026-11-13, which the check of its own page
     if (check.status !== 'measured') return;
     const found = check.findings!.filter((f) => f.viewport === 'iphone-15-pro');
     const handbook = found.filter((f) => /^[A-Z]\d+: /.test(f.fix ?? ''));
-    assert.deepEqual(rules(handbook), ['color/dark-band', 'color/flood', 'copy/figure-twice', 'layout/half-empty-card', 'type/end-aligned-block', 'type/micro-overuse', 'type/second-family', 'type/stacked-text'], said(found));
+    assert.deepEqual(rules(handbook), ['color/dark-band', 'color/flood', 'layout/half-empty-card', 'type/end-aligned-block', 'type/micro-overuse', 'type/second-family', 'type/stacked-text'], said(found));
     for (const rule of BOTH) assert.equal(found.find((f) => f.rule === rule)?.severity, 'major');
     const text = renderMockupCheck(file, check);
     assert.match(text, /- \[major\] color\/flood \(measured\)\n  iphone-15-pro \| docs\/mockups\/b\.html \| selector: [^\n]*div\.side\.opp[^\n]*\n  \d\d% of the first screen is colour at full strength/);

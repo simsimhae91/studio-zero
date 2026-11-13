@@ -1,0 +1,142 @@
+{
+ "file": "/Users/hosoo/project/conclave/.design-lab/production/duel/b.html",
+ "template": "mobile-expo",
+ "phone": {
+  "title": "라인전 · 14라운드 중계 전광판",
+  "headline": {
+   "text": "63점 뒤져 있어요",
+   "px": 20,
+   "lines": 1,
+   "weight": 700
+  },
+  "seed": "{\"hue\":258,\"chroma\":0.22,\"lightness\":0.5,\"neutral_hue\":250,\"neutral_chroma\":0.004,\"corners\":\"sharp\",\"display\":\"grotesk\",\"source\":\"야구장과 e스포츠 중계의 코발트 전광판과 하단 자막 띠에서 왔고, 라운드 칸이 줄 맞춰 서는 각진 판이 그 모양이다.\"}",
+  "tokens": {
+   "--sz-brand": [
+    0,
+    81,
+    178
+   ],
+   "--sz-brand-soft": [
+    223,
+    236,
+    255
+   ],
+   "--sz-accent": [
+    0,
+    72,
+    160
+   ],
+   "--sz-bg": [
+    248,
+    250,
+    253
+   ],
+   "--sz-surface": [
+    254,
+    254,
+    255
+   ],
+   "--sz-fg": [
+    21,
+    22,
+    24
+   ],
+   "--sz-brand-2": null,
+   "--sz-second": null
+  },
+  "viewport": {
+   "vw": 393,
+   "vh": 852
+  },
+  "screensLong": 1.6,
+  "type": {
+   "families": [
+    [
+     "Pretendard Variable",
+     439
+    ],
+    [
+     "Bricolage Grotesque",
+     16
+    ]
+   ],
+   "sizesFirstScreen": [
+    [
+     11,
+     117
+    ],
+    [
+     12,
+     139
+    ],
+    [
+     14,
+     12
+    ],
+    [
+     16,
+     16
+    ],
+    [
+     18,
+     27
+    ],
+    [
+     20,
+     10
+    ],
+    [
+     60,
+     6
+    ]
+   ],
+   "distinctSizes": 7,
+   "distinctSizesFirstScreen": 7,
+   "microSharePct": 63.5,
+   "microSharePctFirstScreen": 78.3,
+   "sentencesAtMicro": [],
+   "bodySharePct": 30.3,
+   "largestPx": 60,
+   "figuresAtLargest": [
+    "433",
+    "496"
+   ],
+   "heavyWeightSharePct": 26.6,
+   "turnedText": [],
+   "stackedText": [
+    "기록대기",
+    "기록전"
+   ],
+   "endAlignedText": [
+    "등급 1,040 · 보통 07:40 기록",
+    "오늘 아직 기록 전",
+    "어제 받은 응원 ‘끝까지 가요’"
+   ],
+   "monoOutsideCode": []
+  },
+  "layout": {
+   "controlsFirstScreen": 4,
+   "cards": 8,
+   "cardsFirstScreen": 7,
+   "halfEmptyCards": [
+    "157x281 filled 54%"
+   ],
+   "nestedCards": 2,
+   "saidTwice": [
+    "새벽등산 x3",
+    "100 x2"
+   ],
+   "figuresTwice": [
+    "63 x2"
+   ]
+  },
+  "colour": {
+   "saturatedPct": 19.7,
+   "darkPct": 29.9,
+   "brandPct": 17,
+   "secondPct": 0,
+   "blankLeftPct": 21.6,
+   "blankRightPct": 33.1
+  }
+ }
+}

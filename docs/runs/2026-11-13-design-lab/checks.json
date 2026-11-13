@@ -1,0 +1,90 @@
+{
+ "oldPages": 12,
+ "newPages": 12,
+ "rows": [
+  {
+   "rule": "type/second-family",
+   "old": 8,
+   "first": 0,
+   "last": 0
+  },
+  {
+   "rule": "type/mono-outside-code",
+   "old": 1,
+   "first": 0,
+   "last": 0
+  },
+  {
+   "rule": "type/micro-overuse",
+   "old": 6,
+   "first": 0,
+   "last": 0
+  },
+  {
+   "rule": "type/micro-sentence",
+   "old": 5,
+   "first": 1,
+   "last": 0
+  },
+  {
+   "rule": "type/turned-text",
+   "old": 1,
+   "first": 0,
+   "last": 0
+  },
+  {
+   "rule": "type/stacked-text",
+   "old": 1,
+   "first": 0,
+   "last": 0
+  },
+  {
+   "rule": "type/end-aligned-block",
+   "old": 4,
+   "first": 0,
+   "last": 0
+  },
+  {
+   "rule": "color/flood",
+   "old": 1,
+   "first": 0,
+   "last": 0
+  },
+  {
+   "rule": "color/dark-band",
+   "old": 3,
+   "first": 0,
+   "last": 0
+  },
+  {
+   "rule": "layout/competing-figures",
+   "old": 0,
+   "first": 0,
+   "last": 0
+  },
+  {
+   "rule": "layout/half-empty-card",
+   "old": 2,
+   "first": 2,
+   "last": 0
+  },
+  {
+   "rule": "layout/nested-cards",
+   "old": 3,
+   "first": 4,
+   "last": 2
+  },
+  {
+   "rule": "layout/too-many-controls",
+   "old": 6,
+   "first": 5,
+   "last": 0
+  },
+  {
+   "rule": "copy/figure-twice",
+   "old": 10,
+   "first": 11,
+   "last": 10
+  }
+ ]
+}

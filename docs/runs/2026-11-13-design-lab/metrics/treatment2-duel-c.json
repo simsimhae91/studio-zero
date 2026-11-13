@@ -1,0 +1,126 @@
+{
+ "file": "/Users/hosoo/project/conclave/.design-lab/runs/treatment/duel-s2/c//ws/docs/mockups/c.html",
+ "template": "mobile-expo",
+ "phone": {
+  "title": "라인전 · 체중계 다이얼",
+  "headline": {
+   "text": "새벽등산과 대결",
+   "px": 20,
+   "lines": 1,
+   "weight": 700
+  },
+  "seed": "{\"hue\":168,\"chroma\":0.14,\"lightness\":0.55,\"neutral_chroma\":0.002,\"corners\":\"round\",\"face\":\"suite\",\"source\":\"욕실 바닥의 오래된 법랑 아날로그 체중계, 민트빛 녹청 몸체와 둥근 유리 눈금판에서 색과 모양을 가져왔다.\"}",
+  "tokens": {
+   "--sz-brand": [
+    0,
+    98,
+    73
+   ],
+   "--sz-brand-soft": [
+    205,
+    246,
+    229
+   ],
+   "--sz-accent": [
+    0,
+    88,
+    65
+   ],
+   "--sz-bg": [
+    249,
+    250,
+    250
+   ],
+   "--sz-surface": [
+    253,
+    255,
+    254
+   ],
+   "--sz-fg": [
+    21,
+    22,
+    22
+   ],
+   "--sz-brand-2": null,
+   "--sz-second": [
+    142,
+    51,
+    108
+   ]
+  },
+  "viewport": {
+   "vw": 393,
+   "vh": 852
+  },
+  "screensLong": 1,
+  "type": {
+   "families": [
+    [
+     "SUITE Variable",
+     214
+    ]
+   ],
+   "sizesFirstScreen": [
+    [
+     11,
+     2
+    ],
+    [
+     12,
+     5
+    ],
+    [
+     14,
+     138
+    ],
+    [
+     16,
+     55
+    ],
+    [
+     20,
+     8
+    ],
+    [
+     30,
+     6
+    ]
+   ],
+   "distinctSizes": 6,
+   "distinctSizesFirstScreen": 6,
+   "microSharePct": 3.3,
+   "microSharePctFirstScreen": 3.3,
+   "sentencesAtMicro": [],
+   "bodySharePct": 25.7,
+   "largestPx": 30,
+   "figuresAtLargest": [
+    "433",
+    "496"
+   ],
+   "heavyWeightSharePct": 42.5,
+   "turnedText": [],
+   "stackedText": [],
+   "endAlignedText": [],
+   "monoOutsideCode": []
+  },
+  "layout": {
+   "controlsFirstScreen": 6,
+   "cards": 4,
+   "cardsFirstScreen": 4,
+   "halfEmptyCards": [],
+   "nestedCards": 0,
+   "saidTwice": [],
+   "figuresTwice": [
+    "40 x3"
+   ]
+  },
+  "colour": {
+   "saturatedPct": 1.1,
+   "darkPct": 1.5,
+   "brandPct": 5.3,
+   "secondPct": 1.1,
+   "blankLeftPct": 38.6,
+   "blankRightPct": 41
+  }
+ }
+}

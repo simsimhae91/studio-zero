@@ -1,0 +1,156 @@
+{
+ "file": "/Users/hosoo/project/conclave/.design-lab/runs/baseline/dues/b/ws/docs/mockups/b.html",
+ "template": "mobile-expo",
+ "phone": {
+  "title": "영수증 꽂이 장부",
+  "headline": {
+   "text": "26,600",
+   "px": 36,
+   "lines": 1,
+   "weight": 800
+  },
+  "seed": "{\"hue\":122,\"chroma\":0.2,\"lightness\":0.75,\"neutral_hue\":265,\"neutral_chroma\":0.005,\"corners\":\"round\",\"display\":\"sans\",\"source\":\"총무가 영수증 합계에 긋는 형광펜과 새벽 러닝 때 입는 형광 연두 바람막이에서 색이 왔고, 감열지 영수증의 고정폭 글씨가 제목 글꼴을, 손에 쥐고 찍는 영수증 사진과 형광펜 끝의 둥근 획이 둥근 모서리를 정한다.\"}",
+  "tokens": {
+   "--sz-brand": [
+    155,
+    191,
+    0
+   ],
+   "--sz-brand-soft": [
+    229,
+    241,
+    204
+   ],
+   "--sz-accent": [
+    66,
+    83,
+    0
+   ],
+   "--sz-bg": [
+    248,
+    250,
+    254
+   ],
+   "--sz-surface": [
+    254,
+    254,
+    255
+   ],
+   "--sz-fg": [
+    21,
+    22,
+    24
+   ],
+   "--sz-brand-2": null,
+   "--sz-second": null
+  },
+  "viewport": {
+   "vw": 393,
+   "vh": 852
+  },
+  "screensLong": 1.3,
+  "type": {
+   "families": [
+    [
+     "Geist Mono",
+     153
+    ],
+    [
+     "Pretendard Variable",
+     71
+    ]
+   ],
+   "sizesFirstScreen": [
+    [
+     12,
+     73
+    ],
+    [
+     14,
+     79
+    ],
+    [
+     16,
+     30
+    ],
+    [
+     18,
+     25
+    ],
+    [
+     30,
+     6
+    ],
+    [
+     36,
+     6
+    ]
+   ],
+   "distinctSizes": 6,
+   "distinctSizesFirstScreen": 6,
+   "microSharePct": 34.8,
+   "microSharePctFirstScreen": 33.3,
+   "sentencesAtMicro": [
+    "2026-11-14 08:39 · POS 02",
+    "체크카드 승인 26,600 · ****3417"
+   ],
+   "bodySharePct": 24.6,
+   "largestPx": 36,
+   "figuresAtLargest": [
+    "26,600"
+   ],
+   "heavyWeightSharePct": 17,
+   "turnedText": [],
+   "stackedText": [],
+   "endAlignedText": [],
+   "monoOutsideCode": [
+    "영수증 기록",
+    "남은 돈",
+    "사진 1/3",
+    "망원한강공원점",
+    "2026-11-14 08:39 · POS 02",
+    "생수 500ml",
+    "14",
+    "13,300",
+    "바나나",
+    "2",
+    "5,800",
+    "이온음료 1.5L",
+    "2",
+    "5,000",
+    "아이스 아메리카노",
+    "1",
+    "2,500",
+    "합계",
+    "26,600",
+    "체크카드 승인 26,600 · ****3417",
+    "영수증",
+    "모임이 낸 돈",
+    "항목",
+    "쓴 곳",
+    "날짜"
+   ]
+  },
+  "layout": {
+   "controlsFirstScreen": 10,
+   "cards": 5,
+   "cardsFirstScreen": 4,
+   "halfEmptyCards": [],
+   "nestedCards": 1,
+   "saidTwice": [
+    "26,600 x4"
+   ],
+   "figuresTwice": [
+    "26,600 x4"
+   ]
+  },
+  "colour": {
+   "saturatedPct": 7.7,
+   "darkPct": 27.4,
+   "brandPct": 7.5,
+   "secondPct": 0,
+   "blankLeftPct": 36.1,
+   "blankRightPct": 36.7
+  }
+ }
+}

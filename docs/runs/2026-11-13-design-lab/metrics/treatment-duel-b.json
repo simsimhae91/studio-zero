@@ -1,0 +1,135 @@
+{
+ "file": "/Users/hosoo/project/conclave/.design-lab/runs/treatment/duel/b//ws/docs/mockups/b.html",
+ "template": "mobile-expo",
+ "phone": {
+  "title": "라운드 중계 전광판",
+  "headline": {
+   "text": "라운드 6 / 14",
+   "px": 20,
+   "lines": 1,
+   "weight": 700
+  },
+  "seed": "{\"hue\":258,\"chroma\":0.22,\"lightness\":0.5,\"neutral_hue\":250,\"neutral_chroma\":0.004,\"corners\":\"sharp\",\"face\":\"suit\",\"source\":\"야구장과 e스포츠 중계의 코발트 전광판과 하단 자막 띠에서 왔고, 라운드 칸이 줄 맞춰 서는 각진 판이 그 모양이다.\"}",
+  "tokens": {
+   "--sz-brand": [
+    0,
+    81,
+    178
+   ],
+   "--sz-brand-soft": [
+    223,
+    236,
+    255
+   ],
+   "--sz-accent": [
+    0,
+    72,
+    160
+   ],
+   "--sz-bg": [
+    248,
+    250,
+    253
+   ],
+   "--sz-surface": [
+    254,
+    254,
+    255
+   ],
+   "--sz-fg": [
+    21,
+    22,
+    24
+   ],
+   "--sz-brand-2": null,
+   "--sz-second": [
+    249,
+    137,
+    66
+   ]
+  },
+  "viewport": {
+   "vw": 393,
+   "vh": 852
+  },
+  "screensLong": 1,
+  "type": {
+   "families": [
+    [
+     "SUIT Variable",
+     225
+    ]
+   ],
+   "sizesFirstScreen": [
+    [
+     11,
+     47
+    ],
+    [
+     12,
+     8
+    ],
+    [
+     14,
+     98
+    ],
+    [
+     16,
+     39
+    ],
+    [
+     18,
+     14
+    ],
+    [
+     20,
+     10
+    ],
+    [
+     24,
+     3
+    ],
+    [
+     48,
+     6
+    ]
+   ],
+   "distinctSizes": 8,
+   "distinctSizesFirstScreen": 8,
+   "microSharePct": 24.4,
+   "microSharePctFirstScreen": 24.4,
+   "sentencesAtMicro": [],
+   "bodySharePct": 23.6,
+   "largestPx": 48,
+   "figuresAtLargest": [
+    "433",
+    "496"
+   ],
+   "heavyWeightSharePct": 52.4,
+   "turnedText": [],
+   "stackedText": [],
+   "endAlignedText": [],
+   "monoOutsideCode": []
+  },
+  "layout": {
+   "controlsFirstScreen": 2,
+   "cards": 3,
+   "cardsFirstScreen": 3,
+   "halfEmptyCards": [],
+   "nestedCards": 0,
+   "saidTwice": [
+    "새벽등산 x2",
+    "100 x2"
+   ],
+   "figuresTwice": []
+  },
+  "colour": {
+   "saturatedPct": 8.7,
+   "darkPct": 2.3,
+   "brandPct": 5.8,
+   "secondPct": 2.8,
+   "blankLeftPct": 51.4,
+   "blankRightPct": 42.2
+  }
+ }
+}

@@ -1,0 +1,55 @@
+<design_handbook>
+How a screen is put together here. Each rule is a default with its numbers: depart from one only for a reason that comes from this product's subject, and say so when you finish. The audit measures several and the reviewer judges by all, each by its number.
+
+Type.
+T1. One typeface. The product is set in the one face its theme names (Pretendard, SUIT or SUITE), Latin and Hangul alike, and the theme already loads its file: install and name no other. A title is that face made heavier: no serif, no second sans, no italics. Monospace only inside code, pre and kbd; dates and figures are the body face with tabular-nums.
+T2. Every size has a role. On a page: the one headline 56 to 96px on a desktop and 36 to 44px on a phone, at 700 or 800, tracking -0.02em, leading 1.05 to 1.15; section heading text-3xl or text-4xl at 700; sub-heading text-xl or text-2xl; lead text-lg or text-xl; body text-base; small text-sm; caption text-xs. On an app screen: page title text-2xl or text-3xl at 700; section text-lg at 600 or 700; body and controls text-sm or text-base; table cells text-sm; table headers text-xs at 600; a headline figure text-2xl to text-4xl at 700.
+T3. Small text has a budget. text-xs and text-2xs are for timestamps, units, badges, stat labels and column headers: never a sentence, never what the screen exists to say, and at most about a third of the text on a screen. A screen of mostly small grey labels has no body: promote what matters.
+T4. Three weights a screen at most: 400 for reading, 600 or 700 for names, titles and values, 800 for the one figure.
+T5. Text is upright and horizontal: no rotated labels, no Hangul stacked a syllable to a line, no numerals turned around a dial or laid along a curve.
+T6. Text aligns to the start. Only numbers in a column align to the end; only a lone figure with its caption, or an empty state, is centred. A block of words never aligns to the end.
+T7. Leading: body 1.5 to 1.6, titles 1.2 to 1.3, the figure 1.0 to 1.1. A label never runs to a third line.
+
+Colour.
+C1. Colours have roles, and only these exist: paper (bg-bg), surfaces (bg-surface, bg-sunken, border-border), ink (text-fg, text-fg-muted), the brand (bg-brand with text-on-brand, text-accent, bg-brand-soft), a second colour (bg-second with text-on-second, bg-second-soft), a data series (series-1 to series-6) and state (danger, success, warning). Invent no colour and dim none with opacity.
+C2. Strong colour has a budget: about a tenth of the first screen, and the audit measures it. A brand fill belongs on the primary action, the mark of what is selected, a plate under the one figure, the fill of a meter. Never on a card, a panel, a column, a header bar or a section.
+C3. No dark band across a light screen. On a phone or app screen, dark is the scheme of the whole screen, which the theme provides, never a panel dropped into a paper one. A web page may carry one inverse section, full width, below its first screen.
+C4. Two sides, or several kinds. The brand is this side (me, ours, the current one) and the second colour is the other. More than two kinds take series-1, series-2 and on, in order. They are applied as marks: the colour of a number, a 4px edge, a dot, one segment of a bar. Never as the fill of a whole card, and never alone: a name or a position says the same thing.
+C5. A soft wash (bg-brand-soft, bg-second-soft) marks one region at most: the selected row, today's column.
+C6. State colours mean state and nothing else.
+C7. No gradient on a control or a surface.
+C8. Choosing a palette: the hue from the subject's own thing; chroma 0.12 to 0.16 for tools and money, 0.17 to 0.22 for consumer products, 0.23 to 0.28 for play and sport; second_hue only when the product has two sides or kinds; corners sharp for tools and data, soft by default, round for friendly consumer products; Pretendard for neutral, dense products, SUIT for crisp geometric ones, SUITE for soft, wide ones.
+
+A page.
+P1. First decide what each route is: a page, which is read and persuades, or an app screen, which works. Rules P are for pages and rules A for app screens. Do not put a marketing hero on a tool, or lay a landing page out as a dashboard.
+P2. Grid and measure. Content 1120 to 1200px wide, twelve columns, 24px gutters. A text column is 68 characters at most (38 to 42 in Hangul). Sections are 96 to 128px apart on a desktop and 56 to 72px on a phone.
+P3. The first screen holds four things: one headline (two lines at most on a desktop, three on a phone), one supporting sentence (text-lg or text-xl), the working thing itself, with at least half of it in view on a desktop and its start within the first screen on a phone, and one primary action. Do not colour one word of the headline by habit.
+P4. Balance. No column of the first screen stays empty for more than a third of its height. When the working thing is taller than the words, centre the words against it, make them stick, or stack the two.
+P5. Sections. One claim (a heading) and one thing to operate or to look at. Five to seven sections at most. Three equal cards of features are not the default.
+P6. Navigation. The wordmark is text in the product's face at 700 or 800; five links at most; one action.
+P7. Proof and numbers are real or absent. The price is said plainly.
+P8. On a phone a page is one column: the headline, the working thing, the action.
+P9. A hand-made mark: one at most, tilted 12 degrees at most.
+P10. The footer is quiet.
+
+An app screen.
+A1. Shell. A side navigation 220 to 256px wide with five to eight items, or a top bar when there are five sections or fewer. The content's width follows the job: a table takes the width, a form 560 to 640px, reading 720px.
+A2. Page head. A title (text-2xl or text-3xl at 700), one line of context, and the primary action at the right. Filters and search sit in one row below it.
+A3. Tables. Rows 44 to 52px. Sticky headers in text-xs at 600. The first column is the name, at 600. Numbers are aligned to the end and tabular. A status is a badge: a dot and a word. Seven columns at most at 1280px; the rest is in the detail. Pressing a row opens its detail in a side panel. Selecting several brings up a floating bar of actions. The table has its empty, loading and error states.
+A4. Detail. A side panel 400 to 480px wide to look, a full page to edit.
+A5. Forms. One column, labels above (text-sm at 600), controls 40 to 44px tall, help below, the primary action at the bottom left. Validate in place.
+A6. Dashboards. One headline figure and its trend, then two to four supporting stats, then the table that explains them. No wall of equal cards.
+A7. Density. Base text-sm or text-base; spacing of 8, 12, 16 and 24px.
+A8. Answering back. Toasts at the bottom right; a confirmation dialog only before something is destroyed; otherwise change at once and offer undo.
+A9. Narrow. Under 1024px the navigation becomes a drawer. Under 640px a table becomes rows of two lines (the name and the key value) and the rest opens on press.
+A10. Focus is visible and the keyboard reaches everything.
+
+Pictures.
+I1. Decide in this order. If it is the product's own working thing or its data, draw it in code. If the subject has a look people come for (food, a place, a room, goods, a face, the world of a game), its picture is content: have a small matching set made with generate_image. Otherwise, no picture.
+I2. Never made: a decorative illustration, a stock scene, a 3D blob, abstract gradient art, a drawing of an interface, an emoji as an icon, a picture for an empty state or onboarding.
+I3. Proportions: a thumbnail 1:1, a card picture 4:3 or 3:2, a hero 16:9 or 3:2. A person is initials on a disc unless people are the subject.
+I4. One set, one direction: the same light and distance, colours toward the theme, no words in the picture.
+I5. How many: one for a mock-up direction; for a build, six for the fixtures and one hero at most.
+I6. Words on a photograph sit on a plate or a scrim, never on the bare picture.
+I7. Icons come from one set (lucide), at 20 or 24px with a 1.5 to 2px stroke, in ink; the accent only when active.
+</design_handbook>

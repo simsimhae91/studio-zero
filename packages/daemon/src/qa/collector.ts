@@ -443,7 +443,9 @@ export function collectDigest(maxElements: number): unknown {
         bottom = Math.max(bottom, kr.bottom);
       }
       const inner = Math.max(1, r.height - px(s.paddingTop) - px(s.paddingBottom));
-      const reach = bottom < top ? 0 : Math.min(1, (bottom - top) / inner);
+      // A box in which nothing was counted (a drawing, a picture, a pattern of its own) is not a card with too little in it.
+      if (bottom < top) continue;
+      const reach = Math.min(1, (bottom - top) / inner);
       if (reach < 0.8) short.push({ selector: selectorOf(el), w: Math.round(r.width), h: Math.round(r.height), reach: Math.round(reach * 100) / 100 });
     }
 

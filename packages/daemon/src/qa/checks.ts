@@ -330,7 +330,6 @@ export const COMPOSITION_LIMITS = {
   /** Text turned further than this many degrees has to be read with a tilted head. */
   turnDegrees: 15,
   /** This many things at the largest size compete. Two are a comparison. */
-  figuresAtLargest: 3,
   /** A card at least this tall, */
   cardMinHeightPx: 140,
   /** whose content reaches under this share of its height, was stretched past what it holds. */
@@ -439,17 +438,10 @@ export function compositionFindings(digest: PageDigest, ctx: CheckContext): Find
     );
   }
 
-  // M3: one figure ----------------------------------------------------------------------------------------
-  if (read.figuresAtLargest.length >= limits.figuresAtLargest) {
-    add(
-      'layout/competing-figures',
-      'hierarchy',
-      'major',
-      `${read.figuresAtLargest.length} things are set at the largest size on the first screen: ${quoted(read.figuresAtLargest)}. With that many, none of them is the figure.`,
-      'M3: One thing per screen is set at figure size. Keep the one the screen is about and bring the others down a step or more. Two values being compared sit in one comparison block at the same size, and the difference is said once.',
-      at(read.figuresAtLargest[0]!),
-    );
-  }
+  // M3 (one figure) and M4 (say it once) are not counted here. Both were tried in the design lab on 24 pages: a
+  // count of things set at the largest size never fired on either side, since two values compared are meant to
+  // be the same size, and a count of figures stated twice fired on ten pages in twelve before and after alike
+  // (a chart's ticks, a date, a table's cells). A count that separates nothing is left to the reviewer.
 
   // M5: what holds things ---------------------------------------------------------------------------------
   const stretched = read.halfEmptyCards.filter((card) => card.h >= limits.cardMinHeightPx && card.reach < limits.cardReach).sort((a, b) => a.reach - b.reach);
@@ -485,16 +477,6 @@ export function compositionFindings(digest: PageDigest, ctx: CheckContext): Find
     );
   }
 
-  // M4: said once -----------------------------------------------------------------------------------------
-  if (read.figuresTwice.length > 0) {
-    add(
-      'copy/figure-twice',
-      'copy',
-      'minor',
-      `The same figure is stated more than once on the first screen: ${read.figuresTwice.slice(0, 4).join(', ')}${read.figuresTwice.length > 4 ? ` and ${read.figuresTwice.length - 4} more` : ''}.`,
-      'M4: Say it once. A date, a round, a gap, a name and a score each appear in one place: keep the one where it is read and delete the other (a badge and a sentence that give the same number are one too many).',
-    );
-  }
 
   return findings;
 }

@@ -1,0 +1,132 @@
+{
+ "file": "/Users/hosoo/project/conclave/.design-lab/runs/treatment/dues/a//checks/1.html",
+ "template": "mobile-expo",
+ "phone": {
+  "title": "모임 통장 한 권",
+  "headline": {
+   "text": "412,000",
+   "px": 48,
+   "lines": 1,
+   "weight": 800
+  },
+  "seed": "{\"hue\":33,\"chroma\":0.19,\"lightness\":0.57,\"neutral_hue\":250,\"neutral_chroma\":0.005,\"corners\":\"sharp\",\"face\":\"pretendard\",\"source\":\"총무가 영수증 뒷면에 찍는 '확인' 도장의 인주색과 금전출납부의 붉은 괘선에서 색이 왔고, 통장 표의 직각 괘선이 각진 모서리를, 장부 표지에 쓰는 명조가 제목 글꼴을 정한다.\"}",
+  "tokens": {
+   "--sz-brand": [
+    166,
+    31,
+    0
+   ],
+   "--sz-brand-soft": [
+    255,
+    228,
+    222
+   ],
+   "--sz-accent": [
+    148,
+    27,
+    0
+   ],
+   "--sz-bg": [
+    248,
+    250,
+    253
+   ],
+   "--sz-surface": [
+    254,
+    254,
+    255
+   ],
+   "--sz-fg": [
+    20,
+    22,
+    24
+   ],
+   "--sz-brand-2": null,
+   "--sz-second": [
+    0,
+    177,
+    206
+   ]
+  },
+  "viewport": {
+   "vw": 393,
+   "vh": 852
+  },
+  "screensLong": 1.1,
+  "type": {
+   "families": [
+    [
+     "Pretendard Variable",
+     388
+    ]
+   ],
+   "sizesFirstScreen": [
+    [
+     12,
+     15
+    ],
+    [
+     14,
+     165
+    ],
+    [
+     16,
+     180
+    ],
+    [
+     18,
+     6
+    ],
+    [
+     20,
+     6
+    ],
+    [
+     30,
+     1
+    ],
+    [
+     48,
+     7
+    ]
+   ],
+   "distinctSizes": 7,
+   "distinctSizesFirstScreen": 7,
+   "microSharePct": 4.1,
+   "microSharePctFirstScreen": 3.9,
+   "sentencesAtMicro": [],
+   "bodySharePct": 47.9,
+   "largestPx": 48,
+   "figuresAtLargest": [
+    "412,000"
+   ],
+   "heavyWeightSharePct": 49,
+   "turnedText": [],
+   "stackedText": [],
+   "endAlignedText": [],
+   "monoOutsideCode": []
+  },
+  "layout": {
+   "controlsFirstScreen": 3,
+   "cards": 3,
+   "cardsFirstScreen": 3,
+   "halfEmptyCards": [],
+   "nestedCards": 1,
+   "saidTwice": [
+    "412,000 x2"
+   ],
+   "figuresTwice": [
+    "412,000 x2",
+    "11 x7"
+   ]
+  },
+  "colour": {
+   "saturatedPct": 5.4,
+   "darkPct": 4,
+   "brandPct": 5.4,
+   "secondPct": 0,
+   "blankLeftPct": 77.1,
+   "blankRightPct": 55
+  }
+ }
+}

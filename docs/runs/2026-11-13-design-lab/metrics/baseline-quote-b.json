@@ -1,0 +1,252 @@
+{
+ "file": "/Users/hosoo/project/conclave/.design-lab/runs/baseline/quote/b/ws/docs/mockups/b.html",
+ "template": "web-vite-react",
+ "desktop": {
+  "title": "계산 테이프 견적서",
+  "headline": {
+   "text": "‘견적 받아볼 수 있을까요?’에 링크 한 줄로 답하세요",
+   "px": 20,
+   "lines": 1,
+   "weight": 700
+  },
+  "seed": "{\"hue\":112,\"chroma\":0.2,\"lightness\":0.75,\"neutral_hue\":245,\"neutral_chroma\":0.005,\"corners\":\"round\",\"display\":\"sans\",\"source\":\"계산 테이프의 합계에 긋는 형광펜의 연두와, 감열지의 푸르스름한 흰색에서 왔다: 이 화면은 서류가 아니라 내 몫을 셈하는 기계다.\"}",
+  "tokens": {
+   "--sz-brand": [
+    177,
+    183,
+    0
+   ],
+   "--sz-brand-soft": [
+    235,
+    239,
+    201
+   ],
+   "--sz-accent": [
+    77,
+    80,
+    0
+   ],
+   "--sz-bg": [
+    247,
+    251,
+    253
+   ],
+   "--sz-surface": [
+    254,
+    254,
+    255
+   ],
+   "--sz-fg": [
+    20,
+    22,
+    24
+   ],
+   "--sz-brand-2": null,
+   "--sz-second": null
+  },
+  "viewport": {
+   "vw": 1440,
+   "vh": 900
+  },
+  "screensLong": 1.1,
+  "type": {
+   "families": [
+    [
+     "Pretendard Variable",
+     519
+    ]
+   ],
+   "sizesFirstScreen": [
+    [
+     11,
+     20
+    ],
+    [
+     12,
+     97
+    ],
+    [
+     14,
+     66
+    ],
+    [
+     16,
+     231
+    ],
+    [
+     18,
+     32
+    ],
+    [
+     20,
+     46
+    ],
+    [
+     30,
+     1
+    ]
+   ],
+   "distinctSizes": 7,
+   "distinctSizesFirstScreen": 7,
+   "microSharePct": 22.5,
+   "microSharePctFirstScreen": 23.7,
+   "sentencesAtMicro": [],
+   "bodySharePct": 55.7,
+   "largestPx": 30,
+   "figuresAtLargest": [
+    "원"
+   ],
+   "heavyWeightSharePct": 22.4,
+   "turnedText": [],
+   "stackedText": [],
+   "endAlignedText": [],
+   "monoOutsideCode": []
+  },
+  "layout": {
+   "controlsFirstScreen": 15,
+   "cards": 3,
+   "cardsFirstScreen": 3,
+   "halfEmptyCards": [],
+   "nestedCards": 1,
+   "saidTwice": [
+    "930,000 x3",
+    "입금될 금액 x2",
+    "30,690 x2"
+   ],
+   "figuresTwice": [
+    "20 x2",
+    "60,000 x3",
+    "930,000 x3",
+    "899,310 x2"
+   ]
+  },
+  "colour": {
+   "saturatedPct": 1.7,
+   "darkPct": 1.7,
+   "brandPct": 1.6,
+   "secondPct": 0,
+   "blankLeftPct": 73.7,
+   "blankRightPct": 59
+  }
+ },
+ "phone": {
+  "title": "계산 테이프 견적서",
+  "headline": {
+   "text": "‘견적 받아볼 수 있을까요?’에 링크 한 줄로 답하세요",
+   "px": 20,
+   "lines": 2,
+   "weight": 700
+  },
+  "seed": "{\"hue\":112,\"chroma\":0.2,\"lightness\":0.75,\"neutral_hue\":245,\"neutral_chroma\":0.005,\"corners\":\"round\",\"display\":\"sans\",\"source\":\"계산 테이프의 합계에 긋는 형광펜의 연두와, 감열지의 푸르스름한 흰색에서 왔다: 이 화면은 서류가 아니라 내 몫을 셈하는 기계다.\"}",
+  "tokens": {
+   "--sz-brand": [
+    177,
+    183,
+    0
+   ],
+   "--sz-brand-soft": [
+    235,
+    239,
+    201
+   ],
+   "--sz-accent": [
+    77,
+    80,
+    0
+   ],
+   "--sz-bg": [
+    247,
+    251,
+    253
+   ],
+   "--sz-surface": [
+    254,
+    254,
+    255
+   ],
+   "--sz-fg": [
+    20,
+    22,
+    24
+   ],
+   "--sz-brand-2": null,
+   "--sz-second": null
+  },
+  "viewport": {
+   "vw": 393,
+   "vh": 852
+  },
+  "screensLong": 1.7,
+  "type": {
+   "families": [
+    [
+     "Pretendard Variable",
+     523
+    ]
+   ],
+   "sizesFirstScreen": [
+    [
+     12,
+     72
+    ],
+    [
+     14,
+     66
+    ],
+    [
+     16,
+     179
+    ],
+    [
+     18,
+     22
+    ],
+    [
+     20,
+     39
+    ],
+    [
+     30,
+     1
+    ]
+   ],
+   "distinctSizes": 7,
+   "distinctSizesFirstScreen": 6,
+   "microSharePct": 22.4,
+   "microSharePctFirstScreen": 19,
+   "sentencesAtMicro": [],
+   "bodySharePct": 56,
+   "largestPx": 30,
+   "figuresAtLargest": [
+    "원"
+   ],
+   "heavyWeightSharePct": 22.9,
+   "turnedText": [],
+   "stackedText": [],
+   "endAlignedText": [],
+   "monoOutsideCode": []
+  },
+  "layout": {
+   "controlsFirstScreen": 13,
+   "cards": 3,
+   "cardsFirstScreen": 3,
+   "halfEmptyCards": [],
+   "nestedCards": 1,
+   "saidTwice": [
+    "930,000 x3"
+   ],
+   "figuresTwice": [
+    "60,000 x3",
+    "930,000 x3"
+   ]
+  },
+  "colour": {
+   "saturatedPct": 2.6,
+   "darkPct": 6.5,
+   "brandPct": 2.3,
+   "secondPct": 0,
+   "blankLeftPct": 37.7,
+   "blankRightPct": 39.9
+  }
+ }
+}

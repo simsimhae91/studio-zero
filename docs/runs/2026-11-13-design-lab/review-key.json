@@ -1,0 +1,198 @@
+{
+ "items": {
+  "p01": {
+   "arm": "baseline",
+   "brief": "duel",
+   "row": "c"
+  },
+  "p02": {
+   "arm": "baseline",
+   "brief": "duel",
+   "row": "b"
+  },
+  "p03": {
+   "arm": "treatment",
+   "brief": "quote",
+   "row": "b"
+  },
+  "p04": {
+   "arm": "baseline",
+   "brief": "quote",
+   "row": "a"
+  },
+  "p05": {
+   "arm": "treatment",
+   "brief": "duel",
+   "row": "c"
+  },
+  "p06": {
+   "arm": "treatment",
+   "brief": "dues",
+   "row": "b"
+  },
+  "p07": {
+   "arm": "treatment",
+   "brief": "quote",
+   "row": "a"
+  },
+  "p08": {
+   "arm": "baseline",
+   "brief": "quote",
+   "row": "b"
+  },
+  "p09": {
+   "arm": "treatment",
+   "brief": "dues",
+   "row": "a"
+  },
+  "p10": {
+   "arm": "treatment2",
+   "brief": "duel",
+   "row": "b"
+  },
+  "p11": {
+   "arm": "baseline",
+   "brief": "dues",
+   "row": "a"
+  },
+  "p12": {
+   "arm": "treatment",
+   "brief": "duel",
+   "row": "a"
+  },
+  "p13": {
+   "arm": "treatment",
+   "brief": "duel",
+   "row": "b"
+  },
+  "p14": {
+   "arm": "treatment",
+   "brief": "orders",
+   "row": "a"
+  },
+  "p15": {
+   "arm": "baseline",
+   "brief": "duel",
+   "row": "a"
+  },
+  "p16": {
+   "arm": "baseline",
+   "brief": "dues",
+   "row": "b"
+  },
+  "p17": {
+   "arm": "baseline",
+   "brief": "orders",
+   "row": "a"
+  },
+  "p18": {
+   "arm": "baseline",
+   "brief": "orders",
+   "row": "b"
+  },
+  "p19": {
+   "arm": "treatment",
+   "brief": "orders",
+   "row": "b"
+  },
+  "p20": {
+   "arm": "treatment2",
+   "brief": "duel",
+   "row": "a"
+  },
+  "p21": {
+   "arm": "production",
+   "brief": "duel",
+   "row": "a"
+  },
+  "p22": {
+   "arm": "production",
+   "brief": "duel",
+   "row": "b"
+  },
+  "p23": {
+   "arm": "treatment2",
+   "brief": "duel",
+   "row": "c"
+  },
+  "p24": {
+   "arm": "production",
+   "brief": "duel",
+   "row": "c"
+  }
+ },
+ "pairs": {
+  "q01": {
+   "brief": "duel",
+   "row": "a",
+   "A": "treatment",
+   "B": "baseline"
+  },
+  "q02": {
+   "brief": "duel",
+   "row": "b",
+   "A": "treatment",
+   "B": "baseline"
+  },
+  "q03": {
+   "brief": "duel",
+   "row": "c",
+   "A": "treatment",
+   "B": "baseline"
+  },
+  "q04": {
+   "brief": "dues",
+   "row": "a",
+   "A": "treatment",
+   "B": "baseline"
+  },
+  "q05": {
+   "brief": "dues",
+   "row": "b",
+   "A": "baseline",
+   "B": "treatment"
+  },
+  "q06": {
+   "brief": "orders",
+   "row": "a",
+   "A": "baseline",
+   "B": "treatment"
+  },
+  "q07": {
+   "brief": "orders",
+   "row": "b",
+   "A": "baseline",
+   "B": "treatment"
+  },
+  "q08": {
+   "brief": "quote",
+   "row": "a",
+   "A": "treatment",
+   "B": "baseline"
+  },
+  "q09": {
+   "brief": "quote",
+   "row": "b",
+   "A": "treatment",
+   "B": "baseline"
+  },
+  "q10": {
+   "brief": "duel",
+   "row": "a",
+   "A": "production",
+   "B": "treatment2"
+  },
+  "q11": {
+   "brief": "duel",
+   "row": "b",
+   "A": "production",
+   "B": "treatment2"
+  },
+  "q12": {
+   "brief": "duel",
+   "row": "c",
+   "A": "production",
+   "B": "treatment2"
+  }
+ }
+}

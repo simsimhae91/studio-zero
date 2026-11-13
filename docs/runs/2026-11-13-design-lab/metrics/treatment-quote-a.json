@@ -1,0 +1,266 @@
+{
+ "file": "/Users/hosoo/project/conclave/.design-lab/runs/treatment/quote/a//ws/docs/mockups/a.html",
+ "template": "web-vite-react",
+ "desktop": {
+  "title": "서식 한 장 · 도장 찍어 보내는 견적서",
+  "headline": {
+   "text": "구십구만",
+   "px": 48,
+   "lines": 1,
+   "weight": 800
+  },
+  "seed": "{\"hue\":35,\"chroma\":0.19,\"lightness\":0.56,\"neutral_hue\":85,\"neutral_chroma\":0.005,\"corners\":\"sharp\",\"face\":\"pretendard\",\"source\":\"한국식 견적서 서식을 찍던 누런 갱지와, 서명 자리에 도장을 찍는 인주의 주홍에서 왔다: 도장이 찍혀야 견적서가 나간다.\"}",
+  "tokens": {
+   "--sz-brand": [
+    163,
+    39,
+    0
+   ],
+   "--sz-brand-soft": [
+    255,
+    228,
+    221
+   ],
+   "--sz-accent": [
+    144,
+    33,
+    0
+   ],
+   "--sz-bg": [
+    252,
+    250,
+    246
+   ],
+   "--sz-surface": [
+    255,
+    254,
+    253
+   ],
+   "--sz-fg": [
+    23,
+    22,
+    19
+   ],
+   "--sz-brand-2": null,
+   "--sz-second": [
+    0,
+    177,
+    206
+   ]
+  },
+  "viewport": {
+   "vw": 1440,
+   "vh": 900
+  },
+  "screensLong": 2,
+  "type": {
+   "families": [
+    [
+     "Pretendard Variable",
+     619
+    ]
+   ],
+   "sizesFirstScreen": [
+    [
+     12,
+     30
+    ],
+    [
+     14,
+     42
+    ],
+    [
+     16,
+     230
+    ],
+    [
+     20,
+     4
+    ],
+    [
+     24,
+     10
+    ],
+    [
+     30,
+     3
+    ],
+    [
+     48,
+     6
+    ]
+   ],
+   "distinctSizes": 8,
+   "distinctSizesFirstScreen": 7,
+   "microSharePct": 4.8,
+   "microSharePctFirstScreen": 9.2,
+   "sentencesAtMicro": [],
+   "bodySharePct": 70.4,
+   "largestPx": 48,
+   "figuresAtLargest": [
+    "원정",
+    "구십구만"
+   ],
+   "heavyWeightSharePct": 34.6,
+   "turnedText": [],
+   "stackedText": [],
+   "endAlignedText": [],
+   "monoOutsideCode": []
+  },
+  "layout": {
+   "controlsFirstScreen": 26,
+   "cards": 8,
+   "cardsFirstScreen": 6,
+   "halfEmptyCards": [],
+   "nestedCards": 7,
+   "saidTwice": [
+    "990,000 x2",
+    "아래로 x2",
+    "지우기 x2",
+    "60,000 x3"
+   ],
+   "figuresTwice": [
+    "2026 x2",
+    "990,000 x2",
+    "60,000 x3"
+   ]
+  },
+  "colour": {
+   "saturatedPct": 0,
+   "darkPct": 0.9,
+   "brandPct": 0,
+   "secondPct": 0,
+   "blankLeftPct": 52.8,
+   "blankRightPct": 53.3
+  }
+ },
+ "phone": {
+  "title": "서식 한 장 · 도장 찍어 보내는 견적서",
+  "headline": {
+   "text": "구십구만",
+   "px": 48,
+   "lines": 1,
+   "weight": 800
+  },
+  "seed": "{\"hue\":35,\"chroma\":0.19,\"lightness\":0.56,\"neutral_hue\":85,\"neutral_chroma\":0.005,\"corners\":\"sharp\",\"face\":\"pretendard\",\"source\":\"한국식 견적서 서식을 찍던 누런 갱지와, 서명 자리에 도장을 찍는 인주의 주홍에서 왔다: 도장이 찍혀야 견적서가 나간다.\"}",
+  "tokens": {
+   "--sz-brand": [
+    163,
+    39,
+    0
+   ],
+   "--sz-brand-soft": [
+    255,
+    228,
+    221
+   ],
+   "--sz-accent": [
+    144,
+    33,
+    0
+   ],
+   "--sz-bg": [
+    252,
+    250,
+    246
+   ],
+   "--sz-surface": [
+    255,
+    254,
+    253
+   ],
+   "--sz-fg": [
+    23,
+    22,
+    19
+   ],
+   "--sz-brand-2": null,
+   "--sz-second": [
+    0,
+    177,
+    206
+   ]
+  },
+  "viewport": {
+   "vw": 393,
+   "vh": 852
+  },
+  "screensLong": 2.1,
+  "type": {
+   "families": [
+    [
+     "Pretendard Variable",
+     632
+    ]
+   ],
+   "sizesFirstScreen": [
+    [
+     12,
+     37
+    ],
+    [
+     14,
+     38
+    ],
+    [
+     16,
+     221
+    ],
+    [
+     20,
+     4
+    ],
+    [
+     24,
+     10
+    ],
+    [
+     30,
+     3
+    ],
+    [
+     48,
+     6
+    ]
+   ],
+   "distinctSizes": 8,
+   "distinctSizesFirstScreen": 7,
+   "microSharePct": 5.9,
+   "microSharePctFirstScreen": 11.6,
+   "sentencesAtMicro": [],
+   "bodySharePct": 69.9,
+   "largestPx": 48,
+   "figuresAtLargest": [
+    "원정",
+    "구십구만"
+   ],
+   "heavyWeightSharePct": 35,
+   "turnedText": [],
+   "stackedText": [],
+   "endAlignedText": [],
+   "monoOutsideCode": []
+  },
+  "layout": {
+   "controlsFirstScreen": 18,
+   "cards": 7,
+   "cardsFirstScreen": 4,
+   "halfEmptyCards": [],
+   "nestedCards": 1,
+   "saidTwice": [
+    "60,000 x3"
+   ],
+   "figuresTwice": [
+    "2026 x2",
+    "60,000 x3"
+   ]
+  },
+  "colour": {
+   "saturatedPct": 0,
+   "darkPct": 4.3,
+   "brandPct": 0,
+   "secondPct": 0,
+   "blankLeftPct": 87.8,
+   "blankRightPct": 93.9
+  }
+ }
+}

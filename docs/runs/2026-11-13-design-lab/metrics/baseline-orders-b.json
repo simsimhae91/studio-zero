@@ -1,0 +1,259 @@
+{
+ "file": "/Users/hosoo/project/conclave/.design-lab/runs/baseline/orders/b/ws/docs/mockups/b.html",
+ "template": "web-vite-react",
+ "desktop": {
+  "title": "포장대 한 상자",
+  "headline": {
+   "text": "에티오피아 구지 200g · 핸드드립 분쇄 · 2개",
+   "px": 30,
+   "lines": 1,
+   "weight": 600
+  },
+  "seed": "{\"hue\":96,\"chroma\":0.17,\"lightness\":0.75,\"neutral_hue\":248,\"neutral_chroma\":0.005,\"corners\":\"round\",\"display\":\"grotesk\",\"source\":\"다 싼 상자에 붙이는 형광 노란 확인 스티커, 감열 라벨지의 푸른 흰빛, 상자 옆면에 찍힌 두꺼운 스텐실 글자에서 왔고, 모서리는 둥글게 말린 라벨 귀퉁이처럼 둥글다.\"}",
+  "tokens": {
+   "--sz-brand": [
+    203,
+    172,
+    0
+   ],
+   "--sz-brand-soft": [
+    245,
+    236,
+    198
+   ],
+   "--sz-accent": [
+    90,
+    75,
+    0
+   ],
+   "--sz-bg": [
+    247,
+    250,
+    253
+   ],
+   "--sz-surface": [
+    254,
+    254,
+    255
+   ],
+   "--sz-fg": [
+    20,
+    22,
+    24
+   ],
+   "--sz-brand-2": null,
+   "--sz-second": null
+  },
+  "viewport": {
+   "vw": 1440,
+   "vh": 900
+  },
+  "screensLong": 1.2,
+  "type": {
+   "families": [
+    [
+     "Pretendard Variable",
+     386
+    ],
+    [
+     "Bricolage Grotesque",
+     69
+    ]
+   ],
+   "sizesFirstScreen": [
+    [
+     12,
+     51
+    ],
+    [
+     16,
+     256
+    ],
+    [
+     18,
+     105
+    ],
+    [
+     24,
+     8
+    ],
+    [
+     30,
+     31
+    ],
+    [
+     60,
+     1
+    ],
+    [
+     96,
+     3
+    ]
+   ],
+   "distinctSizes": 7,
+   "distinctSizesFirstScreen": 7,
+   "microSharePct": 11.2,
+   "microSharePctFirstScreen": 11.2,
+   "sentencesAtMicro": [
+    "15 / 23 · 스마트스토어 · 2026111209417733"
+   ],
+   "bodySharePct": 79.3,
+   "largestPx": 96,
+   "figuresAtLargest": [
+    "오수민"
+   ],
+   "heavyWeightSharePct": 25.3,
+   "turnedText": [],
+   "stackedText": [],
+   "endAlignedText": [],
+   "monoOutsideCode": []
+  },
+  "layout": {
+   "controlsFirstScreen": 10,
+   "cards": 6,
+   "cardsFirstScreen": 6,
+   "halfEmptyCards": [
+    "200x163 filled 41%"
+   ],
+   "nestedCards": 0,
+   "saidTwice": [
+    "카페24 x2"
+   ],
+   "figuresTwice": [
+    "13 x2",
+    "23 x2",
+    "12 x2",
+    "200 x3",
+    "6890 x3",
+    "1234 x3"
+   ]
+  },
+  "colour": {
+   "saturatedPct": 0.6,
+   "darkPct": 2.2,
+   "brandPct": 0.6,
+   "secondPct": 0,
+   "blankLeftPct": 50.1,
+   "blankRightPct": 63.4
+  }
+ },
+ "phone": {
+  "title": "포장대 한 상자",
+  "headline": {
+   "text": "에티오피아 구지 200g · 핸드드립 분쇄 · 2개",
+   "px": 24,
+   "lines": 2,
+   "weight": 600
+  },
+  "seed": "{\"hue\":96,\"chroma\":0.17,\"lightness\":0.75,\"neutral_hue\":248,\"neutral_chroma\":0.005,\"corners\":\"round\",\"display\":\"grotesk\",\"source\":\"다 싼 상자에 붙이는 형광 노란 확인 스티커, 감열 라벨지의 푸른 흰빛, 상자 옆면에 찍힌 두꺼운 스텐실 글자에서 왔고, 모서리는 둥글게 말린 라벨 귀퉁이처럼 둥글다.\"}",
+  "tokens": {
+   "--sz-brand": [
+    203,
+    172,
+    0
+   ],
+   "--sz-brand-soft": [
+    245,
+    236,
+    198
+   ],
+   "--sz-accent": [
+    90,
+    75,
+    0
+   ],
+   "--sz-bg": [
+    247,
+    250,
+    253
+   ],
+   "--sz-surface": [
+    254,
+    254,
+    255
+   ],
+   "--sz-fg": [
+    20,
+    22,
+    24
+   ],
+   "--sz-brand-2": null,
+   "--sz-second": null
+  },
+  "viewport": {
+   "vw": 393,
+   "vh": 852
+  },
+  "screensLong": 1.6,
+  "type": {
+   "families": [
+    [
+     "Pretendard Variable",
+     320
+    ],
+    [
+     "Bricolage Grotesque",
+     21
+    ]
+   ],
+   "sizesFirstScreen": [
+    [
+     12,
+     43
+    ],
+    [
+     16,
+     91
+    ],
+    [
+     18,
+     68
+    ],
+    [
+     24,
+     27
+    ],
+    [
+     72,
+     3
+    ]
+   ],
+   "distinctSizes": 5,
+   "distinctSizesFirstScreen": 5,
+   "microSharePct": 15,
+   "microSharePctFirstScreen": 18.5,
+   "sentencesAtMicro": [
+    "15 / 23 · 스마트스토어 · 2026111209417733"
+   ],
+   "bodySharePct": 73.9,
+   "largestPx": 72,
+   "figuresAtLargest": [
+    "오수민"
+   ],
+   "heavyWeightSharePct": 14.4,
+   "turnedText": [],
+   "stackedText": [],
+   "endAlignedText": [],
+   "monoOutsideCode": []
+  },
+  "layout": {
+   "controlsFirstScreen": 6,
+   "cards": 2,
+   "cardsFirstScreen": 1,
+   "halfEmptyCards": [],
+   "nestedCards": 0,
+   "saidTwice": [],
+   "figuresTwice": [
+    "23 x2"
+   ]
+  },
+  "colour": {
+   "saturatedPct": 0.9,
+   "darkPct": 6.5,
+   "brandPct": 0.9,
+   "secondPct": 0,
+   "blankLeftPct": 50.5,
+   "blankRightPct": 55.2
+  }
+ }
+}

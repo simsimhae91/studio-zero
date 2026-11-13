@@ -1,0 +1,263 @@
+{
+ "file": "/Users/hosoo/project/conclave/.design-lab/runs/treatment/orders/b//checks/1.html",
+ "template": "web-vite-react",
+ "desktop": {
+  "title": "포장대 한 상자",
+  "headline": {
+   "text": "/ 23",
+   "px": 36,
+   "lines": 1,
+   "weight": 700
+  },
+  "seed": "{\"hue\":96,\"chroma\":0.17,\"lightness\":0.75,\"neutral_hue\":248,\"neutral_chroma\":0.005,\"corners\":\"round\",\"face\":\"suit\",\"source\":\"다 싼 상자에 붙이는 형광 노란 확인 스티커, 감열 라벨지의 푸른 흰빛, 상자 옆면에 찍힌 두꺼운 스텐실 글자에서 왔고, 모서리는 둥글게 말린 라벨 귀퉁이처럼 둥글다.\"}",
+  "tokens": {
+   "--sz-brand": [
+    203,
+    172,
+    0
+   ],
+   "--sz-brand-soft": [
+    245,
+    236,
+    198
+   ],
+   "--sz-accent": [
+    90,
+    75,
+    0
+   ],
+   "--sz-bg": [
+    247,
+    250,
+    253
+   ],
+   "--sz-surface": [
+    254,
+    254,
+    255
+   ],
+   "--sz-fg": [
+    20,
+    22,
+    24
+   ],
+   "--sz-brand-2": null,
+   "--sz-second": [
+    0,
+    85,
+    167
+   ]
+  },
+  "viewport": {
+   "vw": 1440,
+   "vh": 900
+  },
+  "screensLong": 1.1,
+  "type": {
+   "families": [
+    [
+     "SUIT Variable",
+     471
+    ]
+   ],
+   "sizesFirstScreen": [
+    [
+     12,
+     35
+    ],
+    [
+     14,
+     221
+    ],
+    [
+     16,
+     114
+    ],
+    [
+     18,
+     56
+    ],
+    [
+     20,
+     10
+    ],
+    [
+     30,
+     28
+    ],
+    [
+     36,
+     4
+    ],
+    [
+     96,
+     3
+    ]
+   ],
+   "distinctSizes": 8,
+   "distinctSizesFirstScreen": 8,
+   "microSharePct": 7.4,
+   "microSharePctFirstScreen": 7.4,
+   "sentencesAtMicro": [
+    "15 / 23 · 스마트스토어 · 2026111209417733"
+   ],
+   "bodySharePct": 36.1,
+   "largestPx": 96,
+   "figuresAtLargest": [
+    "오수민"
+   ],
+   "heavyWeightSharePct": 30.4,
+   "turnedText": [],
+   "stackedText": [],
+   "endAlignedText": [],
+   "monoOutsideCode": []
+  },
+  "layout": {
+   "controlsFirstScreen": 10,
+   "cards": 11,
+   "cardsFirstScreen": 11,
+   "halfEmptyCards": [
+    "220x300 filled 53%"
+   ],
+   "nestedCards": 3,
+   "saidTwice": [],
+   "figuresTwice": [
+    "20 x2",
+    "22 x2",
+    "23 x3",
+    "6890 x2",
+    "1234 x2",
+    "200 x3"
+   ]
+  },
+  "colour": {
+   "saturatedPct": 0.6,
+   "darkPct": 1.5,
+   "brandPct": 0.4,
+   "secondPct": 0,
+   "blankLeftPct": 47.3,
+   "blankRightPct": 47
+  }
+ },
+ "phone": {
+  "title": "포장대 한 상자",
+  "headline": {
+   "text": "오늘 출고",
+   "px": 20,
+   "lines": 1,
+   "weight": 800
+  },
+  "seed": "{\"hue\":96,\"chroma\":0.17,\"lightness\":0.75,\"neutral_hue\":248,\"neutral_chroma\":0.005,\"corners\":\"round\",\"face\":\"suit\",\"source\":\"다 싼 상자에 붙이는 형광 노란 확인 스티커, 감열 라벨지의 푸른 흰빛, 상자 옆면에 찍힌 두꺼운 스텐실 글자에서 왔고, 모서리는 둥글게 말린 라벨 귀퉁이처럼 둥글다.\"}",
+  "tokens": {
+   "--sz-brand": [
+    203,
+    172,
+    0
+   ],
+   "--sz-brand-soft": [
+    245,
+    236,
+    198
+   ],
+   "--sz-accent": [
+    90,
+    75,
+    0
+   ],
+   "--sz-bg": [
+    247,
+    250,
+    253
+   ],
+   "--sz-surface": [
+    254,
+    254,
+    255
+   ],
+   "--sz-fg": [
+    20,
+    22,
+    24
+   ],
+   "--sz-brand-2": null,
+   "--sz-second": [
+    0,
+    85,
+    167
+   ]
+  },
+  "viewport": {
+   "vw": 393,
+   "vh": 852
+  },
+  "screensLong": 1.3,
+  "type": {
+   "families": [
+    [
+     "SUIT Variable",
+     369
+    ]
+   ],
+   "sizesFirstScreen": [
+    [
+     12,
+     49
+    ],
+    [
+     14,
+     81
+    ],
+    [
+     16,
+     45
+    ],
+    [
+     18,
+     56
+    ],
+    [
+     20,
+     39
+    ],
+    [
+     48,
+     3
+    ]
+   ],
+   "distinctSizes": 6,
+   "distinctSizesFirstScreen": 6,
+   "microSharePct": 13.3,
+   "microSharePctFirstScreen": 17.9,
+   "sentencesAtMicro": [
+    "15 / 23 · 스마트스토어 · 2026111209417733"
+   ],
+   "bodySharePct": 32.8,
+   "largestPx": 48,
+   "figuresAtLargest": [
+    "오수민"
+   ],
+   "heavyWeightSharePct": 26,
+   "turnedText": [],
+   "stackedText": [],
+   "endAlignedText": [],
+   "monoOutsideCode": []
+  },
+  "layout": {
+   "controlsFirstScreen": 6,
+   "cards": 7,
+   "cardsFirstScreen": 3,
+   "halfEmptyCards": [],
+   "nestedCards": 2,
+   "saidTwice": [],
+   "figuresTwice": []
+  },
+  "colour": {
+   "saturatedPct": 1.1,
+   "darkPct": 2.6,
+   "brandPct": 0.7,
+   "secondPct": 0,
+   "blankLeftPct": 60,
+   "blankRightPct": 56.8
+  }
+ }
+}

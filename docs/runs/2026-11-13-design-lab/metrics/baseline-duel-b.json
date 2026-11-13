@@ -1,0 +1,138 @@
+{
+ "file": "/Users/hosoo/project/conclave/.design-lab/runs/baseline/duel/b/ws/docs/mockups/b.html",
+ "template": "mobile-expo",
+ "phone": {
+  "title": "라인전 · 14라운드 전광판",
+  "headline": {
+   "text": "63점 뒤져 있어요",
+   "px": 20,
+   "lines": 1,
+   "weight": 700
+  },
+  "seed": "{\"hue\":258,\"chroma\":0.22,\"lightness\":0.5,\"neutral_hue\":250,\"neutral_chroma\":0.004,\"corners\":\"sharp\",\"display\":\"grotesk\",\"source\":\"야구장과 e스포츠 중계의 코발트 전광판과 하단 자막 띠에서 왔고, 라운드 칸이 줄 맞춰 서는 각진 판이 그 모양이다.\"}",
+  "tokens": {
+   "--sz-brand": [
+    0,
+    81,
+    178
+   ],
+   "--sz-brand-soft": [
+    223,
+    236,
+    255
+   ],
+   "--sz-accent": [
+    0,
+    72,
+    160
+   ],
+   "--sz-bg": [
+    248,
+    250,
+    253
+   ],
+   "--sz-surface": [
+    254,
+    254,
+    255
+   ],
+   "--sz-fg": [
+    21,
+    22,
+    24
+   ],
+   "--sz-brand-2": null,
+   "--sz-second": null
+  },
+  "viewport": {
+   "vw": 393,
+   "vh": 852
+  },
+  "screensLong": 1.4,
+  "type": {
+   "families": [
+    [
+     "Pretendard Variable",
+     329
+    ],
+    [
+     "Bricolage Grotesque",
+     21
+    ]
+   ],
+   "sizesFirstScreen": [
+    [
+     11,
+     48
+    ],
+    [
+     12,
+     78
+    ],
+    [
+     14,
+     54
+    ],
+    [
+     16,
+     40
+    ],
+    [
+     18,
+     26
+    ],
+    [
+     20,
+     13
+    ],
+    [
+     60,
+     6
+    ]
+   ],
+   "distinctSizes": 7,
+   "distinctSizesFirstScreen": 7,
+   "microSharePct": 40,
+   "microSharePctFirstScreen": 47.5,
+   "sentencesAtMicro": [],
+   "bodySharePct": 39.1,
+   "largestPx": 60,
+   "figuresAtLargest": [
+    "433",
+    "496"
+   ],
+   "heavyWeightSharePct": 33.4,
+   "turnedText": [],
+   "stackedText": [],
+   "endAlignedText": [
+    "등급 1,040 · 보통 07:40 기록"
+   ],
+   "monoOutsideCode": []
+  },
+  "layout": {
+   "controlsFirstScreen": 2,
+   "cards": 5,
+   "cardsFirstScreen": 5,
+   "halfEmptyCards": [],
+   "nestedCards": 0,
+   "saidTwice": [
+    "새벽등산 x3",
+    "433 x2",
+    "496 x2",
+    "100 x2"
+   ],
+   "figuresTwice": [
+    "63 x2",
+    "8,000 x2"
+   ]
+  },
+  "colour": {
+   "saturatedPct": 10.8,
+   "darkPct": 24.4,
+   "brandPct": 9.7,
+   "secondPct": 0,
+   "blankLeftPct": 46.9,
+   "blankRightPct": 35.3
+  }
+ }
+}

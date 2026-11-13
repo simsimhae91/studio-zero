@@ -1,0 +1,275 @@
+{
+ "file": "/Users/hosoo/project/conclave/.design-lab/runs/treatment/orders/a//checks/1.html",
+ "template": "web-vite-react",
+ "desktop": {
+  "title": "출고 장부",
+  "headline": {
+   "text": "남은 상자",
+   "px": 30,
+   "lines": 3,
+   "weight": 700
+  },
+  "seed": "{\"hue\":29,\"chroma\":0.19,\"lightness\":0.53,\"neutral_hue\":82,\"neutral_chroma\":0.005,\"corners\":\"sharp\",\"face\":\"pretendard\",\"source\":\"손으로 쓰던 출고 장부의 붉은 괘선과 주문서에 찍는 주홍 확인 도장, 누렇게 바랜 장부 종이에서 왔고, 모서리는 장부 칸처럼 각졌다.\"}",
+  "tokens": {
+   "--sz-brand": [
+    174,
+    10,
+    8
+   ],
+   "--sz-brand-soft": [
+    255,
+    228,
+    224
+   ],
+   "--sz-accent": [
+    156,
+    0,
+    1
+   ],
+   "--sz-bg": [
+    252,
+    250,
+    246
+   ],
+   "--sz-surface": [
+    255,
+    254,
+    253
+   ],
+   "--sz-fg": [
+    23,
+    22,
+    20
+   ],
+   "--sz-brand-2": null,
+   "--sz-second": [
+    0,
+    177,
+    206
+   ]
+  },
+  "viewport": {
+   "vw": 1440,
+   "vh": 900
+  },
+  "screensLong": 1.4,
+  "type": {
+   "families": [
+    [
+     "Pretendard Variable",
+     1692
+    ]
+   ],
+   "sizesFirstScreen": [
+    [
+     12,
+     47
+    ],
+    [
+     14,
+     613
+    ],
+    [
+     16,
+     511
+    ],
+    [
+     18,
+     9
+    ],
+    [
+     20,
+     23
+    ],
+    [
+     30,
+     5
+    ]
+   ],
+   "distinctSizes": 6,
+   "distinctSizesFirstScreen": 6,
+   "microSharePct": 2.8,
+   "microSharePctFirstScreen": 3.9,
+   "sentencesAtMicro": [],
+   "bodySharePct": 36.6,
+   "largestPx": 30,
+   "figuresAtLargest": [
+    "남은 상자"
+   ],
+   "heavyWeightSharePct": 17.8,
+   "turnedText": [],
+   "stackedText": [],
+   "endAlignedText": [],
+   "monoOutsideCode": []
+  },
+  "layout": {
+   "controlsFirstScreen": 10,
+   "cards": 7,
+   "cardsFirstScreen": 7,
+   "halfEmptyCards": [
+    "387x298 filled 0%"
+   ],
+   "nestedCards": 1,
+   "saidTwice": [
+    "카페24 x4",
+    "그대로 보내기 x2",
+    "스마트스토어 x12"
+   ],
+   "figuresTwice": [
+    "23 x2",
+    "11 x3",
+    "13 x3",
+    "15 x2",
+    "20 x3",
+    "24 x4",
+    "500 x7",
+    "24,000 x3",
+    "21 x4",
+    "22 x3",
+    "12 x2",
+    "6890 x13",
+    "1234 x13",
+    "200 x6"
+   ]
+  },
+  "colour": {
+   "saturatedPct": 0.7,
+   "darkPct": 1.2,
+   "brandPct": 0.6,
+   "secondPct": 0,
+   "blankLeftPct": 46,
+   "blankRightPct": 43
+  }
+ },
+ "phone": {
+  "title": "출고 장부",
+  "headline": {
+   "text": "남은 상자",
+   "px": 24,
+   "lines": 2,
+   "weight": 700
+  },
+  "seed": "{\"hue\":29,\"chroma\":0.19,\"lightness\":0.53,\"neutral_hue\":82,\"neutral_chroma\":0.005,\"corners\":\"sharp\",\"face\":\"pretendard\",\"source\":\"손으로 쓰던 출고 장부의 붉은 괘선과 주문서에 찍는 주홍 확인 도장, 누렇게 바랜 장부 종이에서 왔고, 모서리는 장부 칸처럼 각졌다.\"}",
+  "tokens": {
+   "--sz-brand": [
+    174,
+    10,
+    8
+   ],
+   "--sz-brand-soft": [
+    255,
+    228,
+    224
+   ],
+   "--sz-accent": [
+    156,
+    0,
+    1
+   ],
+   "--sz-bg": [
+    252,
+    250,
+    246
+   ],
+   "--sz-surface": [
+    255,
+    254,
+    253
+   ],
+   "--sz-fg": [
+    23,
+    22,
+    20
+   ],
+   "--sz-brand-2": null,
+   "--sz-second": [
+    0,
+    177,
+    206
+   ]
+  },
+  "viewport": {
+   "vw": 462,
+   "vh": 1002
+  },
+  "screensLong": 2.4,
+  "type": {
+   "families": [
+    [
+     "Pretendard Variable",
+     1078
+    ]
+   ],
+   "sizesFirstScreen": [
+    [
+     12,
+     5
+    ],
+    [
+     14,
+     119
+    ],
+    [
+     16,
+     213
+    ],
+    [
+     18,
+     7
+    ],
+    [
+     20,
+     18
+    ],
+    [
+     24,
+     5
+    ]
+   ],
+   "distinctSizes": 6,
+   "distinctSizesFirstScreen": 6,
+   "microSharePct": 2,
+   "microSharePctFirstScreen": 1.4,
+   "sentencesAtMicro": [],
+   "bodySharePct": 57.2,
+   "largestPx": 24,
+   "figuresAtLargest": [],
+   "heavyWeightSharePct": 27.1,
+   "turnedText": [],
+   "stackedText": [
+    "이도현",
+    "최유진"
+   ],
+   "endAlignedText": [],
+   "monoOutsideCode": []
+  },
+  "layout": {
+   "controlsFirstScreen": 9,
+   "cards": 7,
+   "cardsFirstScreen": 4,
+   "halfEmptyCards": [
+    "353x298 filled 0%"
+   ],
+   "nestedCards": 1,
+   "saidTwice": [
+    "그대로 보내기 x2"
+   ],
+   "figuresTwice": [
+    "11 x3",
+    "500 x3",
+    "24,000 x3",
+    "21 x4",
+    "22 x3",
+    "12 x2"
+   ]
+  },
+  "colour": {
+   "saturatedPct": 0.8,
+   "darkPct": 2.5,
+   "brandPct": 0.7,
+   "secondPct": 0,
+   "blankLeftPct": 59,
+   "blankRightPct": 66.3
+  }
+ }
+}

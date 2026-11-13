@@ -1,0 +1,1680 @@
+{
+ "rubric": [
+  [
+   {
+    "id": "p01",
+    "hierarchy": 4,
+    "whitespace": 4,
+    "typography": 5.5,
+    "color": 6.5,
+    "copy": 6,
+    "originality": 7.5,
+    "tactility": 5,
+    "slop": 40,
+    "worst": "The bottom dock shows two states at once: three stacked rows of six touching buttons with two competing green primaries (\"오늘 체중 기록\" and \"67.6kg 기록\"), lying over a card whose text is clipped to \"4 0\", with stray arrow fragments at the right edge of the dial."
+   },
+   {
+    "id": "p02",
+    "hierarchy": 7.5,
+    "whitespace": 7,
+    "typography": 7.5,
+    "color": 7,
+    "copy": 7,
+    "originality": 7,
+    "tactility": 6.5,
+    "slop": 20,
+    "worst": "The dashed-outline status chips \"기록 대기\" and \"아직 기록 전\" read as empty placeholders, and the commentary feed the concept rests on is entirely below the dock on the first screen."
+   },
+   {
+    "id": "p03",
+    "hierarchy": 7,
+    "whitespace": 6,
+    "typography": 7,
+    "color": 7.5,
+    "copy": 6.5,
+    "originality": 8,
+    "tactility": 7.5,
+    "slop": 18,
+    "worst": "On desktop the tape is a narrow column stranded mid-page with the left third empty, and a red \"보내는 사람 이름을 적어 주세요\" error sits directly under a sender line that is already filled in."
+   },
+   {
+    "id": "p04",
+    "hierarchy": 7.5,
+    "whitespace": 7.5,
+    "typography": 8,
+    "color": 7.5,
+    "copy": 8,
+    "originality": 8,
+    "tactility": 6.5,
+    "slop": 12,
+    "worst": "The tax-method selector is three half-empty boxes and the amount that actually reaches the bank (입금될 금액) is a small inline sentence under it, while on the phone the only primary action is off the first screen with no docked button."
+   },
+   {
+    "id": "p05",
+    "hierarchy": 4.5,
+    "whitespace": 6.5,
+    "typography": 4,
+    "color": 6.5,
+    "copy": 6,
+    "originality": 7.5,
+    "tactility": 6.5,
+    "slop": 38,
+    "worst": "The centre readout of the dial stacks several text states on top of each other (\"67.6kg\", \"+60\", \"아직 비어 있어요\", a time line), so the hero number of the screen is unreadable."
+   },
+   {
+    "id": "p06",
+    "hierarchy": 6.5,
+    "whitespace": 6,
+    "typography": 6.5,
+    "color": 7,
+    "copy": 6.5,
+    "originality": 7.5,
+    "tactility": 7,
+    "slop": 24,
+    "worst": "Unlabelled marks have to be guessed (a stray ring floating between \"꽂힌 기록\" and the first entry, pill stubs at the end of the balance bar, seven dots for 19/22 members), \"나간 돈\" is set large where the amount should be, and the \"같이 보기\" button breaks the right gutter."
+   },
+   {
+    "id": "p07",
+    "hierarchy": 7,
+    "whitespace": 7,
+    "typography": 7.5,
+    "color": 7.5,
+    "copy": 8,
+    "originality": 7.5,
+    "tactility": 6.5,
+    "slop": 15,
+    "worst": "In the full-page capture a full-width red \"도장 찍고 링크 만들기\" bar lies across the tax-method rows, hiding the 3.3% 원천징수 choice that explains the two amounts and duplicating the button at the signature."
+   },
+   {
+    "id": "p08",
+    "hierarchy": 8,
+    "whitespace": 6.5,
+    "typography": 7.5,
+    "color": 8,
+    "copy": 8.5,
+    "originality": 8.5,
+    "tactility": 8,
+    "slop": 12,
+    "worst": "On desktop the left third of the page is empty while the tape and the controls crowd centre-right, so the layout reads lopsided."
+   },
+   {
+    "id": "p09",
+    "hierarchy": 8.5,
+    "whitespace": 8,
+    "typography": 8,
+    "color": 7.5,
+    "copy": 8,
+    "originality": 7.5,
+    "tactility": 7,
+    "slop": 10,
+    "worst": "Nothing serious; the one primary action is a blunt square red slab and the receipt-attached glyphs in the rows are crude little boxes."
+   },
+   {
+    "id": "p10",
+    "hierarchy": 6.5,
+    "whitespace": 6,
+    "typography": 6.5,
+    "color": 6,
+    "copy": 7,
+    "originality": 6.5,
+    "tactility": 6,
+    "slop": 28,
+    "worst": "The head splits into two uneven columns (a floating 433 over blank space on the left; score block, button and two lines of cheer text crammed on the right), and the empty grey and dashed squares in the mission row look like missing thumbnails, not checkboxes."
+   },
+   {
+    "id": "p11",
+    "hierarchy": 7.5,
+    "whitespace": 6.5,
+    "typography": 7,
+    "color": 6.5,
+    "copy": 7.5,
+    "originality": 7.5,
+    "tactility": 6.5,
+    "slop": 15,
+    "worst": "The content column is so narrow that titles and names break mid-phrase (\"11월 회비 / 3명\", \"오세린 · 윤재민 · / 장민서\"), making row heights lurch from one entry to the next."
+   },
+   {
+    "id": "p12",
+    "hierarchy": 8,
+    "whitespace": 7.5,
+    "typography": 7.5,
+    "color": 7,
+    "copy": 7.5,
+    "originality": 8,
+    "tactility": 7,
+    "slop": 12,
+    "worst": "Nothing serious; the coral primary button is a different red from the deep-red line it belongs to, and neither the mission check nor the cheer has a visible control on the first screen."
+   },
+   {
+    "id": "p13",
+    "hierarchy": 6,
+    "whitespace": 6,
+    "typography": 5,
+    "color": 6,
+    "copy": 6.5,
+    "originality": 6.5,
+    "tactility": 5.5,
+    "slop": 32,
+    "worst": "In the round grid the score \"100\" breaks into \"10 / 0\" on two lines and the bars sit at different heights, so the scoreboard that is the hero of the screen looks broken."
+   },
+   {
+    "id": "p14",
+    "hierarchy": 8,
+    "whitespace": 7,
+    "typography": 7.5,
+    "color": 8,
+    "copy": 8.5,
+    "originality": 9,
+    "tactility": 7.5,
+    "slop": 8,
+    "worst": "The margin slips overlap the ledger sheet's right border so the \"먼저 볼 주문\" heading sits across the sheet edge, and the tiny table header labels sit beside a noticeably larger \"송장 번호\"."
+   },
+   {
+    "id": "p15",
+    "hierarchy": 7.5,
+    "whitespace": 7,
+    "typography": 7.5,
+    "color": 7,
+    "copy": 8,
+    "originality": 8,
+    "tactility": 7,
+    "slop": 12,
+    "worst": "The top quarter of the chart is empty grid above 68.0 while the day-1 point is pressed against the screen edge and the score-breakdown row is sliced by the dock."
+   },
+   {
+    "id": "p16",
+    "hierarchy": 7.5,
+    "whitespace": 6,
+    "typography": 6.5,
+    "color": 7.5,
+    "copy": 7.5,
+    "originality": 8,
+    "tactility": 7.5,
+    "slop": 15,
+    "worst": "Almost a third of the first screen is empty black below the receipt photo, which pushes the category, place and date fields under the dock."
+   },
+   {
+    "id": "p17",
+    "hierarchy": 6.5,
+    "whitespace": 7,
+    "typography": 7,
+    "color": 7.5,
+    "copy": 8,
+    "originality": 8,
+    "tactility": 7.5,
+    "slop": 14,
+    "worst": "The order being packed right now (15번 오수민) is pushed below the fold by fourteen finished rows, and the summary line breaks so \"보류\" and its \"1\" land on separate lines."
+   },
+   {
+    "id": "p18",
+    "hierarchy": 8,
+    "whitespace": 6.5,
+    "typography": 7.5,
+    "color": 7,
+    "copy": 7,
+    "originality": 8,
+    "tactility": 8,
+    "slop": 15,
+    "worst": "The black notice, the scan field and the label card are stacked with no breathing room, and the notice reads \"3건이아직\" with a missing space, so the one input looks wedged between two other blocks."
+   },
+   {
+    "id": "p19",
+    "hierarchy": 8,
+    "whitespace": 7.5,
+    "typography": 7,
+    "color": 7.5,
+    "copy": 7.5,
+    "originality": 8,
+    "tactility": 8,
+    "slop": 14,
+    "worst": "In the left tile the hold count runs straight into the order number (\"보류 1 23 박미경\") so it reads as 123, and the next-box strip clips its fourth card at the column edge."
+   },
+   {
+    "id": "p20",
+    "hierarchy": 8,
+    "whitespace": 7.5,
+    "typography": 7.5,
+    "color": 7.5,
+    "copy": 8,
+    "originality": 8,
+    "tactility": 7.5,
+    "slop": 10,
+    "worst": "Nothing serious; the coral line pokes out past the chart frame on the left and a stray rounded hairline hangs under the score block."
+   },
+   {
+    "id": "p21",
+    "hierarchy": 7.5,
+    "whitespace": 7,
+    "typography": 7,
+    "color": 7,
+    "copy": 7.5,
+    "originality": 7.5,
+    "tactility": 7.5,
+    "slop": 14,
+    "worst": "Text pairs are jammed together with no gap (\"오늘 라인67.56\" in the chart callout, \"응원 보내기\" touching \"오늘 3번 남음\"), and the mission card is cut in half by the dock."
+   },
+   {
+    "id": "p22",
+    "hierarchy": 6,
+    "whitespace": 5.5,
+    "typography": 6.5,
+    "color": 6,
+    "copy": 7,
+    "originality": 7,
+    "tactility": 6.5,
+    "slop": 26,
+    "worst": "The two score panels take a third of the screen, the left one half empty and the right a solid blue slab that makes the opponent the loudest thing on the page, and the gap is stated twice (\"−63\" and \"63점 뒤져 있어요\")."
+   },
+   {
+    "id": "p23",
+    "hierarchy": 6.5,
+    "whitespace": 7,
+    "typography": 7,
+    "color": 7,
+    "copy": 7.5,
+    "originality": 7,
+    "tactility": 6.5,
+    "slop": 22,
+    "worst": "The dial's focal point is an empty dashed slot and its needle is a short stub beside the scale, so the big round instrument shows almost nothing and the unlabelled purple and grey outer ring has to be guessed."
+   },
+   {
+    "id": "p24",
+    "hierarchy": 7,
+    "whitespace": 7,
+    "typography": 6.5,
+    "color": 7.5,
+    "copy": 7.5,
+    "originality": 9,
+    "tactility": 8.5,
+    "slop": 12,
+    "worst": "The tug-of-war ring cannot be read without explanation (a dark arc, a green loop and a black knob, none labelled), and half the dial numerals are upside down."
+   }
+  ],
+  [
+   {
+    "id": "p09",
+    "hierarchy": 7.5,
+    "whitespace": 7.5,
+    "typography": 7,
+    "color": 7,
+    "copy": 7.5,
+    "originality": 6,
+    "tactility": 6.5,
+    "slop": 25,
+    "worst": "The proof behind a spend is the least visible thing in the ledger: the 11.11 and 11.07 rows carry two tiny unlabeled grey glyphs of different shapes, and nothing else on a row suggests it can be opened."
+   },
+   {
+    "id": "p10",
+    "hierarchy": 6.5,
+    "whitespace": 6.5,
+    "typography": 6.5,
+    "color": 6,
+    "copy": 7,
+    "originality": 6.5,
+    "tactility": 6,
+    "slop": 30,
+    "worst": "The only filled colour block on the screen is the orange behind the opponent's 496, so the eye lands on the other player first while the user's own 433 and the square blue '오늘 체중 기록' slab sit plain, and the '중계' heading is stranded above the dock with none of its feed showing."
+   },
+   {
+    "id": "p11",
+    "hierarchy": 6.5,
+    "whitespace": 5.5,
+    "typography": 6,
+    "color": 6.5,
+    "copy": 7,
+    "originality": 6,
+    "tactility": 6,
+    "slop": 30,
+    "worst": "The 내용 column is too narrow, so '11월 회비 3명' and the name lists break onto two and three lines and the rows have ragged heights, with unexplained grey bars of varying length under every balance."
+   },
+   {
+    "id": "p12",
+    "hierarchy": 7.5,
+    "whitespace": 7,
+    "typography": 7,
+    "color": 6.5,
+    "copy": 7.5,
+    "originality": 7.5,
+    "tactility": 6.5,
+    "slop": 22,
+    "worst": "The salmon '오늘 체중 기록' slab with black text matches neither the dark-red line nor the red labels, and the three '0 /20, 0 /40, 0 /40' figures under the graph are a generic stat row."
+   },
+   {
+    "id": "p13",
+    "hierarchy": 6.5,
+    "whitespace": 6,
+    "typography": 5,
+    "color": 6,
+    "copy": 6.5,
+    "originality": 7,
+    "tactility": 6,
+    "slop": 33,
+    "worst": "In the round grid the opponent's 100 breaks into '10' over '0' in two cells, and the score labels sit at a different height in every column."
+   },
+   {
+    "id": "p14",
+    "hierarchy": 7.5,
+    "whitespace": 7,
+    "typography": 7,
+    "color": 7.5,
+    "copy": 8,
+    "originality": 8,
+    "tactility": 7,
+    "slop": 15,
+    "worst": "The right-hand notes column starts about 15px inside the ledger sheet's border, so '먼저 볼 주문 3' and its cards collide with the sheet edge and read as a misaligned column, and on the phone the scan card ends in an empty gap."
+   },
+   {
+    "id": "p15",
+    "hierarchy": 7.5,
+    "whitespace": 7.5,
+    "typography": 7,
+    "color": 7.5,
+    "copy": 7.5,
+    "originality": 8,
+    "tactility": 6.5,
+    "slop": 18,
+    "worst": "'63점 뒤져 있어요' floats unanchored between the two scores, and the '기록 0/20 라인 0/40 미션 0/40' line is sliced by the dock."
+   },
+   {
+    "id": "p16",
+    "hierarchy": 7.5,
+    "whitespace": 6.5,
+    "typography": 7,
+    "color": 7.5,
+    "copy": 8,
+    "originality": 8.5,
+    "tactility": 8.5,
+    "slop": 12,
+    "worst": "About a third of the dark photo area under the receipt is empty black, while the fields the person still has to fill (항목, 쓴 곳, 날짜) are pushed below the dock."
+   },
+   {
+    "id": "p17",
+    "hierarchy": 6,
+    "whitespace": 6.5,
+    "typography": 5.5,
+    "color": 7,
+    "copy": 7.5,
+    "originality": 7,
+    "tactility": 7,
+    "slop": 25,
+    "worst": "The stat line under the giant '남은 상자 5' breaks so that '보류' and its '1' land on separate lines, and the current order (15 오수민) is pushed below the first screen by fourteen finished rows."
+   },
+   {
+    "id": "p18",
+    "hierarchy": 7.5,
+    "whitespace": 6,
+    "typography": 7,
+    "color": 7,
+    "copy": 6,
+    "originality": 7.5,
+    "tactility": 7.5,
+    "slop": 25,
+    "worst": "The dark notice reads '골라낸 주문 3건이아직 정해지지 않았어요' with a missing space, and it, the scan field and the label card are stacked almost touching while the right column drifts apart."
+   },
+   {
+    "id": "p19",
+    "hierarchy": 7.5,
+    "whitespace": 7,
+    "typography": 7,
+    "color": 7,
+    "copy": 7.5,
+    "originality": 7.5,
+    "tactility": 7.5,
+    "slop": 20,
+    "worst": "The hold card runs its count and the order number together as '보류 1 23 박미경 · 추가 배송비 요청함', and the 19번 card is cut off at the right edge of the '다음 상자' strip."
+   },
+   {
+    "id": "p20",
+    "hierarchy": 7.5,
+    "whitespace": 7,
+    "typography": 7,
+    "color": 7,
+    "copy": 7.5,
+    "originality": 7.5,
+    "tactility": 7,
+    "slop": 22,
+    "worst": "The coral line overshoots the plot's left border, and a stray rounded rule, like the bottom of a clipped card, hangs under the score header."
+   },
+   {
+    "id": "p21",
+    "hierarchy": 7.5,
+    "whitespace": 6.5,
+    "typography": 7,
+    "color": 6.5,
+    "copy": 7.5,
+    "originality": 7,
+    "tactility": 7,
+    "slop": 25,
+    "worst": "The mission card is sliced in half by the dock so its title and '+40' cannot be read, and in the chart callout '오늘 라인' touches '67.56' with no space."
+   },
+   {
+    "id": "p22",
+    "hierarchy": 6,
+    "whitespace": 5.5,
+    "typography": 6.5,
+    "color": 5,
+    "copy": 7,
+    "originality": 7.5,
+    "tactility": 6.5,
+    "slop": 32,
+    "worst": "A saturated blue slab for the opponent and a full-width black scoreboard band take over a light screen, while the user's own card is half empty and '−63', '63점 뒤져 있어요' and '6일차 / 14일' repeat what is already shown."
+   },
+   {
+    "id": "p23",
+    "hierarchy": 6.5,
+    "whitespace": 7,
+    "typography": 7,
+    "color": 6.5,
+    "copy": 7,
+    "originality": 8.5,
+    "tactility": 7.5,
+    "slop": 20,
+    "worst": "The dial fills the screen but does not read as a scale: the needle is a short detached stub near 67.6, the centre is an empty dashed well, and the mint, purple and grey rings with a black knob do not say who is ahead."
+   },
+   {
+    "id": "p24",
+    "hierarchy": 7,
+    "whitespace": 7,
+    "typography": 7.5,
+    "color": 7.5,
+    "copy": 7,
+    "originality": 9,
+    "tactility": 8.5,
+    "slop": 14,
+    "worst": "The three empty digit boxes at the dial's centre look like a loading skeleton, and the rope ring (dark arc, green loop, black knob) does not make clear which way the 63 points pull."
+   },
+   {
+    "id": "p01",
+    "hierarchy": 4.5,
+    "whitespace": 3.5,
+    "typography": 5.5,
+    "color": 7,
+    "copy": 6.5,
+    "originality": 8,
+    "tactility": 5,
+    "slop": 40,
+    "worst": "The bottom dock stacks three rows of buttons edge to edge ('오늘 체중 기록', then '닫기 · − · 67.6kg 기록 · +', then '고치기 · 날짜별 점수') as if every state were drawn at once, with stray needle fragments outside the dial and a '40' broken into '4' over '0' behind the sheet."
+   },
+   {
+    "id": "p02",
+    "hierarchy": 7,
+    "whitespace": 6.5,
+    "typography": 7,
+    "color": 6,
+    "copy": 7,
+    "originality": 7.5,
+    "tactility": 6.5,
+    "slop": 25,
+    "worst": "The opponent's 496 sits in a solid blue block bleeding off the right edge while the user's 433 is plain, so the eye goes to the other player, and '−63' and '63점 뒤져 있어요' say the same thing twice."
+   },
+   {
+    "id": "p03",
+    "hierarchy": 6.5,
+    "whitespace": 5.5,
+    "typography": 7,
+    "color": 7,
+    "copy": 6.5,
+    "originality": 8,
+    "tactility": 7.5,
+    "slop": 20,
+    "worst": "On desktop the left third of the page is empty beside the logo while tape and calculator crowd the centre and right, and the tape ends in a red '보내는 사람 이름을 적어 주세요' directly under a filled-in sender line."
+   },
+   {
+    "id": "p04",
+    "hierarchy": 7.5,
+    "whitespace": 7,
+    "typography": 8,
+    "color": 7.5,
+    "copy": 8.5,
+    "originality": 8,
+    "tactility": 6.5,
+    "slop": 12,
+    "worst": "The only action that sends, '도장 찍고 링크 만들기', sits at the very end of a long sheet with no fixed bar, and the tax choice is three tall boxes whose labels float at the top of empty cells."
+   },
+   {
+    "id": "p05",
+    "hierarchy": 5,
+    "whitespace": 7,
+    "typography": 3.5,
+    "color": 7,
+    "copy": 7,
+    "originality": 8.5,
+    "tactility": 7.5,
+    "slop": 35,
+    "worst": "In the centre of the dial the texts of several states ('67.6kg', '+60', '아직 비어 있어요', '어제 기록…') are drawn on top of one another and cannot be read."
+   },
+   {
+    "id": "p06",
+    "hierarchy": 6.5,
+    "whitespace": 6.5,
+    "typography": 7,
+    "color": 7.5,
+    "copy": 6.5,
+    "originality": 8.5,
+    "tactility": 8,
+    "slop": 18,
+    "worst": "The record header prints the words '나간 돈' in the largest type where the amount belongs, and the '같이 보기' pill runs past the right margin."
+   },
+   {
+    "id": "p07",
+    "hierarchy": 7.5,
+    "whitespace": 7,
+    "typography": 7.5,
+    "color": 7.5,
+    "copy": 8.5,
+    "originality": 7.5,
+    "tactility": 6.5,
+    "slop": 14,
+    "worst": "In the full-page capture a full-width '도장 찍고 링크 만들기' bar lies across the tax options and hides the selected '3.3% 원천징수' row, and the same button is repeated at the foot of the sheet."
+   },
+   {
+    "id": "p08",
+    "hierarchy": 7,
+    "whitespace": 6,
+    "typography": 7.5,
+    "color": 7.5,
+    "copy": 7.5,
+    "originality": 8.5,
+    "tactility": 8,
+    "slop": 15,
+    "worst": "On desktop everything sits in the right two-thirds, leaving roughly the left 500px blank beside the logo, and on the phone the dock crowds three keypad chips, the link button and the input row together."
+   }
+  ],
+  [
+   {
+    "id": "p17",
+    "hierarchy": 6.5,
+    "whitespace": 7,
+    "typography": 7,
+    "color": 8,
+    "copy": 7.5,
+    "originality": 7.5,
+    "tactility": 7,
+    "slop": 20,
+    "worst": "On desktop the order being packed (15 오수민) sits far below the fold under a headline-sized '남은 상자 5', and the stat line under it breaks so that '보류' and its '1' land on separate lines."
+   },
+   {
+    "id": "p18",
+    "hierarchy": 7.5,
+    "whitespace": 7,
+    "typography": 7.5,
+    "color": 6.5,
+    "copy": 6.5,
+    "originality": 7,
+    "tactility": 7,
+    "slop": 26,
+    "worst": "The black banner '골라낸 주문 3건이아직 정해지지 않았어요' is missing a space and floats above the scan field like a stray tooltip, while the two grey big-number tiles on the left are generic KPI cards that say little about the orders they stand for."
+   },
+   {
+    "id": "p19",
+    "hierarchy": 7.5,
+    "whitespace": 7,
+    "typography": 6.5,
+    "color": 7,
+    "copy": 7.5,
+    "originality": 7.5,
+    "tactility": 7.5,
+    "slop": 23,
+    "worst": "The side cards run label, oversized number and detail together on one wrapping line ('보류 1 23 박미경 · 추가 / 배송비 요청함'), and the '다음 상자' strip clips the 19번 card mid-word at its right edge."
+   },
+   {
+    "id": "p20",
+    "hierarchy": 7.5,
+    "whitespace": 7,
+    "typography": 7.5,
+    "color": 7.5,
+    "copy": 7.5,
+    "originality": 7.5,
+    "tactility": 6.5,
+    "slop": 20,
+    "worst": "The red line starts outside the chart frame on the left and the top third of the plot is empty grid, while the mission's control is a bare unlabelled square beside '걸음 8,000보 0/40'."
+   },
+   {
+    "id": "p21",
+    "hierarchy": 7,
+    "whitespace": 7,
+    "typography": 7,
+    "color": 7,
+    "copy": 7.5,
+    "originality": 7,
+    "tactility": 7,
+    "slop": 23,
+    "worst": "'63점 뒤져 있어요' floats unanchored between the two scores on its own baseline, and the chart callout jams '오늘 라인' against '67.56' with no gap, so the chart reads like a stock chart widget rather than a drawn line."
+   },
+   {
+    "id": "p22",
+    "hierarchy": 6,
+    "whitespace": 6,
+    "typography": 7,
+    "color": 5.5,
+    "copy": 7,
+    "originality": 7.5,
+    "tactility": 6.5,
+    "slop": 30,
+    "worst": "The rival's panel is flooded edge to edge in brand blue, so the eye lands on 새벽등산's 496 rather than the user's own score, while 서연's white panel is stretched to match and left a third empty."
+   },
+   {
+    "id": "p23",
+    "hierarchy": 6.5,
+    "whitespace": 7,
+    "typography": 7,
+    "color": 6.5,
+    "copy": 7,
+    "originality": 8,
+    "tactility": 6.5,
+    "slop": 25,
+    "worst": "The needle is a short stub pivoting off-centre from a dot labelled '라인', and an empty dashed pill sits in the middle of the dial, so the scale looks unfinished and gives no cue of what to grab and turn."
+   },
+   {
+    "id": "p24",
+    "hierarchy": 7,
+    "whitespace": 7,
+    "typography": 7,
+    "color": 7,
+    "copy": 6.5,
+    "originality": 8.5,
+    "tactility": 7.5,
+    "slop": 18,
+    "worst": "The outer tug-of-war ring is cryptic: a grey arc, a green loop and a black dot with no label, so the 63-point gap it is meant to show cannot be read from it."
+   },
+   {
+    "id": "p01",
+    "hierarchy": 4.5,
+    "whitespace": 4,
+    "typography": 6,
+    "color": 6.5,
+    "copy": 6,
+    "originality": 7,
+    "tactility": 5,
+    "slop": 40,
+    "worst": "The bottom dock piles seven buttons in three touching rows ('오늘 체중 기록', '닫기 − 67.6kg 기록 +', '고치기', '날짜별 점수') as if the open and closed states were drawn at once, covering the mission card whose '40' breaks vertically, with stray arrow marks left outside the dial."
+   },
+   {
+    "id": "p02",
+    "hierarchy": 6.5,
+    "whitespace": 6.5,
+    "typography": 7,
+    "color": 6,
+    "copy": 7,
+    "originality": 7,
+    "tactility": 6,
+    "slop": 28,
+    "worst": "Brand blue fills only the rival's 496 block, so the opponent's score outshouts the user's own, and the gap is stated twice in a row as '-63' and then '63점 뒤져 있어요'."
+   },
+   {
+    "id": "p03",
+    "hierarchy": 7,
+    "whitespace": 6,
+    "typography": 7.5,
+    "color": 7,
+    "copy": 7,
+    "originality": 8,
+    "tactility": 7.5,
+    "slop": 20,
+    "worst": "On desktop the left third of the page is empty with the tape and controls pushed right, and a red '보내는 사람 이름을 적어 주세요' error sits directly under a sender line that is already filled in."
+   },
+   {
+    "id": "p04",
+    "hierarchy": 7,
+    "whitespace": 7.5,
+    "typography": 8,
+    "color": 7.5,
+    "copy": 7.5,
+    "originality": 8,
+    "tactility": 6.5,
+    "slop": 15,
+    "worst": "The only send action ('도장 찍고 링크 만들기') and the amount that will actually be paid in are both far below the first screen, with the latter reduced to one small line under the tax options."
+   },
+   {
+    "id": "p05",
+    "hierarchy": 4,
+    "whitespace": 6,
+    "typography": 3.5,
+    "color": 7,
+    "copy": 6,
+    "originality": 7.5,
+    "tactility": 6.5,
+    "slop": 42,
+    "worst": "The dial's centre readout stacks four or five text layers on top of one another ('67.6kg', '+60', '아직 비어 있어요', '어제 기록'), leaving today's weight unreadable."
+   },
+   {
+    "id": "p06",
+    "hierarchy": 6.5,
+    "whitespace": 6.5,
+    "typography": 6.5,
+    "color": 7,
+    "copy": 6.5,
+    "originality": 7.5,
+    "tactility": 7.5,
+    "slop": 28,
+    "worst": "Unexplained fragments litter the screen: a bare ring floating under '꽂힌 기록', two empty pills at the end of the balance bar, and a bold '나간 돈' with no amount beside it."
+   },
+   {
+    "id": "p07",
+    "hierarchy": 7.5,
+    "whitespace": 7,
+    "typography": 7.5,
+    "color": 7.5,
+    "copy": 8,
+    "originality": 7.5,
+    "tactility": 6.5,
+    "slop": 18,
+    "worst": "In the full-page capture a full-width '도장 찍고 링크 만들기' bar lies across the tax options and hides the selected 3.3% line, duplicating the button at the foot of the sheet, and the lower half lapses from a paper form into boxed web-form fields."
+   },
+   {
+    "id": "p08",
+    "hierarchy": 7.5,
+    "whitespace": 6.5,
+    "typography": 7.5,
+    "color": 7.5,
+    "copy": 8,
+    "originality": 8,
+    "tactility": 8,
+    "slop": 16,
+    "worst": "On desktop the left third of the page is empty while the tape and the control column crowd centre-right, so the page looks off-balance."
+   },
+   {
+    "id": "p09",
+    "hierarchy": 8,
+    "whitespace": 8,
+    "typography": 8,
+    "color": 7.5,
+    "copy": 8,
+    "originality": 7,
+    "tactility": 6.5,
+    "slop": 12,
+    "worst": "Nothing serious; the primary action is a flat square full-width slab and the ledger rows and tiny receipt glyphs give no cue that they can be opened."
+   },
+   {
+    "id": "p10",
+    "hierarchy": 6.5,
+    "whitespace": 6.5,
+    "typography": 7,
+    "color": 6,
+    "copy": 7.5,
+    "originality": 6.5,
+    "tactility": 6.5,
+    "slop": 30,
+    "worst": "The only saturated block on the screen is the orange behind the rival's 496, so the eye goes to the opponent, while the user's 433 sits indented and unframed with dead space beneath it."
+   },
+   {
+    "id": "p11",
+    "hierarchy": 7.5,
+    "whitespace": 6.5,
+    "typography": 7,
+    "color": 7,
+    "copy": 7.5,
+    "originality": 7,
+    "tactility": 6.5,
+    "slop": 15,
+    "worst": "The 내용 column is too narrow, so '11월 회비 3명' and the member names break over two and three lines and the ledger rows end up at ragged, uneven heights."
+   },
+   {
+    "id": "p12",
+    "hierarchy": 8,
+    "whitespace": 7.5,
+    "typography": 7.5,
+    "color": 7,
+    "copy": 7.5,
+    "originality": 7.5,
+    "tactility": 6.5,
+    "slop": 17,
+    "worst": "The mission and the cheer have no visible control on the first screen ('미션 · 걸음 8,000보 0/40' is a plain readout), and the coral button reads as a second, unrelated red next to the dark-red line."
+   },
+   {
+    "id": "p13",
+    "hierarchy": 6,
+    "whitespace": 6,
+    "typography": 5.5,
+    "color": 6,
+    "copy": 7,
+    "originality": 6.5,
+    "tactility": 6.5,
+    "slop": 33,
+    "worst": "In the round table the score '100' breaks into '10' over '0' in two cells, and the centre '63점 뒤져 있어요' sits on top of the divider between the two scores."
+   },
+   {
+    "id": "p14",
+    "hierarchy": 8,
+    "whitespace": 7,
+    "typography": 7.5,
+    "color": 8,
+    "copy": 8,
+    "originality": 8.5,
+    "tactility": 7.5,
+    "slop": 12,
+    "worst": "The red circle marking order 20's missing 동·호수 is drawn around nothing and reads as a stray scribble, and a dead band separates the scan field from the ledger (an empty block inside the card on the phone)."
+   },
+   {
+    "id": "p15",
+    "hierarchy": 7.5,
+    "whitespace": 6.5,
+    "typography": 7.5,
+    "color": 7.5,
+    "copy": 7.5,
+    "originality": 8,
+    "tactility": 6.5,
+    "slop": 18,
+    "worst": "The top third of the chart is empty grid above 68.0 while today's score breakdown below it is cut off by the dock, so the screen spends its space on nothing."
+   },
+   {
+    "id": "p16",
+    "hierarchy": 8,
+    "whitespace": 6.5,
+    "typography": 7.5,
+    "color": 8,
+    "copy": 8,
+    "originality": 8.5,
+    "tactility": 8.5,
+    "slop": 12,
+    "worst": "About a third of the screen is empty black viewfinder below the receipt, which pushes the 항목 and 쓴 곳 fields under the dock."
+   }
+  ]
+ ],
+ "rules": [
+  [
+   {
+    "id": "p05",
+    "broken": [
+     "M3",
+     "M4"
+    ],
+    "note": "In the centre of the dial two figure-size values (67.6kg and +60) and several captions are printed on top of one another, so the screen has more than one figure and the weight is said twice in an unreadable heap."
+   },
+   {
+    "id": "p06",
+    "broken": [
+     "M6",
+     "M1"
+    ],
+    "note": "Under '꽂힌 기록' each record is a full receipt card instead of a 56-72px row, so only one record fits the first screen (and a role switcher sits above the app bar while '같이 보기' pushes into the right gutter)."
+   },
+   {
+    "id": "p07",
+    "broken": [
+     "P3",
+     "T2"
+    ],
+    "note": "The primary action '도장 찍고 링크 만들기' is missing from the first screen on desktop and phone (in the full page a second copy of it lies across the tax options), and the page's headline is set at about 15px instead of 56-96px."
+   },
+   {
+    "id": "p08",
+    "broken": [
+     "P4",
+     "T2",
+     "P2"
+    ],
+    "note": "On the desktop first screen the whole left third is empty and the right column is empty below the entry card for about 40% of the height, with the content pushed right of a full-bleed nav."
+   },
+   {
+    "id": "p09",
+    "broken": [],
+    "note": "none seen"
+   },
+   {
+    "id": "p10",
+    "broken": [
+     "M9"
+    ],
+    "note": "The round scoreboard in the middle of the screen draws eight empty future columns (rounds 7 to 14)."
+   },
+   {
+    "id": "p11",
+    "broken": [
+     "M6"
+    ],
+    "note": "Ledger rows run to about 85-109px because titles ('11월 회비 / 3명') and meta each wrap to two lines, well over the 56-72px row with one line of meta."
+   },
+   {
+    "id": "p12",
+    "broken": [
+     "M3",
+     "M9"
+    ],
+    "note": "The two scores compared at the top are different sizes (433 at about 36px, 496 at about 24px) rather than one comparison block, and the '오늘 라인 67.56kg' label floats on a plate away from the line."
+   },
+   {
+    "id": "p13",
+    "broken": [
+     "M9"
+    ],
+    "note": "The round grid draws eight empty future columns (7 to 14) with dashes, and in the filled ones '100' breaks onto two lines so its bar is drawn shorter than 99's."
+   },
+   {
+    "id": "p14",
+    "broken": [
+     "T2",
+     "A3",
+     "T5"
+    ],
+    "note": "The count '5' beside '남은 상자' is set at roughly 100px on an app screen, far above the text-4xl ceiling for a headline figure (and the table's statuses are plain text and a tilted '보류' stamp instead of dot-and-word badges)."
+   },
+   {
+    "id": "p15",
+    "broken": [
+     "M3",
+     "M5",
+     "T6"
+    ],
+    "note": "The two scores at the top are different sizes (433 at about 48px, 496 at about 36px) and the opponent's block is a right-aligned block of words, not one comparison block."
+   },
+   {
+    "id": "p16",
+    "broken": [
+     "C3",
+     "T1",
+     "C7",
+     "M10",
+     "M3",
+     "T5"
+    ],
+    "note": "A black photo panel with a gradient covers about 60% of the light first screen, and the tilted receipt on it is set in a monospace face."
+   },
+   {
+    "id": "p17",
+    "broken": [
+     "T2",
+     "A3",
+     "T3",
+     "T5"
+    ],
+    "note": "'남은 상자 5' is set as a roughly 96px display headline at the top of a working app screen, while the supporting stats beneath it are in text-xs (with '보류 1' breaking onto a second line)."
+   },
+   {
+    "id": "p18",
+    "broken": [
+     "T2",
+     "T5"
+    ],
+    "note": "The recipient's name '오수민' is set at roughly 96px and the counts at about 56px on an app screen whose ceiling is text-4xl, and the '다 싼 상자' card and its '찍음' tag at the right are tilted."
+   },
+   {
+    "id": "p19",
+    "broken": [
+     "T2",
+     "T5"
+    ],
+    "note": "The recipient's name '오수민' in the centre card is set at roughly 96px on an app screen whose ceiling is text-4xl, and the '찍음' tag on the done pile is a rotated label."
+   },
+   {
+    "id": "p20",
+    "broken": [
+     "M3",
+     "T6"
+    ],
+    "note": "The two scores at the top are different sizes (433 at about 36px, 496 at about 30px) and the opponent's block is right-aligned words, not one comparison block."
+   },
+   {
+    "id": "p21",
+    "broken": [
+     "M3",
+     "M9",
+     "M5",
+     "T6"
+    ],
+    "note": "The two scores at the top are different sizes (433 at about 48px, 496 at about 36px), and in the chart the '오늘 라인 67.56' label sits in a floating shadowed box instead of on the line."
+   },
+   {
+    "id": "p22",
+    "broken": [
+     "C3",
+     "C2",
+     "T5",
+     "M5",
+     "M9",
+     "C4",
+     "M4",
+     "T6"
+    ],
+    "note": "A black scoreboard band crosses the light screen for about a third of its height, and above it the opponent's whole card is filled with the brand blue (strong colour is about 20% of the first screen)."
+   },
+   {
+    "id": "p23",
+    "broken": [],
+    "note": "none seen"
+   },
+   {
+    "id": "p24",
+    "broken": [
+     "T5",
+     "M5",
+     "M3",
+     "M4",
+     "T6"
+    ],
+    "note": "The dial's numerals are turned around the ring, several of them upside down at the bottom (68.3, 68.4, 68.5, 67.0), with '라인 67.56' laid along the curve."
+   },
+   {
+    "id": "p01",
+    "broken": [
+     "M1",
+     "M14",
+     "M7",
+     "M3",
+     "T6"
+    ],
+    "note": "The bottom dock holds seven controls including two brand-filled actions ('오늘 체중 기록' and '67.6kg 기록') in rows that touch each other, and it covers the mission card."
+   },
+   {
+    "id": "p02",
+    "broken": [
+     "C3",
+     "C4",
+     "M9",
+     "M4",
+     "M3",
+     "T2",
+     "T6"
+    ],
+    "note": "A black '날짜별 점수' panel is dropped into the light screen for about 30% of its height, and the brand blue fills the plate under the opponent's score rather than marking my side."
+   },
+   {
+    "id": "p03",
+    "broken": [
+     "P4",
+     "T2",
+     "P8"
+    ],
+    "note": "On the desktop first screen the left third is empty for the full height and the right column is empty below the entry card for half of it, and the headline is about 20px instead of 56-96px."
+   },
+   {
+    "id": "p04",
+    "broken": [
+     "P3",
+     "T2",
+     "P2"
+    ],
+    "note": "The primary action '도장 찍고 링크 만들기' is not on the first screen on desktop or phone (it is only at the foot of the sheet), and the headline is about 18px instead of 56-96px."
+   }
+  ],
+  [
+   {
+    "id": "p16",
+    "broken": [
+     "C3",
+     "T1",
+     "M2",
+     "M4",
+     "M3",
+     "M10",
+     "T5",
+     "C7"
+    ],
+    "note": "A near-black photo backdrop with a visible gradient fills about 60% of the light screen between the app bar and the form, and the receipt on it is set in a tilted monospace face, while 26,600 is repeated five times down the screen."
+   },
+   {
+    "id": "p17",
+    "broken": [
+     "T2",
+     "T5",
+     "A3"
+    ],
+    "note": "The page title '남은 상자 5' at the top left is set at roughly 96px on an app screen where a title is text-2xl or text-3xl, and the '보류' status in row 23 of the table is a tilted stamp rather than a dot-and-word badge."
+   },
+   {
+    "id": "p18",
+    "broken": [
+     "T2",
+     "T5"
+    ],
+    "note": "The recipient name '오수민' in the centre card is about 100px tall on an app screen (far beyond the text-4xl cap for a figure), and the '찍음' tag on the stacked card at the top right is rotated."
+   },
+   {
+    "id": "p19",
+    "broken": [
+     "T2",
+     "T5",
+     "T7"
+    ],
+    "note": "The recipient name '오수민' in the centre card is set at roughly 96px on an app screen, with a rotated '찍음' tag on the right-hand card and a product line running to three lines in the '다음 상자' strip."
+   },
+   {
+    "id": "p20",
+    "broken": [
+     "M9",
+     "M3",
+     "T6"
+    ],
+    "note": "The weight chart draws a full graph-paper grid for the empty future days 7 to 14, and above it the two compared scores are different sizes (433 larger than 496) with the opponent's block right-aligned."
+   },
+   {
+    "id": "p21",
+    "broken": [
+     "M9",
+     "M3",
+     "M5",
+     "T6"
+    ],
+    "note": "The chart draws an empty grid for days 7 to 14 and labels today's line in a floating shadowed box ('오늘 라인 67.56') plus a legend, while 433, 496 and '+0' are all at figure size in different sizes."
+   },
+   {
+    "id": "p22",
+    "broken": [
+     "C3",
+     "C2",
+     "T5",
+     "M5",
+     "C4",
+     "M3",
+     "M9",
+     "T6"
+    ],
+    "note": "A full-width black '라운드별 점수' panel crosses the light screen directly below a solid brand-blue opponent card (strong colour about 20% of the first screen), with '기록대기' and '기록전' stacked one syllable to a line in column 6."
+   },
+   {
+    "id": "p23",
+    "broken": [],
+    "note": "none seen"
+   },
+   {
+    "id": "p24",
+    "broken": [
+     "T5",
+     "M5",
+     "M3",
+     "M4",
+     "T6"
+    ],
+    "note": "The dial's numerals are turned around the rim so that 68.3 to 68.5 read upside-down at the bottom, and the two compared scores sit in twin equal-height cards above it instead of one comparison surface."
+   },
+   {
+    "id": "p01",
+    "broken": [
+     "M1",
+     "M14",
+     "M7",
+     "T6"
+    ],
+    "note": "The dock at the bottom holds seven controls, two of them brand-filled ('오늘 체중 기록' and '67.6kg 기록'), packed edge to edge with no gaps and covering the mission card beneath."
+   },
+   {
+    "id": "p02",
+    "broken": [
+     "C3",
+     "M9",
+     "M3",
+     "M4",
+     "C4",
+     "T6",
+     "T2"
+    ],
+    "note": "A black '날짜별 점수' scoreboard panel is dropped into the middle of the light screen with empty cells for rounds 7 to 14, and the gap is said twice above it ('−63' and '63점 뒤져 있어요') beside a 60px score on a brand-blue plate given to the opponent."
+   },
+   {
+    "id": "p03",
+    "broken": [
+     "P4",
+     "T2"
+    ],
+    "note": "On the desktop first screen the left third is empty for its whole height and the right column is empty below the input box (about half the height), while the headline is only about 20px against a 957,330 figure at about 76px."
+   },
+   {
+    "id": "p04",
+    "broken": [
+     "P3",
+     "T2",
+     "T6"
+    ],
+    "note": "The first screen has no primary action: '도장 찍고 링크 만들기' sits at the very bottom of the sheet about 1,450px down, under a headline of only about 18px."
+   },
+   {
+    "id": "p05",
+    "broken": [
+     "M3",
+     "T6"
+    ],
+    "note": "In the centre of the dial several figure-size values ('67.6kg' and '+60') and their captions are printed on top of one another and cannot be read."
+   },
+   {
+    "id": "p06",
+    "broken": [
+     "M6",
+     "M4",
+     "M1"
+    ],
+    "note": "Under '꽂힌 기록' the ledger entries are drawn as full receipt cards, so only one record fits on the first screen instead of five to eight rows, and the '같이 보기' pill at the top right pokes past the 16px gutter."
+   },
+   {
+    "id": "p07",
+    "broken": [
+     "P3",
+     "T2"
+    ],
+    "note": "The first screen shows no primary action under a headline of about 15px, and on the full page a brand bar '도장 찍고 링크 만들기' lies across the tax options mid-form, duplicating the button at the bottom."
+   },
+   {
+    "id": "p08",
+    "broken": [
+     "P4",
+     "T2"
+    ],
+    "note": "On the desktop first screen the whole left third (left of the tape) is empty and the right column is empty below the input card, while the headline at the top right is only about 20px."
+   },
+   {
+    "id": "p09",
+    "broken": [],
+    "note": "none seen"
+   },
+   {
+    "id": "p10",
+    "broken": [
+     "M9",
+     "M1"
+    ],
+    "note": "The round-by-round score grid in the middle draws empty cells for the future rounds 7 to 14 and runs edge to edge with its numbers about 5px from the screen edge."
+   },
+   {
+    "id": "p11",
+    "broken": [
+     "M6"
+    ],
+    "note": "Ledger rows such as 11.10 and 11.05 wrap their titles and meta to four lines and stand about 85 to 110px tall, well over the 56 to 72px row."
+   },
+   {
+    "id": "p12",
+    "broken": [
+     "M9",
+     "M3"
+    ],
+    "note": "The weight chart draws a full grid for the empty future days up to day 14, and the two compared scores at the top are different sizes (433 at about 36px, 496 at about 24px)."
+   },
+   {
+    "id": "p13",
+    "broken": [
+     "M9",
+     "T6",
+     "M1"
+    ],
+    "note": "The '라운드' grid draws empty cells for rounds 7 to 14 edge to edge (with '100' breaking into '10/0'), and the whole score block above it, names, meta and '63점 뒤져 있어요', is centred."
+   },
+   {
+    "id": "p14",
+    "broken": [
+     "T2",
+     "T5",
+     "A3"
+    ],
+    "note": "The figure '5' beside '남은 상자' at the top left is set at roughly 96px on an app screen, and the '보류' status in row 23 of the table is a tilted stamp rather than a dot-and-word badge."
+   },
+   {
+    "id": "p15",
+    "broken": [
+     "M9",
+     "M3",
+     "T6",
+     "M5",
+     "M1"
+    ],
+    "note": "The weight chart draws a dense graph-paper grid across the empty future days 7 to 14 and bleeds to both screen edges, under two compared scores of different sizes (433 at about 48px, 496 at about 36px, right-aligned)."
+   }
+  ]
+ ],
+ "pairs": [
+  [
+   {
+    "id": "q01",
+    "ship": "B",
+    "margin": "slight",
+    "why": "B ties the graph to the duel by printing each day's score (96, 97, 53, 99, 88, 0) under the day axis and adds a legend, while A leaves the chart as an unlabelled box with a stray cyan dot for the opponent.",
+    "hierarchy": "same",
+    "colour": "B",
+    "typography": "same",
+    "density": "B"
+   },
+   {
+    "id": "q02",
+    "ship": "B",
+    "margin": "slight",
+    "why": "A's scoreboard breaks '100' into '10 / 0' across two lines and its mission is two unlabelled empty squares, while B's board reads cleanly and its mission row says '걸음 8,000보 · 40점' beside a checkbox.",
+    "hierarchy": "B",
+    "colour": "A",
+    "typography": "B",
+    "density": "same"
+   },
+   {
+    "id": "q03",
+    "ship": "B",
+    "margin": "slight",
+    "why": "A stacks several strings on top of one another in the dial centre ('67.6kg', '+60' and three more lines) so the focal point is unreadable, whereas B's dial is legible even though its bottom sheet piles up seven buttons and leaves stray needle fragments at the right edge.",
+    "hierarchy": "A",
+    "colour": "same",
+    "typography": "B",
+    "density": "A"
+   },
+   {
+    "id": "q04",
+    "ship": "A",
+    "margin": "slight",
+    "why": "A keeps every passbook row to two tidy lines with a bold amount and a plain balance column, while B wraps '11월 회비 / 3명' and the member names so rows are ragged, and adds grey bars under each balance that read as noise.",
+    "hierarchy": "A",
+    "colour": "A",
+    "typography": "A",
+    "density": "A"
+   },
+   {
+    "id": "q05",
+    "ship": "A",
+    "margin": "slight",
+    "why": "A shows the receipt being recorded, with the highlighted 합계 26,600 leading to '영수증 26,600 = 모임이 낸 돈 26,600' and a button labelled with the amount, while B shows the ledger with a role switcher at the top, a stray ring glyph and an orphan '나간 돈' heading with no figure.",
+    "hierarchy": "A",
+    "colour": "same",
+    "typography": "B",
+    "density": "B"
+   },
+   {
+    "id": "q06",
+    "ship": "B",
+    "margin": "clear",
+    "why": "B folds rows 1-13 into one line and opens the current order 15 오수민 in the ledger with the 16-18 waiting rows beneath, while A fills the first screen with a giant '남은 상자 5' and already-finished rows 1-8, so the order in hand is below the fold and '보류 1' breaks onto its own line.",
+    "hierarchy": "B",
+    "colour": "same",
+    "typography": "B",
+    "density": "B"
+   },
+   {
+    "id": "q07",
+    "ship": "B",
+    "margin": "slight",
+    "why": "B names the flagged orders in the side card (20 이도현 상세주소 없음, 21·22 최유진 같은 주문 2번) and puts the order number 15 on the label, while A spends the same space on a giant '3' and '1' and floats a black pill with a missing space ('3건이아직') over the scan field.",
+    "hierarchy": "same",
+    "colour": "B",
+    "typography": "A",
+    "density": "B"
+   },
+   {
+    "id": "q08",
+    "ship": "A",
+    "margin": "slight",
+    "why": "A puts '부가세 없음' right beside ₩990,000 and on the phone fits all three items as compact '3편 × 250,000 = 750,000' rows, while B's phone spreads each item across a tall row with wide gaps so only one item fits on the first screen.",
+    "hierarchy": "same",
+    "colour": "same",
+    "typography": "A",
+    "density": "A"
+   },
+   {
+    "id": "q09",
+    "ship": "B",
+    "margin": "slight",
+    "why": "B's tape lists 공급가액, 견적 금액 with a '부가세 없음' tag, 소득세, 지방소득세 and 입금될 금액 as separate lines with calculator marks so the two amounts cannot be confused, while A folds them into a paragraph of small text and shows a stray red '보내는 사람 이름을 적어 주세요' under a filled-in sender.",
+    "hierarchy": "B",
+    "colour": "B",
+    "typography": "B",
+    "density": "same"
+   },
+   {
+    "id": "q10",
+    "ship": "B",
+    "margin": "slight",
+    "why": "B's first screen is complete, with the three score parts and the mission checkbox in one row above the button, while A cuts the mission card in half under the sticky footer and jams the tooltip text together as '오늘 라인67.56'.",
+    "hierarchy": "same",
+    "colour": "A",
+    "typography": "B",
+    "density": "B"
+   },
+   {
+    "id": "q11",
+    "ship": "B",
+    "margin": "clear",
+    "why": "A fills the first screen with a tall solid-blue opponent panel, a half-empty 서연 card and a full-width black scoreboard band, while B stays light, codes the two players blue and orange throughout, and shows the '다 걸었어요' mission check without scrolling.",
+    "hierarchy": "B",
+    "colour": "B",
+    "typography": "B",
+    "density": "B"
+   },
+   {
+    "id": "q12",
+    "ship": "B",
+    "margin": "slight",
+    "why": "B keeps the dial numbers upright and puts both scores and '63점 뒤져 있어요' in one card, while A rotates the scale so 68.3, 68.4 and 68.5 are upside down and lets the '8,000 걸음' knob overlap the edge of the mission card.",
+    "hierarchy": "B",
+    "colour": "same",
+    "typography": "B",
+    "density": "same"
+   }
+  ],
+  [
+   {
+    "id": "q05",
+    "ship": "B",
+    "margin": "slight",
+    "why": "B opens on the 412,000원 balance with its bar and a pinned receipt whose 32,000 total is highlighted, while A gives about a third of the first screen to an empty black photo backdrop and hides the 항목 choices under the sticky 올리기 button.",
+    "hierarchy": "B",
+    "colour": "B",
+    "typography": "same",
+    "density": "B"
+   },
+   {
+    "id": "q06",
+    "ship": "B",
+    "margin": "clear",
+    "why": "B keeps the ledger in view with row 15 오수민 highlighted and the blank 송장 칸 right under the scan field, while A's oversized '남은 상자 5' headline (with '보류' and '1' broken onto separate lines) pushes the table down to the already-finished rows 1-8.",
+    "hierarchy": "B",
+    "colour": "same",
+    "typography": "B",
+    "density": "B"
+   },
+   {
+    "id": "q07",
+    "ship": "B",
+    "margin": "slight",
+    "why": "B's label card carries the 15 badge, the channel and a dashed 송장 번호 slot, with the unresolved-orders warning as a quiet inline strip, while A puts a black tooltip pill ('3건이아직' run together) above the scan bar and leaves its right column mostly empty.",
+    "hierarchy": "B",
+    "colour": "B",
+    "typography": "B",
+    "density": "B"
+   },
+   {
+    "id": "q08",
+    "ship": "A",
+    "margin": "slight",
+    "why": "A shows the finished ₩990,000 / 일금 구십구만 원정 with '부가세 없음' beside it and fits all four item rows on the phone, while B's phone rows are stretched with loose '3 편 × 250,000 =' spacing and its third row still reads 0 under a 930,000 total.",
+    "hierarchy": "same",
+    "colour": "same",
+    "typography": "A",
+    "density": "A"
+   },
+   {
+    "id": "q09",
+    "ship": "B",
+    "margin": "slight",
+    "why": "B's tape fits in one view and names both amounts on it (견적 금액 with a 부가세 없음 tag, then 소득세 and 지방소득세 down to 입금될 금액) beside a full-width 끊어서 링크 만들기 button, while A's tape runs off the screen and ends in a red '보내는 사람 이름을 적어 주세요' error.",
+    "hierarchy": "B",
+    "colour": "same",
+    "typography": "same",
+    "density": "B"
+   },
+   {
+    "id": "q10",
+    "ship": "B",
+    "margin": "slight",
+    "why": "B labels the line on the chart itself (오늘 라인 67.56, 내 라인, 66.98) and ends the first screen with three complete score tiles and the mission checkbox, while A needs a legend row, runs '오늘 라인67.56' together and leaves the mission card cut off under the button.",
+    "hierarchy": "B",
+    "colour": "same",
+    "typography": "B",
+    "density": "B"
+   },
+   {
+    "id": "q11",
+    "ship": "B",
+    "margin": "clear",
+    "why": "B keeps one meaning per colour (blue 서연 bars, orange 새벽등산) on a light round table with the mission row visible, while A makes the opponent's solid blue card and a full-width black panel the heaviest things on the screen and leaves 서연's own card half empty.",
+    "hierarchy": "B",
+    "colour": "B",
+    "typography": "B",
+    "density": "B"
+   },
+   {
+    "id": "q12",
+    "ship": "B",
+    "margin": "clear",
+    "why": "B's dial has upright numerals, a needle at 67.6 and a 14-segment ring under a single score card that says '63점 뒤져 있어요', while A's dial prints half its numbers upside down and its ring mixes a dark arc, a green squiggle and a knob that are hard to read.",
+    "hierarchy": "B",
+    "colour": "B",
+    "typography": "B",
+    "density": "same"
+   },
+   {
+    "id": "q01",
+    "ship": "B",
+    "margin": "slight",
+    "why": "B prints each day's score (96 97 53 99 88) under the day numbers on a graph-paper chart whose coral line matches the button, while A's scrolled view leaves a stray '대결 설정' sheet on the page and draws the line in a darker red unrelated to its coral button.",
+    "hierarchy": "B",
+    "colour": "B",
+    "typography": "same",
+    "density": "A"
+   },
+   {
+    "id": "q02",
+    "ship": "B",
+    "margin": "slight",
+    "why": "B states the standing at once with 433, −63, 496 and a centred '63점 뒤져 있어요' above a clean score panel, while A wraps '100' into '10 / 0' in the round cells and squeezes the verdict into the divider between the two scores.",
+    "hierarchy": "B",
+    "colour": "A",
+    "typography": "B",
+    "density": "same"
+   },
+   {
+    "id": "q03",
+    "ship": "A",
+    "margin": "slight",
+    "why": "A's dial centre is a pile of overlapping text but the rest reads cleanly down to one '오늘 체중 맞추기' button, while B stacks three rows of competing buttons (오늘 체중 기록, 닫기/−/67.6kg 기록/+, 고치기/날짜별 점수) over a clipped card and leaves stray arrow marks beside the dial.",
+    "hierarchy": "A",
+    "colour": "same",
+    "typography": "B",
+    "density": "A"
+   },
+   {
+    "id": "q04",
+    "ship": "A",
+    "margin": "slight",
+    "why": "A keeps six ledger rows at an even height with one-line entries and a red 영수증 찍기 button, while B's entries wrap ('11월 회비 / 3명') into uneven tall rows with grey bars under every balance.",
+    "hierarchy": "same",
+    "colour": "A",
+    "typography": "A",
+    "density": "A"
+   }
+  ],
+  [
+   {
+    "id": "q09",
+    "ship": "B",
+    "margin": "slight",
+    "why": "B's tape reads as a finished calculator slip that names both amounts on separate bold lines (견적 금액 with a '부가세 없음' chip, then 소득세/지방소득세 and 입금될 금액), while A folds them into one '공급가액 · 견적 금액' line, wraps the header dates awkwardly and shows a red '보내는 사람 이름을 적어 주세요' error under a sender that is already filled in.",
+    "hierarchy": "B",
+    "colour": "same",
+    "typography": "B",
+    "density": "same"
+   },
+   {
+    "id": "q10",
+    "ship": "B",
+    "margin": "slight",
+    "why": "B labels the line, the 3-day average and the 66.98 goal directly on the graph and fits the three score cells with the mission checkbox above the button, whereas A's first screen cuts the mission card in half behind the sticky bar and runs '오늘 라인67.56' together in its callout.",
+    "hierarchy": "B",
+    "colour": "same",
+    "typography": "B",
+    "density": "B"
+   },
+   {
+    "id": "q11",
+    "ship": "B",
+    "margin": "slight",
+    "why": "B fits both scores, the 14-round grid, the mission checkbox and the record button on one calm light screen, while A spends the first screen on a flooded blue opponent card beside a half-empty white card and a black scoreboard band with '기록대기' stacked vertically, leaving the mission hidden behind the sticky bar.",
+    "hierarchy": "same",
+    "colour": "B",
+    "typography": "B",
+    "density": "B"
+   },
+   {
+    "id": "q12",
+    "ship": "B",
+    "margin": "slight",
+    "why": "B's dial keeps every numeral upright and puts both scores and '63점 뒤져 있어요' in one card above it, while A's rotated scale prints 68.3 to 68.5 and 67.0 upside down and floats an 8,000 circle over the edge of the mission card.",
+    "hierarchy": "B",
+    "colour": "same",
+    "typography": "B",
+    "density": "same"
+   },
+   {
+    "id": "q01",
+    "ship": "A",
+    "margin": "slight",
+    "why": "A frames the graph with margins, labels the line and '14일 66.98kg' in place and fits the three score cells cleanly above the button, while B bleeds the grid edge to edge with an empty band above 68.0 and squeezes the '기록 0/20 · 라인 0/40 · 미션' row against the sticky bar.",
+    "hierarchy": "A",
+    "colour": "same",
+    "typography": "A",
+    "density": "A"
+   },
+   {
+    "id": "q02",
+    "ship": "B",
+    "margin": "slight",
+    "why": "B's dark scoreboard card, centred '63점 뒤져 있어요' and single mission row with one checkbox look finished, while A breaks '100' into '10 / 0' over the opponent's bars and leaves two large blank squares for the mission with no clear tap target.",
+    "hierarchy": "B",
+    "colour": "A",
+    "typography": "B",
+    "density": "same"
+   },
+   {
+    "id": "q03",
+    "ship": "A",
+    "margin": "slight",
+    "why": "Both are broken, but A's fault is confined to overlapping text in the dial centre while its score row, mission, cheer and single '오늘 체중 맞추기' button are clear, whereas B piles six buttons (오늘 체중 기록, 닫기, −, 67.6kg 기록, +, 고치기, 날짜별 점수) over a clipped mission card and leaves stray needle marks outside the dial.",
+    "hierarchy": "A",
+    "colour": "same",
+    "typography": "B",
+    "density": "A"
+   },
+   {
+    "id": "q04",
+    "ship": "A",
+    "margin": "slight",
+    "why": "A's passbook rows keep an even height with bold signed amounts and a single brick-red '영수증 찍기' button, while B wraps '11월 회비 / 3명' and member names into ragged tall rows and adds a grey bar under every balance.",
+    "hierarchy": "A",
+    "colour": "A",
+    "typography": "A",
+    "density": "A"
+   },
+   {
+    "id": "q05",
+    "ship": "A",
+    "margin": "clear",
+    "why": "A shows the receipt being recorded, with the photographed slip, its highlighted 합계 26,600, the '영수증 = 모임이 낸 돈' card and one '26,600원 올리기' button, while B shows the ledger home under a 총무/회원 role toggle with a stray ring glyph and a bare '나간 돈' label where the amount should be.",
+    "hierarchy": "A",
+    "colour": "A",
+    "typography": "same",
+    "density": "B"
+   },
+   {
+    "id": "q06",
+    "ship": "B",
+    "margin": "clear",
+    "why": "B folds rows 1 to 13 away and shows order 15 오수민 highlighted with its address and memo next to the scan field and red tracking numbers, while A gives the top of the screen to a giant '남은 상자 5' headline with a wrapped '보류 / 1' and a ledger that starts at row 1, leaving the current order below the fold.",
+    "hierarchy": "B",
+    "colour": "B",
+    "typography": "B",
+    "density": "B"
+   },
+   {
+    "id": "q07",
+    "ship": "B",
+    "margin": "slight",
+    "why": "B's label card carries the order number 15 and channel, its side cards name the flagged orders (20 이도현 상세주소 없음, 21·22 같은 주문 2번) and the warning sits in amber under the scan field, while A reduces them to bare '3' and '1' tiles and a black bubble reading '3건이아직' with a missing space.",
+    "hierarchy": "B",
+    "colour": "B",
+    "typography": "same",
+    "density": "B"
+   },
+   {
+    "id": "q08",
+    "ship": "A",
+    "margin": "slight",
+    "why": "A labels the figure '견적 금액' with '부가세 없음' right beside ₩990,000 and its phone view shows all three item lines and the empty fourth as compact '3편 × 250,000 = 750,000' rows, while B's phone spends the first screen on header fields and spreads each item across a loosely spaced row.",
+    "hierarchy": "A",
+    "colour": "same",
+    "typography": "same",
+    "density": "A"
+   }
+  ]
+ ]
+}

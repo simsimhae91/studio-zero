@@ -1,0 +1,129 @@
+{
+ "file": "/Users/hosoo/project/conclave/.design-lab/runs/treatment/duel/c//ws/docs/mockups/c.html",
+ "template": "mobile-expo",
+ "phone": {
+  "title": "라인전 · 체중계 다이얼",
+  "headline": {
+   "text": "67.6",
+   "px": 48,
+   "lines": 1,
+   "weight": 800
+  },
+  "seed": "{\"hue\":168,\"chroma\":0.14,\"lightness\":0.55,\"neutral_chroma\":0.002,\"corners\":\"round\",\"face\":\"suite\",\"source\":\"욕실 바닥의 오래된 법랑 아날로그 체중계, 민트빛 녹청 몸체와 둥근 유리 눈금판에서 색과 모양을 가져왔다.\"}",
+  "tokens": {
+   "--sz-brand": [
+    0,
+    98,
+    73
+   ],
+   "--sz-brand-soft": [
+    205,
+    246,
+    229
+   ],
+   "--sz-accent": [
+    0,
+    88,
+    65
+   ],
+   "--sz-bg": [
+    249,
+    250,
+    250
+   ],
+   "--sz-surface": [
+    253,
+    255,
+    254
+   ],
+   "--sz-fg": [
+    21,
+    22,
+    22
+   ],
+   "--sz-brand-2": null,
+   "--sz-second": [
+    142,
+    51,
+    108
+   ]
+  },
+  "viewport": {
+   "vw": 393,
+   "vh": 852
+  },
+  "screensLong": 1,
+  "type": {
+   "families": [
+    [
+     "SUITE Variable",
+     265
+    ]
+   ],
+   "sizesFirstScreen": [
+    [
+     12,
+     45
+    ],
+    [
+     14,
+     158
+    ],
+    [
+     16,
+     38
+    ],
+    [
+     20,
+     9
+    ],
+    [
+     30,
+     8
+    ],
+    [
+     48,
+     7
+    ]
+   ],
+   "distinctSizes": 6,
+   "distinctSizesFirstScreen": 6,
+   "microSharePct": 17,
+   "microSharePctFirstScreen": 17,
+   "sentencesAtMicro": [],
+   "bodySharePct": 14.3,
+   "largestPx": 48,
+   "figuresAtLargest": [
+    "67.6",
+    "+60"
+   ],
+   "heavyWeightSharePct": 46.8,
+   "turnedText": [],
+   "stackedText": [],
+   "endAlignedText": [],
+   "monoOutsideCode": []
+  },
+  "layout": {
+   "controlsFirstScreen": 5,
+   "cards": 3,
+   "cardsFirstScreen": 3,
+   "halfEmptyCards": [],
+   "nestedCards": 0,
+   "saidTwice": [
+    "67.6 x2",
+    "오늘 체중 x2"
+   ],
+   "figuresTwice": [
+    "67.6 x3"
+   ]
+  },
+  "colour": {
+   "saturatedPct": 1.3,
+   "darkPct": 2.3,
+   "brandPct": 5.8,
+   "secondPct": 1.3,
+   "blankLeftPct": 48,
+   "blankRightPct": 50.8
+  }
+ }
+}
