@@ -3,7 +3,8 @@
 // plan, once on the result, with at most one corrective patch), and the ledger entry every verdict leaves.
 // The engine, the planner and the reviewer are scripted; the harness, the store, git and the sandbox emulation are real.
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import type Anthropic from '@anthropic-ai/sdk';
@@ -194,7 +195,7 @@ async function rig(p: { turns: Block[][]; plans: unknown[]; compiler: (CompilerO
 
 const of = <T extends EventEnvelope['body']['type']>(bodies: EventEnvelope['body'][], type: T): Extract<EventEnvelope['body'], { type: T }>[] => bodies.flatMap((b) => (b.type === type ? [b as Extract<EventEnvelope['body'], { type: T }>] : []));
 const lastUser = (params: Anthropic.Beta.MessageCreateParams): string => String(params.messages.at(-1)!.content);
-const PLAN = { summary: '리필 계산대를 만든다.', steps: ['계산 캔버스', '단가 픽스처'], auditRoutes: ['/'], openQuestions: [] };
+const PLAN = { summary: '리필 계산대를 만든다.', steps: ['계산 캔버스', '단가 픽스처'], auditRoutes: ['/'], openQuestions: [], screens: SCREEN_SPEC };
 
 test('no anchor table, no code: an engine that will not write a valid table is stopped before the build starts', async () => {
   const r = await rig({
@@ -405,20 +406,70 @@ test('a task that waited out a usage limit keeps who reviewed it: the receipt of
   }
 });
 
+test('the screen spec is fixed before code like the anchor table: the planner\'s draft is committed, and without one the engine writes it first or the work is not accepted', async () => {
+  // ---- the planner drafts it: checked and committed before the first line of the work
+  const drafted = await rig({
+    plans: [{ ...PLAN, anchor: ANCHOR }],
+    turns: [[use('tu_1', 'write_file', { path: 'src/App.tsx', content: 'export const price = 2000;\n' })], [say('계산대를 만들었습니다.')]],
+    compiler: [compiled(true)],
+    rounds: [[{ eval: visual, passed: true, detail: 'score 96/100, grade S', audit: audit('S', 0) }]],
+  });
+  try {
+    const task = await drafted.run('리필 스테이션 계산기를 만들어줘');
+    assert.equal(task.state, 'succeeded', task.error ?? '');
+    assert.match(JSON.stringify(drafted.model.planned[0]!.messages[0]!.content), /This task needs a screen spec: fill in \\"screens\\"\./);
+    const log = (await drafted.d.daemon.sandboxes.exec(project, `git log --format=%s ${task.branch}`)).stdout.trim().split('\n');
+    assert.ok(log.indexOf('docs: screen spec') > log.findIndex((subject) => subject.startsWith('feat:')), `the spec is committed before the work: ${log.join(' | ')}`);
+    assert.deepEqual(JSON.parse(readFileSync(join(drafted.d.workspace, SCREEN_SPEC_FILE), 'utf8')).tasks.map((t: { id: string }) => t.id), ['log', 'undo']);
+    assert.deepEqual(of(drafted.bodies(task.id), 'gate.result').filter((g) => g.gate === 'screens').map((g) => g.passed), [true]);
+    assert.ok(!lastUser(drafted.model.sent[0]!).includes('has no screen spec that holds yet'), 'the engine is not asked for what is already there');
+  } finally {
+    await drafted.d.cleanup();
+  }
+
+  // ---- no draft that holds: the engine is told to write it first, and is sent back until it has
+  const owed = await rig({
+    plans: [{ ...PLAN, anchor: ANCHOR, screens: { ...SCREEN_SPEC, tasks: [] } }],
+    turns: [
+      [use('tu_1', 'write_file', { path: 'src/App.tsx', content: 'export const price = 2000;\n' })], [say('계산대를 만들었습니다.')],
+      [use('tu_2', 'write_file', { path: SCREEN_SPEC_FILE, content: JSON.stringify(SCREEN_SPEC) })], [say('화면 명세를 썼습니다.')],
+    ],
+    compiler: [compiled(true), compiled(true)],
+    rounds: [[{ eval: visual, passed: true, detail: 'score 96/100, grade S', audit: audit('S', 0) }]],
+  });
+  try {
+    const task = await owed.run('리필 스테이션 계산기를 만들어줘');
+    assert.equal(task.state, 'succeeded', task.error ?? '');
+    const opening = lastUser(owed.model.sent[0]!);
+    assert.match(opening, /This project has no screen spec that holds yet\. Before any interface code, write docs\/screens\.json, then build to it; the work is not accepted without one\./);
+    assert.match(opening, /What the check found:\n<untrusted-data id="[0-9a-f]{24}" source="sandbox-output">\n- tasks is empty: state the core flow/);
+    assert.deepEqual(of(owed.bodies(task.id), 'gate.result').filter((g) => g.gate === 'screens').map((g) => g.passed), [false], 'the first round stopped at the missing spec; the second found it');
+    assert.match(lastUser(owed.model.sent[2]!), /Check "screen-spec" failed:[\s\S]*docs\/screens\.json does not hold as the screen spec for this work[\s\S]*docs\/screens\.json is missing\./);
+    assert.deepEqual(of(owed.bodies(task.id), 'task.phase').map((p) => `${p.phase}:${p.round}`), ['plan:0', 'execute:1', 'verify:1', 'execute:2', 'verify:2', 'reflect:0']);
+  } finally {
+    await owed.d.cleanup();
+  }
+});
+
 test('a build that follows a design: planned from the screen spec and the approved page, its core flow walked on the app and put on the receipt', async () => {
   const walked = (presses: number) => ({ id: 'log', reached: true, stopped: null, stoppedAtStep: null, presses, typed: 0, scrolls: 0, smallestTargetPx: 48, answered: presses, responseMs: 200 });
   const asked: unknown[] = [];
+  // The audit of the round photographed one of the spec's states; the picture is an artifact like any capture.
+  const shot = join(mkdtempSync(join(tmpdir(), 'sz-state-')), 'empty.png');
+  writeFileSync(shot, Buffer.from('89504e470d0a1a0a', 'hex'));
+  const withState: AuditReport = { ...audit('S', 0), screenshots: [{ viewport: 'desktop-1440', route: '/?state=empty', fold: 0, artifactId: 'art_state', width: 1440, height: 900, state: 'H-01 기록 없음' }] };
   const r = await rig({
     plans: [{ ...PLAN, anchor: ANCHOR }],
     turns: [[use('tu_1', 'write_file', { path: 'src/App.tsx', content: 'export const price = 2000;\n' })], [say('장부를 만들었습니다.')]],
     compiler: [compiled(true)],
-    rounds: [[{ eval: visual, passed: true, detail: 'score 96/100, grade S', audit: audit('S', 0) }]],
+    rounds: [[{ eval: visual, passed: true, detail: 'score 96/100, grade S', audit: withState }]],
     critique: { verdict: '이대로 만드세요.', defaults: [], gaps: [], blandness: [] },
     acceptance: { verdict: 'pass', summary: '약속대로입니다.', unmet: [], copy: [], patch: null },
     // The first task of the flow goes through in two presses; the second stops under a toast.
     walk: async (_project, tasks) => (asked.push(tasks), { route: '/', tasks: [walked(2), { ...walked(0), id: 'undo', reached: false, stopped: 'covered', stoppedAtStep: 1, smallestTargetPx: null }], problems: ['task "undo" (방금 적은 것을 되돌린다): the control for step 1 lies under another element at its centre.'] }),
   });
   try {
+    r.d.daemon.store.insertArtifact({ id: 'art_state', projectId: project.id, mime: 'image/png', file: shot, createdAt: 1 });
     // The design branch as a design task leaves it: the spec and the page the owner picked.
     await r.d.daemon.provisioner.ensure(project);
     await r.d.daemon.sandboxes.writeFile(project, SCREEN_SPEC_FILE, JSON.stringify(SCREEN_SPEC));
@@ -427,6 +478,7 @@ test('a build that follows a design: planned from the screen spec and the approv
 
     const task = await r.run('설계대로 MVP를 구현해줘.\n\n첫 화면은 docs/mockups/b.html 시안을 기준으로 만들어줘.');
     assert.equal(task.state, 'succeeded', task.error ?? '');
+    assert.match(JSON.stringify(r.model.planned[0]!.messages[0]!.content), /No screen spec is needed from you for this task/, 'the design task\'s spec is the one that stands');
 
     // --- the planner saw the product that was approved, as data
     const planned = JSON.stringify(r.model.planned[0]!.messages[0]!.content);
@@ -443,6 +495,11 @@ test('a build that follows a design: planned from the screen spec and the approv
     assert.match(bottom.parts.find((part) => typeof part === 'string' && part.startsWith('Screen spec:')) as string, /source="engine-output">\nCore moment: 지우가[\s\S]*H-01 오늘 장부/);
     assert.match(bottom.parts.find((part) => typeof part === 'string' && part.startsWith('What the studio measured:')) as string, /Core flow of the screen spec, walked on the running app: 1 of 2 task\(s\) carried out to their outcome, in 2 press\(es\) and 0 scroll\(s\), smallest control 48px, 2 of 2 control\(s\) answering the press\.\n- task "undo"/);
     assert.match(ACCEPTANCE_PROMPT, /a flow that cannot be carried out is unmet/);
+    // The states the spec lists are shown to it as the app shows them, each named, and are criteria too.
+    const states = bottom.parts.findIndex((part) => typeof part === 'string' && part.startsWith('States the screen spec lists'));
+    assert.match(String(bottom.parts[states]), /in this order:\n<untrusted-data id="[0-9a-f]{24}" source="sandbox-output">\n1\. H-01 기록 없음\n<\/untrusted-data/);
+    assert.ok(bottom.parts[states + 1] instanceof Uint8Array, 'the picture follows its label');
+    assert.match(ACCEPTANCE_PROMPT, /each has to be a finished screen that tells the person what happened and what they can do next/);
 
     // --- and it is on the receipt
     const [receipt] = r.d.daemon.studio.listLedger(project.id, 1) as [LedgerEntry];

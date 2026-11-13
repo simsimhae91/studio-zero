@@ -17,7 +17,7 @@ import { walkApp } from '../src/qa/SmokeTester.ts';
 import { toScreenReview, visionParts, type VisionInput, type VisionReply } from '../src/qa/vision.ts';
 import { VisualAuditor } from '../src/qa/VisualAuditor.ts';
 import type { OrbStackManager } from '../src/sandbox/OrbStackManager.ts';
-import { SCREEN_SPEC_FILE, checkScreenSpec, readScreenSpec, renderScreenSpec } from '../src/scratch/ScreenSpec.ts';
+import { SCREEN_SPEC_FILE, checkScreenSpec, coreStates, readScreenSpec, renderScreenSpec, stateLabel } from '../src/scratch/ScreenSpec.ts';
 import { COVERED, DEAD, FLOW_TASKS, FROZEN, OPERABLE, SCREEN_SPEC } from './fixtures-mockup.ts';
 import { quietLog, sampleProject, testDaemon } from './helpers.ts';
 
@@ -71,6 +71,10 @@ test('the screen spec check: a spec that holds, and what each miss says', () => 
   assert.match(problems((s) => void (s.tasks[0]!.screen = 'S-01', (s.screens[1] as { later?: boolean }).later = true)), /task log: it happens on S-01, which is marked "later"/);
   assert.match(problems((s) => void (s.events = [])), /events is empty/);
   assert.match(problems((s) => void (s.events[0]!.name = 'choreLogged')), /event choreLogged: the name must be snake_case/);
+
+  // What a build owes a way to look at: the states of the screens its core flow happens on, and no others.
+  assert.deepEqual(coreStates(SCREEN_SPEC).map(stateLabel), ['H-01 기록 없음', 'H-01 저장 실패']);
+  assert.deepEqual(coreStates({ ...SCREEN_SPEC, tasks: [] }), []);
 
   const text = renderScreenSpec(SCREEN_SPEC);
   assert.match(text, /^Core moment: 지우가 설거지를 끝내고 3초 안에 20분을 적는다\.\n\nCore flow:\n {2}1\. \[log\] on H-01: 설거지 20분을 적는다 → 오늘 칸에 지우의 기록이 남는다/);

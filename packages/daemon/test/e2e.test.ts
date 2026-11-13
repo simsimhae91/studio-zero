@@ -9,10 +9,14 @@ import type { EventEnvelope } from '@studio-zero/protocol';
 import { codingSystemPrompt } from '../src/harness/prompts.ts';
 import { sleep } from '../src/util/core.ts';
 import type { CommandRunner, RunResult } from '../src/util/run.ts';
+import { SCREEN_SPEC } from './fixtures-mockup.ts';
 import { sampleAnchor, dockerArgs, testDaemon } from './helpers.ts';
 
 const OWNER = { type: 'owner', via: 'desktop' } as const;
 const ok = (stdout = ''): RunResult => ({ exitCode: 0, stdout, stderr: '', truncated: false, timedOut: false, durationMs: 1 });
+
+/** A state of the screen (nothing yet, a failure), drawn like the clean page: what happened, and what to do next. */
+const STATE_PAGE = (title: string, line: string, action: string): string => CLEAN_PAGE.replace('<h1>미결제 청구서</h1>', `<h1>${title}</h1>`).replace('<p>결제를 기다리는 청구서가 3건 있습니다.</p>', `<p>${line}</p>`).replace(/<section>.*<\/section>/, `<section><a class="action" href="/">${action}</a></section>`);
 
 const SLOPPY_PAGE = `<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"></head><body style="margin:0;font-family:Arial">
 <div id="hero" style="width:900px;padding:13px;background:linear-gradient(90deg,#6366f1,#a855f7)">
@@ -64,7 +68,7 @@ function fakeAnthropic(turns: Anthropic.Beta.BetaContentBlock[][], port: number)
   const structured = (params: Anthropic.Beta.MessageCreateParams): unknown => {
     const system = String(params.system);
     if (system.startsWith('You are planning')) {
-      return { summary: 'Add an unpaid-invoices page built on the project theme.', steps: ['Describe the dev server in .studio-zero/project.json', 'Write index.html'], auditRoutes: ['/', 'javascript:alert(1)', 'https://evil.example/'], openQuestions: ['Assumed three sample invoices.'], anchor: sampleAnchor };
+      return { summary: 'Add an unpaid-invoices page built on the project theme.', steps: ['Describe the dev server in .studio-zero/project.json', 'Write index.html'], auditRoutes: ['/', 'javascript:alert(1)', 'https://evil.example/'], openQuestions: ['Assumed three sample invoices.'], anchor: sampleAnchor, screens: SCREEN_SPEC };
     }
     if (system.startsWith('You are reviewing one screen')) {
       return { archetype: 'web-app', slopScore: 8, critique: 'Calm and legible.', rubric: { hierarchy: 9, whitespace: 9, typography: 9, color: 9, copy: 9, originality: 9, tactility: 9 }, findings: [{ category: 'hierarchy', severity: 'minor', elementId: 'e1', observation: 'The action could sit closer to the customer name.', fix: 'Reduce the gap inside the section to gap-2.' }], redesignPatches: [] };
@@ -109,7 +113,14 @@ function fakeAnthropic(turns: Anthropic.Beta.BetaContentBlock[][], port: number)
   const use = (id: string, name: string, input: Record<string, unknown>): Anthropic.Beta.BetaContentBlock => ({ type: 'tool_use', id, name, input }) as Anthropic.Beta.BetaContentBlock;
   const say = (text: string): Anthropic.Beta.BetaContentBlock => ({ type: 'text', text, citations: null }) as Anthropic.Beta.BetaContentBlock;
   turns.push(
-    [say('Setting up the page.'), use('tu_1', 'write_file', { path: '.studio-zero/project.json', content: JSON.stringify({ dev: { command: 'pnpm dev', port }, routes: ['/'] }) }), use('tu_2', 'write_file', { path: 'index.html', content: SLOPPY_PAGE })],
+    [
+      say('Setting up the page.'),
+      // The screen spec lists two states on the screen the core flow happens on: each gets a route that shows it.
+      use('tu_1', 'write_file', { path: '.studio-zero/project.json', content: JSON.stringify({ dev: { command: 'pnpm dev', port }, routes: ['/'], states: [{ screen: 'H-01', name: '기록 없음', route: '/empty.html' }, { screen: 'H-01', name: '저장 실패', route: '/failed.html' }] }) }),
+      use('tu_2', 'write_file', { path: 'index.html', content: SLOPPY_PAGE }),
+      use('tu_2a', 'write_file', { path: 'empty.html', content: STATE_PAGE('아직 청구서가 없어요', '첫 청구서를 보내면 여기에 쌓입니다.', '첫 청구서 만들기') }),
+      use('tu_2b', 'write_file', { path: 'failed.html', content: STATE_PAGE('청구서를 불러오지 못했어요', '연결을 확인한 뒤 다시 불러 주세요.', '다시 불러오기') }),
+    ],
     [say('Built the invoices page.')],
     [use('tu_3', 'write_file', { path: 'index.html', content: CLEAN_PAGE }), use('tu_4', 'bash', { command: 'grep -q "미결제" index.html' })],
     [say('Rebuilt the page on the theme tokens: no fixed widths, AAA text colours, 44px action.')],
@@ -200,7 +211,7 @@ test('one task, end to end: plan → execute → audit fails → repair → audi
     assert.match(String(turn1.messages[0]!.content), /미결제 청구서 화면을 만들어줘[\s\S]*Plan drafted for this request/);
 
     const results = turn2.messages.at(-1)!.content as Anthropic.Beta.BetaToolResultBlockParam[];
-    assert.deepEqual(results.map((r) => [r.type, r.tool_use_id]), [['tool_result', 'tu_1'], ['tool_result', 'tu_2']], 'all results of a turn go back in one message');
+    assert.deepEqual(results.map((r) => [r.type, r.tool_use_id]), [['tool_result', 'tu_1'], ['tool_result', 'tu_2'], ['tool_result', 'tu_2a'], ['tool_result', 'tu_2b']], 'all results of a turn go back in one message');
     assert.match(String(results[0]!.content), /^<untrusted-data id="[0-9a-f]{24}" source="sandbox-output" tool="write_file">/);
 
     const feedback = String(repair.messages.at(-1)!.content);
@@ -215,6 +226,9 @@ test('one task, end to end: plan → execute → audit fails → repair → audi
     const audit = studio.getAudit(second.auditId);
     assert.deepEqual([...new Set(audit.screenshots.map((s) => s.viewport))], ['iphone-15-pro', 'ipad-pro-11', 'desktop-1440']);
     assert.deepEqual([...new Set(audit.findings.filter((f) => f.source === 'dom').map((f) => f.rule))], ['type/font-not-loaded'], 'light and dark both clean apart from the missing font file');
+    // The states the screen spec lists were opened where the project says they show, at the size the product is used at, and photographed.
+    assert.deepEqual(audit.screenshots.filter((s) => s.state !== undefined).map((s) => [s.state, s.route, s.viewport, s.fold]), [['H-01 기록 없음', '/empty.html', 'desktop-1440', 0], ['H-01 저장 실패', '/failed.html', 'desktop-1440', 0]]);
+    assert.ok(audit.findings.every((f) => !f.rule.startsWith('states/')), 'each is there, and each is a different screen from the usual one');
     assert.equal(audit.rubric?.hierarchy, 9);
     const visionFinding = audit.findings.find((f) => f.source === 'vlm')!;
     assert.equal(visionFinding.selector, 'main > h1', 'a reviewer finding is tied back to a selector through the element id');

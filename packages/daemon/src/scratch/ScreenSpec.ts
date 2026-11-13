@@ -124,3 +124,20 @@ export function renderScreenSpec(spec: ScreenSpec, maxChars = 14_000): string {
   const text = lines.join('\n');
   return text.length > maxChars ? `${text.slice(0, maxChars)}\n(cut)` : text;
 }
+
+/** A state of a screen, named as the audit and the project file name it. */
+export interface NamedState {
+  screen: string;
+  name: string;
+}
+export const stateLabel = (state: NamedState): string => `${state.screen} ${state.name}`;
+
+/**
+ * The states a build owes a way to look at: every state the spec lists on a screen its core flow happens on.
+ * Those are the screens the product exists for, and their other states (nothing yet, a failure, a limit) are
+ * the ones a user will meet first when something is off.
+ */
+export function coreStates(spec: ScreenSpec): NamedState[] {
+  const core = new Set(spec.tasks.map((task) => task.screen));
+  return spec.screens.filter((screen) => core.has(screen.id) && !screen.later).flatMap((screen) => screen.states.map((state) => ({ screen: screen.id, name: state.name.trim() }))).slice(0, 12);
+}

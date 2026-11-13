@@ -333,7 +333,16 @@ export const AuditReport = z.object({
   redesignPatches: z.array(RedesignPatch),
   findings: z.array(Finding),
   screenshots: z.array(
-    z.object({ viewport: ViewportId, route: z.string(), fold: z.number().int(), artifactId: z.string(), width: z.number(), height: z.number() }),
+    z.object({
+      viewport: ViewportId,
+      route: z.string(),
+      fold: z.number().int(),
+      artifactId: z.string(),
+      width: z.number(),
+      height: z.number(),
+      /** Set when the capture is of one of the screen spec's states and not of a route in its usual state: the screen's id and the state's name. */
+      state: z.string().optional(),
+    }),
   ),
   /**
    * The words on the audited screens and nothing else, and what the copy lint made of them. Absent on audits

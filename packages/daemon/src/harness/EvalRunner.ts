@@ -6,6 +6,7 @@ import type { EventLog } from '../events/EventLog.ts';
 import { scoreAudit } from '../qa/checks.ts';
 import { renderAuditFeedback, type VisualAuditor } from '../qa/VisualAuditor.ts';
 import { extractorScript, parseExtraction } from '../sandbox/extract.ts';
+import { SCREEN_SPEC_FILE, coreStates, readScreenSpec, stateLabel, type NamedState } from '../scratch/ScreenSpec.ts';
 import type { OrbStackManager } from '../sandbox/OrbStackManager.ts';
 import { errorMessage, excerpt, newId, type Clock } from '../util/core.ts';
 import { ensureDevServer } from './devServer.ts';
@@ -140,10 +141,25 @@ export class EvalRunner {
         if (!server.ready) {
           return { eval: ev, passed: false, audit: null, detail: `The dev server (\`${file.dev.command}\`) did not answer on port ${file.dev.port} within 90s.\n${excerpt(server.log, 4000)}` };
         }
-        const audit = await this.#auditor.audit({ project, taskId, port: file.dev.port, routes, signal: opts.signal });
+        // The states the screen spec lists on the core flow's screens: looked at where the project says they can be seen, and said where it does not.
+        const owed = await this.#owedStates(project);
+        const shown = owed.flatMap((state) => {
+          const at = file.states.find((s) => s.screen === state.screen && s.name.trim() === state.name);
+          return at ? [{ label: stateLabel(state), route: at.route }] : [];
+        });
+        const missingStates = owed.filter((state) => !file.states.some((s) => s.screen === state.screen && s.name.trim() === state.name)).map(stateLabel);
+        const audit = await this.#auditor.audit({ project, taskId, port: file.dev.port, routes, states: shown.slice(0, 6), missingStates, signal: opts.signal });
         return { eval: ev, audit, ...visualOutcome(audit, spec.minScore) };
       }
     }
+  }
+
+  /** The states this project's screen spec owes a way to see. None when it has no spec, or one that does not hold. */
+  async #owedStates(project: Project): Promise<NamedState[]> {
+    const res = await this.#sandboxes.exec(project, `[ -f ${SCREEN_SPEC_FILE} ] && head -c 262144 ${SCREEN_SPEC_FILE}`, { timeoutSec: 20, maxOutputBytes: 300_000 }).catch(() => null);
+    if (!res || res.exitCode !== 0 || res.stdout.trim() === '') return [];
+    const spec = readScreenSpec(res.stdout);
+    return spec.ok ? coreStates(spec.spec) : [];
   }
 
   /** Static slop lint over the workspace sources. Also used on its own by Kirby's before/after measurement. */

@@ -54,6 +54,10 @@ export interface AuditRequest {
   taskId: string | null;
   port: number;
   routes: string[];
+  /** Routes that show a state the screen spec lists (an empty list, a failure), each with the state's label. */
+  states?: readonly { label: string; route: string }[];
+  /** States the screen spec lists that the project gave no route for. Each becomes a finding. */
+  missingStates?: readonly string[];
   signal?: AbortSignal;
 }
 
@@ -69,6 +73,8 @@ export interface PageAuditRequest {
 interface Subject {
   route: string;
   open: (page: Page) => Promise<string | null>;
+  /** Set when this is a state of a screen and not a route in its usual state: the state's label. */
+  state?: string;
 }
 
 interface Mode {
@@ -111,18 +117,16 @@ export class VisualAuditor {
   }
 
   audit(req: AuditRequest): Promise<AuditReport> {
-    return this.#run(
-      req,
-      (host) => req.routes.map((route) => ({
-        route,
-        open: async (page) => {
-          const response = await page.goto(`http://${host}:${req.port}${route}`, { waitUntil: 'networkidle', timeout: 45_000 });
-          // A refusal or "not found" is the server's own page. Measuring it, or asking a reviewer about it, judges nothing of the product.
-          return !response || response.status() >= 400 ? `HTTP ${response?.status() ?? 'no response'}: the route did not serve the app` : null;
-        },
-      })),
-      { sealed: false, everyFirst: false, reviewAt: null },
-    ).then((ran) => ran.report);
+    const subject = (host: string, route: string, state?: string): Subject => ({
+      route,
+      ...(state === undefined ? {} : { state }),
+      open: async (page) => {
+        const response = await page.goto(`http://${host}:${req.port}${route}`, { waitUntil: 'networkidle', timeout: 45_000 });
+        // A refusal or "not found" is the server's own page. Measuring it, or asking a reviewer about it, judges nothing of the product.
+        return !response || response.status() >= 400 ? `HTTP ${response?.status() ?? 'no response'}: the route did not serve the app` : null;
+      },
+    });
+    return this.#run(req, (host) => [...req.routes.map((route) => subject(host, route)), ...(req.states ?? []).map((s) => subject(host, s.route, s.label))], { sealed: false, everyFirst: false, reviewAt: null }).then((ran) => ran.report);
   }
 
   /**
@@ -144,6 +148,14 @@ export class VisualAuditor {
     );
   }
 
+  /**
+   * States are looked at more lightly than routes, and on purpose. Each is opened once, at the size the product
+   * is first used at, measured against the contract and read for its words like any screen, and photographed;
+   * it is not put to the design reviewer (a screen that says "nothing here yet" is not where a product's design
+   * is judged, and each review is a call on the owner's subscription). The model that accepts the work is shown
+   * the pictures. What is held to is that each state the spec lists can be seen at all, and is a different
+   * screen from the usual one.
+   */
   async #run(req: Omit<AuditRequest, 'port'>, subjectsFor: (host: string) => Subject[], mode: Mode): Promise<{ report: AuditReport; slopByRoute: Map<string, number> }> {
     const auditId = newId('aud');
     const scope = { projectId: req.project.id, taskId: req.taskId };
@@ -174,16 +186,29 @@ export class VisualAuditor {
       // Screens are tried by hand at one size: the one the product is first used at. A phone app under a thumb; a
       // web product at a desk, where the pointer hovers and the keyboard is a way in.
       const tried: ViewportId = req.project.template !== 'mobile-expo' && audited.includes('desktop-1440') ? 'desktop-1440' : (audited[0] ?? 'iphone-15-pro');
+      /** The words of the first route in its usual state, at that size: what a state's screen must differ from. */
+      let usual: string | null = null;
+      for (const missing of (req.missingStates ?? []).slice(0, 8)) {
+        findings.push(stateFinding('states/not-shown', tried, req.routes[0] ?? '/', `The screen spec lists the state "${missing}", and the project gives no route that shows it, so nobody has looked at it.`, `Make the state showable on demand in development (a query your fixtures read, such as /?state=empty) and list it in .studio-zero/project.json under "states" as { "screen", "name", "route" }, with the name exactly as the spec has it.`));
+      }
       for (const viewport of audited) {
         const spec = viewports[viewport];
         for (const [routeIndex, subject] of subjects.entries()) {
           if (req.signal?.aborted) throw req.signal.reason;
           const route = subject.route;
-          const first = mode.everyFirst || routeIndex === 0;
+          const state = subject.state;
+          if (state !== undefined && viewport !== tried) continue;
+          const first = state === undefined && (mode.everyFirst || routeIndex === 0);
           const light = await this.#capture(browser, spec, 'light', subject, true, mode.sealed);
           if (!light.digest) {
             findings.push(loadFailure(viewport, route, light.error));
             continue;
+          }
+          // A state that shows the very words of the usual screen is not being shown: the route was listed and nothing reads it.
+          const shownText = light.digest.elements.map((e) => e.text).filter((text) => text !== '').join('\n');
+          if (state === undefined && routeIndex === 0 && viewport === tried) usual = shownText;
+          else if (state !== undefined && usual !== null && shownText === usual) {
+            findings.push(stateFinding('states/same-as-default', viewport, route, `The route listed for the state "${state}" shows the same screen as ${req.routes[0]}: nothing reads the state from it.`, 'Have the route put the screen into that state (from the fixtures: no items, a failed request, the limit reached), so that what a person would see then is what loads.'));
           }
           const viewportWidth = spec.context.viewport?.width ?? light.digest.width;
           const measured = runDomChecks(light.digest, { viewport, viewportWidth, route, touch: spec.touch, scope: 'full' }, contract);
@@ -200,7 +225,7 @@ export class VisualAuditor {
           }
           if (light.shift !== null) measures.layoutShift = Math.max(measures.layoutShift ?? 0, light.shift);
           // Tried by hand: pressed and held, tabbed through. On a page of its own, since trying leaves marks.
-          const probe = viewport === tried && routeIndex < MAX_PROBED_ROUTES ? await this.#probe(browser, spec, subject, mode.sealed) : null;
+          const probe = state === undefined && viewport === tried && routeIndex < MAX_PROBED_ROUTES ? await this.#probe(browser, spec, subject, mode.sealed) : null;
           if (probe) {
             measures.pressAnswer.passed += probe.press.answered;
             measures.pressAnswer.total += probe.press.probed;
@@ -216,7 +241,7 @@ export class VisualAuditor {
             const file = join(dir, `${viewport}-${routeIndex}-${fold}.png`);
             await writeFile(file, png, { mode: 0o600 });
             this.#store.insertArtifact({ id: artifactId, projectId: req.project.id, mime: 'image/png', file, createdAt: this.#clock() });
-            screenshots.push({ viewport, route, fold, artifactId, width: light.digest.width, height: Math.min(light.digest.height, light.digest.scrollHeight - fold * light.digest.height) });
+            screenshots.push({ viewport, route, fold, artifactId, width: light.digest.width, height: Math.min(light.digest.height, light.digest.scrollHeight - fold * light.digest.height), ...(state === undefined ? {} : { state }) });
           }
 
           // Dark scheme: one more render per viewport, checked only for what a colour scheme can break.
@@ -228,7 +253,7 @@ export class VisualAuditor {
             }
           }
 
-          if (light.folds.length === 0 || (mode.reviewAt !== null && !mode.reviewAt.includes(viewport))) continue;
+          if (light.folds.length === 0 || state !== undefined || (mode.reviewAt !== null && !mode.reviewAt.includes(viewport))) continue;
           screens += 1;
           if (stopped !== null) continue;
           try {
@@ -361,6 +386,10 @@ async function settle(page: Page, sealed = false): Promise<void> {
     await document.fonts.ready;
     await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
   });
+}
+
+function stateFinding(rule: string, viewport: ViewportId, route: string, message: string, fix: string): Finding {
+  return { rule, category: 'responsive', severity: 'major', source: 'dom', viewport, route, message, selector: null, bbox: null, fix, file: null, line: null };
 }
 
 function loadFailure(viewport: ViewportId, route: string, error: string): Finding {

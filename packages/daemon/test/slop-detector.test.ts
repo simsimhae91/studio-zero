@@ -333,3 +333,29 @@ test('an audit recorded before coverage was tracked reads back as what it was', 
     await d.cleanup();
   }
 });
+
+test('the screen spec\'s states are looked at where the project shows them: measured once, photographed, not reviewed; a state with no route, or one that shows the usual screen, is said', async () => {
+  const good: VisionReply = { archetype: 'web-app', slopScore: 6, critique: 'Calm and specific.', rubric: { hierarchy: 9, whitespace: 9, typography: 9, color: 9, copy: 9, originality: 9, tactility: 9 }, findings: [], redesignPatches: [] };
+  const vision = fakeVision(READY, () => good);
+  const d = await testDaemon();
+  try {
+    const { store, events } = d.daemon;
+    const project = sampleProject();
+    store.insertProject(project);
+    // The stand-in browser renders the same screen whatever is asked for: so every state "shows the usual screen".
+    const auditor = new VisualAuditor({ config: d.config, store, events, browser: fakeBrowser(SCREEN), vision: vision.bridge, clock: () => 1000, log: quietLog });
+    const report = await auditor.audit({ project, taskId: null, port: 5173, routes: ['/'], states: [{ label: 'H-01 기록 없음', route: '/?state=empty' }], missingStates: ['H-01 저장 실패'] });
+
+    assert.deepEqual(vision.calls.map((c) => [c.route, c.viewport]), [['/', 'iphone-15-pro'], ['/', 'ipad-pro-11'], ['/', 'desktop-1440']], 'a state is not put to the design reviewer');
+    assert.deepEqual(report.screenshots.filter((s) => s.state !== undefined).map((s) => [s.state, s.route, s.viewport]), [['H-01 기록 없음', '/?state=empty', 'desktop-1440']], 'and is opened at one size: the one the product is first used at');
+    const said = report.findings.filter((f) => f.rule.startsWith('states/')).map((f) => [f.rule, f.severity, f.route, f.message]);
+    assert.deepEqual(said, [
+      ['states/not-shown', 'major', '/', 'The screen spec lists the state "H-01 저장 실패", and the project gives no route that shows it, so nobody has looked at it.'],
+      ['states/same-as-default', 'major', '/?state=empty', 'The route listed for the state "H-01 기록 없음" shows the same screen as /: nothing reads the state from it.'],
+    ]);
+    assert.match(report.findings.find((f) => f.rule === 'states/not-shown')!.fix ?? '', /list it in \.studio-zero\/project\.json under "states" as \{ "screen", "name", "route" \}/);
+    assert.deepEqual([report.vision.reviewed, report.vision.expected], [3, 3], 'the review is complete without the states');
+  } finally {
+    await d.cleanup();
+  }
+});

@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { z } from 'zod';
-import { AcceptanceVerdict, Effort, ReviewerId, ReviewerPref, type AuditReport, type Phase, type Project, type Task, type TaskState } from '@studio-zero/protocol';
+import { AcceptanceVerdict, Effort, ReviewerId, ReviewerPref, ScreenSpec as ScreenSpecShape, type AuditReport, type Phase, type Project, type Task, type TaskState } from '@studio-zero/protocol';
 import { EngineId, type Config } from '../config.ts';
 import type { Store } from '../db/Store.ts';
 import type { EventLog } from '../events/EventLog.ts';
@@ -23,7 +23,7 @@ import { visualOutcome, type EvalRunner } from './EvalRunner.ts';
 import type { EngineResult, EngineSession } from './engines/Engine.ts';
 import { countCompilerErrors, emptyRun, renderEvidence, type Ledger, type RunRecord } from './Ledger.ts';
 import type { LessonBook } from './LessonBook.ts';
-import { ANCHOR_BRIEF, DRAFT_BRIEF, IDEATION_BRIEF, IDEATION_REQUIRED_FILES, IDEATION_REVISION_BRIEF, PLANNER_SYSTEM_PROMPT, codingSystemPrompt } from './prompts.ts';
+import { ANCHOR_BRIEF, DRAFT_BRIEF, IDEATION_BRIEF, IDEATION_REQUIRED_FILES, IDEATION_REVISION_BRIEF, PLANNER_SYSTEM_PROMPT, SCREEN_SPEC_RULES, codingSystemPrompt } from './prompts.ts';
 import type { ReflectionAgent } from './ReflectionAgent.ts';
 import { renderCritique, renderPatch, type Acceptance, type PlanCritique, type SandwichReviewer } from './SandwichReviewer.ts';
 import type { SelfHosting } from './SelfHosting.ts';
@@ -40,6 +40,7 @@ const Plan = z.object({
   auditRoutes: z.array(z.string()).describe('Paths of the running app to review visually afterwards, e.g. "/" or "/settings". Empty when nothing visible changes.'),
   openQuestions: z.array(z.string()).describe('Assumptions made where the request was ambiguous. Empty when there were none.'),
   anchor: AnchorTableShape.nullable().describe('The anchor table, when the request says one is needed. null otherwise.'),
+  screens: ScreenSpecShape.nullable().describe('The screen spec, when the request says one is needed. null otherwise.'),
 });
 type Plan = z.infer<typeof Plan>;
 
@@ -70,7 +71,7 @@ class Cancelled extends Error {}
  */
 const Resume = z.object({
   finalText: z.string(),
-  plan: Plan.partial({ anchor: true }).nullable(),
+  plan: Plan.partial({ anchor: true, screens: true }).nullable(),
   accepted: z.boolean().default(false),
   review: z.object({ plan: ReviewerId.nullable().catch(null), acceptance: ReviewerId.nullable().catch(null), verdict: AcceptanceVerdict.nullable().catch(null) }).nullable().default(null),
 });
@@ -273,7 +274,7 @@ export class Harness {
         // The work exists, committed on its branch. Go back to it; what is left is the verdict.
         await this.#sandboxes.checkout(project, branch);
         onBranch = true;
-        plan = resume.plan ? { ...resume.plan, anchor: null } : null;
+        plan = resume.plan ? { ...resume.plan, anchor: null, screens: null } : null;
         result = { finalText: resume.finalText, stopped: 'completed' };
       } else {
         // ---------------------------------------------------------------- Plan
@@ -297,8 +298,9 @@ export class Harness {
         // the references the owner pointed at, measured in the browser container; the anchor table; one red team.
         const references = task.references.length > 0 && !draft ? await this.#refkit.capture(project, task.id, task.references, signal) : [];
         const existing = design ? await this.#readAnchor(project) : null;
+        const specAtStart = design ? await this.#readSpec(project) : null;
         // A draft goes straight to the engine: the planning call is a model round trip the owner would wait through.
-        plan = !draft && (task.kind === 'build' || task.kind === 'refactor' || task.kind === 'kirby_materialize') ? await this.#plan(project, task, lessons.text, signal, { anchor: design && existing?.ok !== true, references }) : null;
+        plan = !draft && (task.kind === 'build' || task.kind === 'refactor' || task.kind === 'kirby_materialize') ? await this.#plan(project, task, lessons.text, signal, { anchor: design && existing?.ok !== true, screens: design && specAtStart?.ok !== true, references }) : null;
         if (plan) this.#events.emit(scope, { type: 'plan.created', summary: plan.summary, steps: plan.steps, auditRoutes: plan.auditRoutes, appliedLessonIds: lessons.ids });
         checkCancel();
 
@@ -306,6 +308,10 @@ export class Harness {
           anchor = await this.#anchor(project, task, { existing, drafted: plan?.anchor ?? null, references, send, checkCancel });
           checkCancel();
         }
+        // The other half of what is fixed before code: what each screen does. Kept if the project has one that
+        // holds; otherwise the planner's draft is checked and committed, and failing that the engine is told to
+        // write it first. Either way the work is not accepted without one (see `#verify`).
+        const specOwed = design ? await this.#screenSpec(project, task, specAtStart, plan?.screens ?? null) : null;
         let critique: PlanCritique | null = null;
         if (crossChecked && (plan !== null || anchor !== null)) {
           // The plan was drafted by Claude when there is one; otherwise what is reviewed is the engine's own work.
@@ -320,7 +326,7 @@ export class Harness {
         await open();
         // A design task that starts where a finished design already is (the owner sent it back with notes) revises it.
         const revising = ideation && (await this.#ideationDocuments(project)).length === 0;
-        result = await send(executeMessage(task, plan, lessons.text, { anchor, critique, references, revising }));
+        result = await send(executeMessage(task, plan, lessons.text, { anchor, critique, references, revising, specOwed }));
         checkCancel();
       }
 
@@ -387,6 +393,7 @@ export class Harness {
           evidence: renderEvidence(record),
           copy: record.audit?.copy && record.audit.copy.texts.length > 0 ? copyBlock(record.audit.copy.texts) : null,
           captures: await this.#firstScreen(record.audit),
+          states: await this.#stateScreens(record.audit),
           signal,
         });
         record.acceptanceReviewer = checked.reviewer;
@@ -411,7 +418,7 @@ export class Harness {
       if (waitingOn !== null) {
         // Nothing is known to be wrong and the one judgement still owed cannot be had today. The work stays on
         // its branch; the task steps out of the queue's way until a reviewer is back.
-        this.#store.kvSet(resumeKey(task.id), JSON.stringify({ finalText: excerpt(result.finalText, 6000), plan: plan ? { ...plan, anchor: null } : null, accepted, review: { plan: record.planReviewer, acceptance: record.acceptanceReviewer, verdict: record.verdict } } satisfies z.infer<typeof Resume>));
+        this.#store.kvSet(resumeKey(task.id), JSON.stringify({ finalText: excerpt(result.finalText, 6000), plan: plan ? { ...plan, anchor: null, screens: null } : null, accepted, review: { plan: record.planReviewer, acceptance: record.acceptanceReviewer, verdict: record.verdict } } satisfies z.infer<typeof Resume>));
         task = this.#store.updateTask(task.id, { state: 'suspended', phase: null });
         this.#events.emit(scope, { type: 'notice', level: 'warn', message: `The design review is waiting on a usage limit (${waitingOn}). The work is committed on ${branch}; this task is suspended and resumes at verification by itself when a reviewer answers.` });
         this.#events.emit(scope, { type: 'task.state', state: 'suspended', error: null });
@@ -489,7 +496,7 @@ export class Harness {
     }
   }
 
-  async #plan(project: Project, task: Task, lessonText: string, signal: AbortSignal, want: { anchor: boolean; references: readonly ReferenceCapture[] }): Promise<Plan | null> {
+  async #plan(project: Project, task: Task, lessonText: string, signal: AbortSignal, want: { anchor: boolean; screens: boolean; references: readonly ReferenceCapture[] }): Promise<Plan | null> {
     if (!this.#claude.isConfigured()) return null; // bridge-only installs: the engine plans for itself
     const captured = want.references.filter((r) => r.ok);
     const listing = await this.#sandboxes.exec(project, 'git ls-files --cached --others --exclude-standard | head -n 400', { timeoutSec: 30 });
@@ -506,6 +513,7 @@ export class Harness {
         ...(lessonText ? [textBlock(lessonText)] : []),
         textBlock(`Project stack template: ${project.template}. Files in the workspace:\n${untrusted('sandbox-output', listing.stdout.trim() || '(empty workspace)')}`),
         textBlock(want.anchor ? 'This task needs an anchor table: fill in "anchor".' : 'No anchor table is needed from you for this task: set "anchor" to null.'),
+        textBlock(want.screens ? 'This task needs a screen spec: fill in "screens".' : 'No screen spec is needed from you for this task: set "screens" to null.'),
         ...(await this.#approvedDesign(project, task)),
         // The planner is shown the references themselves; the engine, which has no eyes, gets the measurements.
         ...captured.flatMap((r) => [
@@ -517,7 +525,26 @@ export class Harness {
       ],
     });
     // The routes end up in URLs the QA browser visits; only plain app paths are kept.
-    return { ...plan, steps: plan.steps.slice(0, 20), auditRoutes: plan.auditRoutes.filter((r) => /^\/[\w\-./~%]*$/.test(r) && r.length <= 200).slice(0, 6), openQuestions: plan.openQuestions.slice(0, 6), anchor: want.anchor ? (plan.anchor ?? null) : null };
+    return { ...plan, screens: want.screens ? (plan.screens ?? null) : null, steps: plan.steps.slice(0, 20), auditRoutes: plan.auditRoutes.filter((r) => /^\/[\w\-./~%]*$/.test(r) && r.length <= 200).slice(0, 6), openQuestions: plan.openQuestions.slice(0, 6), anchor: want.anchor ? (plan.anchor ?? null) : null };
+  }
+
+  /**
+   * The screen spec a design build owes before code. Returns null when the project has one that holds (its
+   * own, or the planner's draft, which is committed here), and otherwise what is wrong, for the engine to be
+   * told to write it first.
+   */
+  async #screenSpec(project: Project, task: Task, atStart: ScreenSpecRead | null, drafted: unknown): Promise<string[] | null> {
+    if (atStart?.ok) return null;
+    const scope = { projectId: project.id, taskId: task.id };
+    const started = Date.now();
+    const read = drafted === null || drafted === undefined ? null : readScreenSpec(drafted);
+    if (read?.ok) {
+      await this.#sandboxes.writeFile(project, SCREEN_SPEC_FILE, `${JSON.stringify(read.spec, null, 2)}\n`);
+      await this.#sandboxes.commitAll(project, `docs: screen spec\n\nStudio Zero task ${task.id}`);
+      this.#events.emit(scope, { type: 'gate.result', gate: 'screens', name: SCREEN_SPEC_FILE, passed: true, exitCode: null, durationMs: Date.now() - started, detail: '' });
+      return null;
+    }
+    return read ? read.problems : atStart ? atStart.problems : [`${SCREEN_SPEC_FILE} is missing.`];
   }
 
   /** The screen spec as the workspace has it: read and checked, or null when there is no such file. */
@@ -608,6 +635,18 @@ export class Harness {
     return captures;
   }
 
+  /** The screen spec's states as the last audit photographed them: the top of each, up to four. */
+  async #stateScreens(audit: AuditReport | null): Promise<{ label: string; png: Uint8Array }[]> {
+    const shots = (audit?.screenshots ?? []).filter((shot) => shot.state !== undefined && shot.fold === 0).slice(0, 4);
+    const states: { label: string; png: Uint8Array }[] = [];
+    for (const shot of shots) {
+      const artifact = this.#store.getArtifact(shot.artifactId);
+      const png = artifact ? await readFile(artifact.file).catch(() => null) : null;
+      if (png) states.push({ label: shot.state!, png });
+    }
+    return states;
+  }
+
   /**
    * One verification round. Stages run in order of cost and of how little there is to argue about, and the round
    * ends at the first stage that fails: there is no point loading a page that does not compile, or measuring
@@ -642,6 +681,16 @@ export class Harness {
         const detail = table ? table.problems.join('\n') : `${ANCHOR_FILE} is missing.`;
         this.#events.emit(scope, { type: 'gate.result', gate: 'anchor', name: ANCHOR_FILE, passed: false, exitCode: null, durationMs: 0, detail });
         return { failures: [{ name: 'anchor-table', source: 'sandbox-output', detail: `${ANCHOR_FILE} no longer holds as the anchor table for this work:\n${detail}` }], unverified: [], waitingOn: null };
+      }
+    }
+
+    // And it may not be left without a screen spec that holds: what the screens do is fixed like what they are built around.
+    if (run.design) {
+      const spec = await this.#readSpec(project);
+      if (!spec?.ok) {
+        const detail = spec ? spec.problems.join('\n') : `${SCREEN_SPEC_FILE} is missing.`;
+        this.#events.emit(scope, { type: 'gate.result', gate: 'screens', name: SCREEN_SPEC_FILE, passed: false, exitCode: null, durationMs: 0, detail });
+        return { failures: [{ name: 'screen-spec', source: 'sandbox-output', detail: `${SCREEN_SPEC_FILE} does not hold as the screen spec for this work. Write or correct it in the shape you were given:\n${detail}` }], unverified: [], waitingOn: null };
       }
     }
 
@@ -786,11 +835,15 @@ function referenceBlock(ref: ReferenceCapture): string {
   return `Reference page ${ref.url} as measured in a browser. Read principles out of it; its numbers and assets are its own and are not to be carried across:\n${untrusted('browser-page', `${ref.title}\n${ref.summary}`, { url: ref.url })}`;
 }
 
-function executeMessage(task: Task, plan: Plan | null, lessonText: string, handed: { anchor: AnchorTable | null; critique: PlanCritique | null; references: readonly ReferenceCapture[]; revising?: boolean } = { anchor: null, critique: null, references: [] }): string {
+function executeMessage(task: Task, plan: Plan | null, lessonText: string, handed: { anchor: AnchorTable | null; critique: PlanCritique | null; references: readonly ReferenceCapture[]; revising?: boolean; specOwed?: string[] | null } = { anchor: null, critique: null, references: [] }): string {
   const parts = [task.kind === 'ideate' ? (handed.revising ? IDEATION_REVISION_BRIEF : IDEATION_BRIEF) : '', task.track === 'fast' && task.kind !== 'ideate' ? DRAFT_BRIEF : '', `The owner's request:\n${task.prompt}`];
   if (plan) parts.push(`Plan drafted for this request (follow it unless the code shows it is wrong; say so if you deviate):\n${planText(plan)}`);
   // The table's cells were written by a model that had read reference pages, so they travel as data; the instruction to build to it is the harness's.
   if (handed.anchor) parts.push(`The anchor table for this work is committed at ${ANCHOR_FILE}. Build to it: the idea, the first screen as it describes it, and our own values, not the references'.\n${untrusted('engine-output', renderAnchorTable(handed.anchor))}`);
+  // No screen spec holds for this project yet: the engine writes it first. What was wrong is tool output, so it travels as data.
+  if (handed.specOwed) {
+    parts.push(`This project has no screen spec that holds yet. Before any interface code, write ${SCREEN_SPEC_FILE}, then build to it; the work is not accepted without one. ${SCREEN_SPEC_RULES}${handed.specOwed.length > 0 ? `\n\nWhat the check found:\n${untrusted('sandbox-output', handed.specOwed.map((line) => `- ${line}`).join('\n'))}` : ''}`);
+  }
   for (const ref of handed.references.filter((r) => r.ok)) parts.push(referenceBlock(ref));
   if (handed.critique) {
     parts.push(
