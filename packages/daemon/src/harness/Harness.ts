@@ -13,7 +13,7 @@ import type { ReferenceCapture, RefKit } from '../qa/RefKit.ts';
 import type { SmokeRunner } from '../qa/SmokeTester.ts';
 import type { OrbStackManager } from '../sandbox/OrbStackManager.ts';
 import { ANCHOR_FILE, AnchorTableShape, anchorTableJson, readAnchorTable, renderAnchorTable, type AnchorRead, type AnchorTable } from '../scratch/AnchorTable.ts';
-import { DIRECTIONS_FILE, directionOf, directionThemeFile, readDirections, renderDirection, type Direction, type DirectionId, type DirectionsRead } from '../scratch/Directions.ts';
+import { DIRECTIONS_FILE, directionThemeFile, readDirections, renderDirection, type Direction, type DirectionId, type DirectionsRead } from '../scratch/Directions.ts';
 import { SCREEN_SPEC_FILE, readScreenSpec, renderScreenSpec, type FlowTask, type ScreenSpecRead } from '../scratch/ScreenSpec.ts';
 import { untrusted, type UntrustedSource } from '../trust/dataBlock.ts';
 import { errorMessage, excerpt, type Clock, type Logger } from '../util/core.ts';
@@ -26,7 +26,6 @@ import { countCompilerErrors, emptyRun, renderEvidence, type Ledger, type RunRec
 import type { LessonBook } from './LessonBook.ts';
 import { ANCHOR_BRIEF, DEEP_DIVE_BRIEF, DRAFT_BRIEF, DRAW_ALL_BRIEF, IDEATION_BRIEF, IDEATION_REQUIRED_FILES, IDEATION_REVISION_BRIEF, PLANNER_SYSTEM_PROMPT, SCREEN_SPEC_RULES, THEME_FILE, codingSystemPrompt, directionBrief } from './prompts.ts';
 import { THEME_SEED_FILE, chosenTheme } from './themeSeed.ts';
-import { renderAuditFeedback } from '../qa/VisualAuditor.ts';
 import type { ReflectionAgent } from './ReflectionAgent.ts';
 import { renderCritique, renderPatch, type Acceptance, type PlanCritique, type SandwichReviewer } from './SandwichReviewer.ts';
 import type { SelfHosting } from './SelfHosting.ts';
@@ -50,12 +49,6 @@ type Plan = z.infer<typeof Plan>;
 
 /** How many times an engine may correct an anchor table it was asked to write, before the task is refused. */
 const ANCHOR_CORRECTIONS = 2;
-/**
- * How many times an engine reworks its mock-ups after they were measured. Past this they go to the owner with
- * what was found said beside them: a drawing is for the owner to judge, and a measurement that would not come
- * clean is something they are told, not a reason to throw the design away.
- */
-const MOCKUP_CORRECTIONS = 2;
 /** How many times a design task's lead engine is sent back to its directions table before it draws the directions itself, one after another. */
 const DIRECTION_CORRECTIONS = 1;
 
@@ -116,7 +109,8 @@ export class ShutdownSignal extends Error {
  * A design task (`ideate`) writes documents and mock-ups and no product code, and is verified as that: its
  * documents are there, its screen spec holds, and its mock-up pages are measured the way a build's screens are
  * (audited, and the spec's core flow walked on each). The first two are owed; what the measurement finds is
- * reworked a bounded number of times and then shown to the owner beside the mock-ups.
+ * shown to the owner beside the mock-ups, and is nobody's to rework: the engine drew with the same measurement
+ * in hand.
  *
  * A `fast` task (Draft 0) is the same loop with the model-judged parts left out: no planning call before the
  * engine starts, no anchor table, no cross-checks, no design gates, no reflection. Compiler, smoke load and
@@ -366,13 +360,12 @@ export class Harness {
       let unverified: string[] = [];
       let waitingOn: string | null = null;
       let round = 0;
-      /** A design task's mock-ups as last measured, and what was still wrong with them when the reworking stopped. */
+      /** A design task's mock-ups as measured, and what the measurement found wrong with them. */
       let drawn: MockupMeasurement | null = null;
       let outstanding: string[] = [];
       /** Verifies, and has the engine repair what failed, until a round is clean or the corrections run out. */
       const verifyUntilClean = async (): Promise<void> => {
         const corrections = this.#config.budgets.verifyRounds;
-        let reworks = 0;
         for (let used = 0; ; ) {
           round += 1;
           phase('verify', round);
@@ -386,33 +379,18 @@ export class Harness {
           checkCancel();
           if (failures.length === 0) return;
           if (looked?.advisory) {
-            // What the measurement found on the mock-ups: reworked a bounded number of times, then said.
-            if (reworks >= MOCKUP_CORRECTIONS) {
-              outstanding = failures.map((f) => f.name);
-              return;
-            }
-            reworks += 1;
-          } else {
-            if (used >= corrections) throw new Error(`verification still failing after ${corrections} corrections: ${failures.map((f) => f.name).join(', ')}`);
-            used += 1;
+            // What the measurement found on the mock-ups is said, and nobody is sent back. A drawing is for the
+            // owner to judge; the engine had the same measurement to work with while it drew (`check_mockup`).
+            // The one real run of the loop this replaces: a rework turn took 21 minutes and a million tokens,
+            // moved the grade from F to D, and broke the flow that had walked.
+            outstanding = failures.map((f) => f.name);
+            return;
           }
+          if (used >= corrections) throw new Error(`verification still failing after ${corrections} corrections: ${failures.map((f) => f.name).join(', ')}`);
+          used += 1;
 
           phase('execute', round + 1);
-          // A page goes back to the engine that drew it, all of them at once. What no such engine answers for
-          // (a document, the spec, a page the lead drew itself) goes to the lead, as everything used to.
-          const byPage = [...(looked?.pages ?? [])].flatMap(([file, found]) => {
-            const lane = directionOf(file);
-            const session = lane === null ? undefined : lanes.get(lane);
-            return session ? [{ file, found, session }] : [];
-          });
-          if (byPage.length === 0) result = await send(repairMessage(failures));
-          else {
-            const theirs = new Set(byPage.map((page) => page.file));
-            const rest = [...(looked?.pages ?? [])].flatMap(([file, found]) => (theirs.has(file) ? [] : found));
-            const reworked = await Promise.allSettled([...byPage.map((page) => sendTo(page.session, pageRepairMessage(page.file, page.found))), ...(rest.length > 0 ? [send(repairMessage(rest))] : [])]);
-            checkCancel();
-            for (const outcome of reworked) if (outcome.status === 'rejected') this.#log.warn({ taskId: task.id, err: errorMessage(outcome.reason) }, 'a direction could not be reworked');
-          }
+          result = await send(repairMessage(failures));
           checkCancel();
         }
       };
@@ -479,7 +457,7 @@ export class Harness {
         if (options.length > 0) this.#events.emit(scope, { type: 'mockups.rendered', options });
         else this.#events.emit(scope, { type: 'notice', level: 'warn', message: 'The mock-ups could not be drawn (the QA browser did not start, or no mock-up page was found). The documents are complete.' });
         if (outstanding.length > 0) {
-          unverified = [...unverified, `the mock-ups were reworked ${MOCKUP_CORRECTIONS} times and the measurement still finds problems (${outstanding.join(', ')}); they are shown with what was found`];
+          unverified = [...unverified, `the measurement finds problems on the mock-ups (${outstanding.join(', ')}); they are shown with what was found`];
         }
       }
       // The production build, for the ledger. It runs after the commit and gates nothing; a failure is said.
@@ -812,15 +790,16 @@ export class Harness {
   /**
    * One verification round of a design task. Two things are owed and fail the task if they cannot be had: the
    * documents, and a screen spec that holds. Then the mock-ups are measured, and what that finds is `advisory`:
-   * the engine is sent back to rework them a bounded number of times, and after that the owner is shown the
-   * mock-ups with the findings instead of a failed task.
+   * it is shown to the owner beside the pages and sent back to nobody. The engine was given the same
+   * measurement to draw with; a drawing is the owner's to judge, and a rework turn is the most expensive
+   * thing a design task can do.
    *
    * A design review that could not run leaves the mock-ups measured and not judged; that is said and not
    * waited for. The owner is the one who chooses between them.
    */
-  async #verifyIdeation(project: Project, task: Task, signal: AbortSignal): Promise<{ failures: Failure[]; unverified: string[]; waitingOn: null; advisory: boolean; drawn: MockupMeasurement | null; pages: Map<string, Failure[]> | null }> {
+  async #verifyIdeation(project: Project, task: Task, signal: AbortSignal): Promise<{ failures: Failure[]; unverified: string[]; waitingOn: null; advisory: boolean; drawn: MockupMeasurement | null }> {
     const scope = { projectId: project.id, taskId: task.id };
-    const owed = (failures: Failure[]) => ({ failures, unverified: [], waitingOn: null, advisory: false, drawn: null, pages: null });
+    const owed = (failures: Failure[]) => ({ failures, unverified: [], waitingOn: null, advisory: false, drawn: null });
     const missing = await this.#ideationDocuments(project);
     if (missing.length > 0) return owed(missing);
 
@@ -835,30 +814,17 @@ export class Harness {
     const drawn = await this.#mockups.measure(project, { taskId: task.id, tasks, signal });
     const failures: Failure[] = [];
     const unverified: string[] = [];
-    /** The same failures page by page, for when each page has an engine of its own to send it back to. */
-    const pages = new Map<string, Failure[]>();
-    const mine = (file: string, failure: Failure): void => void pages.set(file, [...(pages.get(file) ?? []), failure]);
-    for (const page of drawn.flowProblems) mine(page.file, { name: 'mockup-flow', source: 'browser-page', detail: `${MOCKUP_FLOW_NOTE}\n\n${page.file}\n${page.problems.map((line) => `- ${line}`).join('\n')}` });
     if (drawn.flowProblems.length > 0 || drawn.options.some((o) => o.flow)) {
       const detail = drawn.flowProblems.map((page) => `${page.file}\n${page.problems.map((line) => `- ${line}`).join('\n')}`).join('\n\n');
       this.#events.emit(scope, { type: 'gate.result', gate: 'flow', name: drawn.options.map((o) => o.file).join(' '), passed: drawn.flowProblems.length === 0, exitCode: null, durationMs: Date.now() - walkStarted, detail });
-      if (drawn.flowProblems.length > 0) failures.push({ name: 'mockup-flow', source: 'browser-page', detail: `${MOCKUP_FLOW_NOTE}\n\n${detail}` });
+      if (drawn.flowProblems.length > 0) failures.push({ name: 'mockup-flow', source: 'browser-page', detail });
     }
     if (drawn.audit) {
       const outcome = visualOutcome(drawn.audit, this.#config.audit.threshold);
       if (outcome.unverified) unverified.push(`the mock-ups: the design review did not run (${drawn.audit.vision.reason ?? 'no reason recorded'}), so they are measured and not judged`);
-      else if (!outcome.passed) {
-        failures.push({ name: 'mockup-audit', source: 'browser-page', detail: `${MOCKUP_AUDIT_NOTE}\n\n${outcome.detail}` });
-        const audit = drawn.audit;
-        for (const { file } of drawn.options) {
-          const findings = audit.findings.filter((f) => f.route === file);
-          const redesignPatches = audit.redesignPatches.filter((patch) => patch.route === file);
-          // A page with nothing but minors and no plan from the reviewer is not what held the set back.
-          if (findings.some((f) => f.severity !== 'minor') || redesignPatches.length > 0) mine(file, { name: 'mockup-audit', source: 'browser-page', detail: `${MOCKUP_AUDIT_NOTE}\n\n${renderAuditFeedback({ ...audit, findings, redesignPatches })}` });
-        }
-      }
+      else if (!outcome.passed) failures.push({ name: 'mockup-audit', source: 'browser-page', detail: outcome.detail });
     }
-    return { failures, unverified, waitingOn: null, advisory: true, drawn, pages };
+    return { failures, unverified, waitingOn: null, advisory: true, drawn };
   }
 
   async #readDirections(project: Project): Promise<DirectionsRead> {
@@ -914,6 +880,11 @@ export class Harness {
     const { scene, directions } = read.table;
     // Each direction's theme is generated here, from its row, and left in a file only that direction reads.
     for (const row of directions) await this.#sandboxes.writeFile(project, directionThemeFile(row.id), chosenTheme(row.theme).css);
+    // The project's own theme is the recommended direction's, as it was when one engine drew them all. It is
+    // set before anyone draws: an engine that finds a placeholder there is told to choose a theme itself.
+    const recommended = chosenTheme(directions[0]!.theme);
+    await this.#sandboxes.writeFile(project, THEME_SEED_FILE, recommended.json);
+    await this.#sandboxes.writeFile(project, THEME_FILE, recommended.css);
     const draw = async (row: Direction): Promise<void> => {
       const session = await p.openLane(row.id);
       const others = directions.filter((other) => other.id !== row.id).map((other) => `${other.id}: ${other.concept.trim()}`).join('\n');
@@ -932,19 +903,14 @@ export class Harness {
     this.#events.emit(scope, { type: 'notice', level: 'info', message: `${directions.length} directions are being drawn side by side (${directions.map((row) => row.id).join(', ')}), each by its own engine, while the deep dive is written.` });
     const [lead, ...drawn] = await Promise.allSettled([p.send(DEEP_DIVE_BRIEF), ...directions.map(draw)]);
     p.checkCancel();
+    // Each has drawn its page, or failed to: there is nothing more to ask of them.
+    await Promise.all([...p.lanes.values()].map((session) => session.close().catch(() => undefined)));
+    p.lanes.clear();
     for (const [i, outcome] of drawn.entries()) {
-      if (outcome.status !== 'rejected') continue;
-      const id = directions[i]!.id;
-      // Its conversation is not one to send a rework to. Whether its page is there is found out by the checks.
-      await p.lanes.get(id)?.close().catch(() => undefined);
-      p.lanes.delete(id);
-      this.#events.emit(scope, { type: 'notice', level: 'warn', message: `Direction ${id} was not finished by its engine (${excerpt(errorMessage(outcome.reason), 300)}). The other directions stand.` });
+      // Whether the page is there all the same is found out by the checks.
+      if (outcome.status === 'rejected') this.#events.emit(scope, { type: 'notice', level: 'warn', message: `Direction ${directions[i]!.id} was not finished by its engine (${excerpt(errorMessage(outcome.reason), 300)}). The other directions stand.` });
     }
     if (lead!.status === 'rejected') throw lead.reason;
-    // The project's own theme is the recommended direction's, as it was when one engine drew them all.
-    const recommended = chosenTheme(directions[0]!.theme);
-    await this.#sandboxes.writeFile(project, THEME_SEED_FILE, recommended.json);
-    await this.#sandboxes.writeFile(project, THEME_FILE, recommended.css);
     return lead.value;
   }
 
@@ -1009,11 +975,7 @@ function anchorMessage(task: Task, references: readonly ReferenceCapture[], prob
   return parts.join('\n\n');
 }
 
-/** Said above what a walk found, so the findings read as being about the pages and the two attributes they are walked by. */
-const MOCKUP_FLOW_NOTE = `The studio opened each mock-up page in a browser, with scripts off as it is always shown, and carried out the core flow of ${SCREEN_SPEC_FILE} on it: for each task it pressed the control marked data-step="<task>:1", then "<task>:2" and so on, and then looked for something visible carrying data-done="<task>". These pages could not be walked to the end, or have controls in the flow that fall short. Fix the pages: the states are CSS states (checked inputs, :has(), <details>, :focus-within, :placeholder-shown), and each page opens in the state before the person acts.`;
 
-/** Said above a mock-up audit: the same findings a build gets, pointed at pages of plain HTML and CSS. */
-const MOCKUP_AUDIT_NOTE = 'The studio audited the mock-up pages under docs/mockups/ as it audits a built screen: measured from the DOM at each size, their words read as plain text, and a design reviewer shown each page. Each finding names its page as the route. Fix the pages themselves (their markup and their own CSS). Where a fix names a theme utility (text-fg, bg-surface, rounded-lg), use the theme value behind it, which the page keeps in its :root.';
 
 /** The acceptance reviewer's single corrective patch, as the engine receives it. */
 function patchMessage(acceptance: Acceptance): string {
@@ -1024,11 +986,6 @@ function patchMessage(acceptance: Acceptance): string {
  * What the engine is told after a failed round. A compiler failure keeps its own frame (the command and the exit
  * code are the daemon's; the output inside is the tool's, fenced as data like any other sandbox output).
  */
-/** The same, for the engine that drew one page of a design and answers for that page alone. */
-export function pageRepairMessage(file: string, failures: readonly Failure[]): string {
-  return `${repairMessage(failures)}\n\nOnly ${file} is yours to change: findings that name another page are for the engine that drew it. When yours is fixed, check it with check_mockup before you stop.`;
-}
-
 export function repairMessage(failures: readonly Failure[]): string {
   const blocks = failures.map((f) => {
     const data = untrusted(f.source, excerpt(f.detail, 12_000), { check: f.name });

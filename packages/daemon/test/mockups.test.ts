@@ -202,7 +202,7 @@ test('a design task is asked for at least two drawn directions, and ends by putt
     assert.match(brief, /Never leave a box with a sentence saying what picture will go there, and never write a note to the reader on the page/);
     assert.match(brief, /generate_image, saved under docs\/mockups\/assets\//);
     assert.match(brief, /no sentence that explains the screen/);
-    assert.match(brief, /They are measured, as a built screen is, and what is found comes back to you to fix/);
+    assert.match(brief, /They are measured, as a built screen is, and what is found is put in front of the owner beside each page\. Nothing comes back to you afterwards/);
     assert.match(brief, /call check_mockup on it[\s\S]*do not install a browser, and do not write scripts to look at the pages/);
   }
   assert.match(MOCKUP_RULES, /pages that read as tabs of one app have failed[\s\S]*three different products for the same job[\s\S]*For each direction call set_theme/);
@@ -306,36 +306,24 @@ test('a screen spec that does not hold is owed, like a missing document: the eng
   }
 });
 
-test('what the measurement finds on the mock-ups is reworked twice, then shown to the owner with the findings', async () => {
+test('what the measurement finds on the mock-ups is shown to the owner with the findings, and nobody is sent back to rework them', async () => {
   const pages = { [`${MOCKUP_DIR}/a.html`]: page('흐름 한 줄', '', '<h1>₩184,000</h1>'.repeat(20)), [`${MOCKUP_DIR}/b.html`]: page('이번 달 영수증', '', '<h1>영수증</h1>'.repeat(20)) };
   const stuck: MockupMeasurement = { options: DRAWN, audit: null, flowProblems: [{ file: `${MOCKUP_DIR}/b.html`, problems: ['task "log" (설거지 20분을 적는다): the page opens with [data-done="log"] already showing.'] }] };
-
-  // Never comes clean: three measurements, two reworks, and then the owner is the judge.
   let measured = 0;
-  const never = await designTask({ ...DOCS, ...pages }, { measure: async () => ((measured += 1), stuck) });
-  // Comes clean on the second look: one rework, and nothing left to say.
-  let looks = 0;
-  const fixed = await designTask({ ...DOCS, ...pages }, { measure: async () => ((looks += 1) === 1 ? stuck : CLEAN) });
+  const run = await designTask({ ...DOCS, ...pages }, { measure: async () => ((measured += 1), stuck) });
   try {
-    assert.equal(never.state, 'succeeded', never.error ?? '');
-    assert.equal(measured, 3);
-    assert.deepEqual(never.bodies.flatMap((b) => (b.type === 'task.phase' ? [`${b.phase}:${b.round}`] : [])), ['plan:0', 'execute:1', 'verify:1', 'execute:2', 'verify:2', 'execute:3', 'verify:3']);
-    assert.match(never.summary ?? '', /Not verified: the mock-ups were reworked 2 times and the measurement still finds problems \(mockup-flow\); they are shown with what was found/);
-    assert.deepEqual(never.bodies.flatMap((b) => (b.type === 'mockups.rendered' ? [b.options.length] : [])), [2], 'they are still put in front of the owner');
-    // The page goes back to the engine that drew it, and to nobody else.
-    const rework = never.sentBy.b!.at(-1)!;
-    assert.match(rework, /carried out the core flow of docs\/screens\.json on it/);
-    assert.match(rework, /source=\\"browser-page\\"[\s\S]*docs\/mockups\/b\.html\\n- task \\"log\\"/, 'what the walk found travels as data');
-    assert.match(rework, /Only docs\/mockups\/b\.html is yours to change[\s\S]*check it with check_mockup before you stop/);
-    assert.equal(never.sentBy.b!.filter((messages) => messages.endsWith(rework.slice(-200))).length, 1);
-    assert.ok([...never.sentBy.a!, ...never.sentBy.lead!].every((messages) => !messages.includes('carried out the core flow')), 'the engine of the page that walked, and the lead, are left alone');
-
-    assert.equal(fixed.state, 'succeeded', fixed.error ?? '');
-    assert.equal(looks, 2);
-    assert.ok(!(fixed.summary ?? '').includes('Not verified'));
+    assert.equal(run.state, 'succeeded', run.error ?? '');
+    assert.equal(measured, 1, 'measured once');
+    assert.deepEqual(run.bodies.flatMap((b) => (b.type === 'task.phase' ? [`${b.phase}:${b.round}`] : [])), ['plan:0', 'execute:1', 'verify:1'], 'one round of work, one of verification');
+    assert.match(run.summary ?? '', /Not verified: the measurement finds problems on the mock-ups \(mockup-flow\); they are shown with what was found/);
+    assert.deepEqual(run.bodies.flatMap((b) => (b.type === 'mockups.rendered' ? [b.options.length] : [])), [2], 'they are put in front of the owner as they are');
+    // What was found is on the record for the owner to open, and in no message to an engine.
+    const flow = run.bodies.find((b) => b.type === 'gate.result' && b.gate === 'flow');
+    assert.ok(flow?.type === 'gate.result' && !flow.passed && /docs\/mockups\/b\.html\n- task "log"/.test(flow.detail));
+    assert.ok(run.sent.every((messages) => !messages.includes('already showing')), 'no engine is told');
+    assert.deepEqual([run.sentBy.a!.length, run.sentBy.b!.length], [2, 2], 'each direction\'s engine wrote its page and was done');
   } finally {
-    await never.cleanup();
-    await fixed.cleanup();
+    await run.cleanup();
   }
 });
 

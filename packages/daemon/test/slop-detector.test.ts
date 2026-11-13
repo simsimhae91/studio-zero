@@ -298,6 +298,33 @@ test('a review that covers only some screens is said to be partial, and does not
   assert.match(String(events.find((e) => e.type === 'notice')!.message), /^Design review covered 1 of 2 screens/);
 });
 
+test('screens are put to the reviewer at the same time, and read back in the order they were asked', async () => {
+  const good: VisionReply = { ...SLOP_REPLY, archetype: 'web-app', findings: [], redesignPatches: [], rubric: { hierarchy: 9, whitespace: 9, typography: 9, color: 9, copy: 9, originality: 9, tactility: 9 } };
+  // Three screens (a web product is captured at three sizes). Each review takes a while; the first takes longest.
+  let open = 0;
+  let most = 0;
+  const calls: string[] = [];
+  const bridge = {
+    availability: async () => READY,
+    review: async (input: VisionInput) => {
+      calls.push(input.viewport);
+      most = Math.max(most, (open += 1));
+      await new Promise((resolve) => setTimeout(resolve, calls.length === 1 ? 260 : 120));
+      open -= 1;
+      return { review: toScreenReview({ ...good, slopScore: calls.indexOf(input.viewport) * 10, critique: input.viewport }, input), via: 'codex' as const, model: 'codex:default' };
+    },
+  } as unknown as QaVisionBridge;
+  const started = Date.now();
+  const { report } = await auditWith(sampleProject(), bridge);
+  const took = Date.now() - started;
+  assert.equal(calls.length, 3);
+  assert.ok(most >= 2, `reviews overlapped (${most} at once)`);
+  assert.ok(took < 260 + 120 + 120 + 300, `not one after another (${took}ms)`);
+  assert.deepEqual([report.visionReviewed, report.vision.reviewed, report.vision.expected], [true, 3, 3]);
+  assert.equal(report.slopScore, 10, 'the mean of 0, 10 and 20');
+  assert.equal(report.critique, calls[2], 'the worst screen speaks for the audit, whichever answer came back first');
+});
+
 test('a refusal that cannot go differently is not asked for again on every screen', async () => {
   const vision = fakeVision(READY, () => new VisionUnavailableError('API key: denied by policy (budget.project-daily): project daily budget exhausted', [{ path: 'api', error: 'denied', limited: true }], true));
   const { report } = await auditWith(sampleProject(), vision.bridge);

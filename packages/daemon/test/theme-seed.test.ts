@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { PLACEHOLDER_SOURCE, THEME_SEED_FILE, chosenTheme } from '../src/harness/themeSeed.ts';
-import { THEME_FILE, IDEATION_BRIEF, codingSystemPrompt } from '../src/harness/prompts.ts';
+import { codingSystemPrompt, directionBrief, IDEATION_BRIEF, MOCKUP_RULES, THEME_FILE } from '../src/harness/prompts.ts';
 import { sampleProject, testDaemon } from './helpers.ts';
 
 const OWNER = { type: 'owner', via: 'desktop' } as const;
@@ -50,8 +50,10 @@ test('the engines are told that colour is chosen from the subject, through the t
   assert.match(prompt, /two products made here must not look alike because they were made here/);
   assert.match(prompt, /set_theme tool before you draw or build/);
   assert.match(prompt, /bg-brand with text-on-brand/);
-  assert.match(IDEATION_BRIEF, /For each direction call set_theme with a palette and a shape that belong to that concept/, 'each direction has a look of its own');
-  assert.match(IDEATION_BRIEF, /<meta name="theme-seed"/);
+  // Each direction has a look of its own: said in the table it is drawn from, and recorded in the page that is drawn.
+  assert.match(IDEATION_BRIEF, /"theme": the palette and shape that belong to that concept, with the same fields set_theme takes/);
+  assert.match(directionBrief({ file: 'docs/mockups/a.html', themeFile: '.studio-zero/themes/a.css', seed: '{}', scene: 's', row: 'r', others: 'o' }), /copy that file's custom properties into the page's :root[\s\S]*<meta name="theme-seed"/);
+  assert.match(MOCKUP_RULES, /For each direction call set_theme with a palette and a shape that belong to that concept[\s\S]*<meta name="theme-seed"/, 'and the same when one engine draws them all');
   assert.match(prompt, /using the seed the page records in its theme-seed meta tag/, 'the build takes the approved page\'s look');
   assert.match(chosenTheme(DIET).json, /"source": "2주 동안/);
 });

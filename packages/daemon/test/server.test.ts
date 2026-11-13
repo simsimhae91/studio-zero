@@ -158,7 +158,7 @@ test('session bridge: a vendor CLI\'s MCP server reaches the sandbox only throug
     const replies = new Map(res.stdout.trim().split('\n').map((l) => JSON.parse(l) as { id: number; result?: Record<string, unknown>; error?: unknown }).map((r) => [r.id, r]));
 
     assert.equal((replies.get(1)!.result!.serverInfo as { name: string }).name, 'studio-zero');
-    assert.deepEqual((replies.get(2)!.result!.tools as { name: string }[]).map((x) => x.name), ['bash', 'read_file', 'write_file', 'set_theme', 'generate_image', 'edit_file', 'find_tools', 'use_tool']);
+    assert.deepEqual((replies.get(2)!.result!.tools as { name: string }[]).map((x) => x.name), ['bash', 'read_file', 'write_file', 'set_theme', 'generate_image', 'check_mockup', 'edit_file', 'find_tools', 'use_tool']);
     assert.equal(replies.get(3)!.result!.isError, false);
     assert.equal(readFileSync(join(t.workspace, 'src/hello.txt'), 'utf8'), 'from the bridge\n');
 

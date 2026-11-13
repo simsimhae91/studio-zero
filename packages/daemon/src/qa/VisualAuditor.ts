@@ -15,7 +15,7 @@ import { layoutShift, probeInteraction, type Touchability } from './InteractionP
 import type { QaBrowser } from './QaBrowser.ts';
 import { VisionUnavailableError, type QaVisionBridge } from './QaVisionBridge.ts';
 import { summariseReference } from './RefKit.ts';
-import { LIVING_VISUAL_RULE, RUBRIC_AXES, SLOP_FLOOR_ON_TRAP, isTrap, type ScreenReview } from './vision.ts';
+import { LIVING_VISUAL_RULE, RUBRIC_AXES, SLOP_FLOOR_ON_TRAP, isTrap, type ScreenReview, type VisionInput } from './vision.ts';
 
 export { PLAYWRIGHT_VERSION } from './QaBrowser.ts';
 
@@ -47,6 +47,18 @@ export function auditViewports(template: ProjectTemplate, configured: readonly V
 
 /** After this many reviews in one audit have failed on every path, the rest are not attempted. */
 const MAX_REVIEW_FAILURES = 2;
+/**
+ * How many screens a reviewer is asked about at once. A review is a model call of a minute or more and the
+ * screens are independent, so they are not asked one after another: measured on a real design task, three
+ * mock-up pages took 252 seconds to audit, of which the three reviews in a row were about 230.
+ */
+const REVIEWS_AT_ONCE = 3;
+/**
+ * How long the first review is given before the others are asked. A refusal that cannot go differently (the
+ * day's budget, a subscription at its limit) comes back at once; asking the rest in that time would only run
+ * them into the same wall.
+ */
+const FIRST_REVIEW_HEAD_START_MS = 3000;
 /** How many routes of one audit are tried by hand (pressed, tabbed through). Each costs a page load and some seconds. */
 const MAX_PROBED_ROUTES = 3;
 
@@ -198,6 +210,37 @@ export class VisualAuditor {
     let lastError: string | null = null;
     let ownMeasure: string | null = null;
 
+    // Reviews are asked as the screens are captured and answered in their own time; the captures go on meanwhile.
+    const answers: ({ review: ScreenReview; via: ReviewerId; model: string } | null)[] = [];
+    const asked: Promise<void>[] = [];
+    const inFlight = new Set<Promise<void>>();
+    const ask = async (input: VisionInput): Promise<void> => {
+      while (inFlight.size >= REVIEWS_AT_ONCE) await Promise.race(inFlight);
+      if (stopped !== null) return;
+      const index = asked.length;
+      answers.push(null);
+      const answer = (async (): Promise<void> => {
+        try {
+          answers[index] = await this.#vision.review(input);
+        } catch (err) {
+          if (req.signal?.aborted) throw err;
+          // A review that cannot be had does not throw the audit away: the measurements stand. It does leave
+          // the audit unreviewed, which the report states and the score reflects.
+          lastError = errorMessage(err);
+          failures += 1;
+          if (err instanceof VisionUnavailableError && err.limited) limited = true;
+          if ((err instanceof VisionUnavailableError && err.final) || failures >= MAX_REVIEW_FAILURES) stopped = lastError;
+          this.#log.warn({ err: lastError, viewport: input.viewport, route: input.route }, 'vision review failed');
+        }
+      })();
+      const tracked = answer.finally(() => inFlight.delete(tracked));
+      // Collected with the others below; until then a failure here must not go unhandled.
+      tracked.catch(() => undefined);
+      inFlight.add(tracked);
+      asked.push(tracked);
+      if (index === 0) await Promise.race([tracked.catch(() => undefined), new Promise<void>((resolve) => setTimeout(resolve, FIRST_REVIEW_HEAD_START_MS).unref())]);
+    };
+
     await this.#browser.use(req.project, req.signal, async ({ browser, host, devices }) => {
       const viewports = viewportSpecs(devices);
       const subjects = subjectsFor(host);
@@ -277,26 +320,19 @@ export class VisualAuditor {
 
           if (light.folds.length === 0 || state !== undefined || (mode.reviewAt !== null && !mode.reviewAt.includes(viewport))) continue;
           screens += 1;
-          if (stopped !== null) continue;
-          try {
-            const answered = await this.#vision.review({ scope, viewport, route, template, firstScreen: first, mockup: mode.sealed, folds: light.folds, digest: light.digest, measured, signal: req.signal });
-            reviews.push(answered.review);
-            findings.push(...answered.review.findings);
-            via ??= answered.via;
-            model ??= answered.model;
-          } catch (err) {
-            if (req.signal?.aborted) throw err;
-            // A review that cannot be had does not throw the audit away: the measurements stand. It does leave
-            // the audit unreviewed, which the report states and the score reflects.
-            lastError = errorMessage(err);
-            failures += 1;
-            if (err instanceof VisionUnavailableError && err.limited) limited = true;
-            if ((err instanceof VisionUnavailableError && err.final) || failures >= MAX_REVIEW_FAILURES) stopped = lastError;
-            this.#log.warn({ err: lastError, viewport, route }, 'vision review failed');
-          }
+          await ask({ scope, viewport, route, template, firstScreen: first, mockup: mode.sealed, folds: light.folds, digest: light.digest, measured, signal: req.signal });
         }
       }
     });
+    // The browser is given back; what is still out is the reviewers' answers. They are read in the order asked.
+    await Promise.all(asked);
+    for (const answered of answers) {
+      if (!answered) continue;
+      reviews.push(answered.review);
+      findings.push(...answered.review.findings);
+      via ??= answered.via;
+      model ??= answered.model;
+    }
 
     const reviewed = reviews.length;
     const visionReviewed = screens > 0 && reviewed === screens;

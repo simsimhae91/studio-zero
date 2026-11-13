@@ -172,13 +172,19 @@ export class MockupRenderer {
     const names = [...new Set([...html.matchAll(ASSET_REF)].map((m) => m[2]!))].filter((name) => !name.includes('..'));
     if (names.length === 0) return html;
     const data = new Map<string, string>();
+    // Read side by side (each is its own command in the sandbox), then taken in the page's order up to the limit.
+    const read = await Promise.all(
+      names.slice(0, 12).map(async (name) => {
+        const file = `${MOCKUP_ASSET_DIR}/${name}`;
+        // The size first, so a large file is never read; then the bytes as text the exec channel can carry.
+        const res = await this.#sandboxes.exec(project, `[ -f ${file} ] && [ "$(wc -c < ${file})" -le ${MAX_ASSET_BYTES} ] && base64 < ${file} | tr -d '\\n'`, { timeoutSec: 30, maxOutputBytes: Math.ceil(MAX_ASSET_BYTES * 1.4) + 1024, signal });
+        const encoded = res.stdout.trim();
+        return { name, encoded: res.exitCode === 0 && /^[A-Za-z0-9+/]+=*$/.test(encoded) ? encoded : null };
+      }),
+    );
     let total = 0;
-    for (const name of names.slice(0, 12)) {
-      const file = `${MOCKUP_ASSET_DIR}/${name}`;
-      // The size first, so a large file is never read; then the bytes as text the exec channel can carry.
-      const res = await this.#sandboxes.exec(project, `[ -f ${file} ] && [ "$(wc -c < ${file})" -le ${MAX_ASSET_BYTES} ] && base64 < ${file} | tr -d '\\n'`, { timeoutSec: 30, maxOutputBytes: Math.ceil(MAX_ASSET_BYTES * 1.4) + 1024, signal });
-      const encoded = res.stdout.trim();
-      if (res.exitCode !== 0 || !/^[A-Za-z0-9+/]+=*$/.test(encoded)) continue;
+    for (const { name, encoded } of read) {
+      if (encoded === null) continue;
       total += encoded.length;
       if (total > MAX_PAGE_ASSET_BYTES * 1.4) break;
       const ext = name.slice(name.lastIndexOf('.') + 1).toLowerCase() as keyof typeof MIME;
@@ -325,7 +331,19 @@ export class MockupRenderer {
       this.#log.warn({ projectId: project.id, err: errorMessage(err) }, 'mock-ups could not be read');
       return { options: [], audit: null, flowProblems: [] };
     }
-    const drawn = await this.#draw(project, pages, p.tasks, p.signal);
+    // The pages are drawn and walked while they are audited: neither needs the other, and the audit's reviewers
+    // take longer than everything a browser does here.
+    const audit = async (): Promise<Awaited<ReturnType<VisualAuditor['auditPages']>> | null> => {
+      if (!this.#auditor || pages.length === 0) return null;
+      try {
+        return await this.#auditor.auditPages({ project, taskId: p.taskId, pages: pages.map((page) => ({ route: page.file, html: page.html })), signal: p.signal });
+      } catch (err) {
+        if (p.signal?.aborted) throw err;
+        this.#log.warn({ projectId: project.id, err: errorMessage(err) }, 'mock-ups could not be audited');
+        return null;
+      }
+    };
+    const [drawn, audited] = await Promise.all([this.#draw(project, pages, p.tasks, p.signal), audit()]);
     if (drawn.length === 0) return { options: [], audit: null, flowProblems: [] };
     const touch = project.template === 'mobile-expo';
     const flowProblems = drawn.flatMap((o) => {
@@ -333,15 +351,6 @@ export class MockupRenderer {
       return problems.length > 0 ? [{ file: o.file, problems }] : [];
     });
 
-    let audited: Awaited<ReturnType<VisualAuditor['auditPages']>> | null = null;
-    if (this.#auditor) {
-      try {
-        audited = await this.#auditor.auditPages({ project, taskId: p.taskId, pages: pages.map((page) => ({ route: page.file, html: page.html })), signal: p.signal });
-      } catch (err) {
-        if (p.signal?.aborted) throw err;
-        this.#log.warn({ projectId: project.id, err: errorMessage(err) }, 'mock-ups could not be audited');
-      }
-    }
     const defects = audited ? distinctDefects(audited.report.findings) : [];
     const options = drawn.map((o): MockupOption => {
       if (!audited) return { ...o, measures: null };
