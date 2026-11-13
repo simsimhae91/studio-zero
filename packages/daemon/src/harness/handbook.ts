@@ -17,8 +17,16 @@ import type { Template } from '@studio-zero/protocol';
  * held to them should still look nothing alike, and the palette, the shape and the composition remain the
  * product's own.
  *
- * Ids: T type, C colour, M composing a phone screen, K the parts' names, P a web page, A a web app screen,
- * I pictures. `on` limits a rule to one kind of product.
+ * The first version of these rules only took things away (colour to a tenth, icons in ink, people as initials,
+ * every box a hairline), and the design lab showed what that makes: screens of text and rules on grey paper,
+ * which the owner called flat beside the products people call alive. Measured with one ruler, those products'
+ * first screens are a quarter strong colour, carry a dozen or more icons and pictures over a third of the
+ * screen, and rule almost no box; ours had none of it, before the handbook and after alike. So the rules of
+ * colour, surfaces and pictures now say what a screen is made of (E), and what is drawn must be the product's
+ * own nouns, which is what keeps it from being clip-art.
+ *
+ * Ids: T type, C colour, E what a screen is made of, M composing a phone screen, K the parts' names, P a web
+ * page, A a web app screen, I pictures. `on` limits a rule to one kind of product.
  */
 export interface Rule {
   id: string;
@@ -38,29 +46,37 @@ const TYPE: readonly Rule[] = [
 ];
 
 const COLOUR: readonly Rule[] = [
-  { id: 'C1', says: 'Colours have roles, and only these exist: paper (bg-bg), surfaces (bg-surface, bg-sunken, border-border), ink (text-fg, text-fg-muted), the brand (bg-brand with text-on-brand, text-accent, bg-brand-soft), a second colour (bg-second with text-on-second, bg-second-soft), a data series (series-1 to series-6) and state (danger, success, warning). Invent no colour and dim none with opacity.' },
-  { id: 'C2', says: 'Strong colour has a budget: about a tenth of the first screen, and the audit measures it. A brand fill belongs on the primary action, the mark of what is selected, a plate under the one figure, the fill of a meter. Never on a card, a panel, a column, a header bar or a section.' },
+  { id: 'C1', says: 'Colours have roles, and only these exist: paper (bg-bg), surfaces (bg-surface, bg-sunken, border-border), ink (text-fg, text-fg-muted), the brand (bg-brand with text-on-brand, text-accent, bg-brand-soft), a second colour (bg-second with text-on-second, bg-second-soft), a data series (series-1 to series-6) and state (danger, success, warning). Invent no colour, and never dim text with opacity.' },
+  { id: 'C2', says: 'Strong colour lives on one hero. The product\'s state sits on one band or card in bg-brand with text-on-brand (bg-brand-soft for a quiet product about money or work), up to about a third of the first screen. Elsewhere strong colour is the primary action, the mark of what is selected, icon tiles, badges and the fill of a meter. No second filled card: past 45% the audit calls it a flood.' },
   { id: 'C3', says: 'No dark band across a light screen. On a phone or app screen, dark is the scheme of the whole screen, which the theme provides, never a panel dropped into a paper one. A web page may carry one inverse section, full width, below its first screen.' },
-  { id: 'C4', says: 'Two sides, or several kinds. The brand is this side (me, ours, the current one) and the second colour is the other. More than two kinds take series-1, series-2 and on, in order. They are applied as marks: the colour of a number, a 4px edge, a dot, one segment of a bar. Never as the fill of a whole card, and never alone: a name or a position says the same thing.' },
-  { id: 'C5', says: 'A soft wash (bg-brand-soft, bg-second-soft) marks one region at most: the selected row, today\'s column.' },
+  { id: 'C4', says: 'Two sides, or several kinds. The brand is this side (me, ours, the current one) and the second colour is the other; in the one block that compares them, each side may fill its half. More than two kinds take series-1, series-2 and on, in order, as marks: an icon tile, the colour of a number, a dot, one segment of a bar. Never alone: a name or a position says the same thing.' },
+  { id: 'C5', says: 'Washes. bg-brand-soft and bg-second-soft, or a series colour at 15% (bg-series-2/15), are for icon tiles, badges, the selected row and today\'s column. Not for a whole section.' },
   { id: 'C6', says: 'State colours mean state and nothing else.' },
   { id: 'C7', says: 'No gradient on a control or a surface.' },
   { id: 'C8', says: 'Choosing a palette: the hue from the subject\'s own thing; chroma 0.12 to 0.16 for tools and money, 0.17 to 0.22 for consumer products, 0.23 to 0.28 for play and sport; second_hue only when the product has two sides or kinds; corners sharp for tools and data, soft by default, round for friendly consumer products; Pretendard for neutral, dense products, SUIT for crisp geometric ones, SUITE for soft, wide ones.' },
 ];
 
+const MATERIAL: readonly Rule[] = [
+  { id: 'E1', says: 'A first screen is made of more than text and rules: the product\'s own working thing at size, and around it its people, its things and its icons. Text in ruled boxes on grey paper is unfinished however tidy it is, and the audit counts what is drawn.' },
+  { id: 'E2', says: 'People and things. A person is an avatar: a drawn face or character on a tinted disc, the same everywhere (initials only in a dense table). A thing the product names (the receipt, the scale, the coin, the trophy) is a small drawn object, and the state may take one hero drawing. Draw them as SVG in one style: flat rounded shapes, two or three tones from the theme\'s brand, second and series colours. Only this product\'s own nouns: never a scene that could sit on any product, a blob person, abstract shapes or a grey placeholder.' },
+  { id: 'E3', says: 'Icons and badges. A row, tab, chip or stat that names a kind of thing leads with its icon: on a tile of 36 to 44px (rounded-lg, a wash of its colour, C5), or bare at 20 to 24px in a tab bar. A count or a state rides on its thing as a badge.' },
+  { id: 'E4', says: 'Surfaces. The canvas is bg-sunken; content sits on bg-surface cards, rounded-xl, with no border and shadow-sm or none. Controls and chips are rounded-lg or pills. A hairline is a divider inside a surface, never a box round every block.' },
+  { id: 'E5', says: 'Words last. A drawing, an icon, a figure or a badge before a sentence; one line of secondary text an item at most. The hero\'s headline is a plain sentence with the figure in it.' },
+];
+
 const MOBILE: readonly Rule[] = [
-  { id: 'M1', says: 'Frame. An app bar (a title of 14 characters or fewer, one line of context, up to two actions), a one-column body with 16px gutters, and at the bottom either a dock holding the one primary action or, on a top-level screen, a tab bar of three to five. Never a dock on a tab bar.' },
-  { id: 'M2', says: 'The first screenful answers three things, in this order: where I stand (the state), what I do now (the action), what it rests on (the first evidence). The state takes a third of the height at most; the action is always in view, in the dock; the rest scrolls.' },
+  { id: 'M1', says: 'Frame. An app bar (a title of 14 characters or fewer, one line of context, up to two actions) and a one-column body with 16px gutters. At the bottom of a top-level screen, a tab bar of three to five tabs, each an icon and a label, with the one primary action as a pill floating above it at the end side. On a deeper screen, a dock holding the one primary action. The body ends with room for what floats: nothing at rest lies under it.' },
+  { id: 'M2', says: 'The first screenful answers three things, in this order: where I stand (the state, on the hero, two fifths of the height at most), what I do now (the action, always in view), what it rests on (the first evidence). The rest scrolls.' },
   { id: 'M3', says: 'One figure. One thing on the screen is at figure size. Two values compared sit in one comparison block: one surface, the same size, the difference said once.' },
   { id: 'M4', says: 'Say it once. A date, a round, a gap, a name with its score appears once on a screen. The app bar\'s title is not repeated in the body.' },
-  { id: 'M5', says: 'Containers. Sections on paper are the default: a text-lg heading and its content, 24 to 32px apart. A card (bg-surface, a hairline, 16px padding) is only for an object pressed as a whole, something that floats, or the comparison block. No card in a card. No twin cards of equal height: one surface with a divider. A container is as tall as its content, never stretched.' },
-  { id: 'M6', says: 'Lists. Things of one kind are rows, not cards: 56 to 72px tall, a 40px leading mark, a text-base title at 600, one text-sm line of meta, a trailing value or chevron, hairlines inset to the text. Five to eight rows show on the first screen.' },
-  { id: 'M7', says: 'Density. Besides rows and the app bar, at most seven things can be pressed on the first screenful, and a block has at most two lines of meta.' },
+  { id: 'M5', says: 'Containers. A card (E4) holds one object or one group; a section is a text-lg heading and its cards, 24 to 32px apart. No card in a card. A container is as tall as its content, never stretched to match a neighbour.' },
+  { id: 'M6', says: 'Lists. Things of one kind are rows on one card, not a card each: 56 to 72px tall, a leading avatar or icon tile of 40px, a text-base title at 600, one text-sm line of meta, a trailing value or chevron, dividers inset to the text. Three to six rows show on the first screen.' },
+  { id: 'M7', says: 'Density and rhythm. Besides rows, the app bar and the tab bar, at most seven things can be pressed on the first screenful. A screen mixes kinds of block (the hero, a strip that scrolls sideways, a grid of two tiles, a short list): never one list or one table from top to bottom.' },
   { id: 'M8', says: 'Stats. A label (text-xs at 500) with its value (text-xl to text-3xl at 700, tabular) and the unit at about 60% of the value\'s size. Three in a row at most.' },
   { id: 'M9', says: 'Charts and instruments. When the product is about a trend or a measure, its instrument is the focal block. Draw the periods that have data and the next one: no grid of empty future. Label a line on the line, not in a floating box. One accent series; the rest ink, muted or the second colour.' },
   { id: 'M10', says: 'Input. Three fields or more: one question a screen. A field is 48 to 52px tall, label above (text-sm at 600), help below; numbers get the number pad; a small set is a segmented control or a stepper, not a dropdown; pickers open in a sheet.' },
   { id: 'M11', says: 'Answering back. A toast sits above the dock for three to five seconds with undo; an error appears beside its cause; a skeleton has the shape of what is loading.' },
-  { id: 'M12', says: 'Empty, and first run. Show one muted example of what will be here and the one action. No illustration and no onboarding cards.' },
+  { id: 'M12', says: 'Empty, and first run. One small drawing of the thing that will be here (E2), one line, and the one action. No onboarding cards.' },
   { id: 'M13', says: 'Moving around. Push to go deeper (back at top left), a sheet for a side task, a full screen for long writing, tabs for three to five peers, a segmented control for two to four views of one data set.' },
   { id: 'M14', says: 'The hand. Primary action at the bottom; targets 44px or more, 8px apart or more.' },
   { id: 'M15', says: 'Motion. One entrance, an answer to each press, and the moment the outcome lands, once.' },
@@ -68,7 +84,7 @@ const MOBILE: readonly Rule[] = [
 ];
 
 const PARTS: readonly Rule[] = [
-  { id: 'K', says: 'Parts. Compose a screen from these, each built the same way everywhere: AppBar, Dock, TabBar, Segmented, Section, Row, Stat, CompareBlock, Card, Sheet, Field, Chip, Badge, Toast, Empty, Skeleton, Meter, Chart. A part that is none of them needs a reason.' },
+  { id: 'K', says: 'Parts. Compose a screen from these, each built the same way everywhere: AppBar, Dock, TabBar, Hero, Segmented, Section, Row, IconTile, Avatar, Stat, CompareBlock, Card, Sheet, Field, Chip, Badge, Toast, Empty, Skeleton, Meter, Chart. A part that is none of them needs a reason.' },
 ];
 
 const PAGE: readonly Rule[] = [
@@ -98,21 +114,22 @@ const APP: readonly Rule[] = [
 ];
 
 const PICTURES: readonly Rule[] = [
-  { id: 'I1', says: 'Decide in this order. If it is the product\'s own working thing or its data, draw it in code. If the subject has a look people come for (food, a place, a room, goods, a face, the world of a game), its picture is content: have a small matching set made with generate_image. Otherwise, no picture.' },
-  { id: 'I2', says: 'Never made: a decorative illustration, a stock scene, a 3D blob, abstract gradient art, a drawing of an interface, an emoji as an icon, a picture for an empty state or onboarding.' },
-  { id: 'I3', says: 'Proportions: a thumbnail 1:1, a card picture 4:3 or 3:2, a hero 16:9 or 3:2. A person is initials on a disc unless people are the subject.' },
+  { id: 'I1', says: 'Decide in this order. The product\'s own working thing and its data are drawn in code, and so are its people, its things and its icons (E2, E3). If the subject has a look people come for (food, a place, a room, goods, a face, the world of a game), its picture is content: have a small matching set made with generate_image.' },
+  { id: 'I2', says: 'Never made: a stock scene, a 3D blob, abstract gradient art, a drawing of an interface, an emoji as an icon, a picture that names nothing this product has.' },
+  { id: 'I3', says: 'Proportions: a thumbnail 1:1, a card picture 4:3 or 3:2, a hero 16:9 or 3:2.' },
   { id: 'I4', says: 'One set, one direction: the same light and distance, colours toward the theme, no words in the picture.' },
   { id: 'I5', says: 'How many: one for a mock-up direction; for a build, six for the fixtures and one hero at most.' },
   { id: 'I6', says: 'Words on a photograph sit on a plate or a scrim, never on the bare picture.' },
-  { id: 'I7', says: 'Icons come from one set (lucide), at 20 or 24px with a 1.5 to 2px stroke, in ink; the accent only when active.' },
+  { id: 'I7', says: 'Icons come from one set (lucide), with a 1.5 to 2px stroke: in ink when bare, in the tile\'s colour on a tile, in the accent when active.' },
 ];
 
-export const HANDBOOK = { type: TYPE, colour: COLOUR, mobile: MOBILE, parts: PARTS, page: PAGE, app: APP, pictures: PICTURES } as const;
+export const HANDBOOK = { type: TYPE, colour: COLOUR, material: MATERIAL, mobile: MOBILE, parts: PARTS, page: PAGE, app: APP, pictures: PICTURES } as const;
 
 const SECTIONS: Record<'mobile' | 'web', readonly { title: string; rules: readonly Rule[] }[]> = {
   mobile: [
     { title: 'Type', rules: TYPE },
     { title: 'Colour', rules: COLOUR },
+    { title: 'What a screen is made of', rules: MATERIAL },
     { title: 'Composing a phone screen', rules: MOBILE },
     { title: 'Parts', rules: PARTS },
     { title: 'Pictures', rules: PICTURES },
@@ -120,6 +137,7 @@ const SECTIONS: Record<'mobile' | 'web', readonly { title: string; rules: readon
   web: [
     { title: 'Type', rules: TYPE },
     { title: 'Colour', rules: COLOUR },
+    { title: 'What a screen is made of', rules: MATERIAL },
     { title: 'A page', rules: PAGE },
     { title: 'An app screen', rules: APP },
     { title: 'Pictures', rules: PICTURES },

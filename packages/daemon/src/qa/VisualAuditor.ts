@@ -294,7 +294,7 @@ export class VisualAuditor {
             findings.push(stateFinding('states/same-as-default', viewport, route, `The route listed for the state "${state}" shows the same screen as ${req.routes[0]}: nothing reads the state from it.`, 'Have the route put the screen into that state (from the fixtures: no items, a failed request, the limit reached), so that what a person would see then is what loads.'));
           }
           const viewportWidth = spec.context.viewport?.width ?? light.digest.width;
-          const measured = runDomChecks(light.digest, { viewport, viewportWidth, route, touch: spec.touch, scope: 'full', template, ...(light.shares ? { shares: light.shares } : {}) }, contract);
+          const measured = runDomChecks(light.digest, { viewport, viewportWidth, route, touch: spec.touch, scope: 'full', template, firstScreen: first, ...(light.shares ? { shares: light.shares } : {}) }, contract);
           findings.push(...measured);
           // The words, read apart from how they are set. The design reviewer below is not shown these findings as
           // measured defects to skip: copy is on its rubric too, and it reads the page as a picture.

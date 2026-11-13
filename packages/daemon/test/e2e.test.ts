@@ -47,6 +47,7 @@ const CLEAN_PAGE = `<!doctype html>
 <main>
   <h1>미결제 청구서</h1>
   <p>결제를 기다리는 청구서가 3건 있습니다.</p>
+  <svg viewBox="0 0 320 96" width="320" height="96" role="img" aria-label="청구서 세 장"><rect x="8" y="20" width="96" height="68" rx="6" fill="var(--sz-brand-soft)"/><rect x="112" y="12" width="96" height="76" rx="6" fill="var(--sz-brand-soft)"/><rect x="216" y="4" width="96" height="84" rx="6" fill="var(--sz-brand)"/><rect x="228" y="20" width="56" height="6" rx="3" fill="var(--sz-on-brand)"/><rect x="228" y="36" width="72" height="6" rx="3" fill="var(--sz-on-brand)"/></svg>
   <section><p>Northwind Trading</p><a class="action" href="/invoices/1">청구서 다시 보내기</a></section>
 </main>
 </body>

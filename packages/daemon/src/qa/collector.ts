@@ -79,6 +79,15 @@ export const Composition = z.object({
   mediaBoxes: z.array(Box4).max(80),
   /** The colour the screen is laid on: the canvas with every box that covers the whole viewport painted over it. */
   paper: z.tuple([z.number(), z.number(), z.number()]),
+  /**
+   * What the first screenful is made of besides text. `drawnShare` is the share of it under pictures and
+   * drawings (img, video, canvas, CSS background images, and inline svg 64px or wider: a chart drawn in svg is a
+   * drawing); `icons` counts the small ones, 12 to 56px (icons, avatars, marks); `boxes` counts the boxes in
+   * view that are set off from what is around them (80 by 40px or more, with a fill, a shadow or a rule
+   * along the top) and `ruledBoxes` those of them that carry the rule: a box drawn round, or a section ruled
+   * off from the one above. Absent in digests read before it was counted.
+   */
+  material: z.object({ drawnShare: z.number(), icons: z.number(), boxes: z.number(), ruledBoxes: z.number() }).optional(),
 });
 export type Composition = z.infer<typeof Composition>;
 
@@ -400,6 +409,8 @@ export function collectDigest(maxElements: number): unknown {
         const r = rectOf(el);
         if (r.width < 4 || r.height < 4 || parseFloat(styleOf(el).opacity) < 0.05) target = el.closest('label');
       }
+      // Tabs are the frame, as the app bar's title is: the handbook's count (M7) is of what the screen itself offers.
+      if (target && target.closest('[role=tablist], [role=tab], nav')) continue;
       if (target && shown(target) && inFirst(rectOf(target))) pressed.add(target);
     }
 
@@ -460,6 +471,43 @@ export function collectDigest(maxElements: number): unknown {
       mediaBoxes.push([Math.round(x0), Math.round(y0), Math.round(x1 - x0), Math.round(y1 - y0)]);
     }
 
+    // What is drawn, besides text: pictures and drawings by the share of the screenful under them, counted on a
+    // grid so that two that overlap are counted once, and the small ones (icons, avatars, marks) by number.
+    const CELL = 4;
+    const across = Math.ceil(vw / CELL);
+    const down = Math.ceil(vh / CELL);
+    const under = new Uint8Array(across * down);
+    let icons = 0;
+    for (const el of all) {
+      const outerSvg = el.tagName === 'svg' && !el.parentElement?.closest('svg');
+      if (!outerSvg && (el instanceof SVGElement || !(MEDIA_TAGS.has(el.tagName) || styleOf(el).backgroundImage.includes('url(')))) continue;
+      const r = rectOf(el);
+      if (r.width < 12 || r.height < 12 || !inFirst(r) || !shown(el)) continue;
+      if (r.width <= 56 && r.height <= 56) {
+        icons += 1;
+        continue;
+      }
+      // A bar or a rule drawn in svg is neither an icon nor a picture.
+      if (r.width < 64 || r.height < 56) continue;
+      for (let y = Math.max(0, Math.floor(r.top / CELL)); y < Math.min(down, Math.ceil(r.bottom / CELL)); y++) for (let x = Math.max(0, Math.floor(r.left / CELL)); x < Math.min(across, Math.ceil(r.right / CELL)); x++) under[y * across + x] = 1;
+    }
+    const drawnShare = under.length === 0 ? 0 : Math.round((under.reduce((n, cell) => n + cell, 0) / under.length) * 1000) / 1000;
+    // Boxes set off from what is around them, and how many of them by a hairline. This is the count the design
+    // lab laid on the owner's references and on the studio's pages, kept as it was laid: a fill, a shadow or a
+    // rule along the top makes a box, and the rule along the top is what is counted.
+    let boxes = 0;
+    let ruledBoxes = 0;
+    for (const el of all) {
+      if (el instanceof SVGElement) continue;
+      const r = rectOf(el);
+      if (r.width < 80 || r.height < 40 || !inFirst(r) || !shown(el)) continue;
+      const s = styleOf(el);
+      const ruled = px(s.borderTopWidth) > 0 && s.borderTopStyle !== 'none' && rgba(s.borderTopColor)[3] > 0.05;
+      if (!ruled && fillOf(el)[3] <= 0.5 && s.boxShadow === 'none') continue;
+      boxes += 1;
+      if (ruled) ruledBoxes += 1;
+    }
+
     const lines = (list: readonly string[]): string[] => list.slice(0, 40);
     return {
       microShare: total === 0 ? 0 : Math.round((micro.reduce((n, p) => n + p.chars, 0) / total) * 1000) / 1000,
@@ -476,6 +524,7 @@ export function collectDigest(maxElements: number): unknown {
       figuresTwice: lines([...places].filter(([, at]) => at.length >= 2).map(([figure, at]) => `${figure} x${at.length}`)),
       mediaBoxes: mediaBoxes.sort((a, b) => b[2] * b[3] - a[2] * a[3]).slice(0, 80),
       paper,
+      material: { drawnShare, icons, boxes, ruledBoxes },
     };
   };
   // A page this cannot be read off (a browser without one of the calls, a document built strangely) is still

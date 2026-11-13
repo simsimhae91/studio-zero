@@ -17,6 +17,8 @@ export interface CheckContext {
   template?: Template;
   /** How the pixels of the first screenful divide (`colourShares`), when a picture of it was taken. */
   shares?: { saturated: number; dark: number };
+  /** Whether this is a screen a person meets the product on: what a screen is made of is asked of those only. */
+  firstScreen?: boolean;
 }
 
 const GENERIC_FAMILIES = new Set(['serif', 'sans-serif', 'monospace', 'system-ui', 'ui-sans-serif', 'ui-serif', 'ui-monospace', 'cursive', 'fantasy', '-apple-system', 'blinkmacsystemfont']);
@@ -256,7 +258,7 @@ export function runDomChecks(digest: PageDigest, ctx: CheckContext, c: DesignCon
   }
   const cardGrid = [...groups.values()].find((g) => g.length >= 3 && g[0]!.shadow !== 'none' && g[0]!.radius >= 8);
   if (cardGrid) {
-    add('slop/identical-cards', 'originality', 'minor', `${cardGrid.length} identical rounded, shadowed cards in a row: the stock feature-grid layout.`, 'Ask whether these items are really equal. Lead with the one that matters, or use a plain list or table; drop the shadow and let a border or surface colour group them.', cardGrid[0]);
+    add('slop/identical-cards', 'originality', 'minor', `${cardGrid.length} identical rounded, shadowed cards in a row: the stock feature-grid layout.`, 'Ask whether these items are really equal. Lead with the one that matters, or set them as rows on one card (M6); a strip of cards is for things that each have a picture of their own.', cardGrid[0]);
   }
 
   // 9. How the first screen is put together -----------------------------------------------------------
@@ -275,8 +277,8 @@ export function runDomChecks(digest: PageDigest, ctx: CheckContext, c: DesignCon
         'color/flood',
         'color',
         'major',
-        `${percent(ctx.shares.saturated)}% of the first screen is colour at full strength. About 10% is the budget, and ${percent(COLOUR_LIMITS.flood)}% the limit.`,
-        'C2: bg-brand is for the main action, the mark of what is selected, the plate of the one figure and the fill of a progress bar. Take it off cards, panels, columns, header bands and section backgrounds: set those on bg-surface or bg-bg, and show a side or a category with the colour of its figure, a 4px edge or a dot.',
+        `${percent(ctx.shares.saturated)}% of the first screen is colour at full strength. About a third is the budget, and ${percent(COLOUR_LIMITS.flood)}% the limit.`,
+        'C2: Strong colour lives on one hero. Keep bg-brand on the one band or card that holds the state, the main action, the mark of what is selected, icon tiles and badges; set every other card, panel and section on bg-surface over bg-sunken, and show a side or a kind with an icon tile, the colour of its figure or a dot.',
         largest('saturated'),
       );
     }
@@ -306,8 +308,13 @@ export function runDomChecks(digest: PageDigest, ctx: CheckContext, c: DesignCon
  * 659: shorter than the 393 by 852 a mock-up is shown at, so the same page measures differently on each.
  */
 export const COLOUR_LIMITS = {
-  /** Colour at strength over more of the screen than this is a flood: the handbook's budget is about a tenth. */
-  flood: 0.15,
+  /**
+   * Colour at strength over more of the screen than this is a flood: the handbook's budget is one hero, about
+   * a third. The first limit was 0.15, set when the budget was a tenth, and it called every screen the owner
+   * found alive a flood: the products they named measure up to 0.38 and the lab's own pages drawn with a hero
+   * 0.23 to 0.34 here.
+   */
+  flood: 0.45,
   /**
    * Near-black over more of a light phone screen than this is a band. The page that showed the need for the
    * rule measures 0.20 here (its band runs on below the first screenful) and 0.30 at the taller size; pages
@@ -322,6 +329,23 @@ export const COLOUR_LIMITS = {
  * 2026-11-13. The sizes that define small text (12px and under) and a figure (28px and up) are the
  * collector's: it runs in the page and can read nothing from here.
  */
+/**
+ * Where what a first screen is made of becomes a finding. Set in the design lab on 2026-11-13 with the
+ * collector itself, at the audit's phone size, laid on five products the owner called alive and on the studio's
+ * own pages. The products: a drawing over 9 to 60% of the first screen, 11 to 27 icons on four of the five,
+ * and no box with a hairline (one, on one of them). The studio's pages that read as flat: nothing drawn, or a
+ * chart alone, with 0 to 4 icons, and 3 to 8 ruled boxes on eleven pages of fourteen. The pages drawn with the
+ * rules E: 12 to 43% drawn, 11 to 21 icons, no ruled box.
+ */
+export const MATERIAL_LIMITS = {
+  /** Under this share of the first screen drawn, */
+  drawn: 0.05,
+  /** and fewer small drawings (icons, avatars) than this, the screen is text and rules. */
+  icons: 8,
+  /** This many boxes drawn with a hairline box the screen in. */
+  ruledBoxes: 3,
+} as const;
+
 export const COMPOSITION_LIMITS = {
   /** Share of the first screen's characters set at 12px or under. Above it, small text is carrying the screen. */
   microShare: 0.4,
@@ -471,10 +495,37 @@ export function compositionFindings(digest: PageDigest, ctx: CheckContext): Find
     add(
       'layout/too-many-controls',
       'hierarchy',
-      'major',
-      `${read.controls} controls can be pressed on the first screen; ${limits.controls} is the limit.`,
-      'M7: A first screen offers up to 7 controls beside its rows and app bar. Keep the main action in the dock, move the rest into a sheet or onto the screen a row opens, and let a row be pressed whole in place of carrying buttons.',
+      // Minor since the lab read the owner's references with this count: their first screens offer 8 to 28
+      // things to press (a feed of cards is many), so the number alone does not mark a screen as worse.
+      'minor',
+      `${read.controls} controls can be pressed on the first screen, not counting its tabs; ${limits.controls} is the limit.`,
+      'M7: A first screen offers up to 7 controls beside its rows, app bar and tab bar. Keep the main action where M1 puts it, move the rest into a sheet or onto the screen a row opens, and let a row be pressed whole in place of carrying buttons.',
     );
+  }
+
+  // E1 and E4: what the screen is made of, on a screen a person meets the product on. Held to the phone's
+  // size: that is where the ruler was laid, a drawing that is a tenth of a phone is a hundredth of a desk, and
+  // a desk-sized table screen was not measured.
+  const made = read.material;
+  if (made && ctx.firstScreen && ctx.viewport === 'iphone-15-pro') {
+    if (made.drawnShare < MATERIAL_LIMITS.drawn && made.icons < MATERIAL_LIMITS.icons) {
+      add(
+        'material/nothing-drawn',
+        'originality',
+        'major',
+        `Nothing is drawn on the first screen besides text: no picture or drawing, and ${made.icons} icon${made.icons === 1 ? '' : 's'}. A screen of text and rules reads as a form.`,
+        'E1: Give the screen its material. People are avatars (E2: a drawn face on a tinted disc), the things the product names are small drawn objects, the state takes one hero drawing, and each row, tab and stat leads with its icon on a tinted tile (E3). Draw them in code as SVG in one style, from the theme\'s colours, and only this product\'s own nouns.',
+      );
+    }
+    if (made.ruledBoxes >= MATERIAL_LIMITS.ruledBoxes) {
+      add(
+        'material/ruled-boxes',
+        'hierarchy',
+        'major',
+        `${made.ruledBoxes} of the ${made.boxes} boxes on the first screen are drawn with a hairline: the screen is boxed and ruled like a form.`,
+        'E4: Lay the screen on bg-sunken and set content on bg-surface cards with rounded-xl, no border, and shadow-sm or none. Part sections with space and a heading, not a rule; keep a hairline for the divider between rows inside a card.',
+      );
+    }
   }
 
 

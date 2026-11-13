@@ -8,8 +8,8 @@ import { DIRECTIONS_RULES, MOCKUP_RULES, codingSystemPrompt } from '../src/harne
 import { VISION_SYSTEM_PROMPT, visionParts, type VisionInput } from '../src/qa/vision.ts';
 
 const range = (prefix: string, n: number): string[] => Array.from({ length: n }, (_, i) => `${prefix}${i + 1}`);
-const MOBILE_IDS = [...range('T', 7), ...range('C', 8), ...range('M', 16), 'K', ...range('I', 7)];
-const WEB_IDS = [...range('T', 7), ...range('C', 8), ...range('P', 10), ...range('A', 10), ...range('I', 7)];
+const MOBILE_IDS = [...range('T', 7), ...range('C', 8), ...range('E', 5), ...range('M', 16), 'K', ...range('I', 7)];
+const WEB_IDS = [...range('T', 7), ...range('C', 8), ...range('E', 5), ...range('P', 10), ...range('A', 10), ...range('I', 7)];
 
 test('each kind of product gets its own rules, each once, under the cap an engine will still read', () => {
   assert.deepEqual(rulesFor('mobile-expo').map((rule) => rule.id), MOBILE_IDS);
@@ -17,7 +17,8 @@ test('each kind of product gets its own rules, each once, under the cap an engin
   assert.deepEqual(rulesFor('web-next').map((rule) => rule.id), WEB_IDS);
   for (const template of ['mobile-expo', 'web-vite-react'] as const) {
     const text = handbookFor(template);
-    assert.ok(text.split(/\s+/).length <= 1500, `${template}: ${text.split(/\s+/).length} words`);
+    // 1,500 until the rules for what a screen is made of (E) were added; the lab's drawing agents kept the longer text as they kept the shorter.
+    assert.ok(text.split(/\s+/).length <= 1900, `${template}: ${text.split(/\s+/).length} words`);
     for (const rule of rulesFor(template)) assert.equal(text.split(`\n${rule.id}. `).length - 1, 1, `${template}: ${rule.id} is printed once, at the start of a line`);
     assert.match(text, /^<design_handbook>[\s\S]*<\/design_handbook>$/);
     assert.match(text, /depart from one only for a reason that comes from this product's subject/);
@@ -31,17 +32,24 @@ test('each kind of product gets its own rules, each once, under the cap an engin
   assert.equal(Object.values(HANDBOOK).flat().every((rule) => !rule.says.includes('—')), true, 'written without em-dashes, as the pages should be');
 });
 
-test('the rules carry their numbers: a budget for strong colour and for small text, one face, upright text', () => {
+test('the rules carry their numbers: one hero of strong colour, a budget for small text, one face, upright text, and what a screen is made of', () => {
   const says = (template: 'mobile-expo' | 'web-vite-react', id: string): string => rulesFor(template).find((rule) => rule.id === id)!.says;
   assert.match(says('mobile-expo', 'T1'), /Pretendard, SUIT or SUITE[\s\S]*no serif, no second sans, no italics[\s\S]*Monospace only inside code, pre and kbd/);
   assert.match(says('mobile-expo', 'T3'), /never a sentence[\s\S]*about a third of the text on a screen/);
   assert.match(says('mobile-expo', 'T5'), /no rotated labels, no Hangul stacked a syllable to a line, no numerals turned around a dial/);
-  assert.match(says('mobile-expo', 'C2'), /about a tenth of the first screen[\s\S]*Never on a card, a panel, a column, a header bar or a section/);
-  assert.match(says('mobile-expo', 'C4'), /the second colour is the other[\s\S]*applied as marks[\s\S]*never alone/);
+  assert.match(says('mobile-expo', 'C2'), /lives on one hero[\s\S]*up to about a third of the first screen[\s\S]*No second filled card: past 45% the audit calls it a flood/);
+  assert.match(says('mobile-expo', 'C4'), /the second colour is the other[\s\S]*each side may fill its half[\s\S]*as marks[\s\S]*Never alone/);
   assert.match(says('mobile-expo', 'M3'), /one comparison block: one surface, the same size, the difference said once/);
-  assert.match(says('mobile-expo', 'M5'), /No twin cards of equal height[\s\S]*as tall as its content, never stretched/);
+  assert.match(says('mobile-expo', 'M5'), /No card in a card[\s\S]*as tall as its content, never stretched/);
+  assert.match(says('mobile-expo', 'M1'), /a tab bar of three to five tabs[\s\S]*a pill floating above it[\s\S]*nothing at rest lies under it/);
   assert.match(says('web-vite-react', 'P4'), /No column of the first screen stays empty for more than a third of its height/);
-  assert.match(says('web-vite-react', 'I1'), /draw it in code[\s\S]*its picture is content[\s\S]*Otherwise, no picture/);
+  assert.match(says('web-vite-react', 'I1'), /drawn in code, and so are its people, its things and its icons[\s\S]*its picture is content/);
+  // What a screen is made of, for a phone app and a web product alike.
+  for (const template of ['mobile-expo', 'web-vite-react'] as const) {
+    assert.match(says(template, 'E1'), /more than text and rules[\s\S]*the audit counts what is drawn/);
+    assert.match(says(template, 'E2'), /A person is an avatar[\s\S]*Only this product's own nouns: never a scene that could sit on any product/);
+    assert.match(says(template, 'E4'), /The canvas is bg-sunken; content sits on bg-surface cards, rounded-xl, with no border/);
+  }
 });
 
 test('the engines receive the handbook for their kind of product, and nothing that contradicts it', () => {

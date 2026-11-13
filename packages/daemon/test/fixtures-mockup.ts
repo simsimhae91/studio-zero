@@ -20,6 +20,7 @@ body:has(#s-logged:checked) [data-state="logged"]{display:flex}
 [data-state="logged"] .stamp{animation:stamp 320ms ease-out both}`)}<body><main>
 <input type="radio" name="s" id="s-rest" checked hidden><input type="radio" name="s" id="s-logged" hidden>
 <h1>망원동 집 장부</h1>
+<svg class="drawn" viewBox="0 0 320 96" width="320" height="96" role="img" aria-label="도장이 찍힌 장부"><rect x="8" y="8" width="304" height="80" rx="8" fill="#e7efe9"/><rect x="24" y="24" width="120" height="8" rx="4" fill="#1f4d39"/><rect x="24" y="44" width="176" height="8" rx="4" fill="#9db8aa"/><rect x="24" y="64" width="96" height="8" rx="4" fill="#9db8aa"/><circle cx="260" cy="48" r="26" fill="none" stroke="#1f4d39" stroke-width="4"/><path d="M248 48l9 9 16-18" fill="none" stroke="#1f4d39" stroke-width="4"/></svg>
 <section class="state" data-state="rest"><p>설거지 · 보통 매일 · 20분</p><label class="btn" for="s-logged" data-step="log:1">설거지 20분 적기</label></section>
 <section class="state" data-state="logged"><p class="stamp" data-done="log">지우 방금 · 설거지 20분</p><label class="btn quiet" for="s-rest" data-step="undo:1">되돌리기</label></section>
 <section class="state" data-state="rest"><p data-done="undo">오늘 적은 집안일이 없어요</p></section>

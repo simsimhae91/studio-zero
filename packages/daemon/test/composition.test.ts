@@ -117,7 +117,7 @@ const CASES: readonly { rule: string; severity: 'major' | 'minor'; id: string; c
   { rule: 'type/end-aligned-block', severity: 'minor', id: 'T6', change: { css: '.note{text-align:right}' }, says: /"정오 전에 기록하면[^"]*" is aligned to the end side/ },
   { rule: 'layout/half-empty-card', severity: 'minor', id: 'M5', change: { css: '.compare{min-height:280px}' }, says: /A 361×280px card is filled to 2\d% of its height/ },
   { rule: 'layout/nested-cards', severity: 'minor', id: 'M5', change: { css: '.compare div{margin:8px;border:1px solid var(--sz-border);border-radius:8px}' }, says: /2 cards sit inside another card/ },
-  { rule: 'layout/too-many-controls', severity: 'major', id: 'M7', change: { extra: CHIPS }, says: new RegExp(`^1\\d controls can be pressed on the first screen; ${COMPOSITION_LIMITS.controls} is the limit`) },
+  { rule: 'layout/too-many-controls', severity: 'minor', id: 'M7', change: { extra: CHIPS }, says: new RegExp(`^1\\d controls can be pressed on the first screen, not counting its tabs; ${COMPOSITION_LIMITS.controls} is the limit`) },
 ];
 
 test('composition, read off a real page: a screen that keeps the handbook is clean, and each rule is found on the page that breaks it alone', async (t) => {
@@ -177,6 +177,38 @@ test('composition, read off a real page: a screen that keeps the handbook is cle
     assert.deepEqual(rules(runDomChecks(charted, phone, contract)), [], 'numerals inside a chart are not small text overused, and a score on two bars is not a figure said twice');
     assert.deepEqual(rules(runDomChecks(await measure(screen({ list: chart(true) })), phone, contract)), ['type/turned-text'], 'a tick label turned on its side is still turned, drawn or not');
 
+    // E1 and E4: what a first screen is made of. The clean screen above keeps every rule of type and layout and
+    // is still text and rules: asked as a screen a person meets the product on, it has nothing drawn.
+    const first: CheckContext = { ...phone, firstScreen: true };
+    assert.deepEqual(clean.composition!.material, { drawnShare: 0, icons: 0, boxes: 3, ruledBoxes: 2 }, 'the comparison block and the dock are ruled; the dock\'s button is a box with no rule');
+    const flat = runDomChecks(clean, first, contract);
+    assert.deepEqual(rules(flat), ['material/nothing-drawn'], said(flat));
+    assert.equal(flat[0]!.severity, 'major');
+    assert.match(flat[0]!.message, /^Nothing is drawn on the first screen besides text: no picture or drawing, and 0 icons\./);
+    assert.ok(flat[0]!.fix!.startsWith('E1: '));
+    // A chart is a drawing, and so are eight faces: either is enough to say the screen is made of something.
+    assert.ok(charted.composition!.material!.drawnShare > 0.25);
+    assert.deepEqual(rules(runDomChecks(charted, first, contract)), []);
+    const FACE = '<svg class="face" viewBox="0 0 40 40" width="40" height="40" aria-hidden="true"><circle cx="20" cy="20" r="20" fill="#dbe7fb"/><circle cx="20" cy="16" r="7" fill="#0051b2"/></svg>';
+    const faces = await measure(screen({ css: '.faces{display:flex;gap:4px}', extra: `<div class="faces">${FACE.repeat(8)}</div>` }));
+    assert.deepEqual([faces.composition!.material!.icons, faces.composition!.material!.drawnShare], [8, 0]);
+    assert.deepEqual(rules(runDomChecks(faces, first, contract)), []);
+    assert.deepEqual(rules(runDomChecks(await measure(screen({ css: '.faces{display:flex;gap:4px}', extra: `<div class="faces">${FACE.repeat(7)}</div>` })), first, contract)), ['material/nothing-drawn'], 'seven are not yet a screen with faces on it');
+    // Three boxes drawn with a hairline: the comparison block, the dock, and one more.
+    const BOXES = { css: '.box{padding:16px;min-height:80px;border:1px solid var(--sz-border);border-radius:8px;background:var(--sz-surface)}.faces{display:flex;gap:4px}', extra: `<div class="faces">${FACE.repeat(8)}</div><div class="box">오늘 미션</div>` };
+    const boxed = runDomChecks(await measure(screen(BOXES)), first, contract);
+    assert.deepEqual(rules(boxed), ['material/ruled-boxes'], said(boxed));
+    assert.match(boxed[0]!.message, /^3 of the 4 boxes on the first screen are drawn with a hairline/);
+    assert.ok(boxed[0]!.fix!.startsWith('E4: ') && boxed[0]!.severity === 'major');
+    assert.deepEqual(rules(runDomChecks(await measure(screen({ ...BOXES, css: `${BOXES.css}.box,.compare,.dock{border:0}` })), first, contract)), [], 'the same boxes with no rule on them');
+    // Asked only where a person meets the product, and at the size of a hand.
+    assert.deepEqual(rules(runDomChecks(clean, phone, contract)), []);
+    assert.deepEqual(rules(runDomChecks(clean, { ...first, viewport: 'desktop-1440', viewportWidth: 1440, touch: false }, contract)), []);
+    assert.deepEqual(rules(runDomChecks(clean, { ...first, viewport: 'ipad-pro-11', viewportWidth: 834 }, contract)), [], 'the ruler was laid at the phone\'s size');
+    // The tabs of a tab bar are the frame, not what the screen offers.
+    const TABS = '<nav class="tabs">' + ['대결', '점수', '지난 대결', '내 정보'].map((name) => `<a href="#${name}">${name}</a>`).join('') + '</nav>';
+    assert.equal((await measure(screen({ css: '.tabs{position:fixed;left:0;right:0;bottom:84px;display:flex;gap:16px}.tabs a{min-height:44px}', extra: TABS }))).composition!.controls, 6, 'five rows and the dock, as without the tabs');
+
     // A desk has no thumb to crowd: the count of controls is a touch-screen rule.
     const crowded = await measure(screen({ extra: CHIPS }), 'desk');
     assert.ok(crowded.composition!.controls > COMPOSITION_LIMITS.controls);
@@ -217,6 +249,8 @@ const BOTH = ['color/dark-band', 'color/flood'];
 const PICTURE = `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="40" height="20"><rect width="40" height="20" fill="#0051b2"/></svg>')}`;
 const HELD = 'display:flex;flex-direction:column;justify-content:space-between;padding:16px;font-weight:600';
 const PANEL = { css: `.panel{${HELD};height:200px;border-radius:8px;background:var(--sz-brand);color:var(--sz-on-brand)}`, extra: '<div class="panel"><span>새벽등산이 앞서 있어요</span><span>응원을 보내면 따라잡을 수 있어요</span></div>' };
+/** The same panel grown to half the first screen: past what one hero takes. */
+const FLOOD = { css: PANEL.css.replace('height:200px', 'height:330px'), extra: PANEL.extra };
 const BAND = { css: `.band{${HELD};height:240px;margin:0 -16px;background:#0b0c0e;color:#f4f5f7}`, extra: '<div class="band"><span>라운드별 점수</span><span>하루에 백 점까지 받아요</span></div>' };
 const DARK_TOKENS = ':root{--sz-bg:#0e0f12;--sz-surface:#17181c;--sz-fg:#f4f5f7;--sz-fg-muted:#b6bac4;--sz-border:#2a2c33}';
 
@@ -253,17 +287,19 @@ test('colour by the pixel, through the auditor: a flood of brand and a dark band
 
     assert.deepEqual(rules(await measured({})), [], 'the dock\'s one button is colour where colour belongs');
 
-    // A brand panel over a quarter of the first screen.
-    const flooded = await measured(PANEL);
+    // A brand panel over a quarter of the first screen is a hero, which is where strong colour lives (C2).
+    assert.deepEqual(rules(await measured(PANEL)), [], 'one hero in the brand is inside the budget');
+    // The same panel over half of it.
+    const flooded = await measured(FLOOD);
     assert.deepEqual(atPhone(flooded), ['color/flood']);
     const flood = flooded.find((f) => f.viewport === 'iphone-15-pro')!;
     assert.equal(flood.severity, 'major');
-    assert.match(flood.message, /^3\d% of the first screen is colour at full strength\. About 10% is the budget, and \d\d% the limit\.$/);
+    assert.match(flood.message, /^(4[6-9]|5\d)% of the first screen is colour at full strength\. About a third is the budget, and 45% the limit\.$/);
     assert.ok(flood.fix!.startsWith('C2: '), flood.fix!);
     assert.equal(flood.selector, 'main > div.panel', 'the finding points at the largest surface of that colour');
     // Review Focus 4: the same panel as a photograph, and as a picture behind a box. What a picture holds is not the interface's colour.
-    assert.deepEqual(rules(await measured({ css: '.panel{display:block;width:100%;height:200px;border-radius:8px}', extra: `<img class="panel" alt="새벽 산길" src="${PICTURE}">` })), []);
-    assert.deepEqual(rules(await measured({ css: `${PANEL.css}.panel{background:url("${PICTURE}") center/cover}`, extra: PANEL.extra })), []);
+    assert.deepEqual(rules(await measured({ css: '.panel{display:block;width:100%;height:330px;border-radius:8px}', extra: `<img class="panel" alt="새벽 산길" src="${PICTURE}">` })), []);
+    assert.deepEqual(rules(await measured({ css: `${FLOOD.css}.panel{background:url("${PICTURE}") center/cover}`, extra: FLOOD.extra })), []);
 
     // A black band over a third of a paper screen.
     const banded = await measured(BAND);
@@ -288,7 +324,7 @@ test('colour by the pixel, through the auditor: a flood of brand and a dark band
     const kept = (project: Project): string[] => (existsSync(join(d.config.artifactsDir, project.id)) ? (readdirSync(join(d.config.artifactsDir, project.id), { recursive: true }) as string[]).filter((name) => name.endsWith('.png')) : []);
     assert.deepEqual(kept(phoneProject), []);
     // An audit counts the picture it keeps anyway.
-    const { report } = await auditor.auditPages({ project: phoneProject, taskId: null, pages: [{ route: `${MOCKUP_DIR}/a.html`, html: withFaces(screen(PANEL)) }] });
+    const { report } = await auditor.auditPages({ project: phoneProject, taskId: null, pages: [{ route: `${MOCKUP_DIR}/a.html`, html: withFaces(screen(FLOOD)) }] });
     assert.deepEqual(atPhone(report.findings.filter((f) => f.rule.startsWith('color/'))), ['color/flood']);
     assert.ok(report.screenshots.length > 0 && kept(phoneProject).length === report.screenshots.length);
   } finally {
@@ -297,7 +333,7 @@ test('colour by the pixel, through the auditor: a flood of brand and a dark band
   }
 });
 
-test('the page a real engine drew on 2026-11-13, which the check of its own page called clean: a brand panel, a black band, and six more', async (t) => {
+test('the page a real engine drew on 2026-11-13, which the check of its own page called clean: a black band, nothing drawn, boxes ruled, and five more', async (t) => {
   const browser = await launch();
   if (!browser) return t.skip('headless Chrome cannot be launched here');
   const d = await testDaemon();
@@ -312,10 +348,11 @@ test('the page a real engine drew on 2026-11-13, which the check of its own page
     if (check.status !== 'measured') return;
     const found = check.findings!.filter((f) => f.viewport === 'iphone-15-pro');
     const handbook = found.filter((f) => /^[A-Z]\d+: /.test(f.fix ?? ''));
-    assert.deepEqual(rules(handbook), ['color/dark-band', 'color/flood', 'layout/half-empty-card', 'type/end-aligned-block', 'type/micro-overuse', 'type/second-family', 'type/stacked-text'], said(found));
-    for (const rule of BOTH) assert.equal(found.find((f) => f.rule === rule)?.severity, 'major');
+    // Its brand panel is a sixth of the screen: inside the budget of one hero since the lab's second round, and no longer said.
+    assert.deepEqual(rules(handbook), ['color/dark-band', 'layout/half-empty-card', 'material/nothing-drawn', 'material/ruled-boxes', 'type/end-aligned-block', 'type/micro-overuse', 'type/second-family', 'type/stacked-text'], said(found));
+    for (const rule of ['color/dark-band', 'material/nothing-drawn', 'material/ruled-boxes']) assert.equal(found.find((f) => f.rule === rule)?.severity, 'major');
     const text = renderMockupCheck(file, check);
-    assert.match(text, /- \[major\] color\/flood \(measured\)\n  iphone-15-pro \| docs\/mockups\/b\.html \| selector: [^\n]*div\.side\.opp[^\n]*\n  \d\d% of the first screen is colour at full strength/);
+    assert.match(text, /- \[major\] material\/nothing-drawn \(measured\)\n  iphone-15-pro \| docs\/mockups\/b\.html[^\n]*\n  Nothing is drawn on the first screen besides text: no picture or drawing, and \d icons?\./);
     assert.match(text, /- \[major\] color\/dark-band \(measured\)\n  iphone-15-pro \| docs\/mockups\/b\.html \| selector: [^\n]*button\.board[^\n]*\n  \d\d% of this light screen is near-black/);
     assert.ok(!text.includes('Nothing here holds the page back'), 'the answer the engine stopped on is not given any more');
     assert.deepEqual(store.listAudits(phoneProject.id, 10), []);
@@ -335,11 +372,11 @@ test('where a share of pixels becomes a finding: over the limit, on a phone app 
   assert.deepEqual(found({ saturated: COLOUR_LIMITS.flood + 0.001, dark: COLOUR_LIMITS.darkBand + 0.001 }), BOTH);
   assert.deepEqual(rules(runDomChecks(digest(), phone, contract)), [], 'with no picture counted, nothing is said about colour');
   // A flood is a flood on any product at any size. The band is the phone app's rule, on its phone screen, on light paper.
-  assert.deepEqual(found({ saturated: 0.4, dark: 0.4 }, { template: 'web-vite-react', viewport: 'desktop-1440', viewportWidth: 1440, touch: false }), ['color/flood']);
+  assert.deepEqual(found({ saturated: 0.5, dark: 0.4 }, { template: 'web-vite-react', viewport: 'desktop-1440', viewportWidth: 1440, touch: false }), ['color/flood']);
   assert.deepEqual(found({ saturated: 0, dark: 0.4 }, { viewport: 'ipad-pro-11', viewportWidth: 834 }), []);
   assert.deepEqual(found({ saturated: 0, dark: 0.4 }, { template: undefined }), [], 'a caller that does not say what the product is gets no rule that depends on it');
   assert.deepEqual(found({ saturated: 0, dark: 0.9 }, {}, { paper: [0.05, 0.06, 0.07] }), []);
-  assert.deepEqual(found({ saturated: 0.4, dark: 0.4 }, { scope: 'color-only' }), [], 'the dark pass is not where a light screen is counted');
+  assert.deepEqual(found({ saturated: 0.5, dark: 0.4 }, { scope: 'color-only' }), [], 'the dark pass is not where a light screen is counted');
   const { composition: _unread, ...old } = digest();
   assert.deepEqual(rules(runDomChecks(old, { ...phone, shares: { saturated: 0, dark: 0.4 } }, contract)), [], 'without the paper read off the page there is no saying the screen is light');
 });
