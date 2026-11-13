@@ -115,6 +115,8 @@ function Workbench({ project, onOpen, onChanged }: { project: Project; onOpen: (
   const [trackChoice, setTrackChoice] = useState<TaskTrack | null>(null);
   // The engine and model for the next task: the owner's standing choice, shared with the first page.
   const choice = useEngineChoice();
+  // Sending a design back is design work: the same engine and model, at the level remembered for design.
+  const designChoice = useEngineChoice('design');
   // 'auto' pairs the reviewer with the engine (never its own vendor); anything else is the owner's pick.
   const [reviewer, setReviewer] = useState<ReviewerPref | 'auto'>('auto');
   const [references, setReferences] = useState('');
@@ -176,7 +178,7 @@ function Workbench({ project, onOpen, onChanged }: { project: Project; onOpen: (
   const revise = useAction(async (prompt: string) => {
     if (prompt === '' || !design?.branch) return;
     // A revision is design work on top of the design: it starts from that task's branch, where the pages are.
-    const task = await backend.call('tasks.submit', { projectId: project.id, kind: 'ideate', prompt, track: 'full', baseBranch: design.branch, ...(session ? { sessionId: session } : {}) });
+    const task = await backend.call('tasks.submit', { projectId: project.id, kind: 'ideate', prompt, track: 'full', baseBranch: design.branch, ...(session ? { sessionId: session } : {}), ...designChoice.fields });
     setMockupNotes([]);
     setPicked((prev) => ({ ...prev, [key]: task.id }));
     setPane('chat');

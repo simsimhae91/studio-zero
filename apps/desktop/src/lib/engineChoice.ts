@@ -7,6 +7,17 @@ export interface RememberedChoice {
   effort: string;
 }
 
+/** The two kinds of work a level is remembered for: designing a product on paper, and everything that writes code. */
+export type Work = 'design' | 'build';
+
+/**
+ * What is remembered for one kind of work. The engine and its model are one choice for the whole app; the
+ * level is kept per kind of work, so a level picked for builds does not follow the owner into a design task.
+ */
+export function rememberedFor(prefs: { engine: string; model: string; effort: string; designEffort: string }, work: Work): RememberedChoice {
+  return { engine: prefs.engine, model: prefs.model, effort: work === 'design' ? prefs.designEffort : prefs.effort };
+}
+
 /** What an engine offers to choose from, once the daemon has said. */
 export interface EngineCatalog {
   models: readonly EngineModel[];

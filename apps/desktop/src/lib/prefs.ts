@@ -10,8 +10,13 @@ export interface Prefs {
   engine: string;
   /** The model picked on that engine, or `default`. */
   model: string;
-  /** How hard that engine is asked to think, or `default`. */
+  /** How hard that engine is asked to think when it builds, or `default`. */
   effort: string;
+  /**
+   * The same for design work (the documents and mock-ups of "설계부터", and their revisions), kept apart: a
+   * design task is one long turn of writing, and the level that suits a build is not the level it needs.
+   */
+  designEffort: string;
 }
 
 /** Each preset is a seed for the theme generator (see scripts/theme.mjs); `system` follows the OS light/dark setting. */
@@ -36,7 +41,7 @@ export const MONO_FONTS: readonly { id: MonoFont; label: string; stack: string; 
 ];
 
 const KEY = 'studio-zero.prefs';
-const DEFAULTS: Prefs = { theme: 'studio-dark', mono: 'geist-mono', engine: 'auto', model: 'default', effort: 'default' };
+const DEFAULTS: Prefs = { theme: 'studio-dark', mono: 'geist-mono', engine: 'auto', model: 'default', effort: 'default', designEffort: 'default' };
 
 function load(): Prefs {
   try {
@@ -47,6 +52,7 @@ function load(): Prefs {
       engine: typeof saved?.engine === 'string' ? saved.engine : DEFAULTS.engine,
       model: typeof saved?.model === 'string' ? saved.model : DEFAULTS.model,
       effort: typeof saved?.effort === 'string' ? saved.effort : DEFAULTS.effort,
+      designEffort: typeof saved?.designEffort === 'string' ? saved.designEffort : DEFAULTS.designEffort,
     };
   } catch {
     return DEFAULTS;

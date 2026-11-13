@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { resolveChoice, type EngineCatalog } from '../src/lib/engineChoice.ts';
+import { rememberedFor, resolveChoice, type EngineCatalog } from '../src/lib/engineChoice.ts';
 
 const engines = [{ id: 'claude-code', available: true }, { id: 'cursor', available: true }, { id: 'codex', available: false }];
 const claude: EngineCatalog = { models: [{ id: 'opus', label: 'Claude Opus' }, { id: 'haiku', label: 'Claude Haiku' }], efforts: ['low', 'medium', 'high', 'xhigh', 'max'] };
@@ -32,4 +32,13 @@ test('effort is a choice only where the engine has it as a setting, and it outli
 test('whatever is in storage is not trusted to be a choice', () => {
   assert.deepEqual(resolveChoice({ engine: 'rm -rf', model: 'x', effort: 'max' }, undefined, undefined), { engine: null, ...none });
   assert.deepEqual(resolveChoice({ engine: 'claude-code', model: '--dangerously-skip-permissions', effort: 'ultra' }, undefined, undefined), { engine: 'claude-code', ...none });
+});
+
+test('the level is remembered once for design work and once for builds; the engine and its model are one choice', () => {
+  const prefs = { engine: 'claude-code', model: 'opus', effort: 'xhigh', designEffort: 'high' };
+  assert.deepEqual(rememberedFor(prefs, 'build'), { engine: 'claude-code', model: 'opus', effort: 'xhigh' });
+  assert.deepEqual(rememberedFor(prefs, 'design'), { engine: 'claude-code', model: 'opus', effort: 'high' });
+  // A level picked for builds does not follow the owner into a design task: left alone, design stays at the table's own.
+  const untouched = rememberedFor({ ...prefs, designEffort: 'default' }, 'design');
+  assert.equal(resolveChoice(untouched, [{ id: 'claude-code', available: true }], { models: [], efforts: ['low', 'medium', 'high', 'xhigh', 'max'] }).effort, null);
 });

@@ -30,7 +30,8 @@ export function Home({ scratchpads, projects, onOpen, onCreated }: { scratchpads
   const current = MODES.find((m) => m.id === mode)!;
   const builds = mode === 'fast' || mode === 'deep';
   // The first task of a project is usually its largest: who runs it is chosen here, not one task later.
-  const choice = useEngineChoice();
+  // A design task and a build each remember their own level: the menu follows what is about to be started.
+  const choice = useEngineChoice(mode === 'deep' ? 'design' : 'build');
 
   const start = useAction(async () => {
     const opening = text.trim();

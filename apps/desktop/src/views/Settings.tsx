@@ -4,6 +4,7 @@ import type { McpServerInfo } from '@studio-zero/protocol';
 import { engineLabel, slugify } from '../lib/format.ts';
 import { forgetToken } from '../lib/platform.ts';
 import { MONO_FONTS, THEME_PRESETS, fontInstalled, setPrefs, usePrefs } from '../lib/prefs.ts';
+import { EffortDefaults } from './enginePicker.tsx';
 import { useAction, useQuery, useStudio } from '../lib/studio.tsx';
 import { Button, Field, Problem, Segmented, Sheet, Status, inputClass } from '../ui.tsx';
 
@@ -104,6 +105,11 @@ export function Settings({ open, onOpenChange, onDisconnect }: { open: boolean; 
             </li>
           ))}
         </ul>
+        <div className="flex flex-col gap-1 pt-3">
+          <h4 className="text-base font-semibold">추론 강도 기본값</h4>
+          <p className="text-base text-fg-muted">엔진을 직접 골랐을 때 얼마나 깊이 생각하게 할지입니다. 설계와 구현은 따로 기억합니다. 작업을 시작하는 자리의 메뉴와 같은 값이고, 어느 쪽에서 바꿔도 됩니다.</p>
+        </div>
+        <EffortDefaults />
       </section>
 
       <section className="flex flex-col gap-4">
