@@ -1,7 +1,7 @@
 import type { Page } from 'playwright-core';
 import { z } from 'zod';
 import { contract } from '@studio-zero/design';
-import type { FlowTaskWalk } from '@studio-zero/protocol';
+import type { FlowTaskWalk, FlowTotals } from '@studio-zero/protocol';
 import type { FlowTask } from '../scratch/ScreenSpec.ts';
 
 /**
@@ -130,9 +130,22 @@ function moving(): number {
  * Those are counted here, on the page itself, with no model in the loop.
  *
  * `touch` says the page is being looked at as a phone: there, how a control looks under a hovering pointer is
- * not an answer to anything.
+ * not an answer to anything. `patienceMs` is how long the walk waits for the next thing to appear after a
+ * press: nothing on a mock-up, whose states are CSS and change at once; a couple of seconds on a running app,
+ * where a press may go through a render or a request first.
  */
-export async function walkFlow(page: Page, tasks: readonly FlowTask[], opts: { touch: boolean }): Promise<Walk> {
+export async function walkFlow(page: Page, tasks: readonly FlowTask[], opts: { touch: boolean; patienceMs?: number }): Promise<Walk> {
+  const patience = opts.patienceMs ?? 0;
+  /** Looks, and keeps looking until `ready` or patience runs out. Null when the page gave nothing readable. */
+  const seek = async (q: { step: string; done: string }, ready: (seen: z.infer<typeof Look>) => boolean): Promise<z.infer<typeof Look> | null> => {
+    const until = Date.now() + patience;
+    for (;;) {
+      const seen = Look.safeParse(await page.evaluate(look, q).catch(() => null));
+      if (seen.success && ready(seen.data)) return seen.data;
+      if (Date.now() >= until) return seen.success ? seen.data : null;
+      await page.waitForTimeout(100);
+    }
+  };
   const frames: WalkFrame[] = [];
   const shoot = async (task: number | null, step: number | null): Promise<void> => void frames.push({ task, step, jpeg: await page.screenshot({ type: 'jpeg', quality: 72 }) });
   await shoot(null, null);
@@ -146,17 +159,18 @@ export async function walkFlow(page: Page, tasks: readonly FlowTask[], opts: { t
     walked.push(result);
 
     for (let step = 1; step <= MAX_STEPS; step++) {
-      const seen = Look.safeParse(await page.evaluate(look, selectors(step)).catch(() => null));
-      if (!seen.success) {
+      // After the first step, the outcome showing means the steps are over: no need to wait for one more.
+      const seen = await seek(selectors(step), (s) => s.target !== null || s.done);
+      if (seen === null) {
         Object.assign(result, { stopped: 'step-missing', stoppedAtStep: step });
         break;
       }
       // The page has to open before the person acts. One that shows the outcome already has nothing to carry out.
-      if (step === 1 && seen.data.done) {
+      if (step === 1 && seen.done) {
         Object.assign(result, { stopped: 'already-done', stoppedAtStep: 1 });
         break;
       }
-      const target = seen.data.target;
+      const target = seen.target;
       if (!target) {
         // Out of marked steps: the task is over, and whether it worked is what the outcome says.
         if (step === 1) Object.assign(result, { stopped: 'step-missing', stoppedAtStep: 1 });
@@ -194,8 +208,8 @@ export async function walkFlow(page: Page, tasks: readonly FlowTask[], opts: { t
     }
 
     if (result.stopped === null) {
-      const after = Look.safeParse(await page.evaluate(look, selectors(MAX_STEPS + 1)).catch(() => null));
-      if (after.success && after.data.done) result.reached = true;
+      const after = await seek(selectors(MAX_STEPS + 1), (s) => s.done);
+      if (after?.done) result.reached = true;
       else Object.assign(result, { stopped: 'outcome-not-shown', stoppedAtStep: null });
     }
     // A flow is a sequence: what comes after a task that did not finish would be walked from the wrong state.
@@ -228,4 +242,11 @@ export function walkProblems(walk: Pick<Walk, 'tasks'>, tasks: readonly FlowTask
     if (walked.presses > 0 && walked.answered < walked.presses) problems.push(`task "${task.id}": ${walked.presses - walked.answered} of its ${walked.presses} control(s) look the same while held down as at rest. Give each an :active state (a shift, a press-in, a change of surface).`);
   }
   return problems;
+}
+
+/** A walk added up over the flow's tasks: the one line a receipt keeps. `expected` is how many tasks the spec has. */
+export function flowTotals(walked: readonly FlowTaskWalk[], expected: number): FlowTotals {
+  const sum = (pick: (t: FlowTaskWalk) => number): number => walked.reduce((n, t) => n + pick(t), 0);
+  const sizes = walked.flatMap((t) => (t.smallestTargetPx === null ? [] : [t.smallestTargetPx]));
+  return { tasks: expected, reached: walked.filter((t) => t.reached).length, presses: sum((t) => t.presses), scrolls: sum((t) => t.scrolls), smallestTargetPx: sizes.length > 0 ? Math.min(...sizes) : null, answered: sum((t) => t.answered) };
 }

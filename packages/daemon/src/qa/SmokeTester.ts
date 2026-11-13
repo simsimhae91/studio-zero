@@ -1,10 +1,12 @@
-import type { Browser } from 'playwright-core';
-import type { Project } from '@studio-zero/protocol';
+import type { Browser, BrowserContextOptions } from 'playwright-core';
+import type { FlowTaskWalk, Project } from '@studio-zero/protocol';
 import type { Config } from '../config.ts';
 import { ensureDevServer } from '../harness/devServer.ts';
 import { readProjectFile } from '../harness/projectFile.ts';
 import type { OrbStackManager } from '../sandbox/OrbStackManager.ts';
+import type { FlowTask } from '../scratch/ScreenSpec.ts';
 import { errorMessage, excerpt } from '../util/core.ts';
+import { walkFlow, walkProblems } from './FlowWalker.ts';
 import type { QaBrowser } from './QaBrowser.ts';
 
 export interface SmokeIssue {
@@ -24,10 +26,22 @@ export interface SmokeOutcome {
   durationMs: number;
 }
 
+/** A core flow as it went on the running app: each task as walked, and what the walk found wrong, in sentences. */
+export interface AppWalk {
+  route: string;
+  tasks: FlowTaskWalk[];
+  problems: string[];
+}
+
 /** The seam the harness depends on, so tests can stand in for a browser. */
 export interface SmokeRunner {
   run(project: Project, opts?: { extraRoutes?: string[]; signal?: AbortSignal }): Promise<SmokeOutcome>;
+  /** Walks a screen spec's core flow on the app the smoke run has just served. Not every stand-in can. */
+  walk?(project: Project, tasks: readonly FlowTask[], opts?: { signal?: AbortSignal }): Promise<AppWalk | null>;
 }
+
+/** How long the walk waits, after a press on a running app, for the next step or the outcome to appear. */
+const APP_PATIENCE_MS = 2500;
 
 const MAX_ISSUES_PER_ROUTE = 12;
 /** A missing favicon or image is logged by the browser as a console error; responses are judged by status instead. */
@@ -68,6 +82,40 @@ export class SmokeTester implements SmokeRunner {
       return all;
     });
     return finish(issues);
+  }
+
+  /**
+   * Carries the core flow of the project's screen spec out on the running app, the way it was carried out on
+   * the mock-up the owner chose from: the same two attributes, the same counts. The app is opened at the size
+   * it is first met at (a phone for a phone product) on its first route, with its scripts running. Expects the
+   * dev server `run` has just started. Null when the page would not open.
+   */
+  async walk(project: Project, tasks: readonly FlowTask[], opts: { signal?: AbortSignal } = {}): Promise<AppWalk | null> {
+    const file = await readProjectFile(this.#sandboxes, project, this.#config);
+    const route = file.routes[0] ?? '/';
+    const touch = project.template === 'mobile-expo';
+    return this.#browser.use(project, opts.signal, async ({ browser, host, devices }) => {
+      const walked = await walkApp(browser, `http://${host}:${file.dev.port}${route}`, tasks, touch ? devices['iPhone 15 Pro']! : null);
+      return walked === null ? null : { route, ...walked };
+    });
+  }
+}
+
+/**
+ * Opens one URL of a running app and walks a core flow on it. `phone` is the device to open it as, or null for
+ * a desktop window. Null when the page would not open. Exported so it can be tested against a real browser.
+ */
+export async function walkApp(browser: Browser, url: string, tasks: readonly FlowTask[], phone: BrowserContextOptions | null): Promise<Pick<AppWalk, 'tasks' | 'problems'> | null> {
+  const touch = phone !== null;
+  const context = await browser.newContext({ ...(phone ?? { viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 }), serviceWorkers: 'block' });
+  try {
+    const page = await context.newPage();
+    const response = await page.goto(url, { waitUntil: 'networkidle', timeout: 45_000 }).catch(() => null);
+    if (!response || response.status() >= 400) return null;
+    const walked = await walkFlow(page, tasks, { touch, patienceMs: APP_PATIENCE_MS });
+    return { tasks: walked.tasks, problems: walkProblems(walked, tasks, { touch }) };
+  } finally {
+    await context.close().catch(() => undefined);
   }
 }
 

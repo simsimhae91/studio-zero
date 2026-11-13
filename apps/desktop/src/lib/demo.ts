@@ -349,6 +349,7 @@ const receipt = (over: Partial<LedgerEntry> & Pick<LedgerEntry, 'id' | 'taskId' 
   design: { grade: 'A', score: 91, slopScore: 18, livingVisual: true, contrastAaa: 1, touchTargets: 1, textSlop: 0 },
   cost: { modelCalls: 14, inputTokens: 368_000, outputTokens: 44_800, usdMicros: 1_890_000, wallMs: 14 * 60_000 },
   review: { plan: 'codex', acceptance: 'codex', verdict: 'pass' },
+  flow: { tasks: 2, reached: 2, presses: 3, scrolls: 0, smallestTargetPx: 48, answered: 3 },
   delta: [], proof: '',
   ...over,
 });

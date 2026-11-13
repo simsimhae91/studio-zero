@@ -7,12 +7,13 @@ import type { EventLog } from '../events/EventLog.ts';
 import { pngBlock, textBlock, type ClaudeClient } from '../llm/ClaudeClient.ts';
 import type { EnginePick, ModelRouter } from '../llm/ModelRouter.ts';
 import { ApprovalDeniedError, type PolicyEngine } from '../policy/PolicyEngine.ts';
-import type { MockupMeasurement, MockupRenderer } from '../qa/MockupRenderer.ts';
+import { flowTotals } from '../qa/FlowWalker.ts';
+import { MOCKUP_DIR, type MockupMeasurement, type MockupRenderer } from '../qa/MockupRenderer.ts';
 import type { ReferenceCapture, RefKit } from '../qa/RefKit.ts';
 import type { SmokeRunner } from '../qa/SmokeTester.ts';
 import type { OrbStackManager } from '../sandbox/OrbStackManager.ts';
 import { ANCHOR_FILE, AnchorTableShape, anchorTableJson, readAnchorTable, renderAnchorTable, type AnchorRead, type AnchorTable } from '../scratch/AnchorTable.ts';
-import { SCREEN_SPEC_FILE, readScreenSpec, type FlowTask } from '../scratch/ScreenSpec.ts';
+import { SCREEN_SPEC_FILE, readScreenSpec, renderScreenSpec, type FlowTask, type ScreenSpecRead } from '../scratch/ScreenSpec.ts';
 import { untrusted, type UntrustedSource } from '../trust/dataBlock.ts';
 import { errorMessage, excerpt, type Clock, type Logger } from '../util/core.ts';
 import type { WorkspaceProvisioner } from './bootstrap.ts';
@@ -374,6 +375,7 @@ export class Harness {
         // The table as the work leaves it: the engine may have revised it, and a resumed task reads it afresh.
         const kept = design ? await this.#readAnchor(project) : null;
         const tableNow = kept?.ok ? kept.table : anchor;
+        const screens = await this.#readSpec(project);
         const checked = await this.#reviewer.accept({
           scope,
           author: lead,
@@ -381,6 +383,7 @@ export class Harness {
           request: task.prompt,
           plan: plan ? planText(plan) : null,
           anchor: tableNow ? renderAnchorTable(tableNow) : null,
+          spec: screens?.ok ? renderScreenSpec(screens.spec) : null,
           evidence: renderEvidence(record),
           copy: record.audit?.copy && record.audit.copy.texts.length > 0 ? copyBlock(record.audit.copy.texts) : null,
           captures: await this.#firstScreen(record.audit),
@@ -503,6 +506,7 @@ export class Harness {
         ...(lessonText ? [textBlock(lessonText)] : []),
         textBlock(`Project stack template: ${project.template}. Files in the workspace:\n${untrusted('sandbox-output', listing.stdout.trim() || '(empty workspace)')}`),
         textBlock(want.anchor ? 'This task needs an anchor table: fill in "anchor".' : 'No anchor table is needed from you for this task: set "anchor" to null.'),
+        ...(await this.#approvedDesign(project, task)),
         // The planner is shown the references themselves; the engine, which has no eyes, gets the measurements.
         ...captured.flatMap((r) => [
           textBlock(referenceBlock(r)),
@@ -514,6 +518,35 @@ export class Harness {
     });
     // The routes end up in URLs the QA browser visits; only plain app paths are kept.
     return { ...plan, steps: plan.steps.slice(0, 20), auditRoutes: plan.auditRoutes.filter((r) => /^\/[\w\-./~%]*$/.test(r) && r.length <= 200).slice(0, 6), openQuestions: plan.openQuestions.slice(0, 6), anchor: want.anchor ? (plan.anchor ?? null) : null };
+  }
+
+  /** The screen spec as the workspace has it: read and checked, or null when there is no such file. */
+  async #readSpec(project: Project): Promise<ScreenSpecRead | null> {
+    const res = await this.#sandboxes.exec(project, `[ -f ${SCREEN_SPEC_FILE} ] && head -c 262144 ${SCREEN_SPEC_FILE}`, { timeoutSec: 20, maxOutputBytes: 300_000 });
+    return res.exitCode !== 0 || res.stdout.trim() === '' ? null : readScreenSpec(res.stdout);
+  }
+
+  /**
+   * What a build that follows a design task is planned from: the screen spec, and the head of the mock-up page
+   * the owner picked (its name, its one-line idea, its theme seed). Without these the planner drafted the plan
+   * and the anchor table from the request and a file listing alone, and could describe a direction other than
+   * the one that was approved. Both were written by a model, so they travel as data.
+   */
+  async #approvedDesign(project: Project, task: Task): Promise<ReturnType<typeof textBlock>[]> {
+    const blocks: ReturnType<typeof textBlock>[] = [];
+    const spec = await this.#readSpec(project);
+    if (spec?.ok) blocks.push(textBlock(`The product's screen spec (${SCREEN_SPEC_FILE}), written and approved before this build. The plan covers its screens and keeps its core flow; do not plan a different product:\n${untrusted('sandbox-output', renderScreenSpec(spec.spec, 8000))}`));
+    const picked = new RegExp(`${MOCKUP_DIR}/[abc]\\.html`).exec(task.prompt)?.[0];
+    if (picked) {
+      const head = await this.#sandboxes.exec(project, `[ -f ${picked} ] && head -c 6000 ${picked}`, { timeoutSec: 20, maxOutputBytes: 8000 });
+      const read = (pattern: RegExp): string => (pattern.exec(head.stdout)?.[1] ?? '').replace(/\s+/g, ' ').trim().slice(0, 400);
+      const title = read(/<title[^>]*>([^<]*)<\/title>/i);
+      const idea = read(/<meta\s+name=["']description["']\s+content=["']([^"']*)["']/i);
+      if (head.exitCode === 0 && (title !== '' || idea !== '')) {
+        blocks.push(textBlock(`The owner approved the mock-up page ${picked} as the direction to build. The anchor table states this direction (its idea, what its first screen leads with), not another:\n${untrusted('sandbox-output', `name: ${title}\nhow it makes the core moment work: ${idea}`)}`));
+      }
+    }
+    return blocks;
   }
 
   /** The anchor table as the workspace has it: read and checked, or null when there is no such file. */
@@ -621,6 +654,7 @@ export class Harness {
         served = smoke.passed;
         this.#events.emit(scope, { type: 'gate.result', gate: 'smoke', name: smoke.routes.join(' '), passed: smoke.passed, exitCode: null, durationMs: smoke.durationMs, detail: excerpt(smoke.detail, 2000) });
         if (!smoke.passed) return { failures: [{ name: 'smoke', source: 'browser-page', detail: smoke.detail }], unverified: [], waitingOn: null };
+        record.flow = await this.#walkApp(project, task, signal);
       } catch (err) {
         if (signal.aborted) throw err;
         // The browser not starting is the studio's problem, not a defect in the work: say so and carry on.
@@ -643,6 +677,31 @@ export class Harness {
       unverified: outcomes.filter((o) => o.unverified).map((o) => `${o.eval.name}: the design review did not run (${o.audit?.vision.reason ?? 'no reason recorded'}), so the design is not vouched for`),
       waitingOn: waiting ? (waiting.audit?.vision.reason ?? 'every design reviewer is at its usage limit') : null,
     };
+  }
+
+  /**
+   * The screen spec's core flow, carried out on the app the smoke gate has just loaded. A measurement for the
+   * receipt and for the acceptance reviewer, and not a gate: the counts are new, and a flow that needs a camera
+   * or a login cannot be pressed through in a headless browser, so a walk that stops is said, not sent back for
+   * repair. Null when the project has no screen spec, or the walk could not be had.
+   */
+  async #walkApp(project: Project, task: Task, signal: AbortSignal): Promise<RunRecord['flow']> {
+    if (!this.#smoke.walk) return null;
+    try {
+      const spec = await this.#readSpec(project);
+      if (!spec?.ok) return null;
+      const tasks: FlowTask[] = spec.spec.tasks.map(({ id, goal, outcome }) => ({ id, goal, outcome }));
+      const walked = await this.#smoke.walk(project, tasks, { signal });
+      if (!walked) return null;
+      const totals = flowTotals(walked.tasks, tasks.length);
+      const through = totals.reached === totals.tasks;
+      this.#events.emit({ projectId: project.id, taskId: task.id }, { type: 'notice', level: through ? 'info' : 'warn', message: `Core flow walked on the running app (${walked.route}): ${totals.reached} of ${totals.tasks} task(s) carried out, ${totals.presses} press(es), ${totals.scrolls} scroll(s).${through ? '' : ` ${walked.problems[0] ?? ''}`}` });
+      return { ...totals, problems: walked.problems };
+    } catch (err) {
+      if (signal.aborted) throw err;
+      this.#log.warn({ taskId: task.id, err: errorMessage(err) }, 'the core flow could not be walked on the app');
+      return null;
+    }
   }
 
   /** What a design task owes as files: each required document exists and has substance. */
@@ -669,8 +728,7 @@ export class Harness {
     if (missing.length > 0) return owed(missing);
 
     const started = Date.now();
-    const read = await this.#sandboxes.exec(project, `head -c 262144 ${SCREEN_SPEC_FILE}`, { timeoutSec: 20, maxOutputBytes: 300_000 });
-    const spec = readScreenSpec(read.stdout);
+    const spec: ScreenSpecRead = (await this.#readSpec(project)) ?? { ok: false, problems: [`${SCREEN_SPEC_FILE} is missing or empty.`] };
     this.#events.emit(scope, { type: 'gate.result', gate: 'screens', name: SCREEN_SPEC_FILE, passed: spec.ok, exitCode: null, durationMs: Date.now() - started, detail: spec.ok ? '' : spec.problems.join('\n') });
     if (!spec.ok) return owed([{ name: 'screen-spec', source: 'sandbox-output', detail: `${SCREEN_SPEC_FILE} does not hold as the screen spec yet. Correct exactly these, keeping its shape:\n${spec.problems.map((line) => `- ${line}`).join('\n')}` }]);
     if (!this.#mockups) return owed([]);

@@ -36,10 +36,10 @@ export type PlanCritique = z.infer<typeof PlanCritique>;
 /** The bottom slice: acceptance of the finished work against what was asked. A constant, like every system prompt here. */
 export const ACCEPTANCE_PROMPT = `You are accepting, or sending back once, a piece of work that another model built. You are a different model on purpose. The build is finished and has already passed the studio's own checks (it compiles, it loads, its measurements and its design review are in the evidence below); you are the last look before it reaches the owner, and you get exactly one pass.
 
-You are given the owner's request, the plan and anchor table the work was built to (its acceptance criteria), the evidence the studio measured, the words on the screens as plain text, and where available a capture of the first screen.
+You are given the owner's request, the plan and anchor table the work was built to (its acceptance criteria), where there is one the screen spec (what each screen does, its states, and the core flow a person must be able to carry out), the evidence the studio measured, the words on the screens as plain text, and where available a capture of the first screen.
 
 Judge three things.
-1. Whether the request and the acceptance criteria are met. Go through what was asked and what the anchor table promised (the idea, the first screen's largest element, what a person can do straight away, what there is to look at) and check each against the evidence. Something you cannot confirm from the evidence is not met.
+1. Whether the request and the acceptance criteria are met. Go through what was asked and what the anchor table promised (the idea, the first screen's largest element, what a person can do straight away, what there is to look at) and check each against the evidence. With a screen spec, its core flow is a criterion: the evidence says how many of its tasks the studio could carry out on the running app and what stopped it; a flow that cannot be carried out is unmet. Something you cannot confirm from the evidence is not met.
 2. The copy, from the plain-text block alone. It is the screens' words with their rendering taken away, so judge it as writing: does it say specific things in a human voice, or does it list features in explaining sentences, open with a slogan, and label its buttons with words any product could use? Quote what is wrong and give the exact replacement.
 3. Overall finish: would you put your name to this?
 
@@ -127,11 +127,11 @@ export class SandwichReviewer {
    * Bottom slice. `evidence` is what the daemon measured (gates, audit verdict, ledger figures), `copy` the
    * screens' words as plain text, `captures` the first screen as PNG. All three are page- or tool-derived.
    */
-  async accept(subject: ReviewSubject & { evidence: string; copy: string | null; captures: readonly Uint8Array[] }): Promise<CrossCheck<Acceptance>> {
+  async accept(subject: ReviewSubject & { spec?: string | null; evidence: string; copy: string | null; captures: readonly Uint8Array[] }): Promise<CrossCheck<Acceptance>> {
     const started = Date.now();
     const parts: (string | Uint8Array)[] = [
       `The owner's request:\n${subject.request}`,
-      ...[block('Plan', subject.plan), block('Anchor table', subject.anchor)].filter((part): part is string => part !== null),
+      ...[block('Plan', subject.plan), block('Anchor table', subject.anchor), block('Screen spec', subject.spec ?? null)].filter((part): part is string => part !== null),
       `What the studio measured:\n${untrusted('sandbox-output', excerpt(subject.evidence, 8000))}`,
       subject.copy ? `The words on the screens, as plain text ("#" a title, ">" a control's label, "·" a short label):\n${untrusted('browser-page', subject.copy)}` : 'No screen text was captured for this work.',
       ...(subject.captures.length > 0 ? ['The first screen as captured:', ...subject.captures] : []),

@@ -100,7 +100,7 @@ function Row({ label, children, tone }: { label: string; children: string; tone?
 }
 
 function Receipt({ entry, task }: { entry: LedgerEntry; task: Task | null }) {
-  const { code, design, cost, review } = entry;
+  const { code, design, cost, review, flow } = entry;
   const checks = code.checksPassed + code.checksFailed.length;
   return (
     <li className="flex max-w-none flex-col gap-3 border-t border-border py-4">
@@ -134,6 +134,10 @@ function Receipt({ entry, task }: { entry: LedgerEntry; task: Task | null }) {
           <Row label="텍스트 슬롭">{design.textSlop === null ? '재지 않음' : design.textSlop === 0 ? '0건' : `${design.textSlop}건`}</Row>
           <Row label="AAA 대비">{pct(design.contrastAaa)}</Row>
           <Row label="터치 타깃">{pct(design.touchTargets)}</Row>
+          {/* The screen spec's core flow, carried out on the running app. Absent on receipts from before builds were walked. */}
+          <Row label="핵심 흐름" tone={flow && flow.reached < flow.tasks ? 'warn' : undefined}>
+            {flow ? `${flow.reached}/${flow.tasks} 완주, 누름 ${flow.presses}번${flow.scrolls > 0 ? `, 스크롤 ${flow.scrolls}번` : ''}${flow.presses > 0 ? `, 답함 ${flow.answered}/${flow.presses}` : ''}` : '걷지 않음'}
+          </Row>
         </dl>
         <dl className="flex flex-col">
           <dt className="pb-1 text-sm font-semibold">비용</dt>

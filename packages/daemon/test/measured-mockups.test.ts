@@ -13,6 +13,7 @@ import { SUPPLIED_FACES, withFaces } from '../src/qa/mockupFaces.ts';
 import { MOCKUP_ASSET_DIR, MOCKUP_DIR, MockupRenderer } from '../src/qa/MockupRenderer.ts';
 import type { QaBrowser, QaSession } from '../src/qa/QaBrowser.ts';
 import type { QaVisionBridge } from '../src/qa/QaVisionBridge.ts';
+import { walkApp } from '../src/qa/SmokeTester.ts';
 import { toScreenReview, visionParts, type VisionInput, type VisionReply } from '../src/qa/vision.ts';
 import { VisualAuditor } from '../src/qa/VisualAuditor.ts';
 import type { OrbStackManager } from '../src/sandbox/OrbStackManager.ts';
@@ -251,5 +252,33 @@ test('measuring a design task\'s mock-ups: each drawn, walked and filmed, the au
   } finally {
     await d.cleanup();
     await browser.close();
+  }
+});
+
+test('the same walk on a running app: its scripts run, a press may take a moment to land, and a page that will not open is not walked', async (t) => {
+  const browser = await launch();
+  if (!browser) return t.skip('headless Chrome cannot be launched here');
+  // A built app in miniature: the press goes through a 300ms "request" before the outcome is on screen.
+  const app = `<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>장부</title><style>button{min-height:56px;min-width:160px;font-size:18px}button:active{transform:scale(.96)}</style></head><body>
+<main id="app"><button data-step="log:1">설거지 20분 적기</button></main>
+<script>
+const app = document.getElementById('app');
+const rest = () => { app.innerHTML = '<button data-step="log:1">설거지 20분 적기</button>'; app.firstChild.onclick = logged; };
+const logged = () => setTimeout(() => { app.innerHTML = '<p data-done="log">지우 방금 · 설거지 20분</p><button data-step="undo:1">되돌리기</button><p hidden data-done="undo">없음</p>'; app.querySelector('button').onclick = () => setTimeout(() => { rest(); app.insertAdjacentHTML('beforeend', '<p data-done="undo">오늘 적은 집안일이 없어요</p>'); }, 300); }, 300);
+rest();
+</script></body></html>`;
+  const server = createServer((req, res) => (req.url === '/blocked' ? res.writeHead(403).end('Blocked request. This host is not allowed.') : res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }).end(app))).listen(0, '127.0.0.1');
+  await new Promise((resolve) => server.once('listening', resolve));
+  const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  try {
+    const walked = await walkApp(browser, `${base}/`, FLOW_TASKS, devices['iPhone 15 Pro']!);
+    assert.deepEqual(walked?.tasks.map((task) => [task.id, task.reached, task.presses, task.answered, task.smallestTargetPx]), [['log', true, 1, 1, 56], ['undo', true, 1, 1, 56]], 'the walk waited for each press to land');
+    assert.deepEqual(walked?.problems, []);
+    assert.deepEqual((await walkApp(browser, `${base}/`, FLOW_TASKS, null))?.tasks.map((task) => task.reached), [true, true], 'and at a desk as on a phone');
+    assert.equal(await walkApp(browser, `${base}/blocked`, FLOW_TASKS, null), null, 'a refusal from the server is not the app: there is nothing to walk');
+    assert.equal(await walkApp(browser, 'http://127.0.0.1:1/', FLOW_TASKS, null), null);
+  } finally {
+    await browser.close();
+    server.close();
   }
 });

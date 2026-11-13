@@ -23,6 +23,8 @@ import type { SmokeRunner } from '../src/qa/SmokeTester.ts';
 import { ANCHOR_FILE, checkAnchorTable, readAnchorTable } from '../src/scratch/AnchorTable.ts';
 import { testConfig } from '../src/config.ts';
 import type { Engine } from '../src/harness/engines/Engine.ts';
+import { SCREEN_SPEC_FILE } from '../src/scratch/ScreenSpec.ts';
+import { SCREEN_SPEC } from './fixtures-mockup.ts';
 import { quietLog, sampleProject, testDaemon, type TestDaemon } from './helpers.ts';
 
 type Block = Anthropic.Beta.BetaContentBlock;
@@ -143,7 +145,7 @@ interface Rig {
 }
 
 /** A harness of its own over a real daemon: checks and reviewer scripted, design gates on. */
-async function rig(p: { turns: Block[][]; plans: unknown[]; compiler: (CompilerOutcome | null)[]; rounds: EvalOutcome[][]; critique?: PlanCritique; acceptance?: Acceptance; verifyRounds?: number }): Promise<Rig> {
+async function rig(p: { turns: Block[][]; plans: unknown[]; compiler: (CompilerOutcome | null)[]; rounds: EvalOutcome[][]; critique?: PlanCritique; acceptance?: Acceptance; verifyRounds?: number; walk?: SmokeRunner['walk'] }): Promise<Rig> {
   const model = scripted(p.turns, p.plans);
   const d = await testDaemon({ budgets: { verifyRounds: p.verifyRounds ?? 3 } }, { anthropic: model.sdk });
   const { store, events, policy, sandboxes, provisioner, router, claude, lessons, ledger } = d.daemon;
@@ -162,7 +164,7 @@ async function rig(p: { turns: Block[][]; plans: unknown[]; compiler: (CompilerO
     config: d.config, store, events, policy, sandboxes, provisioner, router, claude, lessons, ledger,
     evals: { usesBrowser: () => true, runAll: async () => p.rounds.shift() ?? assert.fail('verification ran again: no more rounds were scripted') } as unknown as EvalRunner,
     compiler: { run: async () => (p.compiler.length > 0 ? p.compiler.shift()! : null) } as unknown as CompilerGate,
-    smoke: { run: async () => ({ passed: true, routes: ['/'], issues: [], detail: '1 route loaded without errors', durationMs: 5 }) } as SmokeRunner,
+    smoke: { run: async () => ({ passed: true, routes: ['/'], issues: [], detail: '1 route loaded without errors', durationMs: 5 }), ...(p.walk ? { walk: p.walk } : {}) } as SmokeRunner,
     reflection: { reflect: async () => undefined } as unknown as ReflectionAgent,
     refkit: { capture: async () => [] } as unknown as RefKit,
     reviewer: new SandwichReviewer({ desk, router: { pairReviewer: async () => ({ reviewer: 'codex', considered: [] }) }, events, log: quietLog }),
@@ -403,6 +405,53 @@ test('a task that waited out a usage limit keeps who reviewed it: the receipt of
   }
 });
 
+test('a build that follows a design: planned from the screen spec and the approved page, its core flow walked on the app and put on the receipt', async () => {
+  const walked = (presses: number) => ({ id: 'log', reached: true, stopped: null, stoppedAtStep: null, presses, typed: 0, scrolls: 0, smallestTargetPx: 48, answered: presses, responseMs: 200 });
+  const asked: unknown[] = [];
+  const r = await rig({
+    plans: [{ ...PLAN, anchor: ANCHOR }],
+    turns: [[use('tu_1', 'write_file', { path: 'src/App.tsx', content: 'export const price = 2000;\n' })], [say('장부를 만들었습니다.')]],
+    compiler: [compiled(true)],
+    rounds: [[{ eval: visual, passed: true, detail: 'score 96/100, grade S', audit: audit('S', 0) }]],
+    critique: { verdict: '이대로 만드세요.', defaults: [], gaps: [], blandness: [] },
+    acceptance: { verdict: 'pass', summary: '약속대로입니다.', unmet: [], copy: [], patch: null },
+    // The first task of the flow goes through in two presses; the second stops under a toast.
+    walk: async (_project, tasks) => (asked.push(tasks), { route: '/', tasks: [walked(2), { ...walked(0), id: 'undo', reached: false, stopped: 'covered', stoppedAtStep: 1, smallestTargetPx: null }], problems: ['task "undo" (방금 적은 것을 되돌린다): the control for step 1 lies under another element at its centre.'] }),
+  });
+  try {
+    // The design branch as a design task leaves it: the spec and the page the owner picked.
+    await r.d.daemon.provisioner.ensure(project);
+    await r.d.daemon.sandboxes.writeFile(project, SCREEN_SPEC_FILE, JSON.stringify(SCREEN_SPEC));
+    await r.d.daemon.sandboxes.writeFile(project, 'docs/mockups/b.html', '<!doctype html><html><head><title>B · 한 자리를 누르는 집 약도</title><meta name="description" content="싱크대를 누르면 그 자리에 기록이 꽂힌다."></head><body></body></html>');
+    await r.d.daemon.sandboxes.commitAll(project, 'docs: design');
+
+    const task = await r.run('설계대로 MVP를 구현해줘.\n\n첫 화면은 docs/mockups/b.html 시안을 기준으로 만들어줘.');
+    assert.equal(task.state, 'succeeded', task.error ?? '');
+
+    // --- the planner saw the product that was approved, as data
+    const planned = JSON.stringify(r.model.planned[0]!.messages[0]!.content);
+    assert.match(planned, /The product's screen spec \(docs\/screens\.json\), written and approved before this build[\s\S]*source=\\"sandbox-output\\"[\s\S]*Core moment: 지우가 설거지를 끝내고/);
+    assert.match(planned, /The owner approved the mock-up page docs\/mockups\/b\.html as the direction to build[\s\S]*name: B · 한 자리를 누르는 집 약도\\nhow it makes the core moment work: 싱크대를 누르면/);
+
+    // --- the app was walked by the spec's tasks once it had loaded, and the owner is told how it went
+    assert.deepEqual(asked, [SCREEN_SPEC.tasks.map(({ id, goal, outcome }) => ({ id, goal, outcome }))]);
+    const notice = of(r.bodies(task.id), 'notice').find((n) => n.message.startsWith('Core flow walked'));
+    assert.deepEqual([notice?.level, notice?.message], ['warn', 'Core flow walked on the running app (/): 1 of 2 task(s) carried out, 2 press(es), 0 scroll(s). task "undo" (방금 적은 것을 되돌린다): the control for step 1 lies under another element at its centre.']);
+
+    // --- a walk that stops is not a failed build: it is evidence, and the screen spec is a criterion for the one who accepts
+    const bottom = r.asked.find((a) => a.system === ACCEPTANCE_PROMPT)!;
+    assert.match(bottom.parts.find((part) => typeof part === 'string' && part.startsWith('Screen spec:')) as string, /source="engine-output">\nCore moment: 지우가[\s\S]*H-01 오늘 장부/);
+    assert.match(bottom.parts.find((part) => typeof part === 'string' && part.startsWith('What the studio measured:')) as string, /Core flow of the screen spec, walked on the running app: 1 of 2 task\(s\) carried out to their outcome, in 2 press\(es\) and 0 scroll\(s\), smallest control 48px, 2 of 2 control\(s\) answering the press\.\n- task "undo"/);
+    assert.match(ACCEPTANCE_PROMPT, /a flow that cannot be carried out is unmet/);
+
+    // --- and it is on the receipt
+    const [receipt] = r.d.daemon.studio.listLedger(project.id, 1) as [LedgerEntry];
+    assert.deepEqual(receipt.flow, { tasks: 2, reached: 1, presses: 2, scrolls: 0, smallestTargetPx: 48, answered: 2 });
+  } finally {
+    await r.d.cleanup();
+  }
+});
+
 test('ledger arithmetic: compiler errors are counted from the tool\'s output, and a delta says which way is better', () => {
   assert.equal(countCompilerErrors(THREE_ERRORS, false), 3);
   assert.equal(countCompilerErrors('', true), 0);
@@ -422,4 +471,10 @@ test('ledger arithmetic: compiler errors are counted from the tool\'s output, an
   assert.deepEqual(ledgerDelta(entry({}), entry({ design: { grade: 'C' } })), [{ metric: '디자인 등급', before: 'S', after: 'C', better: false }]);
   assert.deepEqual(ledgerDelta(entry({}), entry({})), [], 'nothing changed, nothing claimed');
   assert.deepEqual(ledgerDelta(entry({ design: { grade: null, score: null, slopScore: null } }), entry({})), [], 'a metric one side never measured is not compared');
+
+  // The way the product works is on the receipt too: a flow that now goes through, and one that takes fewer presses.
+  const flow = (reached: number, presses: number) => ({ ...entry({}), flow: { tasks: 2, reached, presses, scrolls: 0, smallestTargetPx: 48, answered: presses } });
+  assert.deepEqual(ledgerDelta(flow(1, 2), flow(2, 3)), [{ metric: '핵심 흐름 완주', before: '1/2', after: '2/2', better: true }], 'presses are not compared while one side did not finish the flow');
+  assert.deepEqual(ledgerDelta(flow(2, 5), flow(2, 3)), [{ metric: '핵심 흐름 누름', before: '5번', after: '3번', better: true }]);
+  assert.deepEqual(ledgerDelta(entry({}), flow(2, 3)), [], 'a project walked for the first time has nothing to compare with');
 });

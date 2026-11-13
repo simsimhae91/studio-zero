@@ -1,6 +1,6 @@
 import { appendFile, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { AcceptanceVerdict, AuditReport, DesignGrade, LedgerDelta, LedgerEntry, Project, ReviewerId, Task } from '@studio-zero/protocol';
+import type { AcceptanceVerdict, AuditReport, DesignGrade, FlowTotals, LedgerDelta, LedgerEntry, Project, ReviewerId, Task } from '@studio-zero/protocol';
 import type { Config } from '../config.ts';
 import type { Store } from '../db/Store.ts';
 import type { EventLog } from '../events/EventLog.ts';
@@ -20,13 +20,15 @@ export interface RunRecord {
   /** The last visual audit of the task. */
   audit: AuditReport | null;
   build: { ms: number; bytes: number | null } | null;
+  /** The screen spec's core flow as last walked on the running app, and what that walk found wrong. Null when there was nothing to walk by. */
+  flow: (FlowTotals & { problems: string[] }) | null;
   planReviewer: ReviewerId | null;
   acceptanceReviewer: ReviewerId | null;
   /** How acceptance ended. `patched` only once the harness has seen the patch land (see `AcceptanceVerdict`). */
   verdict: AcceptanceVerdict | null;
 }
 
-export const emptyRun = (): RunRecord => ({ rounds: 0, firstCompilerErrors: null, compilerErrors: null, checksPassed: 0, checksFailed: [], audit: null, build: null, planReviewer: null, acceptanceReviewer: null, verdict: null });
+export const emptyRun = (): RunRecord => ({ rounds: 0, firstCompilerErrors: null, compilerErrors: null, checksPassed: 0, checksFailed: [], audit: null, build: null, flow: null, planReviewer: null, acceptanceReviewer: null, verdict: null });
 
 /**
  * How many errors a failed compile reported. `tsc` numbers its errors, so those are counted; any other tool's
@@ -69,6 +71,11 @@ export function ledgerDelta(prev: Measured, next: Measured): LedgerDelta[] {
   number('텍스트 슬롭', prev.design.textSlop, next.design.textSlop, (n) => (n === 0 ? '0건 클린' : `${n}건`), true);
   if (prev.design.livingVisual !== null && next.design.livingVisual !== null && prev.design.livingVisual !== next.design.livingVisual) {
     deltas.push({ metric: '첫 화면 볼거리', before: prev.design.livingVisual ? '있음' : '없음', after: next.design.livingVisual ? '있음' : '없음', better: next.design.livingVisual });
+  }
+  // The way the product works, counted: fewer presses for the same flow is better, a flow that goes through is better still.
+  if (prev.flow && next.flow && prev.flow.tasks === next.flow.tasks) {
+    number('핵심 흐름 완주', prev.flow.reached, next.flow.reached, (n) => `${n}/${next.flow!.tasks}`, false);
+    if (prev.flow.reached === prev.flow.tasks && next.flow.reached === next.flow.tasks) number('핵심 흐름 누름', prev.flow.presses, next.flow.presses, (n) => `${n}번`, true);
   }
   number('AAA 대비 통과율', prev.design.contrastAaa, next.design.contrastAaa, pct, false);
   number('터치 타깃 적합도', prev.design.touchTargets, next.design.touchTargets, pct, false);
@@ -143,6 +150,7 @@ export class Ledger {
       },
       cost: { modelCalls: usage.calls, inputTokens: usage.inputTokens, outputTokens: usage.outputTokens, usdMicros: usage.usdMicros, wallMs: Math.max(0, (task.finishedAt ?? now) - (task.startedAt ?? task.createdAt)) },
       review: { plan: run.planReviewer, acceptance: run.acceptanceReviewer, verdict: run.verdict },
+      flow: run.flow ? { tasks: run.flow.tasks, reached: run.flow.reached, presses: run.flow.presses, scrolls: run.flow.scrolls, smallestTargetPx: run.flow.smallestTargetPx, answered: run.flow.answered } : null,
     };
     const previous = this.#store.listLedgerEntries(project.id, 2).find((e) => e.taskId !== task.id);
     const delta = previous ? ledgerDelta(previous, measured) : [];
@@ -183,5 +191,10 @@ export function renderEvidence(run: RunRecord): string {
     if (audit.critique) lines.push(`Design reviewer: ${audit.critique}`);
     for (const f of audit.findings.filter((x) => x.severity !== 'minor').slice(0, 8)) lines.push(`- [${f.severity}] ${f.rule}: ${f.message}`);
   } else lines.push('Visual audit: not run for this task.');
+  if (run.flow) {
+    const f = run.flow;
+    lines.push(`Core flow of the screen spec, walked on the running app: ${f.reached} of ${f.tasks} task(s) carried out to their outcome, in ${f.presses} press(es) and ${f.scrolls} scroll(s)${f.smallestTargetPx === null ? '' : `, smallest control ${f.smallestTargetPx}px`}, ${f.answered} of ${f.presses} control(s) answering the press.`);
+    for (const problem of f.problems.slice(0, 6)) lines.push(`- ${problem}`);
+  }
   return lines.join('\n');
 }

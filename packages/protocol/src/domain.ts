@@ -450,6 +450,20 @@ export const FlowTaskWalk = z.object({
 });
 export type FlowTaskWalk = z.infer<typeof FlowTaskWalk>;
 
+/**
+ * A walk through the core flow, added up: how many of the spec's tasks there were and how many were carried
+ * out to their outcome, and what that took. The line a receipt keeps, and the line two directions are compared by.
+ */
+export const FlowTotals = z.object({
+  tasks: z.number().int(),
+  reached: z.number().int(),
+  presses: z.number().int(),
+  scrolls: z.number().int(),
+  smallestTargetPx: z.number().nullable(),
+  answered: z.number().int(),
+});
+export type FlowTotals = z.infer<typeof FlowTotals>;
+
 export const FlowWalk = z.object({
   tasks: z.array(FlowTaskWalk),
   /** The walk as pictures: the screen at rest, then after each press, on one sheet. */
@@ -533,6 +547,11 @@ export const LedgerEntry = z.object({
     acceptance: ReviewerId.nullable(),
     verdict: AcceptanceVerdict.nullable(),
   }),
+  /**
+   * The core flow of the project's screen spec, walked on the running app. Null when there was no spec to walk
+   * by or the app could not be opened; absent on entries from before builds were walked.
+   */
+  flow: FlowTotals.nullable().optional(),
   delta: z.array(LedgerDelta),
   /** The deltas as one line, written by code: "타입 에러 3→0, 디자인 등급 B→S". Empty for a project's first entry. */
   proof: z.string(),
