@@ -37,7 +37,9 @@ test('the mobile kit as a project receives it: complete, extensionless, native p
 test('a mobile project is told to build from the kit; a web project is not handed a phone mandate', () => {
   const mobile = codingSystemPrompt('mobile-expo');
   const web = codingSystemPrompt('web-vite-react');
-  assert.match(mobile, /<mobile_design_mandate>[\s\S]*1\. Never put a generic or static illustration under a headline[\s\S]*2\. Every screen has three zones[\s\S]*MobileShell\.Header[\s\S]*MobileShell\.Content[\s\S]*MobileShell\.BottomDock[\s\S]*3\. Paper, structure, punch[\s\S]*never paint a region cream, peach or yellow as paper[\s\S]*4\. Everything that can be pressed answers the press[\s\S]*5\. Type is a hierarchy[\s\S]*text-2xs or text-xs \(11 and 12px\) for timestamps[\s\S]*6\. Microcopy is short and human[\s\S]*"가릴 사진 가져오기"[\s\S]*<\/mobile_design_mandate>/);
+  assert.match(mobile, /<mobile_design_mandate>[\s\S]*1\. Never put a generic or static illustration under a headline[\s\S]*2\. Every screen has three zones[\s\S]*MobileShell\.Header[\s\S]*MobileShell\.Content[\s\S]*MobileShell\.BottomDock[\s\S]*3\. Build depth from surfaces[\s\S]*4\. Everything that can be pressed answers the press[\s\S]*5\. Microcopy is short and human[\s\S]*"가릴 사진 가져오기"[\s\S]*<\/mobile_design_mandate>/);
+  // How much colour, which sizes and how a screen is composed are the handbook's (handbook.test.ts); the mandate keeps what is a phone's alone.
+  assert.match(mobile, /The handbook's other parts \(rule K: Row, Stat, Segmented, Field and the rest\) are built on Tactile and the theme tokens/);
   assert.match(mobile, /Those parts are already in \.studio-zero\/mobile-kit \(read its README\.md first/);
   assert.match(mobile, /renders each route at iPhone 15 Pro and iPad sizes,/);
   assert.match(mobile, /It is not judged at desktop width, so do not design a desktop layout for it/);

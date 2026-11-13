@@ -185,20 +185,11 @@ test('the tool admits a punch colour on clean paper and nothing else', () => {
   assert.match(ThemeChoice.shape.neutral_chroma.description ?? '', /cream|peach|yellow/i, 'the engine is told which paper is off the table');
 });
 
-test('the engines are told the paper is clean, the figures tabular and Hangul set in Pretendard', () => {
-  const mobile = codingSystemPrompt('mobile-expo');
-  const web = codingSystemPrompt('web-vite-react');
-  for (const prompt of [mobile, web]) {
-    assert.match(prompt, /Pretendard/, 'the body face');
-    assert.match(prompt, /pretendard package/, 'and where its files come from');
-    assert.doesNotMatch(prompt, /body text is Geist/);
+test('the engines are given the scale down to its micro step; what goes where on it is the handbook\'s', () => {
+  for (const prompt of [codingSystemPrompt('mobile-expo'), codingSystemPrompt('web-vite-react')]) {
     assert.match(prompt, /text-2xs to text-10xl \(11, 12, 14, 16/, 'the micro step is on the scale the engine is given');
     assert.match(prompt, /tabular-nums/, 'figures that are compared line up');
+    assert.doesNotMatch(prompt, /body text is Geist/);
   }
-  assert.match(mobile, /cream, peach or yellow/, 'a phone screen\'s paper is near-white or a cool grey');
-  assert.match(mobile, /bg-brand[^.]*punch/i, 'the brand is the ten percent that is seen');
-  assert.match(mobile, /11|12px[^.]*timestamps?/i, 'where the micro sizes go');
   assert.doesNotMatch(MOCKUP_RULES, /Hangul falls to the reader's own system face/);
-  assert.match(MOCKUP_RULES, /Pretendard/, 'the studio supplies the Hangul face with the page');
-  assert.match(MOCKUP_RULES, /tabular-nums/);
 });

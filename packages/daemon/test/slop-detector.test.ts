@@ -66,7 +66,7 @@ test('the review brief: the traps are blockers by name, tactility and type hiera
   assert.match(VISION_SYSTEM_PROMPT, /Every blocker gets one\./);
   assert.match(VISION_SYSTEM_PROMPT, /empty first screen trap \(category "no-living-visual", a blocker on a product's first screen\)[\s\S]*anything there besides text and rules[\s\S]*Nothing to look at on the first screen/);
   assert.match(VISION_SYSTEM_PROMPT, /a screen caught in any of the three traps scores 60 or more/);
-  assert.match(VISION_SYSTEM_PROMPT, /A large headline, a deep curve or a serif title is not a defect; a habit is\./);
+  assert.match(VISION_SYSTEM_PROMPT, /A large headline or a deep curve is not a defect; a habit is\. A second typeface, a serif, or monospace outside code is a defect\./);
 
   const schema = z.toJSONSchema(VisionReply) as { properties: Record<string, { enum?: string[]; items?: { properties: Record<string, { enum?: string[] }> } }> };
   assert.deepEqual(schema.properties.archetype!.enum, ['mobile-app', 'web-app', 'web-dashboard', 'marketing']);

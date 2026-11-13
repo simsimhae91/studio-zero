@@ -142,8 +142,20 @@ function read() {
     for (const num of new Set(t.text.match(/\d[\d,.]*\d|\d{2,}/g) ?? [])) figures.set(num, (figures.get(num) ?? 0) + 1);
   }
 
+  // A page's headline: the largest text of the first screen, and how many lines it runs to.
+  const headEl = [...document.querySelectorAll('h1, h2, [role=heading], p, div, span')].filter((el) => {
+    const r = el.getBoundingClientRect();
+    return inFirst(r) && [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim().length >= 4);
+  }).sort((a, b) => parseFloat(getComputedStyle(b).fontSize) - parseFloat(getComputedStyle(a).fontSize))[0];
+  const headline = headEl ? (() => {
+    const cs = getComputedStyle(headEl);
+    const lh = parseFloat(cs.lineHeight) || parseFloat(cs.fontSize) * 1.2;
+    return { text: headEl.textContent.replace(/\s+/g, ' ').trim().slice(0, 60), px: parseFloat(cs.fontSize), lines: Math.max(1, Math.round(headEl.getBoundingClientRect().height / lh)), weight: Number(cs.fontWeight) };
+  })() : null;
+
   return {
     title: document.title,
+    headline,
     seed: document.querySelector('meta[name="theme-seed"]')?.getAttribute('content') ?? null,
     tokens,
     viewport: { vw, vh },
@@ -191,9 +203,20 @@ async function pixels({ b64, brand, second }) {
   ctx.drawImage(img, 0, 0);
   const { data } = ctx.getImageData(0, 0, img.width, img.height);
   const near = (r, g, b, c) => c && Math.abs(r - c[0]) + Math.abs(g - c[1]) + Math.abs(b - c[2]) < 36;
+  // How much of each half of the screen is bare paper: the most common colour of the picture, untouched.
+  const counts = new Map();
+  for (let i = 0; i < data.length; i += 64) {
+    const key = (data[i] >> 2 << 12) | (data[i + 1] >> 2 << 6) | (data[i + 2] >> 2);
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  const paper = [...counts].sort((a, b) => b[1] - a[1])[0]?.[0];
+  const half = [[0, 0], [0, 0]];
   let n = 0, sat = 0, dark = 0, isBrand = 0, isSecond = 0;
   for (let i = 0; i < data.length; i += 16) {
     const r = data[i], g = data[i + 1], b = data[i + 2];
+    const side = ((i / 4) % img.width) < img.width / 2 ? 0 : 1;
+    half[side][1] += 1;
+    if (((r >> 2 << 12) | (g >> 2 << 6) | (b >> 2)) === paper) half[side][0] += 1;
     const max = Math.max(r, g, b), min = Math.min(r, g, b);
     const l = (max + min) / 510;
     const s = max === min ? 0 : l > 0.5 ? (max - min) / (510 - max - min) : (max - min) / (max + min);
@@ -205,7 +228,7 @@ async function pixels({ b64, brand, second }) {
     if (near(r, g, b, second)) isSecond += 1;
   }
   const pct = (v) => Math.round((v / n) * 1000) / 10;
-  return { saturatedPct: pct(sat), darkPct: pct(dark), brandPct: pct(isBrand), secondPct: pct(isSecond) };
+  return { saturatedPct: pct(sat), darkPct: pct(dark), brandPct: pct(isBrand), secondPct: pct(isSecond), blankLeftPct: Math.round((half[0][0] / half[0][1]) * 1000) / 10, blankRightPct: Math.round((half[1][0] / half[1][1]) * 1000) / 10 };
 }
 
 const result = { file, template };
