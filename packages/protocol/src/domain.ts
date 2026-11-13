@@ -358,6 +358,12 @@ export const AuditReport = z.object({
       habits: z.number().int(),
     })
     .optional(),
+  /**
+   * The first screen measured the way a reference page is measured (sizes, leading, curves, colours, what the
+   * screen is made of), at desktop size where the audit has one. Kept so that a build can be set beside the
+   * references it was built from, measured by the same instrument. Page-derived text. Absent on older audits.
+   */
+  ownMeasure: z.string().optional(),
   /** Counts behind the pass rates a ledger reports. Absent on older audits. */
   measures: z
     .object({

@@ -220,6 +220,8 @@ export class Harness {
     if (resume?.review) Object.assign(record, { planReviewer: resume.review.plan, acceptanceReviewer: resume.review.acceptance, verdict: resume.review.verdict });
     let anchor: AnchorTable | null = null;
     let accepted = resume?.accepted ?? false;
+    /** The pages the owner pointed at, as captured before the build. Empty on a task picked up after a suspension. */
+    let references: ReferenceCapture[] = [];
 
     const phase = (p: Phase, round: number): void => {
       task = this.#store.updateTask(task.id, { phase: p });
@@ -296,7 +298,7 @@ export class Harness {
         appliedLessons = lessons.ids;
         // What the builder is handed before it builds decides more than how the build is organised. So first:
         // the references the owner pointed at, measured in the browser container; the anchor table; one red team.
-        const references = task.references.length > 0 && !draft ? await this.#refkit.capture(project, task.id, task.references, signal) : [];
+        references = task.references.length > 0 && !draft ? await this.#refkit.capture(project, task.id, task.references, signal) : [];
         const existing = design ? await this.#readAnchor(project) : null;
         const specAtStart = design ? await this.#readSpec(project) : null;
         // A draft goes straight to the engine: the planning call is a model round trip the owner would wait through.
@@ -394,6 +396,8 @@ export class Harness {
           copy: record.audit?.copy && record.audit.copy.texts.length > 0 ? copyBlock(record.audit.copy.texts) : null,
           captures: await this.#firstScreen(record.audit),
           states: await this.#stateScreens(record.audit),
+          references: references.filter((r) => r.ok).map((r) => ({ url: r.url, summary: r.summary, png: r.png })),
+          ownMeasure: record.audit?.ownMeasure ?? null,
           signal,
         });
         record.acceptanceReviewer = checked.reviewer;

@@ -14,6 +14,7 @@ import { PageDigest, collectDigest } from './collector.ts';
 import { layoutShift, probeInteraction, type Touchability } from './InteractionProbe.ts';
 import type { QaBrowser } from './QaBrowser.ts';
 import { VisionUnavailableError, type QaVisionBridge } from './QaVisionBridge.ts';
+import { summariseReference } from './RefKit.ts';
 import { LIVING_VISUAL_RULE, RUBRIC_AXES, SLOP_FLOOR_ON_TRAP, isTrap, type ScreenReview } from './vision.ts';
 
 export { PLAYWRIGHT_VERSION } from './QaBrowser.ts';
@@ -178,6 +179,7 @@ export class VisualAuditor {
     /** Why no further review is attempted in this audit; null while reviews are still being asked for. */
     let stopped = available.status === 'ready' ? null : available.reason;
     let lastError: string | null = null;
+    let ownMeasure: string | null = null;
 
     await this.#browser.use(req.project, req.signal, async ({ browser, host, devices }) => {
       const viewports = viewportSpecs(devices);
@@ -188,6 +190,8 @@ export class VisualAuditor {
       const tried: ViewportId = req.project.template !== 'mobile-expo' && audited.includes('desktop-1440') ? 'desktop-1440' : (audited[0] ?? 'iphone-15-pro');
       /** The words of the first route in its usual state, at that size: what a state's screen must differ from. */
       let usual: string | null = null;
+      // References are measured at a desk. The build's own first screen is measured there too, where the audit has that size.
+      const comparedAt: ViewportId = audited.includes('desktop-1440') ? 'desktop-1440' : tried;
       for (const missing of (req.missingStates ?? []).slice(0, 8)) {
         findings.push(stateFinding('states/not-shown', tried, req.routes[0] ?? '/', `The screen spec lists the state "${missing}", and the project gives no route that shows it, so nobody has looked at it.`, `Make the state showable on demand in development (a query your fixtures read, such as /?state=empty) and list it in .studio-zero/project.json under "states" as { "screen", "name", "route" }, with the name exactly as the spec has it.`));
       }
@@ -206,6 +210,7 @@ export class VisualAuditor {
           }
           // A state that shows the very words of the usual screen is not being shown: the route was listed and nothing reads it.
           const shownText = light.digest.elements.map((e) => e.text).filter((text) => text !== '').join('\n');
+          if (state === undefined && routeIndex === 0 && viewport === comparedAt) ownMeasure = summariseReference(light.digest, []);
           if (state === undefined && routeIndex === 0 && viewport === tried) usual = shownText;
           else if (state !== undefined && usual !== null && shownText === usual) {
             findings.push(stateFinding('states/same-as-default', viewport, route, `The route listed for the state "${state}" shows the same screen as ${req.routes[0]}: nothing reads the state from it.`, 'Have the route put the screen into that state (from the fixtures: no items, a failed request, the limit reached), so that what a person would see then is what loads.'));
@@ -315,6 +320,7 @@ export class VisualAuditor {
       findings,
       screenshots,
       copy: summariseCopy(copy),
+      ...(ownMeasure === null ? {} : { ownMeasure }),
       measures,
       // Only a reviewer who saw the first screen can say whether there was anything on it to look at.
       livingVisual: reviews.some((r) => mode.everyFirst || r.route === req.routes[0]) ? !findings.some((f) => f.rule === LIVING_VISUAL_RULE && f.severity === 'blocker') : null,

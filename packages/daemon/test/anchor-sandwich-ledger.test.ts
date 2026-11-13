@@ -19,7 +19,7 @@ import type { ReflectionAgent } from '../src/harness/ReflectionAgent.ts';
 import { ACCEPTANCE_PROMPT, PLAN_REDTEAM_PROMPT, SandwichReviewer, type Acceptance, type PlanCritique } from '../src/harness/SandwichReviewer.ts';
 import { ModelRouter, REVIEW_PAIRS } from '../src/llm/ModelRouter.ts';
 import type { ReviewDesk } from '../src/llm/ReviewDesk.ts';
-import type { RefKit } from '../src/qa/RefKit.ts';
+import type { ReferenceCapture, RefKit } from '../src/qa/RefKit.ts';
 import type { SmokeRunner } from '../src/qa/SmokeTester.ts';
 import { ANCHOR_FILE, checkAnchorTable, readAnchorTable } from '../src/scratch/AnchorTable.ts';
 import { testConfig } from '../src/config.ts';
@@ -139,14 +139,14 @@ interface Rig {
   d: TestDaemon;
   model: ReturnType<typeof scripted>;
   asked: { path: string; system: string; parts: readonly (string | Uint8Array)[] }[];
-  run: (prompt: string) => Promise<Task>;
+  run: (prompt: string, references?: string[]) => Promise<Task>;
   /** Queues a suspended task again and runs it, as the resumer does when a reviewer is back. */
   resume: (taskId: string) => Promise<Task>;
   bodies: (taskId: string) => EventEnvelope['body'][];
 }
 
 /** A harness of its own over a real daemon: checks and reviewer scripted, design gates on. */
-async function rig(p: { turns: Block[][]; plans: unknown[]; compiler: (CompilerOutcome | null)[]; rounds: EvalOutcome[][]; critique?: PlanCritique; acceptance?: Acceptance; verifyRounds?: number; walk?: SmokeRunner['walk'] }): Promise<Rig> {
+async function rig(p: { turns: Block[][]; plans: unknown[]; compiler: (CompilerOutcome | null)[]; rounds: EvalOutcome[][]; critique?: PlanCritique; acceptance?: Acceptance; verifyRounds?: number; walk?: SmokeRunner['walk']; references?: ReferenceCapture[] }): Promise<Rig> {
   const model = scripted(p.turns, p.plans);
   const d = await testDaemon({ budgets: { verifyRounds: p.verifyRounds ?? 3 } }, { anthropic: model.sdk });
   const { store, events, policy, sandboxes, provisioner, router, claude, lessons, ledger } = d.daemon;
@@ -167,7 +167,7 @@ async function rig(p: { turns: Block[][]; plans: unknown[]; compiler: (CompilerO
     compiler: { run: async () => (p.compiler.length > 0 ? p.compiler.shift()! : null) } as unknown as CompilerGate,
     smoke: { run: async () => ({ passed: true, routes: ['/'], issues: [], detail: '1 route loaded without errors', durationMs: 5 }), ...(p.walk ? { walk: p.walk } : {}) } as SmokeRunner,
     reflection: { reflect: async () => undefined } as unknown as ReflectionAgent,
-    refkit: { capture: async () => [] } as unknown as RefKit,
+    refkit: { capture: async () => p.references ?? [] } as unknown as RefKit,
     reviewer: new SandwichReviewer({ desk, router: { pairReviewer: async () => ({ reviewer: 'codex', considered: [] }) }, events, log: quietLog }),
     build: { run: async () => ({ command: 'npm run --silent build', passed: true, exitCode: 0, durationMs: 1200, bundleBytes: 300 * 1024, output: '' }) } as unknown as BuildMeter,
     clock: Date.now,
@@ -175,8 +175,8 @@ async function rig(p: { turns: Block[][]; plans: unknown[]; compiler: (CompilerO
   });
   return {
     d, model, asked,
-    run: async (prompt) => {
-      await d.daemon.studio.submitTask({ type: 'owner', via: 'desktop' }, { projectId: project.id, kind: 'build', prompt }, 'desktop');
+    run: async (prompt, references) => {
+      await d.daemon.studio.submitTask({ type: 'owner', via: 'desktop' }, { projectId: project.id, kind: 'build', prompt, ...(references ? { references } : {}) }, 'desktop');
       const claimed = store.claimNextTask(Date.now());
       assert.ok(claimed);
       await harness.run(claimed, new AbortController().signal);
@@ -448,6 +448,49 @@ test('the screen spec is fixed before code like the anchor table: the planner\'s
     assert.deepEqual(of(owed.bodies(task.id), 'task.phase').map((p) => `${p.phase}:${p.round}`), ['plan:0', 'execute:1', 'verify:1', 'execute:2', 'verify:2', 'reflect:0']);
   } finally {
     await owed.d.cleanup();
+  }
+});
+
+test('a build with a reference is set beside it at acceptance: both measured by the same instrument, asked for parity and for difference', async () => {
+  const reference: ReferenceCapture = { url: 'https://usekuroko.com/', ok: true, title: 'Kuroko', summary: 'largest type 88px at line-height 0.95, 5.5 times the body\naccent colour on 1.2% of the first screen', png: Buffer.from('89504e470d0a1a0a', 'hex'), film: null, artifactId: null, error: null };
+  const unopened: ReferenceCapture = { url: 'https://example.org/', ok: false, title: '', summary: '', png: null, film: null, artifactId: null, error: 'HTTP 404' };
+  const r = await rig({
+    plans: [{ ...PLAN, anchor: ANCHOR }],
+    turns: [[use('tu_1', 'write_file', { path: 'src/App.tsx', content: 'export const price = 2000;\n' })], [say('계산대를 만들었습니다.')]],
+    compiler: [compiled(true)],
+    rounds: [[{ eval: visual, passed: true, detail: 'score 96/100, grade S', audit: { ...audit('S', 0), ownMeasure: 'largest type 36px at line-height 1.2, 2.3 times the body\naccent colour on 9% of the first screen' } }]],
+    critique: { verdict: '이대로 만드세요.', defaults: [], gaps: [], blandness: [] },
+    acceptance: { verdict: 'pass', summary: '약속대로입니다.', unmet: [], copy: [], patch: null },
+    references: [reference, unopened],
+  });
+  try {
+    const task = await r.run('리필 스테이션 계산기를 만들어줘', ['https://usekuroko.com/', 'https://example.org/']);
+    assert.equal(task.state, 'succeeded', task.error ?? '');
+    const bottom = r.asked.find((a) => a.system === ACCEPTANCE_PROMPT)!;
+    const at = bottom.parts.findIndex((part) => typeof part === 'string' && part.startsWith('Reference page https://usekuroko.com/'));
+    assert.match(String(bottom.parts[at]), /as measured before the build[^\n]*\n<untrusted-data id="[0-9a-f]{24}" source="browser-page" url="https:\/\/usekuroko\.com\/">\nlargest type 88px/);
+    assert.ok(bottom.parts[at + 1] instanceof Uint8Array, 'the reference\'s first screen follows its measurements');
+    assert.match(String(bottom.parts[at + 2]), /^This build's first screen, measured the same way:\n<untrusted-data id="[0-9a-f]{24}" source="browser-page">\nlargest type 36px at line-height 1\.2, 2\.3 times the body/);
+    assert.ok(!bottom.parts.some((part) => typeof part === 'string' && part.includes('example.org')), 'a page that could not be opened is not compared with');
+    assert.match(ACCEPTANCE_PROMPT, /4\. Only when reference pages are given: the comparison\.[\s\S]*Parity:[\s\S]*or did it stay on paper while the build came out plainer\?[\s\S]*Difference:[\s\S]*a copy is unmet however polished it is/);
+  } finally {
+    await r.d.cleanup();
+  }
+
+  // With no reference there is nothing to set the build beside, and nothing is said about one.
+  const alone = await rig({
+    plans: [{ ...PLAN, anchor: ANCHOR }],
+    turns: [[use('tu_1', 'write_file', { path: 'src/App.tsx', content: 'export const price = 2000;\n' })], [say('계산대를 만들었습니다.')]],
+    compiler: [compiled(true)],
+    rounds: [[{ eval: visual, passed: true, detail: 'score 96/100, grade S', audit: { ...audit('S', 0), ownMeasure: 'largest type 36px' } }]],
+    critique: { verdict: '이대로 만드세요.', defaults: [], gaps: [], blandness: [] },
+    acceptance: { verdict: 'pass', summary: '약속대로입니다.', unmet: [], copy: [], patch: null },
+  });
+  try {
+    await alone.run('리필 스테이션 계산기를 만들어줘');
+    assert.ok(!alone.asked.find((a) => a.system === ACCEPTANCE_PROMPT)!.parts.some((part) => typeof part === 'string' && /Reference page|measured the same way/.test(part)));
+  } finally {
+    await alone.d.cleanup();
   }
 });
 

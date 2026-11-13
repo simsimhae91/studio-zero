@@ -229,6 +229,8 @@ test('one task, end to end: plan → execute → audit fails → repair → audi
     // The states the screen spec lists were opened where the project says they show, at the size the product is used at, and photographed.
     assert.deepEqual(audit.screenshots.filter((s) => s.state !== undefined).map((s) => [s.state, s.route, s.viewport, s.fold]), [['H-01 기록 없음', '/empty.html', 'desktop-1440', 0], ['H-01 저장 실패', '/failed.html', 'desktop-1440', 0]]);
     assert.ok(audit.findings.every((f) => !f.rule.startsWith('states/')), 'each is there, and each is a different screen from the usual one');
+    // The first screen is also measured the way a reference page is, so that the two can be set side by side.
+    assert.match(audit.ownMeasure ?? '', /\d+px/);
     assert.equal(audit.rubric?.hierarchy, 9);
     const visionFinding = audit.findings.find((f) => f.source === 'vlm')!;
     assert.equal(visionFinding.selector, 'main > h1', 'a reviewer finding is tied back to a selector through the element id');

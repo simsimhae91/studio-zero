@@ -36,12 +36,13 @@ export type PlanCritique = z.infer<typeof PlanCritique>;
 /** The bottom slice: acceptance of the finished work against what was asked. A constant, like every system prompt here. */
 export const ACCEPTANCE_PROMPT = `You are accepting, or sending back once, a piece of work that another model built. You are a different model on purpose. The build is finished and has already passed the studio's own checks (it compiles, it loads, its measurements and its design review are in the evidence below); you are the last look before it reaches the owner, and you get exactly one pass.
 
-You are given the owner's request, the plan and anchor table the work was built to (its acceptance criteria), where there is one the screen spec (what each screen does, its states, and the core flow a person must be able to carry out), the evidence the studio measured, the words on the screens as plain text, and where available a capture of the first screen.
+You are given the owner's request, the plan and anchor table the work was built to (its acceptance criteria), where there is one the screen spec (what each screen does, its states, and the core flow a person must be able to carry out), the evidence the studio measured, the words on the screens as plain text, where available a capture of the first screen, and where the owner pointed at reference pages, those pages as they were measured beside this build measured the same way.
 
 Judge three things.
 1. Whether the request and the acceptance criteria are met. Go through what was asked and what the anchor table promised (the idea, the first screen's largest element, what a person can do straight away, what there is to look at) and check each against the evidence. With a screen spec, the states it lists are criteria too: where captures of them are given, each has to be a finished screen that tells the person what happened and what they can do next, not a bare message. Its core flow is a criterion: the evidence says how many of its tasks the studio could carry out on the running app and what stopped it; a flow that cannot be carried out is unmet. Something you cannot confirm from the evidence is not met.
 2. The copy, from the plain-text block alone. It is the screens' words with their rendering taken away, so judge it as writing: does it say specific things in a human voice, or does it list features in explaining sentences, open with a slogan, and label its buttons with words any product could use? Quote what is wrong and give the exact replacement.
 3. Overall finish: would you put your name to this?
+4. Only when reference pages are given: the comparison. You have each reference's measurements and first screen, and this build's first screen measured by the same instrument. Ask two things. Parity: where the anchor table says a principle was taken from the reference, was it kept in what was measured (is the step from the largest type to the body really as decisive, is colour really held back, is there something real to look at where the reference has its own), or did it stay on paper while the build came out plainer? Difference: is this its own product? The same colour family, the same typeface, the same signature move or the same sizes as the reference is a copy, and a copy is unmet however polished it is. A principle that fell short, or anything carried across, goes in "unmet" with the two measurements that show it.
 
 Then decide. "pass" stamps the work as it is. "patch" sends it back once with a single corrective patch: one coherent set of changes, the most important first, specific enough to carry out without asking you anything. There is no second review, so do not ask for a patch over polish; ask when a criterion is unmet or the copy reads as generated. Do not re-litigate the plan, and do not ask for what the request did not ask for. Write in the language of the request.
 
@@ -127,7 +128,7 @@ export class SandwichReviewer {
    * Bottom slice. `evidence` is what the daemon measured (gates, audit verdict, ledger figures), `copy` the
    * screens' words as plain text, `captures` the first screen as PNG. All three are page- or tool-derived.
    */
-  async accept(subject: ReviewSubject & { spec?: string | null; evidence: string; copy: string | null; captures: readonly Uint8Array[]; states?: readonly { label: string; png: Uint8Array }[] }): Promise<CrossCheck<Acceptance>> {
+  async accept(subject: ReviewSubject & { spec?: string | null; evidence: string; copy: string | null; captures: readonly Uint8Array[]; states?: readonly { label: string; png: Uint8Array }[]; references?: readonly { url: string; summary: string; png: Uint8Array | null }[]; ownMeasure?: string | null }): Promise<CrossCheck<Acceptance>> {
     const started = Date.now();
     const parts: (string | Uint8Array)[] = [
       `The owner's request:\n${subject.request}`,
@@ -135,6 +136,10 @@ export class SandwichReviewer {
       `What the studio measured:\n${untrusted('sandbox-output', excerpt(subject.evidence, 8000))}`,
       subject.copy ? `The words on the screens, as plain text ("#" a title, ">" a control's label, "·" a short label):\n${untrusted('browser-page', subject.copy)}` : 'No screen text was captured for this work.',
       ...(subject.captures.length > 0 ? ['The first screen as captured:', ...subject.captures] : []),
+      // The pages the owner pointed at, set beside the build: each as it was measured before the build, and the build's
+      // own first screen measured by the same instrument. Both are other people's pages or tool output: data.
+      ...(subject.references ?? []).flatMap((ref) => [`Reference page ${ref.url}, as measured before the build (its first screen follows where it was captured):\n${untrusted('browser-page', excerpt(ref.summary, 3000), { url: ref.url })}`, ...(ref.png ? [ref.png] : [])]),
+      ...(subject.references && subject.references.length > 0 && subject.ownMeasure ? [`This build's first screen, measured the same way:\n${untrusted('browser-page', excerpt(subject.ownMeasure, 3000))}`] : []),
       // The labels are the screen spec's own words for its states: page-side text, so they travel as data.
       ...(subject.states && subject.states.length > 0 ? [`States the screen spec lists, each as the running app shows it, in this order:\n${untrusted('sandbox-output', subject.states.map((s, i) => `${i + 1}. ${s.label}`).join('\n'))}`, ...subject.states.map((s) => s.png)] : []),
     ];
