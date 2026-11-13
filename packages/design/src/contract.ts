@@ -13,7 +13,10 @@
 export interface DesignContract {
   /** Every margin, padding and gap is a multiple of this. */
   spacingUnitPx: number;
-  /** The stepped font sizes a page may use, in CSS px. The last steps are display sizes: one headline, not running text. */
+  /**
+   * The stepped font sizes a page may use, in CSS px. The first step is the micro size of a timestamp, a badge or a
+   * stat label; the last steps are display sizes: one headline, not running text.
+   */
   typeScalePx: readonly number[];
   /**
    * Display type: the one headline of an introduction or landing screen. Above `fromPx` a size need not sit on a
@@ -23,7 +26,11 @@ export interface DesignContract {
   display: { fromPx: number; maxPx: number; ratioToBody: readonly [number, number] };
   /** Smallest size allowed for running text and form controls (below 16px iOS Safari zooms on focus). */
   minBodyPx: number;
-  /** A page that needs more sizes than this has no hierarchy, only variety. */
+  /**
+   * A page that needs more sizes than this has no hierarchy, only variety. A phone screen with a header, a
+   * subheader, body, secondary text, a caption, a micro label and one or two figures is at the limit, not over
+   * it: a limit tighter than that was met by growing every caption to body size, which blew the cards apart.
+   */
   maxFontSizesPerView: number;
   lineHeight: { body: readonly [number, number]; heading: readonly [number, number] };
   /** Running text wider than this (in characters) is hard to track from line end to line start. */
@@ -51,6 +58,10 @@ export interface DesignContract {
    */
   clicheGradientHues: { from: number; to: number };
   fonts: {
+    /**
+     * The body stack, and the set of families a page may set text in. The Hangul faces lead it: the first one a
+     * project self-hosts is what both scripts are set in. System faces are the last fallback, never the design.
+     */
     sans: readonly string[];
     mono: readonly string[];
     /** Title faces a project's seed may pick, each a Latin face with its Hangul partner. `sans` sets titles in the body face. */
@@ -72,10 +83,10 @@ export type DisplayFace = (typeof displayFaces)[number];
 
 export const contract: DesignContract = {
   spacingUnitPx: 4,
-  typeScalePx: [12, 14, 16, 18, 20, 24, 30, 36, 48, 60, 72, 96, 120, 160],
+  typeScalePx: [11, 12, 14, 16, 18, 20, 24, 30, 36, 48, 60, 72, 96, 120, 160],
   display: { fromPx: 60, maxPx: 160, ratioToBody: [3, 7] },
   minBodyPx: 16,
-  maxFontSizesPerView: 6,
+  maxFontSizesPerView: 8,
   // A headline at display size is set tight: 0.9 to 1.0. Smaller headings keep the looser end.
   lineHeight: { body: [1.45, 1.8], heading: [0.9, 1.35] },
   maxLineLengthCh: 80,
@@ -85,8 +96,9 @@ export const contract: DesignContract = {
   touchTargetPx: 44,
   clicheGradientHues: { from: 215, to: 325 },
   fonts: {
-    // Geist for Latin, Pretendard for Hangul. System faces are fallbacks only, never the design.
-    sans: ['Geist', 'Pretendard Variable', 'Pretendard', '-apple-system', 'BlinkMacSystemFont', 'system-ui', 'sans-serif'],
+    // Pretendard sets both scripts; SUIT and SUITE are the other Hangul faces a project may self-host instead.
+    // Geist stays for what was set in it before; system faces are fallbacks only, never the design.
+    sans: ['Pretendard Variable', 'Pretendard', 'SUIT Variable', 'SUIT', 'SUITE Variable', 'SUITE', 'Geist', '-apple-system', 'BlinkMacSystemFont', 'system-ui', 'sans-serif'],
     mono: ['Geist Mono', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
     display: {
       sans: [],
@@ -107,8 +119,8 @@ export function lineHeightFor(sizePx: number): number {
   return sizePx <= 96 ? 1 : 0.92;
 }
 
-/** Tailwind step name for each size of the scale. */
-export const typeStepNames = ['xs', 'sm', 'base', 'lg', 'xl', '2xl', '3xl', '4xl', '5xl', '6xl', '7xl', '8xl', '9xl', '10xl'] as const;
+/** Tailwind step name for each size of the scale: `2xs` is the 11px micro step below Tailwind's own `xs`. */
+export const typeStepNames = ['2xs', 'xs', 'sm', 'base', 'lg', 'xl', '2xl', '3xl', '4xl', '5xl', '6xl', '7xl', '8xl', '9xl', '10xl'] as const;
 
 const near = (a: number, b: number, tolerance = 0.5): boolean => Math.abs(a - b) <= tolerance;
 
@@ -138,6 +150,14 @@ export function isAllowedDuration(ms: number, c: DesignContract = contract): boo
 /** Every family a page may set text in: the body and code stacks and each display pairing. */
 export function contractFamilies(c: DesignContract = contract): string[] {
   return [...c.fonts.sans, ...c.fonts.mono, ...Object.values(c.fonts.display).flat()];
+}
+
+/** The tail of the stacks: what a device has of its own. Never the design, and never something a project loads. */
+const SYSTEM_FAMILIES = new Set(['-apple-system', 'BlinkMacSystemFont', 'system-ui', 'sans-serif', 'serif', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace']);
+
+/** The families a project has to load itself for them to show at all: the contract's faces, without the system tail. */
+export function hostedFamilies(c: DesignContract = contract): string[] {
+  return contractFamilies(c).filter((family) => !SYSTEM_FAMILIES.has(family));
 }
 
 export function isLargeText(fontSizePx: number, fontWeight: number): boolean {

@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import { testConfig } from '../src/config.ts';
 import { Store } from '../src/db/Store.ts';
-import { OrbStackManager, SandboxError, parsePortOutput, resolveInWorkspace, sandboxNames } from '../src/sandbox/OrbStackManager.ts';
+import { OrbStackManager, SandboxError, parsePortOutput, qaBrowserDockerfile, resolveInWorkspace, sandboxNames } from '../src/sandbox/OrbStackManager.ts';
 import { assertBranchName } from '../src/sandbox/scripts.ts';
 import { extractorScript, parseExtraction } from '../src/sandbox/extract.ts';
 import { sha256Hex } from '../src/util/core.ts';
@@ -141,6 +141,24 @@ test('file access and names are confined', async () => {
   for (const bad of ['-rf', 'a..b', 'a b', 'x;y', 'a/', 'refs.lock', '']) assert.throws(() => assertBranchName(bad), /invalid branch/, bad);
   for (const good of ['main', 'sz/tsk_abc123', 'kirby/prp_1', 'release-1.2']) assertBranchName(good);
   cleanup();
+});
+
+test('the QA browser image carries the Hangul face, so a screen is photographed in the face its theme names and not in the image\'s stand-in', () => {
+  // Microsoft's Playwright image draws Hangul with WenQuanYi Zen Hei, a Chinese face: what the reviewer saw on every
+  // screenshot of a Korean product until the face was put in the image.
+  const recipe = qaBrowserDockerfile('1.65.0', undefined);
+  assert.match(recipe, /^FROM mcr\.microsoft\.com\/playwright:v1\.65\.0-noble\n/);
+  assert.match(recipe, /npm install -g playwright@1\.65\.0/);
+  assert.match(recipe, /npm pack pretendard@1\.3\.9/, 'the same release the studio inlines into mock-ups');
+  assert.match(recipe, /PretendardVariable\.ttf/);
+  assert.match(recipe, /\/usr\/share\/fonts\//);
+  // The file alone changed nothing for a page that fell to the generic family: fontconfig is told the face is Korean's and sans-serif's.
+  assert.match(recipe, /> \/etc\/fonts\/conf\.d\/40-pretendard\.conf && fc-cache -f/);
+  assert.match(recipe, /<alias binding="strong"><family>sans-serif<\/family><prefer><family>Pretendard Variable<\/family><\/prefer><\/alias>/);
+  assert.match(recipe, /<test name="lang" compare="contains"><string>ko<\/string><\/test><edit name="family" mode="prepend" binding="strong"><string>Pretendard Variable<\/string><\/edit>/);
+  assert.ok(!recipe.includes('`'), 'nothing in the recipe that a shell would run as a command');
+  assert.ok(qaBrowserDockerfile('1.65.0', 'ghcr.io/x/browser:1').startsWith('FROM ghcr.io/x/browser:1\n'), 'an owner\'s own base image is kept');
+  assert.notEqual(recipe, qaBrowserDockerfile('1.66.0', undefined));
 });
 
 test('docker port output parsing', () => {

@@ -203,13 +203,13 @@ function fakeVision(availability: VisionAvailability, review: (input: VisionInpu
   return { bridge, calls };
 }
 
-async function auditWith(project: Project, vision: QaVisionBridge, digest: PageDigest = SCREEN): Promise<{ report: AuditReport; stored: AuditReport; events: { type: string; [key: string]: unknown }[] }> {
+async function auditWith(project: Project, vision: QaVisionBridge, digest: PageDigest = SCREEN, routes: string[] = ['/']): Promise<{ report: AuditReport; stored: AuditReport; events: { type: string; [key: string]: unknown }[] }> {
   const d = await testDaemon();
   try {
     const { store, events } = d.daemon;
     store.insertProject(project);
     const auditor = new VisualAuditor({ config: d.config, store, events, browser: fakeBrowser(digest), vision, clock: () => 1000, log: quietLog });
-    const report = await auditor.audit({ project, taskId: null, port: 8081, routes: ['/'] });
+    const report = await auditor.audit({ project, taskId: null, port: 8081, routes });
     return { report, stored: store.getAudit(report.id)!, events: events.history({ projectId: project.id }, 0, 50).map((e) => e.body) };
   } finally {
     await d.cleanup();
@@ -222,12 +222,15 @@ test('the 가림 screen through the whole audit: grade F, a redesign plan, and f
   const vision = fakeVision(READY, () => SLOP_REPLY);
   const { report, stored, events } = await auditWith(garim, vision.bridge);
 
-  assert.deepEqual(vision.calls.map((c) => c.viewport), ['iphone-15-pro', 'ipad-pro-11'], 'a phone app is judged at phone and tablet size, never at desktop width');
-  assert.deepEqual([...new Set(report.screenshots.map((s) => s.viewport))], ['iphone-15-pro', 'ipad-pro-11']);
+  // A phone app is measured at phone and tablet size, never at desktop width. The reviewer is asked at the phone
+  // size only: on a tablet the app is the same phone-shaped column, and a real build (2026-11-13) spent 16 review
+  // calls, half of its six-minute audit, being asked about each of 8 routes twice.
+  assert.deepEqual(vision.calls.map((c) => c.viewport), ['iphone-15-pro'], 'one review per route, at the size the product is first met at');
+  assert.deepEqual([...new Set(report.screenshots.map((s) => s.viewport))], ['iphone-15-pro', 'ipad-pro-11'], 'measured at both');
   assert.equal(vision.calls[0]!.template, 'mobile-expo');
 
   assert.deepEqual([report.visionReviewed, report.passed, report.grade, report.archetype], [true, false, 'F', 'marketing']);
-  assert.deepEqual(report.vision, { status: 'reviewed', via: 'codex', model: 'codex:default', limited: false, reviewed: 2, expected: 2, reason: null }, 'the report names who judged');
+  assert.deepEqual(report.vision, { status: 'reviewed', via: 'codex', model: 'codex:default', limited: false, reviewed: 1, expected: 1, reason: null }, 'the report names who judged, and owes one review per route');
   assert.ok(report.slopScore! >= SLOP_FAIL && report.score < 85, `slop ${report.slopScore}, score ${report.score}`);
   assert.equal(report.critique, SLOP_REPLY.critique);
   assert.equal(report.rubric!.tactility, 3);
@@ -266,7 +269,7 @@ test('truth in reporting: with nobody to ask, a measured-clean screen is capped 
   assert.equal(vision.calls.length, 0);
   assert.deepEqual(report.findings, [], 'nothing measurable is wrong with it');
   assert.deepEqual([report.visionReviewed, report.score, report.passed, report.grade, report.rubric, report.slopScore], [false, 50, false, null, null, null]);
-  assert.deepEqual(report.vision, { status: 'unavailable', via: null, model: null, limited: false, reviewed: 0, expected: 2, reason: unavailable.reason });
+  assert.deepEqual(report.vision, { status: 'unavailable', via: null, model: null, limited: false, reviewed: 0, expected: 1, reason: unavailable.reason });
   assert.equal(stored.visionReviewed, false);
   assert.match(String(events.find((e) => e.type === 'notice')!.message), /^Design review did not run \(no model to ask[\s\S]*The design is not verified: the audit score is capped at 50 and the audit does not pass\.$/);
   assert.deepEqual(events.find((e) => e.type === 'audit.completed'), { type: 'audit.completed', auditId: report.id, score: 50, passed: false, blockers: 0, majors: 0, minors: 0, visionReviewed: false, grade: null });
@@ -290,7 +293,8 @@ test('an unreviewed screen with a measured defect is a plain failure, and the en
 test('a review that covers only some screens is said to be partial, and does not pass', async () => {
   const good: VisionReply = { ...SLOP_REPLY, archetype: 'mobile-app', slopScore: 5, findings: [], redesignPatches: [], rubric: { hierarchy: 9, whitespace: 9, typography: 9, color: 9, copy: 9, originality: 9, tactility: 9 } };
   const vision = fakeVision(READY, (_input, call) => (call === 1 ? good : new VisionUnavailableError('Claude subscription: timed out', [{ path: 'claude-code', error: 'timed out', limited: false }], false)));
-  const { report, events } = await auditWith(garim, vision.bridge);
+  // Two routes of a phone app: two screens for the reviewer (one per route, at the phone size).
+  const { report, events } = await auditWith(garim, vision.bridge, SCREEN, ['/', '/scores']);
   assert.equal(vision.calls.length, 2);
   assert.deepEqual([report.visionReviewed, report.passed, report.grade, report.score], [false, false, null, 50]);
   assert.deepEqual(report.vision, { status: 'partial', via: 'codex', model: 'codex:default', limited: false, reviewed: 1, expected: 2, reason: 'Claude subscription: timed out' });
@@ -336,7 +340,7 @@ test('a refusal that cannot go differently is not asked for again on every scree
 test('every reviewer at its usage limit: the audit is unreviewed for a reason that passes, so the task it belongs to can wait', async () => {
   const limit = new VisionUnavailableError('Codex subscription: You\'ve hit your usage limit; Claude subscription: Claude 구독의 사용 한도에 걸렸습니다.', [{ path: 'codex', error: 'usage limit', limited: true }, { path: 'claude-code', error: '한도', limited: true }], false);
   const vision = fakeVision(READY, () => limit);
-  const { report } = await auditWith(garim, vision.bridge);
+  const { report } = await auditWith(garim, vision.bridge, SCREEN, ['/', '/scores']);
   assert.equal(vision.calls.length, 2, 'both screens were tried before giving up');
   assert.deepEqual(report.vision, { status: 'failed', via: null, model: null, limited: true, reviewed: 0, expected: 2, reason: limit.message });
   assert.deepEqual([report.score, report.passed, report.grade], [50, false, null], 'it is still not a pass while it waits');

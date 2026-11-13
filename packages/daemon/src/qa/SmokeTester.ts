@@ -44,8 +44,28 @@ export interface SmokeRunner {
 const APP_PATIENCE_MS = 2500;
 
 const MAX_ISSUES_PER_ROUTE = 12;
-/** A missing favicon or image is logged by the browser as a console error; responses are judged by status instead. */
-const RESOURCE_NOISE = /^Failed to load resource/;
+/**
+ * What on the console is not the app failing to run. A missing favicon or image is logged by the browser as a
+ * console error, and responses are judged by status instead. React's warnings about a prop's name or type on a
+ * DOM element (a React Native prop that reached the DOM on the Expo web target, a `class` for `className`) are
+ * development lint: the element rendered and the page works. A real build failed this gate twice on nothing but
+ * `accessibilityElementsHidden` and spent two turns renaming props. The browser reports React's text with the
+ * `%s` unfilled and the arguments appended (React 18 prefixes "Warning: ", React 19 fills the name in), so the
+ * patterns match the start of the sentence and nothing after it. Warnings about behaviour (an update during
+ * render, a missing key) are kept: they are not about a name.
+ */
+const CONSOLE_NOISE: readonly RegExp[] = [
+  /^Failed to load resource/,
+  /^(?:Warning: )?React does not recognize the `[^`]*` prop on a DOM element\./,
+  /^(?:Warning: )?Invalid DOM property `[^`]*`\./,
+  /^(?:Warning: )?Unknown event handler property `[^`]*`\./,
+  /^(?:Warning: )?Received `[^`]*` for a non-boolean attribute `[^`]*`\./,
+];
+
+/** Whether a console error is one the smoke gate does not count. Exported for its test. */
+export function isConsoleNoise(text: string): boolean {
+  return CONSOLE_NOISE.some((pattern) => pattern.test(text));
+}
 
 /**
  * The smoke gate: does the app actually run? Starts the project's dev server, loads each of its routes in the
@@ -131,7 +151,7 @@ export async function probeRoute(browser: Browser, url: string, route: string): 
     const page = await context.newPage();
     page.on('pageerror', (err) => add('exception', err.stack || err.message));
     page.on('console', (msg) => {
-      if (msg.type() !== 'error' || RESOURCE_NOISE.test(msg.text())) return;
+      if (msg.type() !== 'error' || isConsoleNoise(msg.text())) return;
       const at = msg.location();
       add('console', at.url ? `${msg.text()}\n    at ${pathOf(at.url)}:${at.lineNumber}` : msg.text());
     });

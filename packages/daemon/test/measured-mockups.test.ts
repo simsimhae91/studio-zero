@@ -88,12 +88,35 @@ test('the screen spec check: a spec that holds, and what each miss says', () => 
 });
 
 test('a mock-up page is given what it points at: its pictures from the asset folder and the theme faces it names, and nothing else', async () => {
-  assert.deepEqual(SUPPLIED_FACES, ['Geist', 'Fraunces', 'Instrument Serif', 'Bricolage Grotesque']);
+  assert.deepEqual(SUPPLIED_FACES, ['Pretendard Variable', 'Geist', 'Fraunces', 'Instrument Serif', 'Bricolage Grotesque']);
   const titled = withFaces('<!doctype html><html><head><title>t</title><style>h1{font-family:Fraunces,"Noto Serif KR",serif}body{font-family:Geist,sans-serif}</style></head><body></body></html>');
   assert.match(titled, /^<!doctype html><html><head><style data-studio-faces>@font-face\{font-family:"Geist";[^}]*src:url\(data:font\/woff2;base64,[A-Za-z0-9+/=]{1000,}\) format\("woff2"\)\}@font-face\{font-family:"Fraunces";/, 'the faces go in after <head>, where they cannot change how the page is parsed');
-  assert.ok(!titled.includes('Instrument Serif') && !titled.includes('Bricolage'), 'a face the page does not name is not added');
+  assert.ok(!titled.includes('Instrument Serif') && !titled.includes('Bricolage') && !titled.includes('Pretendard'), 'a face the page does not name is not added');
   assert.equal(withFaces('<p>system-ui only</p>'), '<p>system-ui only</p>');
   assert.match(withFaces('<!DOCTYPE html><p style="font-family:Geist">x</p>'), /^<!DOCTYPE html><style data-studio-faces>/, 'with no <head>, after the doctype: never before it');
+
+  // The Hangul face is too large to carry whole (2 MB), so a page gets the pieces its own characters need: the
+  // file is split by code point range, and only the ranges the page uses go in, with the range on each rule.
+  const covers = (html: string, codePoint: number): boolean =>
+    [...html.matchAll(/@font-face\{font-family:"Pretendard(?: Variable)?";[^}]*unicode-range:([^;}]+)/g)].some(([, ranges]) =>
+      ranges!.split(',').some((r) => {
+        const [from, to] = r.trim().replace(/^U\+/i, '').split('-').map((h) => parseInt(h, 16));
+        return codePoint >= from! && codePoint <= (to ?? from!);
+      }),
+    );
+  const korean = withFaces('<!doctype html><html lang="ko"><head><style>body{font-family:"Pretendard Variable",Pretendard,sans-serif}</style></head><body><h1>오늘 64점 차</h1><p>체중 72.4kg</p></body></html>');
+  const rules = korean.match(/@font-face\{font-family:"Pretendard Variable";/g) ?? [];
+  assert.ok(rules.length >= 2 && rules.length <= 12, `the Latin piece and the few Hangul pieces this text needs, not all of them: ${rules.length}`);
+  for (const ch of '오늘점차체중kg64') assert.ok(covers(korean, ch.codePointAt(0)!), `${ch} is drawn in Pretendard`);
+  assert.ok(!covers(korean, '뷁'.codePointAt(0)!), 'a syllable the page never uses is not carried');
+  assert.match(korean, /font-family:"Pretendard Variable";font-style:normal;font-weight:45 920;font-display:block;src:url\(data:font\/woff2;base64,[A-Za-z0-9+/=]{100,}\) format\("woff2-variations"\);unicode-range:U\+/);
+  assert.ok(korean.length < 1_200_000, `a short page stays small: ${korean.length} bytes`);
+  // The Latin piece carries a dozen of the most frequent syllables with it (가, 이, 하 …), so the syllable looked for is one it lacks.
+  const latin = withFaces('<p style="font-family:Pretendard" title="Weight">Weight 72.4 kg</p>');
+  assert.equal((latin.match(/@font-face/g) ?? []).length, 1, 'a page with no Hangul carries the Latin piece alone: the markup\'s own brackets pull nothing in');
+  assert.ok(covers(latin, 'W'.codePointAt(0)!) && !covers(latin, '오'.codePointAt(0)!));
+  assert.ok(latin.includes('font-family:"Pretendard";') && !latin.includes('Pretendard Variable'), 'under the family name the page uses');
+  assert.ok(covers(withFaces('<p style="font-family:Pretendard"><img alt="비빔밥"></p>'), '빔'.codePointAt(0)!), 'what an attribute shows is drawn too');
 
   const d = await testDaemon();
   try {

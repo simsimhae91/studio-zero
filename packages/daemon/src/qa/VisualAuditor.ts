@@ -45,6 +45,21 @@ export function auditViewports(template: ProjectTemplate, configured: readonly V
   return template === 'mobile-expo' && handheld.length > 0 ? handheld : [...configured];
 }
 
+/** The size a product is first met at: a phone for a phone app, a desktop window for the rest. */
+const primaryViewport = (template: ProjectTemplate): ViewportId => (template === 'mobile-expo' ? 'iphone-15-pro' : 'desktop-1440');
+
+/**
+ * The sizes a design reviewer is asked about, of those measured. A web product is reviewed at every size, since
+ * its phone and desktop layouts are different screens. A phone app is reviewed at the phone size only: on a
+ * tablet it is the same phone-shaped column, and each review is a model call of a minute. A real build
+ * (2026-11-13) was asked about 8 routes at two sizes, 16 calls, which was most of a six-minute audit.
+ */
+export function reviewViewports(template: ProjectTemplate, measured: readonly ViewportId[]): ViewportId[] | null {
+  if (template !== 'mobile-expo') return null;
+  const primary = primaryViewport(template);
+  return [measured.includes(primary) ? primary : (measured[0] ?? primary)];
+}
+
 /** After this many reviews in one audit have failed on every path, the rest are not attempted. */
 const MAX_REVIEW_FAILURES = 2;
 /**
@@ -144,7 +159,8 @@ export class VisualAuditor {
         return !response || response.status() >= 400 ? `HTTP ${response?.status() ?? 'no response'}: the route did not serve the app` : null;
       },
     });
-    return this.#run(req, (host) => [...req.routes.map((route) => subject(host, route)), ...(req.states ?? []).map((s) => subject(host, s.route, s.label))], { sealed: false, everyFirst: false, reviewAt: null, record: true }).then((ran) => ran.report);
+    const reviewAt = reviewViewports(req.project.template, auditViewports(req.project.template, this.#config.audit.viewports));
+    return this.#run(req, (host) => [...req.routes.map((route) => subject(host, route)), ...(req.states ?? []).map((s) => subject(host, s.route, s.label))], { sealed: false, everyFirst: false, reviewAt, record: true }).then((ran) => ran.report);
   }
 
   /**
@@ -157,7 +173,7 @@ export class VisualAuditor {
    * that reviewer's score for each page it saw.
    */
   auditPages(req: PageAuditRequest): Promise<{ report: AuditReport; slopByRoute: Map<string, number> }> {
-    const primary: ViewportId = req.project.template === 'mobile-expo' ? 'iphone-15-pro' : 'desktop-1440';
+    const primary = primaryViewport(req.project.template);
     const measured = auditViewports(req.project.template, this.#config.audit.viewports);
     return this.#run(
       { ...req, routes: req.pages.map((p) => p.route) },

@@ -11,7 +11,7 @@ import { Store } from '../src/db/Store.ts';
 import { CompilerGate } from '../src/harness/CompilerGate.ts';
 import { repairMessage } from '../src/harness/Harness.ts';
 import { DRAFT_BRIEF } from '../src/harness/prompts.ts';
-import { probeRoute, renderSmokeFeedback, type SmokeOutcome, type SmokeRunner } from '../src/qa/SmokeTester.ts';
+import { isConsoleNoise, probeRoute, renderSmokeFeedback, type SmokeOutcome, type SmokeRunner } from '../src/qa/SmokeTester.ts';
 import { OrbStackManager } from '../src/sandbox/OrbStackManager.ts';
 import { sleep } from '../src/util/core.ts';
 import { localDocker, sampleProject, tempDir, testDaemon } from './helpers.ts';
@@ -242,11 +242,30 @@ test('repair feedback: compiler output cannot close its own frame', () => {
   assert.ok(message.endsWith(`</untrusted-data id="${id}">\n</compiler_error>\nFix this compilation error immediately.`));
 });
 
+// What React says, through console.error, when a React Native prop reaches a DOM element on the Expo web target
+// (as the browser reports it: the `%s` unfilled, the arguments appended). A real build on 2026-11-13 failed the
+// smoke gate twice on nothing else and spent two turns renaming props. The element rendered; the app ran.
+const RN_PROP_WARNING = 'React does not recognize the `%s` prop on a DOM element. If you intentionally want it to appear in the DOM as a custom attribute, spell it as lowercase `%s` instead. If you accidentally passed it from a parent component, remove it from the DOM element. accessibilityElementsHidden accessibilityelementshidden';
+
+test('a React warning about a prop\'s name is not the app failing to run; an error the app logged is', () => {
+  assert.ok(isConsoleNoise(RN_PROP_WARNING));
+  assert.ok(isConsoleNoise(`Warning: ${RN_PROP_WARNING}`), 'React 18 prefixes its warnings');
+  assert.ok(isConsoleNoise('React does not recognize the `importantForAccessibility` prop on a DOM element. If you intentionally want it to appear in the DOM as a custom attribute, spell it as lowercase `importantforaccessibility` instead.'), 'React 19 fills the name in');
+  assert.ok(isConsoleNoise('Invalid DOM property `%s`. Did you mean `%s`? stroke-width strokeWidth'));
+  assert.ok(isConsoleNoise('Unknown event handler property `%s`. It will be ignored. onResponderGrant'));
+  assert.ok(isConsoleNoise('Received `%s` for a non-boolean attribute `%s`.\n\nIf you want to write it to the DOM, pass a string instead: %s="%s" or %s={value.toString()}. true collapsable'));
+  assert.ok(isConsoleNoise('Failed to load resource: the server responded with a status of 404 (Not Found)'));
+  assert.ok(!isConsoleNoise('state is corrupt'));
+  assert.ok(!isConsoleNoise('Warning: Cannot update a component (`Duel`) while rendering a different component (`Timeline`).'), 'a React warning about behaviour is kept');
+  assert.ok(!isConsoleNoise('Warning: Each child in a list should have a unique "key" prop.'));
+  assert.ok(!isConsoleNoise('Uncaught TypeError: Cannot read properties of undefined (reading \'map\')'));
+});
+
 test('smoke probe in a real browser: uncaught exceptions, console.error and 5xx are reported; a missing favicon is not', async (t) => {
   const browser = await chromium.launch({ channel: 'chrome', headless: true, timeout: 15_000 }).catch(() => null);
   if (!browser) return t.skip('headless Chrome cannot be launched here');
   const pages: Record<string, string> = {
-    '/clean': '<!doctype html><title>ok</title><h1>fine</h1><img src="/missing.png"><script>console.log("hello"); console.warn("careful")</script>',
+    '/clean': `<!doctype html><title>ok</title><h1>fine</h1><img src="/missing.png"><script>console.log("hello"); console.warn("careful"); console.error(${JSON.stringify(RN_PROP_WARNING.replace(/ accessibilityElementsHidden accessibilityelementshidden$/, ''))}, "accessibilityElementsHidden", "accessibilityelementshidden")</script>`,
     '/broken': '<!doctype html><h1>broken</h1><script>console.error("state is corrupt", { id: 7 }); fetch("/api/items"); setTimeout(() => { throw new Error("boom in a timer") }, 50)</script>',
   };
   const server = createServer((req, res) => {
@@ -262,7 +281,7 @@ test('smoke probe in a real browser: uncaught exceptions, console.error and 5xx 
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   const base = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
   try {
-    assert.deepEqual(await probeRoute(browser, `${base}/clean`, '/clean'), [], 'a 404 image and a missing favicon are not smoke failures; neither are log and warn');
+    assert.deepEqual(await probeRoute(browser, `${base}/clean`, '/clean'), [], 'a 404 image and a missing favicon are not smoke failures; neither are log and warn, nor React\'s warning about a prop\'s name');
 
     const issues = await probeRoute(browser, `${base}/broken`, '/broken');
     assert.deepEqual(issues.map((i) => i.kind).sort(), ['console', 'exception', 'http']);

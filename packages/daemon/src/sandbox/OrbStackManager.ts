@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, symlinkSync, writeFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { isIPv4 } from 'node:net';
 import { homedir } from 'node:os';
 import { dirname, isAbsolute, join, posix } from 'node:path';
@@ -33,6 +34,38 @@ const QA_BROWSER_PORT = 3000;
 /** The sandbox image: the base plus the package manager the project templates and the coding prompt assume. */
 const sandboxDockerfile = (base: string): string => `FROM ${base}
 RUN npm install -g pnpm@12 && npm cache clean --force
+`;
+
+/** The Hangul face the studio ships, at the release installed here: the same files go into mock-up pages (`qa/mockupFaces.ts`). */
+const PRETENDARD_VERSION = (createRequire(import.meta.url)('pretendard/package.json') as { version: string }).version;
+
+/**
+ * What fontconfig in the QA image is told about the Hangul face: it is the face for Korean, and the face behind
+ * `sans-serif` and `system-ui`. Installing the file alone is not enough: the image's own rules still answered a
+ * Korean character, or a page that fell to the generic family, with WenQuanYi Zen Hei.
+ */
+const PRETENDARD_FONTCONFIG = [
+  '<?xml version="1.0"?>',
+  '<!DOCTYPE fontconfig SYSTEM "fonts.dtd">',
+  '<fontconfig>',
+  '<alias binding="strong"><family>sans-serif</family><prefer><family>Pretendard Variable</family></prefer></alias>',
+  '<alias binding="strong"><family>system-ui</family><prefer><family>Pretendard Variable</family></prefer></alias>',
+  '<match target="pattern"><test name="lang" compare="contains"><string>ko</string></test><edit name="family" mode="prepend" binding="strong"><string>Pretendard Variable</string></edit></match>',
+  '</fontconfig>',
+];
+
+/**
+ * The QA browser image. Microsoft's Playwright image ships the browsers but not the `playwright` package that
+ * provides `run-server`, so that is installed once into a derived image, and the browser container starts without
+ * touching the network. The image also gets the Hangul face: its own Korean fallback is WenQuanYi Zen Hei, a
+ * Chinese face, which is what every screenshot of a Korean product showed the reviewer until the face was put in.
+ * A built product still has to load the face itself (the audit measures that); this is what a page that has not
+ * is photographed in. Exported for its test; the tag is the recipe's hash, so a change here rebuilds the image.
+ */
+export const qaBrowserDockerfile = (playwrightVersion: string, baseOverride: string | undefined): string => `FROM ${baseOverride ?? `mcr.microsoft.com/playwright:v${playwrightVersion}-noble`}
+RUN npm install -g playwright@${playwrightVersion} && npm cache clean --force
+RUN mkdir -p /usr/share/fonts/truetype/pretendard && cd /tmp && npm pack pretendard@${PRETENDARD_VERSION} --silent && tar -xzf pretendard-${PRETENDARD_VERSION}.tgz --strip-components=4 -C /usr/share/fonts/truetype/pretendard package/dist/public/variable/PretendardVariable.ttf && rm pretendard-${PRETENDARD_VERSION}.tgz && npm cache clean --force
+RUN printf '%s\\n' ${PRETENDARD_FONTCONFIG.map((line) => `'${line}'`).join(' ')} > /etc/fonts/conf.d/40-pretendard.conf && fc-cache -f
 `;
 
 export class SandboxError extends Error {
@@ -554,16 +587,12 @@ export class OrbStackManager {
     return image;
   }
 
-  /**
-   * Microsoft's Playwright image ships the browsers but not the `playwright` package that provides `run-server`.
-   * Installing it once into a derived image means the browser container starts without touching the network.
-   */
+  /** The QA browser image (`qaBrowserDockerfile`), built once per recipe and kept under the recipe's hash. */
   async #qaBrowserImage(version: string, baseOverride: string | undefined): Promise<string> {
-    const base = baseOverride ?? `mcr.microsoft.com/playwright:v${version}-noble`;
-    const dockerfile = `FROM ${base}\nRUN npm install -g playwright@${version} && npm cache clean --force\n`;
+    const dockerfile = qaBrowserDockerfile(version, baseOverride);
     const tag = `studio-zero/qa-browser:${sha256Hex(dockerfile).slice(0, 12)}`;
     if ((await this.#docker(['image', 'inspect', '--format', '{{.Id}}', tag], { timeoutMs: 15_000 })).exitCode === 0) return tag;
-    await this.#ensureImage(base);
+    await this.#ensureImage(/^FROM (\S+)/.exec(dockerfile)![1]!);
     const res = await this.#docker(['build', '--quiet', '--tag', tag, '-'], { stdin: dockerfile, timeoutMs: 20 * 60 * 1000 });
     if (res.exitCode !== 0) throw new SandboxError('could not build the QA browser image', lastLine(res.stderr));
     return tag;

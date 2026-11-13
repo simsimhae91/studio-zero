@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { referenceSeed, referenceThemePath } from '../src/build.ts';
-import { KOREAN_TEXT_SLOP_PATTERNS, colorTokens, contract, contractFamilies, contrastRatio, cornerRadii, createTheme, displayFaces, isAllowedDuration, isAllowedRadius, isDisplayInProportion, isOnTypeScale, lineHeightFor, lintInterfaceText, lintSources, mobileTokens, oklchToRgb, parseHex, renderThemeCss, seedFromName, textSlopScore, typeStepNames, type InterfaceText, type Palette } from '../src/index.ts';
+import { KOREAN_TEXT_SLOP_PATTERNS, colorTokens, contract, contractFamilies, contrastRatio, cornerRadii, createTheme, displayFaces, hostedFamilies, isAllowedDuration, isAllowedRadius, isDisplayInProportion, isOnTypeScale, lineHeightFor, lintInterfaceText, lintSources, mobileTokens, oklchToRgb, parseHex, renderThemeCss, seedFromName, textSlopScore, typeStepNames, type InterfaceText, type Palette } from '../src/index.ts';
 
 const TEXT_TOKENS = ['fg', 'fg-muted', 'accent', 'danger', 'success', 'warning'] as const;
 const BACKGROUNDS = ['bg', 'surface', 'sunken'] as const;
@@ -40,9 +40,36 @@ test('theme CSS replaces the Tailwind defaults and exposes exactly the contract 
   const css = renderThemeCss(createTheme(referenceSeed));
   for (const reset of ['--color-*: initial;', '--text-*: initial;', '--radius-*: initial;', '--shadow-*: initial;']) assert.ok(css.includes(reset), reset);
   for (const token of colorTokens) assert.ok(css.includes(`--color-${token}: var(--sz-${token});`), token);
+  assert.equal(typeStepNames.length, contract.typeScalePx.length, 'every step of the scale has a name');
   contract.typeScalePx.forEach((size, i) => assert.ok(css.includes(`--text-${typeStepNames[i]}: ${size / 16}rem;`), `text step ${size}px`));
+  // The micro step sits below xs; the names above it keep their sizes (text-base is still 16px).
+  for (const step of ['--text-2xs: 0.6875rem;', '--text-xs: 0.75rem;', '--text-sm: 0.875rem;', '--text-base: 1rem;', '--text-10xl: 10rem;']) assert.ok(css.includes(step), step);
+  assert.ok(css.includes('--font-sans: "Pretendard Variable", "Pretendard", "SUIT Variable", "SUIT", "SUITE Variable", "SUITE", "Geist", '), 'the Hangul faces lead the body stack; Geist and the system faces are fallbacks');
   assert.ok(css.includes(`min-block-size: ${contract.touchTargetPx}px`));
   assert.ok(css.includes('prefers-reduced-motion'));
+});
+
+test('a phone screen is a hierarchy of eight sizes down to 11px, on paper that never turns to cream', () => {
+  assert.ok(isOnTypeScale(11), '11px: a timestamp, a badge, a stat label');
+  assert.ok(!isOnTypeScale(10), 'below the scale');
+  assert.equal(contract.maxFontSizesPerView, 8, 'header, subheader, body, secondary, caption, micro and one or two figures');
+  assert.equal(contract.minBodyPx, 16, 'running text keeps the floor Apple and Toss set body at; the small steps are for labels');
+  for (let i = 0; i < 500; i++) {
+    const seed = seedFromName(`project-${i}`);
+    assert.ok(seed.neutralChroma <= 0.005, `placeholder ${i}: neutral chroma ${seed.neutralChroma} would tint the paper`);
+    assert.ok(seed.chroma >= 0.12 && seed.lightness! >= 0.4 && seed.lightness! <= 0.75, `placeholder ${i}: brand ${seed.chroma} / ${seed.lightness} is outside the band the tool admits`);
+  }
+  assert.ok(referenceSeed.neutralChroma <= 0.005, 'the studio\'s own paper obeys the same rule');
+  // Every choice inside the tool's band comes out legible: the vivid end and both ends of brand lightness included.
+  for (let hue = 0; hue < 360; hue += 15) {
+    for (const [chroma, lightness] of [[0.12, 0.4], [0.28, 0.4], [0.2, 0.55], [0.12, 0.75], [0.28, 0.75]] as const) {
+      const theme = createTheme({ hue, chroma, lightness, neutralChroma: 0.005, corners: 'soft' });
+      for (const mode of ['light', 'dark'] as const) {
+        for (const bg of BACKGROUNDS) for (const token of TEXT_TOKENS) assert.ok(ratio(theme[mode], token, bg) >= contract.contrast.text, `${mode} hue ${hue} chroma ${chroma} lightness ${lightness}: ${token} on ${bg}`);
+        assert.ok(ratio(theme[mode], 'on-brand', 'brand') >= contract.contrast.text, `${mode} hue ${hue} chroma ${chroma} lightness ${lightness}: on-brand on brand`);
+      }
+    }
+  }
 });
 
 test('the committed theme.css is the output of the generator', () => {
@@ -164,7 +191,8 @@ test('the contract admits what the reference sites ship: display type, tight lea
   for (const size of contract.typeScalePx.filter((s) => s > contract.display.fromPx)) assert.ok(lineHeightFor(size) >= 0.9 && lineHeightFor(size) <= 1, `the theme sets ${size}px tight`);
   for (const radius of GOLDEN.radiiPx) assert.ok(isAllowedRadius(radius), `${radius}px radius`);
   for (const ms of [...GOLDEN.entranceMs, ...GOLDEN.pageMs, ...contract.motion.durationsMs]) assert.ok(isAllowedDuration(ms), `${ms}ms`);
-  for (const family of ['Fraunces', 'Noto Serif KR', 'Instrument Serif', 'Gowun Batang', 'Bricolage Grotesque', 'Geist', 'Pretendard']) assert.ok(contractFamilies().includes(family), family);
+  for (const family of ['Fraunces', 'Noto Serif KR', 'Instrument Serif', 'Gowun Batang', 'Bricolage Grotesque', 'Geist', 'Pretendard', 'SUIT', 'SUITE']) assert.ok(contractFamilies().includes(family) && hostedFamilies().includes(family), `${family} is a face a project loads`);
+  for (const family of ['-apple-system', 'system-ui', 'sans-serif', 'Menlo', 'monospace']) assert.ok(contractFamilies().includes(family) && !hostedFamilies().includes(family), `${family} is the device's own`);
 });
 
 test('the contract still refuses what is merely loud or arbitrary', () => {
@@ -186,7 +214,7 @@ test('titles, corners and motion vary by seed and reach the generated theme', ()
   assert.deepEqual([...new Set(names.map((s) => s.corners))].sort(), ['round', 'sharp', 'soft']);
 
   const serif = renderThemeCss(createTheme({ ...referenceSeed, corners: 'round', display: 'serif' }));
-  assert.ok(serif.includes('--font-display: "Fraunces", "Noto Serif KR", "Geist", '), 'the display pairing leads the title stack');
+  assert.ok(serif.includes('--font-display: "Fraunces", "Noto Serif KR", "Pretendard Variable", '), 'the display pairing leads the title stack, and the body face follows it');
   assert.match(serif, /titles in Fraunces \+ Noto Serif KR/);
   for (const [step, px] of Object.entries(cornerRadii.round)) assert.ok(serif.includes(`--radius-${step}: ${px}px;`), `round ${step}`);
   assert.ok(Object.values(cornerRadii).every((r) => Object.values(r).every((px) => isAllowedRadius(px))));
@@ -194,7 +222,7 @@ test('titles, corners and motion vary by seed and reach the generated theme', ()
   assert.ok(entrance! >= contract.motion.entranceMs[0] && entrance! <= contract.motion.entranceMs[1]);
   assert.ok(page! >= contract.motion.pageMs[0] && page! <= contract.motion.pageMs[1]);
   // A seed that names no display face sets titles in the body face.
-  assert.ok(renderThemeCss(createTheme(referenceSeed)).includes('--font-display: "Geist", "Pretendard Variable", '));
+  assert.ok(renderThemeCss(createTheme(referenceSeed)).includes('--font-display: "Pretendard Variable", "Pretendard", '));
 });
 
 const t = (role: InterfaceText['role'], text: string): InterfaceText => ({ role, text });

@@ -163,6 +163,9 @@ importers:
       playwright-core:
         specifier: ^1.65.0
         version: 1.65.0
+      pretendard:
+        specifier: ^1.3.9
+        version: 1.3.9
       typescript-classic:
         specifier: npm:typescript@^5.9.3
         version: typescript@5.9.3

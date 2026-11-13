@@ -5,16 +5,21 @@ import { contract as defaultContract, displayFaces, lineHeightFor, typeStepNames
 export interface ThemeSeed {
   /** Brand hue in OKLCH degrees. */
   hue: number;
-  /** Brand chroma, 0.06 (muted) – 0.2 (vivid). */
+  /** Brand chroma, 0.12 (clear) – 0.28 (electric). The brand is the one colour on the screen; a muted one is not seen. */
   chroma: number;
-  /** How strongly neutrals lean toward the brand hue, 0 (pure grey) – 0.02. */
+  /**
+   * How strongly neutrals lean toward the brand hue, 0 (pure grey) – 0.005 (the faintest lean). Past that the
+   * paper reads as a colour of its own (cream under a warm brand, which a real build shipped as #fff9f5), and the
+   * screen loses the clean canvas the brand is meant to punch through.
+   */
   neutralChroma: number;
   corners: Corners;
   /** The face titles are set in. Left out: the body face. */
   display?: DisplayFace;
   /**
-   * How light the brand colour is, 0.3 (deep) – 0.92 (pale). The brand is a fill, not a text colour, so it may be
-   * as bright as the subject asks: the text that sits on it is solved. Left out: as dark as the accent.
+   * How light the brand colour is, 0.4 (deep) – 0.75 (bright). The brand is a fill, not a text colour, so the text
+   * that sits on it is solved; darker it reads as ink, lighter as a pastel wash, and neither is a punch. Left out:
+   * as dark as the accent.
    */
   lightness?: number;
   /** The hue the neutrals lean toward. Left out: the brand's. Warm paper under a cold brand is a choice. */
@@ -137,9 +142,10 @@ export function seedFromName(name: string): ThemeSeed {
   const mixed = Math.imul(hash ^ (hash >>> 15), 2246822507) >>> 0;
   const display = displayFaces[(mixed >>> 13) % displayFaces.length]!;
   // A name says nothing about a product, so this is a placeholder until someone chooses from the subject. It is
-  // still spread over deep and bright brands, so two placeholders do not look like the same product.
-  const lightness = 0.4 + ((mixed >>> 5) % 5) * 0.1;
-  return { hue, chroma: 0.11 + ((hash >>> 9) % 7) * 0.01, neutralChroma: 0.004 + ((hash >>> 13) % 4) * 0.003, corners, display, lightness };
+  // still spread over deep and bright brands, so two placeholders do not look like the same product, and it stays
+  // inside the band the set_theme tool admits: a clear brand on near-white paper.
+  const lightness = 0.4 + ((mixed >>> 5) % 4) * 0.1;
+  return { hue, chroma: 0.12 + ((hash >>> 9) % 7) * 0.01, neutralChroma: ((hash >>> 13) % 6) * 0.001, corners, display, lightness };
 }
 
 const px = (n: number): string => `${n / 16}rem`;

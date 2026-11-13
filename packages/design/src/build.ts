@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { createTheme, renderThemeCss, type ThemeSeed } from './theme.ts';
 
 /** The reference seed shipped as `@studio-zero/design/theme.css`. Projects get their own via `seedFromName`. */
-export const referenceSeed: ThemeSeed = { hue: 168, chroma: 0.12, neutralChroma: 0.008, corners: 'soft' };
+export const referenceSeed: ThemeSeed = { hue: 168, chroma: 0.12, neutralChroma: 0.005, corners: 'soft' };
 
 export const referenceThemePath = fileURLToPath(new URL('../theme.css', import.meta.url));
 

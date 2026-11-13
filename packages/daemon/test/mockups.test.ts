@@ -168,8 +168,8 @@ async function designTask(files: Record<string, string>, mockups: Pick<MockupRen
 const DIRECTIONS: Directions = {
   scene: '프리랜서 지우가 10월 정산을 마감하는 중이다. 도윤에게 ₩184,000을 보내야 하고 서연에게서 ₩96,500을 받아야 하며, 공용 경비는 ₩42,300이다. 택시 영수증 한 장(₩12,000)은 누구 몫인지 아직 정해지지 않았다.',
   directions: [
-    { id: 'a', concept: '돈이 누구에게서 누구에게로 가는지를 화살표 한 줄로 보여 주는 흐름도', operation: '받을 사람의 이름표를 눌러 보낼 금액을 확인한 뒤 아래의 확인 단추를 한 번 눌러 닫는다', composition: '화면 위쪽 절반을 세 사람을 잇는 화살표가 차지하고 금액은 화살표 위에 큰 숫자로 놓인다', theme: { hue: 200, chroma: 0.13, lightness: 0.6, neutral_chroma: 0.01, corners: 'soft', display: 'sans', source: '송금 화면의 차분한 청록과 계좌 이체 확인증' } },
-    { id: 'b', concept: '이번 달 영수증을 길게 펼친 종이 장부 한 장', operation: '영수증의 항목 줄을 옆으로 밀어 몫을 나누고 맨 아래 합계 줄에 도장을 찍어 마감한다', composition: '가운데에 세로로 긴 영수증이 놓이고 합계가 맨 아래에서 가장 크게 읽힌다', theme: { hue: 32, chroma: 0.17, lightness: 0.6, neutral_chroma: 0.02, corners: 'sharp', display: 'serif', source: '감열지 영수증의 누런 종이와 붉은 인주 도장' } },
+    { id: 'a', concept: '돈이 누구에게서 누구에게로 가는지를 화살표 한 줄로 보여 주는 흐름도', operation: '받을 사람의 이름표를 눌러 보낼 금액을 확인한 뒤 아래의 확인 단추를 한 번 눌러 닫는다', composition: '화면 위쪽 절반을 세 사람을 잇는 화살표가 차지하고 금액은 화살표 위에 큰 숫자로 놓인다', theme: { hue: 200, chroma: 0.13, lightness: 0.6, neutral_chroma: 0.004, corners: 'soft', display: 'sans', source: '송금 화면의 차분한 청록과 계좌 이체 확인증' } },
+    { id: 'b', concept: '이번 달 영수증을 길게 펼친 종이 장부 한 장', operation: '영수증의 항목 줄을 옆으로 밀어 몫을 나누고 맨 아래 합계 줄에 도장을 찍어 마감한다', composition: '가운데에 세로로 긴 영수증이 놓이고 합계가 맨 아래에서 가장 크게 읽힌다', theme: { hue: 32, chroma: 0.17, lightness: 0.6, neutral_chroma: 0.005, corners: 'sharp', display: 'serif', source: '감열지 영수증의 누런 종이와 붉은 인주 도장' } },
   ],
 };
 const DOCS = { ...Object.fromEntries(IDEATION_REQUIRED_FILES.filter((f) => !f.startsWith(MOCKUP_DIR)).map((f) => [f, DOC(f)])), [SCREEN_SPEC_FILE]: JSON.stringify(SCREEN_SPEC, null, 2), [DIRECTIONS_FILE]: JSON.stringify(DIRECTIONS, null, 2) };
@@ -363,7 +363,7 @@ test('a table that does not hold is sent back once, and then one engine draws th
 
 test('a direction whose engine gives out is said, and the others stand', async () => {
   const pages = Object.fromEntries(['a', 'b', 'c'].map((id) => [`${MOCKUP_DIR}/${id}.html`, page(`방향 ${id}`, '', '<h1>₩184,000</h1>'.repeat(20))]));
-  const three: Directions = { ...DIRECTIONS, directions: [...DIRECTIONS.directions, { id: 'c', concept: '세 사람이 둘러앉은 식탁을 위에서 내려다본 자리 배치도', operation: '자리에 놓인 접시를 끌어 옆 사람 앞으로 옮기면 그만큼의 몫이 넘어간다', composition: '둥근 식탁이 화면 가운데를 채우고 각자의 금액이 자리 앞 접시에 적힌다', theme: { hue: 140, chroma: 0.12, lightness: 0.5, neutral_chroma: 0.01, corners: 'round', display: 'grotesk', source: '식당 테이블의 초록 식탁보와 둥근 접시' } }] };
+  const three: Directions = { ...DIRECTIONS, directions: [...DIRECTIONS.directions, { id: 'c', concept: '세 사람이 둘러앉은 식탁을 위에서 내려다본 자리 배치도', operation: '자리에 놓인 접시를 끌어 옆 사람 앞으로 옮기면 그만큼의 몫이 넘어간다', composition: '둥근 식탁이 화면 가운데를 채우고 각자의 금액이 자리 앞 접시에 적힌다', theme: { hue: 140, chroma: 0.12, lightness: 0.5, neutral_chroma: 0.002, corners: 'round', display: 'grotesk', source: '식당 테이블의 초록 식탁보와 둥근 접시' } }] };
   const run = await designTask({ ...DOCS, ...pages, [DIRECTIONS_FILE]: JSON.stringify(three) }, { measure: async () => CLEAN }, {}, ['c']);
   try {
     assert.equal(run.state, 'succeeded', run.error ?? '');

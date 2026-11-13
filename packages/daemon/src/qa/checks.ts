@@ -1,4 +1,4 @@
-import { blend, contractFamilies, contrastRatio, hueSaturation, isAllowedRadius, isDisplayInProportion, isLargeText, isOnTypeScale, type DesignContract, type Rgb } from '@studio-zero/design';
+import { blend, contractFamilies, contrastRatio, hostedFamilies, hueSaturation, isAllowedRadius, isDisplayInProportion, isLargeText, isOnTypeScale, typeStepNames, type DesignContract, type Rgb } from '@studio-zero/design';
 import { UNREVIEWED_SCORE_CAP, type DesignGrade, type Finding, type FindingCategory, type Severity, type ViewportId } from '@studio-zero/protocol';
 import type { DigestElement, PageDigest } from './collector.ts';
 import type { ProbedControl, Touchability } from './InteractionProbe.ts';
@@ -138,7 +138,7 @@ export function runDomChecks(digest: PageDigest, ctx: CheckContext, c: DesignCon
   const offScale = sizes.filter((s) => !isOnTypeScale(s, c));
   if (offScale.length > 0) {
     const example = texts.find((e) => near(e.fontSize, offScale[0]!, 0.06));
-    add('type/off-scale', 'typography', 'major', `Font sizes outside the type scale: ${offScale.map((s) => `${s}px`).join(', ')}.`, `Use text-xs … text-10xl (${c.typeScalePx.join(', ')}px). Above ${c.display.fromPx}px a headline may be fluid, up to ${c.display.maxPx}px.`, example);
+    add('type/off-scale', 'typography', 'major', `Font sizes outside the type scale: ${offScale.map((s) => `${s}px`).join(', ')}.`, `Use text-${typeStepNames[0]} … text-${typeStepNames[typeStepNames.length - 1]} (${c.typeScalePx.join(', ')}px). Above ${c.display.fromPx}px a headline may be fluid, up to ${c.display.maxPx}px.`, example);
   }
   // Display type is allowed, in proportion: a headline that dwarfs its body is a shout, one barely above it is not a headline.
   const largest = sizes.at(-1) ?? 0;
@@ -181,10 +181,12 @@ export function runDomChecks(digest: PageDigest, ctx: CheckContext, c: DesignCon
   if (foreign.length > 0) {
     add('type/foreign-font', 'typography', 'major', `Text is set in ${foreign.join(', ')}, which is not a theme font.`, 'Use font-sans, font-display or font-mono from the theme.', texts.find((e) => e.fontFamily === foreign[0]));
   }
-  const intended = families.filter((f) => [c.fonts.sans[0], c.fonts.sans[1], c.fonts.mono[0]].includes(f));
+  // A theme face the page asks for first has to have been loaded by the page, or what shows is the device's own.
+  const hosted = hostedFamilies(c);
+  const intended = families.filter((f) => hosted.includes(f));
   const missing = intended.filter((f) => !digest.loadedFonts.includes(f));
   if (missing.length > 0 && !intended.some((f) => digest.loadedFonts.includes(f))) {
-    add('type/font-not-loaded', 'typography', 'major', `${missing.join(', ')} is requested but no theme font was loaded, so a system fallback is what users see.`, 'Self-host the font files (e.g. the geist and pretendard packages) and load them with @font-face / next/font; do not rely on them being installed.');
+    add('type/font-not-loaded', 'typography', 'major', `${missing.join(', ')} is requested but no theme font was loaded, so a system fallback is what users see.`, 'Self-host the font files (the pretendard package for the body face, the geist and fontsource packages for the others) and load them with @font-face / next/font; do not rely on them being installed.');
   }
 
   // 6. Spacing rhythm -----------------------------------------------------------------------------------
