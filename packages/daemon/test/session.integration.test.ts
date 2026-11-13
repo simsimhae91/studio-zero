@@ -9,12 +9,15 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { chromium, devices } from 'playwright-core';
 import { contract, createTheme, renderThemeCss, seedFromName } from '@studio-zero/design';
-import { MOCKUP_RULES, codingSystemPrompt } from '../src/harness/prompts.ts';
+import { Plan } from '../src/harness/Harness.ts';
+import { MOCKUP_RULES, PLANNER_SYSTEM_PROMPT, codingSystemPrompt } from '../src/harness/prompts.ts';
 import { loopTool, runToolLoop } from '../src/llm/toolLoop.ts';
 import { gradeAudit, runDomChecks } from '../src/qa/checks.ts';
 import { PageDigest, collectDigest } from '../src/qa/collector.ts';
 import { walkFlow, walkProblems } from '../src/qa/FlowWalker.ts';
 import { withFaces } from '../src/qa/mockupFaces.ts';
+import { readAnchorTable } from '../src/scratch/AnchorTable.ts';
+import { coreStates, readScreenSpec } from '../src/scratch/ScreenSpec.ts';
 import { runCommand } from '../src/util/run.ts';
 import { SCREEN_SPEC } from './fixtures-mockup.ts';
 import { freePort, sampleProject, testDaemon } from './helpers.ts';
@@ -302,6 +305,49 @@ test('a mock-up from the real brief: a real model writes a page that opens befor
     assert.deepEqual(walk.tasks.map((task) => [task.id, task.reached]), tasks.map((task) => [task.id, true]), `every task of the core flow was carried out on the page: ${problems.join(' | ')}`);
   } finally {
     await browser.close();
+    await d.cleanup();
+  }
+});
+
+// What every verified build is planned with, put to the real planner once: the plan, the anchor table and the
+// screen spec in one structured answer. If the subscription's CLI could not take this schema, or the model
+// could not fill it so that both checks hold, no design build would get past planning.
+//
+//   SZ_TEST_SESSION=1 node --test --test-name-pattern="the real planner" packages/daemon/test/session.integration.test.ts
+test('the real planner fills in a plan, an anchor table and a screen spec that both hold', { skip: enabled ? false : 'set SZ_TEST_SESSION=1 (uses the Claude Code login on this machine)', timeout: 15 * 60 * 1000 }, async (t) => {
+  const d = await testDaemon({ listen: { port: await freePort() }, engines: { claudeCode: { enabled: true } } }, {}, (docker) => (file, args, opts) => (file === 'claude' ? runCommand(file, args, opts) : docker(file, args, opts)));
+  await d.daemon.start();
+  try {
+    const started = Date.now();
+    const plan = await d.daemon.claude.structured({
+      scope: { projectId: 'prj_studio', taskId: null },
+      model: 'claude-fable-5-2',
+      effort: 'medium',
+      system: PLANNER_SYSTEM_PROMPT,
+      schema: Plan,
+      maxTokens: 8000,
+      content: [
+        { type: 'text', text: "Owner's request (build):\n같이 사는 두 사람이 집안일을 누가 했는지 적는 폰 앱. 설거지를 끝내고 3초 안에 적을 수 있어야 하고, 잘못 누르면 바로 되돌릴 수 있어야 한다." },
+        { type: 'text', text: 'Project stack template: mobile-expo. Files in the workspace:\n(empty workspace)' },
+        { type: 'text', text: 'This task needs an anchor table: fill in "anchor".' },
+        { type: 'text', text: 'This task needs a screen spec: fill in "screens".' },
+      ],
+    });
+    t.diagnostic(`the planner answered in ${Math.round((Date.now() - started) / 1000)}s: ${plan.steps.length} steps`);
+    // SZ_TEST_OUT=<dir> keeps the answer, so a check that refuses it can be looked at without asking again.
+    if (process.env.SZ_TEST_OUT) {
+      mkdirSync(process.env.SZ_TEST_OUT, { recursive: true });
+      writeFileSync(join(process.env.SZ_TEST_OUT, 'plan.json'), JSON.stringify(plan, null, 2));
+    }
+    const anchor = readAnchorTable(plan.anchor);
+    assert.ok(anchor.ok, `the anchor table holds: ${anchor.ok ? '' : anchor.problems.join(' | ')}`);
+    const spec = readScreenSpec(plan.screens);
+    assert.ok(spec.ok, `the screen spec holds: ${spec.ok ? '' : spec.problems.join(' | ')}`);
+    t.diagnostic(`screens: ${spec.spec.screens.map((s) => `${s.id} ${s.name}`).join(', ')}`);
+    t.diagnostic(`core flow: ${spec.spec.tasks.map((task) => `${task.id} (${task.goal} → ${task.outcome})`).join(' | ')}`);
+    t.diagnostic(`states owed a route: ${coreStates(spec.spec).map((s) => `${s.screen} ${s.name}`).join(', ')}`);
+    assert.ok(coreStates(spec.spec).length > 0, 'the screens of the core flow say what they show when the usual case does not hold');
+  } finally {
     await d.cleanup();
   }
 });

@@ -34,7 +34,8 @@ export const INTEGRATION_BRANCH = 'main';
 const MAX_BUDGET_EXTENSIONS = 2;
 const PLANNER_MODEL = 'claude-fable-5-2';
 
-const Plan = z.object({
+/** What the planner is asked to return. Exported so the shape can be put to a real model in a test. */
+export const Plan = z.object({
   summary: z.string().describe('Two or three sentences: what will change and why this shape.'),
   steps: z.array(z.string()).describe('Ordered, concrete steps. Each names what is done and where.'),
   auditRoutes: z.array(z.string()).describe('Paths of the running app to review visually afterwards, e.g. "/" or "/settings". Empty when nothing visible changes.'),

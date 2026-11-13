@@ -69,6 +69,16 @@ test('the anchor table check: what each miss says, and that a reference\'s value
   assert.ok(has(/retainedPrinciples has 1; give three to five/));
   assert.ok(has(/discardedDefaults is empty/));
 
+  // Naming an illustration in order to rule it out is following the brief. The first sentence is what a real
+  // planner wrote; the check refused it for the word alone, and the build paid for a round to rewrite the table.
+  const livingVisual = (text: string): boolean => checkAnchorTable({ ...ANCHOR, firstScreen: { ...ANCHOR.firstScreen, livingVisual: text } }).some((problem) => /names an illustration/.test(problem));
+  assert.equal(livingVisual("저장된 실제 기록에서 계산한 두 사람의 이번 주 횟수와 두 색 비율 띠, 그리고 마지막 기록 한 줄('설거지 · 나 · 방금'). 일러스트는 없고, 기록이 0건이면 띠는 반반 윤곽선만 보인다."), false);
+  assert.equal(livingVisual('The working ledger with its own entries, not an illustration and never a stock photo.'), false);
+  assert.equal(livingVisual('일러스트 대신 가게 12곳의 실제 단가로 움직이는 계산 캔버스'), false);
+  assert.equal(livingVisual('귀여운 고양이 일러스트와 환영 문구'), true, 'an illustration that is there is still refused');
+  assert.equal(livingVisual('A friendly illustration of a couple doing chores'), true);
+  assert.equal(livingVisual('스톡 사진 없이 실제 기록만. 그 옆에 장식용 그림 하나'), true, 'ruling one out does not excuse another');
+
   assert.deepEqual(readAnchorTable('{ not json'), { ok: false, problems: [`${ANCHOR_FILE} is not valid JSON.`] });
   assert.equal(readAnchorTable({ idea: 'x' }).ok, false, 'a table with missing fields is refused, not completed');
   assert.ok(!checkAnchorTable({ ...ANCHOR, firstScreen: { ...ANCHOR.firstScreen, livingVisual: '없음' } }).every((p) => !/livingVisual is empty/.test(p)));

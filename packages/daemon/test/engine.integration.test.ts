@@ -35,7 +35,10 @@ const PAGE = `<!doctype html>
   main { padding: 24px; display: grid; gap: 24px; }
   h1 { font-size: 30px; line-height: 1.3; margin: 0; }
   p { font-size: 16px; line-height: 1.6; margin: 0; color: var(--sz-fg-muted); }
-  a.action { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 0 16px; border-radius: 8px; background: var(--sz-accent); color: var(--sz-on-accent); font-size: 16px; text-decoration: none; }
+  a.action { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 0 16px; border-radius: 8px; background: var(--sz-accent); color: var(--sz-on-accent); font-size: 16px; text-decoration: none; transition: transform 120ms; }
+  /* It answers the hand: held down it gives way, and the keyboard's focus can be seen. The audit tries both. */
+  a.action:active { transform: translateY(2px); background: var(--sz-fg); }
+  a.action:focus-visible { outline: 3px solid var(--sz-fg); outline-offset: 2px; }
 </style>
 </head>
 <body><main><h1>미결제 청구서</h1><p>결제를 기다리는 청구서가 3건 있습니다.</p><a class="action" href="/invoices">청구서 보기</a></main></body>
@@ -186,6 +189,9 @@ test('real container engine', { skip: process.env.SZ_TEST_ENGINE !== '1' && 'set
       const domRules = [...new Set(report.findings.filter((f) => f.source === 'dom').map((f) => f.rule))];
       assert.deepEqual([...new Set(report.screenshots.map((s) => s.viewport))], ['iphone-15-pro', 'ipad-pro-11', 'desktop-1440']);
       assert.deepEqual(domRules, ['type/font-not-loaded'], JSON.stringify(report.findings.map((f) => `${f.rule}: ${f.message}`)));
+      // The container's browser also tried the screen by hand: its one control was held down and tabbed to, and answered both times.
+      assert.deepEqual([report.measures?.pressAnswer, report.measures?.focusVisible], [{ passed: 1, total: 1 }, { passed: 1, total: 1 }]);
+      assert.equal(typeof report.measures?.layoutShift, 'number');
       assert.equal(report.passed, true, `score ${report.score}`);
       const shot = store.getArtifact(report.screenshots.find((s) => s.viewport === 'iphone-15-pro')!.artifactId)!;
       assert.ok(existsSync(shot.file));

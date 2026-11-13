@@ -132,12 +132,19 @@ export interface NamedState {
 }
 export const stateLabel = (state: NamedState): string => `${state.screen} ${state.name}`;
 
+/** How many states of one screen a build is asked to make showable. A real planner lists five or so for the screen that matters. */
+const MAX_OWED_STATES = 6;
+
 /**
- * The states a build owes a way to look at: every state the spec lists on a screen its core flow happens on.
- * Those are the screens the product exists for, and their other states (nothing yet, a failure, a limit) are
- * the ones a user will meet first when something is off.
+ * The states a build owes a way to look at: those of the one screen the core flow starts on. That is the
+ * screen the product exists for, and its other states (nothing yet, a failure, a limit) are what a user meets
+ * first when something is off.
+ *
+ * Only that screen, on purpose. A real planner, asked for a spec, listed eleven states over three screens;
+ * a route and a fixture for each would be most of the engine's work on screens that matter least. The rest
+ * stay in the spec as what the build has to do, and are the accepting model's to hold it to.
  */
 export function coreStates(spec: ScreenSpec): NamedState[] {
-  const core = new Set(spec.tasks.map((task) => task.screen));
-  return spec.screens.filter((screen) => core.has(screen.id) && !screen.later).flatMap((screen) => screen.states.map((state) => ({ screen: screen.id, name: state.name.trim() }))).slice(0, 12);
+  const first = spec.screens.find((screen) => screen.id === spec.tasks[0]?.screen && !screen.later);
+  return first ? first.states.map((state) => ({ screen: first.id, name: state.name.trim() })).slice(0, MAX_OWED_STATES) : [];
 }

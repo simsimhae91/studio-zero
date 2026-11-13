@@ -74,6 +74,12 @@ export const AnchorTableShape = z.object({
 
 const EMPTY = /^(?:없음|해당 ?없음|미정|n\/?a|none|tbd|todo|-+|\.+)?$/i;
 const CLIPART = /(일러스트|클립 ?아트|스톡 ?(?:이미지|사진)|장식(?:용)? ?(?:그림|이미지)|illustration|clip ?art|stock (?:photo|image)|decorative (?:image|graphic)|placeholder)/i;
+/**
+ * The same words, said in order to rule them out: "일러스트는 없고", "not an illustration". A table that says what
+ * is on the first screen and adds that there is no illustration has followed the brief, not broken it. A real
+ * planner writes exactly this, and the check used to refuse it for the word alone.
+ */
+const RULED_OUT = /(?:일러스트(?:레이션)?|클립 ?아트|스톡 ?(?:이미지|사진)|장식(?:용)? ?(?:그림|이미지))(?:은|는|이|가|도|를|을|나)?\s*(?:없|아니|아닌|않|빼|쓰지|넣지|두지|대신)|(?:\bno|\bnot|\bnever|\bwithout|\binstead of|\brather than)\s+(?:an?\s+|any\s+)?(?:generic\s+|decorative\s+|stock\s+)?(?:illustration|clip ?art|stock (?:photo|image)|decorative (?:image|graphic)|placeholder)s?/gi;
 /** A measured value as a reference states it: a number with its unit. */
 const VALUE = /\d+(?:\.\d+)?\s?(?:px|rem|em|ms|s|%|deg)\b|#[0-9a-f]{6}\b/gi;
 
@@ -107,7 +113,7 @@ export function checkAnchorTable(table: z.infer<typeof AnchorTableShape>): strin
   if (blank(first.primaryElement)) problems.push('firstScreen.primaryElement is empty: name the largest thing on the first screen.');
   if (blank(first.interactiveAction)) problems.push('firstScreen.interactiveAction is empty: name what a person can do on the first screen straight away.');
   if (blank(first.livingVisual)) problems.push('firstScreen.livingVisual is empty: a first screen of text and rules only is not accepted. Name what there is to look at and where it comes from (the working product, real data, a material).');
-  else if (CLIPART.test(first.livingVisual)) problems.push('firstScreen.livingVisual names an illustration or a stock picture. It has to be the product itself: a working data canvas, a real product screen, an interactive viewfinder, an element that responds like a material.');
+  else if (CLIPART.test(first.livingVisual.replace(RULED_OUT, ' '))) problems.push('firstScreen.livingVisual names an illustration or a stock picture. It has to be the product itself: a working data canvas, a real product screen, an interactive viewfinder, an element that responds like a material.');
 
   if (table.anchors.length < 3) problems.push(`anchors has ${table.anchors.length} row(s); at least three are needed, in different categories (${ANCHOR_CATEGORIES.join(', ')}).`);
   else if (new Set(table.anchors.map((a) => a.category)).size < 3) problems.push('anchors cover fewer than three categories: spread them across layout, typography, color, surfaces, motion and interaction.');
