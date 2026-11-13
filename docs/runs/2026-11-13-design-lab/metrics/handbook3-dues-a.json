@@ -1,0 +1,119 @@
+{
+ "file": "/Users/hosoo/project/conclave/.design-lab/runs/handbook3/dues/a/ws/docs/mockups/a.html",
+ "template": "mobile-expo",
+ "phone": {
+  "title": "모임 통장 한 권",
+  "headline": {
+   "text": "49,600",
+   "px": 20,
+   "lines": 1,
+   "weight": 700
+  },
+  "seed": "{\"hue\":33,\"chroma\":0.19,\"lightness\":0.57,\"neutral_hue\":250,\"neutral_chroma\":0.005,\"corners\":\"sharp\",\"face\":\"pretendard\",\"source\":\"총무가 영수증 뒷면에 찍는 '확인' 도장의 인주색과 금전출납부의 붉은 괘선에서 색이 왔고, 통장 표의 직각 괘선이 각진 모서리를, 장부 표지에 쓰는 명조가 제목 글꼴을 정한다.\"}",
+  "tokens": {
+   "--sz-brand": [
+    166,
+    31,
+    0
+   ],
+   "--sz-brand-soft": [
+    255,
+    228,
+    222
+   ],
+   "--sz-accent": [
+    148,
+    27,
+    0
+   ],
+   "--sz-bg": [
+    248,
+    250,
+    253
+   ],
+   "--sz-surface": [
+    254,
+    254,
+    255
+   ],
+   "--sz-fg": [
+    20,
+    22,
+    24
+   ],
+   "--sz-brand-2": null,
+   "--sz-second": [
+    0,
+    177,
+    206
+   ]
+  },
+  "viewport": {
+   "vw": 393,
+   "vh": 852
+  },
+  "screensLong": 1.1,
+  "type": {
+   "families": [
+    [
+     "Pretendard Variable",
+     267
+    ]
+   ],
+   "sizesFirstScreen": [
+    [
+     12,
+     36
+    ],
+    [
+     14,
+     79
+    ],
+    [
+     16,
+     136
+    ],
+    [
+     20,
+     16
+    ]
+   ],
+   "distinctSizes": 4,
+   "distinctSizesFirstScreen": 4,
+   "microSharePct": 13.5,
+   "microSharePctFirstScreen": 13.5,
+   "sentencesAtMicro": [],
+   "bodySharePct": 50.9,
+   "largestPx": 20,
+   "figuresAtLargest": [],
+   "heavyWeightSharePct": 44.9,
+   "turnedText": [],
+   "stackedText": [],
+   "endAlignedText": [],
+   "monoOutsideCode": []
+  },
+  "layout": {
+   "controlsFirstScreen": 6,
+   "cards": 3,
+   "cardsFirstScreen": 3,
+   "halfEmptyCards": [],
+   "nestedCards": 0,
+   "saidTwice": [
+    "11월 회비 x3"
+   ],
+   "figuresTwice": [
+    "11 x5",
+    "12 x2",
+    "10 x2"
+   ]
+  },
+  "colour": {
+   "saturatedPct": 0,
+   "darkPct": 7.6,
+   "brandPct": 0,
+   "secondPct": 0,
+   "blankLeftPct": 49.9,
+   "blankRightPct": 57.5
+  }
+ }
+}

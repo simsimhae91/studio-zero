@@ -1,0 +1,1819 @@
+{
+ "chzzk": {
+  "where": "https://chzzk.naver.com/",
+  "title": "치지직 CHZZK",
+  "picturePct": 49.7,
+  "iconPct": 3.9,
+  "tintPct": 4.8,
+  "textPct": 21.1,
+  "pictures": 12,
+  "icons": 23,
+  "chars": 324,
+  "boxes": 11,
+  "roundedBoxes": 5,
+  "shadowedBoxes": 0,
+  "borderedBoxes": 0,
+  "radii": [
+   [
+    0,
+    6
+   ],
+   [
+    8,
+    4
+   ],
+   [
+    10,
+    1
+   ]
+  ],
+  "hueFamilies": 2,
+  "topSizes": [
+   [
+    15,
+    120
+   ],
+   [
+    13,
+    61
+   ],
+   [
+    14,
+    35
+   ],
+   [
+    10,
+    33
+   ]
+  ],
+  "bodyBg": "rgb(20, 21, 23)",
+  "colourPct": 16.2,
+  "greyPct": 66.4
+ },
+ "naver-shopping": {
+  "where": "https://shopping.naver.com/ns/home",
+  "title": "네이버+ 스토어",
+  "picturePct": 38.5,
+  "iconPct": 12.3,
+  "tintPct": 2.4,
+  "textPct": 21.3,
+  "pictures": 12,
+  "icons": 28,
+  "chars": 242,
+  "boxes": 12,
+  "roundedBoxes": 1,
+  "shadowedBoxes": 1,
+  "borderedBoxes": 1,
+  "radii": [
+   [
+    0,
+    11
+   ],
+   [
+    8,
+    1
+   ]
+  ],
+  "hueFamilies": 1,
+  "topSizes": [
+   [
+    13,
+    74
+   ],
+   [
+    12,
+    64
+   ],
+   [
+    14,
+    62
+   ],
+   [
+    11,
+    28
+   ]
+  ],
+  "bodyBg": "rgb(233, 236, 239)",
+  "colourPct": 26.8,
+  "greyPct": 68.5
+ },
+ "daangn": {
+  "where": "https://www.daangn.com/kr/buy-sell/",
+  "title": "당근 중고거래",
+  "picturePct": 14.4,
+  "iconPct": 1.7,
+  "tintPct": 16.7,
+  "textPct": 20.6,
+  "pictures": 2,
+  "icons": 14,
+  "chars": 155,
+  "boxes": 7,
+  "roundedBoxes": 6,
+  "shadowedBoxes": 4,
+  "borderedBoxes": 0,
+  "radii": [
+   [
+    9999,
+    2
+   ],
+   [
+    16,
+    2
+   ],
+   [
+    8,
+    2
+   ],
+   [
+    0,
+    1
+   ]
+  ],
+  "hueFamilies": 1,
+  "topSizes": [
+   [
+    16,
+    57
+   ],
+   [
+    14,
+    51
+   ],
+   [
+    13,
+    19
+   ],
+   [
+    24,
+    14
+   ]
+  ],
+  "bodyBg": "rgb(243, 244, 245)",
+  "colourPct": 2.3,
+  "greyPct": 86.2
+ },
+ "toss-web": {
+  "where": "https://toss.im/",
+  "title": "토스",
+  "picturePct": 100,
+  "iconPct": 0.3,
+  "tintPct": 50.2,
+  "textPct": 16.5,
+  "pictures": 1,
+  "icons": 1,
+  "chars": 18,
+  "boxes": 1,
+  "roundedBoxes": 0,
+  "shadowedBoxes": 0,
+  "borderedBoxes": 0,
+  "radii": [
+   [
+    0,
+    1
+   ]
+  ],
+  "hueFamilies": 0,
+  "topSizes": [
+   [
+    40,
+    18
+   ]
+  ],
+  "bodyBg": "rgba(0, 0, 0, 0)",
+  "colourPct": 2.2,
+  "greyPct": 63.5
+ },
+ "nintendo-kr": {
+  "where": "https://www.nintendo.com/kr/",
+  "title": "Nintendo",
+  "picturePct": 62.9,
+  "iconPct": 3.1,
+  "tintPct": 12.2,
+  "textPct": 2.9,
+  "pictures": 6,
+  "icons": 12,
+  "chars": 92,
+  "boxes": 14,
+  "roundedBoxes": 0,
+  "shadowedBoxes": 0,
+  "borderedBoxes": 0,
+  "radii": [
+   [
+    0,
+    14
+   ]
+  ],
+  "hueFamilies": 1,
+  "topSizes": [
+   [
+    10,
+    92
+   ]
+  ],
+  "bodyBg": "rgba(0, 0, 0, 0)",
+  "colourPct": 37.9,
+  "greyPct": 35.5
+ },
+ "nintendo-store": {
+  "where": "https://store.nintendo.co.kr/",
+  "title": "Nintendo Store",
+  "picturePct": 42.3,
+  "iconPct": 0.2,
+  "tintPct": 15.5,
+  "textPct": 14.4,
+  "pictures": 8,
+  "icons": 1,
+  "chars": 163,
+  "boxes": 3,
+  "roundedBoxes": 0,
+  "shadowedBoxes": 0,
+  "borderedBoxes": 0,
+  "radii": [
+   [
+    0,
+    3
+   ]
+  ],
+  "hueFamilies": 1,
+  "topSizes": [
+   [
+    14,
+    163
+   ]
+  ],
+  "bodyBg": "rgb(255, 255, 255)",
+  "colourPct": 24.6,
+  "greyPct": 62.6
+ },
+ "ours-duel-b-after": {
+  "where": "/Users/hosoo/project/conclave/.design-lab/runs/treatment/duel/b/ws/docs/mockups/b.html",
+  "title": "라운드 중계 전광판",
+  "picturePct": 0,
+  "iconPct": 0.2,
+  "tintPct": 0,
+  "textPct": 36,
+  "pictures": 0,
+  "icons": 1,
+  "chars": 225,
+  "boxes": 6,
+  "roundedBoxes": 0,
+  "shadowedBoxes": 0,
+  "borderedBoxes": 6,
+  "radii": [
+   [
+    0,
+    6
+   ]
+  ],
+  "hueFamilies": 0,
+  "topSizes": [
+   [
+    14,
+    98
+   ],
+   [
+    11,
+    47
+   ],
+   [
+    16,
+    39
+   ],
+   [
+    18,
+    14
+   ]
+  ],
+  "bodyBg": "oklch(0.985 0.004 250)",
+  "colourPct": 8.7,
+  "greyPct": 88.5
+ },
+ "ours-duel-a-after": {
+  "where": "/Users/hosoo/project/conclave/.design-lab/runs/treatment/duel/a/ws/docs/mockups/a.html",
+  "title": "라인전 · 라인 위의 경주",
+  "picturePct": 48.3,
+  "iconPct": 0.4,
+  "tintPct": 0,
+  "textPct": 26.7,
+  "pictures": 1,
+  "icons": 2,
+  "chars": 234,
+  "boxes": 4,
+  "roundedBoxes": 2,
+  "shadowedBoxes": 1,
+  "borderedBoxes": 3,
+  "radii": [
+   [
+    0,
+    2
+   ],
+   [
+    12,
+    1
+   ],
+   [
+    8,
+    1
+   ]
+  ],
+  "hueFamilies": 0,
+  "topSizes": [
+   [
+    14,
+    110
+   ],
+   [
+    12,
+    55
+   ],
+   [
+    11,
+    21
+   ],
+   [
+    16,
+    15
+   ]
+  ],
+  "bodyBg": "oklch(0.985 0.003 250)",
+  "colourPct": 6,
+  "greyPct": 93.9
+ },
+ "ours-dues-a-after": {
+  "where": "/Users/hosoo/project/conclave/.design-lab/runs/treatment/dues/a/ws/docs/mockups/a.html",
+  "title": "모임 통장 한 권",
+  "picturePct": 0,
+  "iconPct": 0.5,
+  "tintPct": 0,
+  "textPct": 68.6,
+  "pictures": 0,
+  "icons": 3,
+  "chars": 360,
+  "boxes": 3,
+  "roundedBoxes": 0,
+  "shadowedBoxes": 0,
+  "borderedBoxes": 3,
+  "radii": [
+   [
+    0,
+    3
+   ]
+  ],
+  "hueFamilies": 0,
+  "topSizes": [
+   [
+    14,
+    165
+   ],
+   [
+    16,
+    160
+   ],
+   [
+    12,
+    15
+   ],
+   [
+    48,
+    7
+   ]
+  ],
+  "bodyBg": "oklch(0.985 0.005 250)",
+  "colourPct": 5.4,
+  "greyPct": 94.6
+ },
+ "ours-dues-b-after": {
+  "where": "/Users/hosoo/project/conclave/.design-lab/runs/treatment/dues/b/ws/docs/mockups/b.html",
+  "title": "영수증 꽂이 장부",
+  "picturePct": 0,
+  "iconPct": 1.1,
+  "tintPct": 2.8,
+  "textPct": 54.5,
+  "pictures": 0,
+  "icons": 6,
+  "chars": 388,
+  "boxes": 6,
+  "roundedBoxes": 3,
+  "shadowedBoxes": 1,
+  "borderedBoxes": 5,
+  "radii": [
+   [
+    9999,
+    3
+   ],
+   [
+    0,
+    3
+   ]
+  ],
+  "hueFamilies": 0,
+  "topSizes": [
+   [
+    14,
+    249
+   ],
+   [
+    16,
+    100
+   ],
+   [
+    18,
+    21
+   ],
+   [
+    20,
+    10
+   ]
+  ],
+  "bodyBg": "oklch(0.962 0.005 265)",
+  "colourPct": 4.1,
+  "greyPct": 95.8
+ },
+ "ours-duel-b-before": {
+  "where": "/Users/hosoo/project/conclave/.design-lab/runs/baseline/duel/b/ws/docs/mockups/b.html",
+  "title": "라인전 · 14라운드 전광판",
+  "picturePct": 0,
+  "iconPct": 0.2,
+  "tintPct": 0,
+  "textPct": 41.8,
+  "pictures": 0,
+  "icons": 1,
+  "chars": 265,
+  "boxes": 6,
+  "roundedBoxes": 0,
+  "shadowedBoxes": 1,
+  "borderedBoxes": 6,
+  "radii": [
+   [
+    0,
+    6
+   ]
+  ],
+  "hueFamilies": 0,
+  "topSizes": [
+   [
+    12,
+    78
+   ],
+   [
+    14,
+    54
+   ],
+   [
+    11,
+    48
+   ],
+   [
+    16,
+    40
+   ]
+  ],
+  "bodyBg": "oklch(0.985 0.004 250)",
+  "colourPct": 10.8,
+  "greyPct": 89.1
+ },
+ "ours-dues-a-before": {
+  "where": "/Users/hosoo/project/conclave/.design-lab/runs/baseline/dues/a/ws/docs/mockups/a.html",
+  "title": "모임 통장 한 권",
+  "picturePct": 0,
+  "iconPct": 1.5,
+  "tintPct": 0,
+  "textPct": 60.4,
+  "pictures": 0,
+  "icons": 25,
+  "chars": 380,
+  "boxes": 3,
+  "roundedBoxes": 0,
+  "shadowedBoxes": 0,
+  "borderedBoxes": 3,
+  "radii": [
+   [
+    0,
+    3
+   ]
+  ],
+  "hueFamilies": 0,
+  "topSizes": [
+   [
+    16,
+    160
+   ],
+   [
+    12,
+    105
+   ],
+   [
+    14,
+    53
+   ],
+   [
+    11,
+    42
+   ]
+  ],
+  "bodyBg": "oklch(0.985 0.005 250)",
+  "colourPct": 0,
+  "greyPct": 100
+ },
+ "ours-orders-a-after": {
+  "where": "/Users/hosoo/project/conclave/.design-lab/runs/treatment/orders/a/ws/docs/mockups/a.html",
+  "title": "출고 장부",
+  "picturePct": 0,
+  "iconPct": 0,
+  "tintPct": 0,
+  "textPct": 42.8,
+  "pictures": 0,
+  "icons": 0,
+  "chars": 306,
+  "boxes": 7,
+  "roundedBoxes": 0,
+  "shadowedBoxes": 3,
+  "borderedBoxes": 7,
+  "radii": [
+   [
+    0,
+    7
+   ]
+  ],
+  "hueFamilies": 0,
+  "topSizes": [
+   [
+    16,
+    184
+   ],
+   [
+    14,
+    87
+   ],
+   [
+    20,
+    18
+   ],
+   [
+    18,
+    7
+   ]
+  ],
+  "bodyBg": "oklch(0.985 0.005 82)",
+  "colourPct": 2.8,
+  "greyPct": 97.1
+ },
+ "ours-quote-b-after": {
+  "where": "/Users/hosoo/project/conclave/.design-lab/runs/treatment/quote/b/ws/docs/mockups/b.html",
+  "title": "계산 테이프 견적서",
+  "picturePct": 0,
+  "iconPct": 0.5,
+  "tintPct": 0,
+  "textPct": 56.8,
+  "pictures": 0,
+  "icons": 3,
+  "chars": 422,
+  "boxes": 8,
+  "roundedBoxes": 5,
+  "shadowedBoxes": 0,
+  "borderedBoxes": 8,
+  "radii": [
+   [
+    9999,
+    4
+   ],
+   [
+    0,
+    3
+   ],
+   [
+    14,
+    1
+   ]
+  ],
+  "hueFamilies": 0,
+  "topSizes": [
+   [
+    14,
+    199
+   ],
+   [
+    16,
+    137
+   ],
+   [
+    20,
+    32
+   ],
+   [
+    12,
+    29
+   ]
+  ],
+  "bodyBg": "oklch(0.985 0.005 245)",
+  "colourPct": 3.7,
+  "greyPct": 96.3
+ },
+ "material-dues-a": {
+  "where": "/Users/hosoo/project/conclave/.design-lab/runs/material/dues/a/ws/docs/mockups/a.html",
+  "title": "모임 통장 한 권",
+  "picturePct": 8.9,
+  "iconPct": 9.8,
+  "tintPct": 0,
+  "textPct": 36.2,
+  "pictures": 1,
+  "icons": 26,
+  "chars": 233,
+  "boxes": 4,
+  "roundedBoxes": 4,
+  "shadowedBoxes": 4,
+  "borderedBoxes": 0,
+  "radii": [
+   [
+    9999,
+    2
+   ],
+   [
+    24,
+    2
+   ]
+  ],
+  "hueFamilies": 0,
+  "topSizes": [
+   [
+    16,
+    68
+   ],
+   [
+    14,
+    64
+   ],
+   [
+    12,
+    48
+   ],
+   [
+    18,
+    20
+   ]
+  ],
+  "bodyBg": "oklch(0.962 0.005 250)",
+  "colourPct": 25.4,
+  "greyPct": 69
+ },
+ "material-dues-b": {
+  "where": "/Users/hosoo/project/conclave/.design-lab/runs/material/dues/b/ws/docs/mockups/b.html",
+  "title": "영수증 꽂이 장부",
+  "picturePct": 15.1,
+  "iconPct": 3.2,
+  "tintPct": 0,
+  "textPct": 33.8,
+  "pictures": 3,
+  "icons": 16,
+  "chars": 220,
+  "boxes": 3,
+  "roundedBoxes": 3,
+  "shadowedBoxes": 3,
+  "borderedBoxes": 0,
+  "radii": [
+   [
+    9999,
+    2
+   ],
+   [
+    22,
+    1
+   ]
+  ],
+  "hueFamilies": 0,
+  "topSizes": [
+   [
+    14,
+    87
+   ],
+   [
+    16,
+    70
+   ],
+   [
+    11,
+    19
+   ],
+   [
+    18,
+    18
+   ]
+  ],
+  "bodyBg": "oklch(0.962 0.005 265)",
+  "colourPct": 26.4,
+  "greyPct": 65.4
+ },
+ "material-duel-a": {
+  "where": "/Users/hosoo/project/conclave/.design-lab/runs/material/duel/a/ws/docs/mockups/a.html",
+  "title": "라인 위의 경주",
+  "picturePct": 32.8,
+  "iconPct": 5.1,
+  "tintPct": 0,
+  "textPct": 33.6,
+  "pictures": 1,
+  "icons": 33,
+  "chars": 187,
+  "boxes": 4,
+  "roundedBoxes": 3,
+  "shadowedBoxes": 4,
+  "borderedBoxes": 0,
+  "radii": [
+   [
+    24,
+    2
+   ],
+   [
+    9999,
+    1
+   ],
+   [
+    0,
+    1
+   ]
+  ],
+  "hueFamilies": 0,
+  "topSizes": [
+   [
+    11,
+    69
+   ],
+   [
+    14,
+    60
+   ],
+   [
+    16,
+    19
+   ],
+   [
+    18,
+    14
+   ]
+  ],
+  "bodyBg": "oklch(0.962 0.003 250)",
+  "colourPct": 25.2,
+  "greyPct": 71.6
+ },
+ "material-duel-b": {
+  "where": "/Users/hosoo/project/conclave/.design-lab/runs/material/duel/b/ws/docs/mockups/b.html",
+  "title": "라인전 중계 전광판",
+  "picturePct": 26.8,
+  "iconPct": 6.3,
+  "tintPct": 0,
+  "textPct": 38,
+  "pictures": 2,
+  "icons": 22,
+  "chars": 206,
+  "boxes": 4,
+  "roundedBoxes": 4,
+  "shadowedBoxes": 4,
+  "borderedBoxes": 0,
+  "radii": [
+   [
+    20,
+    3
+   ],
+   [
+    999,
+    1
+   ]
+  ],
+  "hueFamilies": 0,
+  "topSizes": [
+   [
+    14,
+    117
+   ],
+   [
+    18,
+    30
+   ],
+   [
+    12,
+    22
+   ],
+   [
+    16,
+    11
+   ]
+  ],
+  "bodyBg": "oklch(0.962 0.004 250)",
+  "colourPct": 30.7,
+  "greyPct": 66
+ },
+ "material-duel-c": {
+  "where": "/Users/hosoo/project/conclave/.design-lab/runs/material/duel/c/ws/docs/mockups/c.html",
+  "title": "체중계 다이얼 대결",
+  "picturePct": 35.1,
+  "iconPct": 3.8,
+  "tintPct": 0,
+  "textPct": 35,
+  "pictures": 2,
+  "icons": 14,
+  "chars": 190,
+  "boxes": 6,
+  "roundedBoxes": 6,
+  "shadowedBoxes": 6,
+  "borderedBoxes": 0,
+  "radii": [
+   [
+    22,
+    3
+   ],
+   [
+    9999,
+    2
+   ],
+   [
+    14,
+    1
+   ]
+  ],
+  "hueFamilies": 0,
+  "topSizes": [
+   [
+    14,
+    109
+   ],
+   [
+    12,
+    27
+   ],
+   [
+    16,
+    13
+   ],
+   [
+    24,
+    10
+   ]
+  ],
+  "bodyBg": "oklch(0.962 0.002 168)",
+  "colourPct": 32.9,
+  "greyPct": 56.2
+ },
+ "ours-duel-c-after": {
+  "where": "/Users/hosoo/project/conclave/.design-lab/runs/treatment/duel/c/ws/docs/mockups/c.html",
+  "title": "라인전 · 체중계 다이얼",
+  "picturePct": 42.8,
+  "iconPct": 0.4,
+  "tintPct": 0,
+  "textPct": 37.7,
+  "pictures": 2,
+  "icons": 4,
+  "chars": 265,
+  "boxes": 5,
+  "roundedBoxes": 3,
+  "shadowedBoxes": 2,
+  "borderedBoxes": 4,
+  "radii": [
+   [
+    9999,
+    2
+   ],
+   [
+    0,
+    2
+   ],
+   [
+    22,
+    1
+   ]
+  ],
+  "hueFamilies": 0,
+  "topSizes": [
+   [
+    14,
+    158
+   ],
+   [
+    12,
+    45
+   ],
+   [
+    16,
+    38
+   ],
+   [
+    20,
+    9
+   ]
+  ],
+  "bodyBg": "oklch(0.985 0.002 168)",
+  "colourPct": 7.2,
+  "greyPct": 84.7
+ },
+ "ours-duel-a-before": {
+  "where": "/Users/hosoo/project/conclave/.design-lab/runs/baseline/duel/a/ws/docs/mockups/a.html",
+  "title": "라인 위의 경주",
+  "picturePct": 48.8,
+  "iconPct": 0.4,
+  "tintPct": 0,
+  "textPct": 25.8,
+  "pictures": 1,
+  "icons": 4,
+  "chars": 271,
+  "boxes": 4,
+  "roundedBoxes": 2,
+  "shadowedBoxes": 1,
+  "borderedBoxes": 3,
+  "radii": [
+   [
+    0,
+    2
+   ],
+   [
+    12,
+    2
+   ]
+  ],
+  "hueFamilies": 0,
+  "topSizes": [
+   [
+    12,
+    124
+   ],
+   [
+    14,
+    59
+   ],
+   [
+    11,
+    51
+   ],
+   [
+    18,
+    25
+   ]
+  ],
+  "bodyBg": "oklch(0.962 0.003 250)",
+  "colourPct": 6.6,
+  "greyPct": 93.4
+ },
+ "ours-duel-c-before": {
+  "where": "/Users/hosoo/project/conclave/.design-lab/runs/baseline/duel/c/ws/docs/mockups/c.html",
+  "title": "라인전 · 체중계 다이얼",
+  "picturePct": 39.3,
+  "iconPct": 0.3,
+  "tintPct": 0,
+  "textPct": 41,
+  "pictures": 1,
+  "icons": 1,
+  "chars": 267,
+  "boxes": 9,
+  "roundedBoxes": 9,
+  "shadowedBoxes": 4,
+  "borderedBoxes": 6,
+  "radii": [
+   [
+    22,
+    5
+   ],
+   [
+    9999,
+    3
+   ],
+   [
+    30,
+    1
+   ]
+  ],
+  "hueFamilies": 0,
+  "topSizes": [
+   [
+    12,
+    110
+   ],
+   [
+    14,
+    58
+   ],
+   [
+    18,
+    45
+   ],
+   [
+    11,
+    28
+   ]
+  ],
+  "bodyBg": "oklch(0.985 0.002 168)",
+  "colourPct": 8.4,
+  "greyPct": 87.1
+ },
+ "ours-dues-b-before": {
+  "where": "/Users/hosoo/project/conclave/.design-lab/runs/baseline/dues/b/ws/docs/mockups/b.html",
+  "title": "영수증 꽂이 장부",
+  "picturePct": 0,
+  "iconPct": 0.3,
+  "tintPct": 61.1,
+  "textPct": 38.3,
+  "pictures": 0,
+  "icons": 2,
+  "chars": 219,
+  "boxes": 7,
+  "roundedBoxes": 5,
+  "shadowedBoxes": 3,
+  "borderedBoxes": 5,
+  "radii": [
+   [
+    9999,
+    4
+   ],
+   [
+    0,
+    2
+   ],
+   [
+    30,
+    1
+   ]
+  ],
+  "hueFamilies": 0,
+  "topSizes": [
+   [
+    14,
+    79
+   ],
+   [
+    12,
+    73
+   ],
+   [
+    16,
+    30
+   ],
+   [
+    18,
+    25
+   ]
+  ],
+  "bodyBg": "oklch(0.962 0.005 265)",
+  "colourPct": 7.8,
+  "greyPct": 92
+ },
+ "ours-quote-a-after": {
+  "where": "/Users/hosoo/project/conclave/.design-lab/runs/treatment/quote/a/ws/docs/mockups/a.html",
+  "title": "서식 한 장 · 도장 찍어 보내는 견적서",
+  "picturePct": 0,
+  "iconPct": 0,
+  "tintPct": 0,
+  "textPct": 49.1,
+  "pictures": 0,
+  "icons": 0,
+  "chars": 319,
+  "boxes": 1,
+  "roundedBoxes": 0,
+  "shadowedBoxes": 0,
+  "borderedBoxes": 1,
+  "radii": [
+   [
+    0,
+    1
+   ]
+  ],
+  "hueFamilies": 0,
+  "topSizes": [
+   [
+    16,
+    221
+   ],
+   [
+    14,
+    38
+   ],
+   [
+    12,
+    37
+   ],
+   [
+    24,
+    10
+   ]
+  ],
+  "bodyBg": "oklch(0.998 0.0025 85)",
+  "colourPct": 0,
+  "greyPct": 100
+ },
+ "ours-orders-b-after": {
+  "where": "/Users/hosoo/project/conclave/.design-lab/runs/treatment/orders/b/ws/docs/mockups/b.html",
+  "title": "포장대 한 상자",
+  "picturePct": 0,
+  "iconPct": 0.4,
+  "tintPct": 0,
+  "textPct": 40.3,
+  "pictures": 0,
+  "icons": 2,
+  "chars": 259,
+  "boxes": 10,
+  "roundedBoxes": 7,
+  "shadowedBoxes": 1,
+  "borderedBoxes": 10,
+  "radii": [
+   [
+    14,
+    5
+   ],
+   [
+    0,
+    2
+   ],
+   [
+    9999,
+    1
+   ],
+   [
+    6,
+    1
+   ]
+  ],
+  "hueFamilies": 0,
+  "topSizes": [
+   [
+    14,
+    102
+   ],
+   [
+    18,
+    56
+   ],
+   [
+    16,
+    45
+   ],
+   [
+    20,
+    39
+   ]
+  ],
+  "bodyBg": "oklch(0.985 0.005 248)",
+  "colourPct": 1.2,
+  "greyPct": 98.7
+ },
+ "hb2-dues-a": {
+  "where": "/Users/hosoo/project/conclave/.design-lab/runs/handbook2/dues/a/ws/docs/mockups/a.html",
+  "title": "모임 통장 한 권",
+  "picturePct": 3.7,
+  "iconPct": 2.8,
+  "tintPct": 0,
+  "textPct": 59.5,
+  "pictures": 1,
+  "icons": 13,
+  "chars": 383,
+  "boxes": 5,
+  "roundedBoxes": 0,
+  "shadowedBoxes": 4,
+  "borderedBoxes": 1,
+  "radii": [
+   [
+    0,
+    5
+   ]
+  ],
+  "hueFamilies": 0,
+  "topSizes": [
+   [
+    14,
+    184
+   ],
+   [
+    16,
+    145
+   ],
+   [
+    18,
+    25
+   ],
+   [
+    12,
+    14
+   ]
+  ],
+  "bodyBg": "oklch(0.962 0.005 250)",
+  "colourPct": 5.5,
+  "greyPct": 93.9
+ },
+ "hb2-dues-b": {
+  "where": "/Users/hosoo/project/conclave/.design-lab/runs/handbook2/dues/b/ws/docs/mockups/b.html",
+  "title": "영수증 꽂이 장부",
+  "picturePct": 6.7,
+  "iconPct": 2,
+  "tintPct": 0,
+  "textPct": 34.7,
+  "pictures": 2,
+  "icons": 8,
+  "chars": 273,
+  "boxes": 5,
+  "roundedBoxes": 3,
+  "shadowedBoxes": 3,
+  "borderedBoxes": 2,
+  "radii": [
+   [
+    22,
+    2
+   ],
+   [
+    0,
+    2
+   ],
+   [
+    30,
+    1
+   ]
+  ],
+  "hueFamilies": 0,
+  "topSizes": [
+   [
+    14,
+    136
+   ],
+   [
+    16,
+    60
+   ],
+   [
+    12,
+    27
+   ],
+   [
+    20,
+    24
+   ]
+  ],
+  "bodyBg": "oklch(0.962 0.005 265)",
+  "colourPct": 6.4,
+  "greyPct": 70.4
+ },
+ "hb2-duel-a": {
+  "where": "/Users/hosoo/project/conclave/.design-lab/runs/handbook2/duel/a/ws/docs/mockups/a.html",
+  "title": "라인 위의 경주",
+  "picturePct": 35,
+  "iconPct": 1.7,
+  "tintPct": 0,
+  "textPct": 26.8,
+  "pictures": 1,
+  "icons": 9,
+  "chars": 210,
+  "boxes": 5,
+  "roundedBoxes": 4,
+  "shadowedBoxes": 4,
+  "borderedBoxes": 1,
+  "radii": [
+   [
+    20,
+    4
+   ],
+   [
+    0,
+    1
+   ]
+  ],
+  "hueFamilies": 0,
+  "topSizes": [
+   [
+    14,
+    129
+   ],
+   [
+    12,
+    28
+   ],
+   [
+    16,
+    22
+   ],
+   [
+    20,
+    12
+   ]
+  ],
+  "bodyBg": "oklch(0.962 0.003 250)",
+  "colourPct": 6.5,
+  "greyPct": 91.4
+ },
+ "hb2-duel-b": {
+  "where": "/Users/hosoo/project/conclave/.design-lab/runs/handbook2/duel/b/ws/docs/mockups/b.html",
+  "title": "라인전 · 14라운드 전광판",
+  "picturePct": 0,
+  "iconPct": 2.9,
+  "tintPct": 0,
+  "textPct": 40.1,
+  "pictures": 0,
+  "icons": 12,
+  "chars": 247,
+  "boxes": 8,
+  "roundedBoxes": 0,
+  "shadowedBoxes": 6,
+  "borderedBoxes": 2,
+  "radii": [
+   [
+    4,
+    5
+   ],
+   [
+    0,
+    3
+   ]
+  ],
+  "hueFamilies": 0,
+  "topSizes": [
+   [
+    14,
+    130
+   ],
+   [
+    16,
+    65
+   ],
+   [
+    12,
+    21
+   ],
+   [
+    18,
+    12
+   ]
+  ],
+  "bodyBg": "oklch(0.962 0.004 250)",
+  "colourPct": 11.1,
+  "greyPct": 80
+ },
+ "hb2-duel-c": {
+  "where": "/Users/hosoo/project/conclave/.design-lab/runs/handbook2/duel/c/ws/docs/mockups/c.html",
+  "title": "체중계 다이얼 줄다리기",
+  "picturePct": 62.3,
+  "iconPct": 2.6,
+  "tintPct": 23.2,
+  "textPct": 36.7,
+  "pictures": 3,
+  "icons": 8,
+  "chars": 230,
+  "boxes": 6,
+  "roundedBoxes": 6,
+  "shadowedBoxes": 6,
+  "borderedBoxes": 0,
+  "radii": [
+   [
+    30,
+    4
+   ],
+   [
+    9999,
+    2
+   ]
+  ],
+  "hueFamilies": 0,
+  "topSizes": [
+   [
+    14,
+    126
+   ],
+   [
+    16,
+    43
+   ],
+   [
+    12,
+    32
+   ],
+   [
+    20,
+    9
+   ]
+  ],
+  "bodyBg": "oklch(0.962 0.002 168)",
+  "colourPct": 10.8,
+  "greyPct": 85.8
+ },
+ "hb2-quote-a": {
+  "where": "/Users/hosoo/project/conclave/.design-lab/runs/handbook2/quote/a/ws/docs/mockups/a.html",
+  "title": "서식 한 장 · 도장 찍어 보내는 견적서",
+  "picturePct": 6.8,
+  "iconPct": 0.8,
+  "tintPct": 0,
+  "textPct": 31.1,
+  "pictures": 1,
+  "icons": 3,
+  "chars": 205,
+  "boxes": 1,
+  "roundedBoxes": 0,
+  "shadowedBoxes": 0,
+  "borderedBoxes": 1,
+  "radii": [
+   [
+    0,
+    1
+   ]
+  ],
+  "hueFamilies": 0,
+  "topSizes": [
+   [
+    16,
+    95
+   ],
+   [
+    12,
+    42
+   ],
+   [
+    18,
+    30
+   ],
+   [
+    14,
+    15
+   ]
+  ],
+  "bodyBg": "oklch(0.998 0.0025 85)",
+  "colourPct": 0.6,
+  "greyPct": 99.2
+ },
+ "hb2-quote-b": {
+  "where": "/Users/hosoo/project/conclave/.design-lab/runs/handbook2/quote/b/ws/docs/mockups/b.html",
+  "title": "한장 · 계산 테이프 견적서",
+  "picturePct": 3.1,
+  "iconPct": 1.7,
+  "tintPct": 0,
+  "textPct": 52.5,
+  "pictures": 1,
+  "icons": 9,
+  "chars": 339,
+  "boxes": 6,
+  "roundedBoxes": 5,
+  "shadowedBoxes": 6,
+  "borderedBoxes": 0,
+  "radii": [
+   [
+    9999,
+    4
+   ],
+   [
+    30,
+    1
+   ],
+   [
+    0,
+    1
+   ]
+  ],
+  "hueFamilies": 0,
+  "topSizes": [
+   [
+    16,
+    145
+   ],
+   [
+    14,
+    114
+   ],
+   [
+    20,
+    32
+   ],
+   [
+    12,
+    31
+   ]
+  ],
+  "bodyBg": "oklch(0.962 0.005 245)",
+  "colourPct": 3.6,
+  "greyPct": 93.8
+ },
+ "hb2-orders-a": {
+  "where": "/Users/hosoo/project/conclave/.design-lab/runs/handbook2/orders/a/ws/docs/mockups/a.html",
+  "title": "출고 장부 · 붉게 채워지는 송장 칸",
+  "picturePct": 1.7,
+  "iconPct": 5,
+  "tintPct": 0,
+  "textPct": 40.2,
+  "pictures": 1,
+  "icons": 14,
+  "chars": 267,
+  "boxes": 5,
+  "roundedBoxes": 0,
+  "shadowedBoxes": 4,
+  "borderedBoxes": 1,
+  "radii": [
+   [
+    0,
+    3
+   ],
+   [
+    4,
+    2
+   ]
+  ],
+  "hueFamilies": 0,
+  "topSizes": [
+   [
+    16,
+    126
+   ],
+   [
+    14,
+    107
+   ],
+   [
+    18,
+    24
+   ],
+   [
+    20,
+    5
+   ]
+  ],
+  "bodyBg": "oklch(0.962 0.005 82)",
+  "colourPct": 2.7,
+  "greyPct": 97.2
+ },
+ "hb2-orders-b": {
+  "where": "/Users/hosoo/project/conclave/.design-lab/runs/handbook2/orders/b/ws/docs/mockups/b.html",
+  "title": "포장대 한 상자",
+  "picturePct": 0,
+  "iconPct": 2.2,
+  "tintPct": 0,
+  "textPct": 37.5,
+  "pictures": 0,
+  "icons": 8,
+  "chars": 238,
+  "boxes": 9,
+  "roundedBoxes": 9,
+  "shadowedBoxes": 8,
+  "borderedBoxes": 1,
+  "radii": [
+   [
+    22,
+    4
+   ],
+   [
+    9999,
+    3
+   ],
+   [
+    30,
+    1
+   ],
+   [
+    14,
+    1
+   ]
+  ],
+  "hueFamilies": 0,
+  "topSizes": [
+   [
+    14,
+    119
+   ],
+   [
+    16,
+    64
+   ],
+   [
+    20,
+    30
+   ],
+   [
+    18,
+    20
+   ]
+  ],
+  "bodyBg": "oklch(0.962 0.005 248)",
+  "colourPct": 6.3,
+  "greyPct": 93.4
+ },
+ "hb3-dues-a": {
+  "where": "/Users/hosoo/project/conclave/.design-lab/runs/handbook3/dues/a/ws/docs/mockups/a.html",
+  "title": "모임 통장 한 권",
+  "picturePct": 0,
+  "iconPct": 3.6,
+  "tintPct": 0,
+  "textPct": 50.1,
+  "pictures": 0,
+  "icons": 22,
+  "chars": 267,
+  "boxes": 6,
+  "roundedBoxes": 0,
+  "shadowedBoxes": 5,
+  "borderedBoxes": 1,
+  "radii": [
+   [
+    0,
+    6
+   ]
+  ],
+  "hueFamilies": 0,
+  "topSizes": [
+   [
+    16,
+    136
+   ],
+   [
+    14,
+    79
+   ],
+   [
+    12,
+    36
+   ],
+   [
+    20,
+    16
+   ]
+  ],
+  "bodyBg": "oklch(0.962 0.005 250)",
+  "colourPct": 0.1,
+  "greyPct": 99.7
+ },
+ "hb3-dues-b": {
+  "where": "/Users/hosoo/project/conclave/.design-lab/runs/handbook3/dues/b/ws/docs/mockups/b.html",
+  "title": "영수증 꽂이",
+  "picturePct": 35,
+  "iconPct": 3.6,
+  "tintPct": 0,
+  "textPct": 38.4,
+  "pictures": 1,
+  "icons": 14,
+  "chars": 300,
+  "boxes": 5,
+  "roundedBoxes": 3,
+  "shadowedBoxes": 3,
+  "borderedBoxes": 2,
+  "radii": [
+   [
+    9999,
+    3
+   ],
+   [
+    0,
+    2
+   ]
+  ],
+  "hueFamilies": 0,
+  "topSizes": [
+   [
+    14,
+    163
+   ],
+   [
+    16,
+    58
+   ],
+   [
+    20,
+    32
+   ],
+   [
+    18,
+    26
+   ]
+  ],
+  "bodyBg": "oklch(0.962 0.005 265)",
+  "colourPct": 25.3,
+  "greyPct": 72.9
+ },
+ "hb3-duel-a": {
+  "where": "/Users/hosoo/project/conclave/.design-lab/runs/handbook3/duel/a/ws/docs/mockups/a.html",
+  "title": "라인 위의 경주",
+  "picturePct": 0,
+  "iconPct": 2.2,
+  "tintPct": 0,
+  "textPct": 22.7,
+  "pictures": 0,
+  "icons": 10,
+  "chars": 229,
+  "boxes": 5,
+  "roundedBoxes": 4,
+  "shadowedBoxes": 4,
+  "borderedBoxes": 1,
+  "radii": [
+   [
+    20,
+    3
+   ],
+   [
+    0,
+    1
+   ],
+   [
+    12,
+    1
+   ]
+  ],
+  "hueFamilies": 0,
+  "topSizes": [
+   [
+    14,
+    111
+   ],
+   [
+    12,
+    74
+   ],
+   [
+    18,
+    14
+   ],
+   [
+    20,
+    12
+   ]
+  ],
+  "bodyBg": "oklch(0.962 0.003 250)",
+  "colourPct": 6.8,
+  "greyPct": 90.7
+ },
+ "hb3-duel-b": {
+  "where": "/Users/hosoo/project/conclave/.design-lab/runs/handbook3/duel/b/ws/docs/mockups/b.html",
+  "title": "라인전 경기 중계 전광판",
+  "picturePct": 0,
+  "iconPct": 3.4,
+  "tintPct": 0,
+  "textPct": 39.9,
+  "pictures": 0,
+  "icons": 14,
+  "chars": 275,
+  "boxes": 6,
+  "roundedBoxes": 0,
+  "shadowedBoxes": 2,
+  "borderedBoxes": 4,
+  "radii": [
+   [
+    0,
+    4
+   ],
+   [
+    4,
+    2
+   ]
+  ],
+  "hueFamilies": 0,
+  "topSizes": [
+   [
+    14,
+    124
+   ],
+   [
+    16,
+    73
+   ],
+   [
+    11,
+    52
+   ],
+   [
+    20,
+    10
+   ]
+  ],
+  "bodyBg": "oklch(0.962 0.004 250)",
+  "colourPct": 32.3,
+  "greyPct": 63.5
+ },
+ "hb3-duel-c": {
+  "where": "/Users/hosoo/project/conclave/.design-lab/runs/handbook3/duel/c/ws/docs/mockups/c.html",
+  "title": "체중계 다이얼 대결",
+  "picturePct": 35.1,
+  "iconPct": 3.3,
+  "tintPct": 0,
+  "textPct": 33.9,
+  "pictures": 2,
+  "icons": 15,
+  "chars": 230,
+  "boxes": 6,
+  "roundedBoxes": 6,
+  "shadowedBoxes": 6,
+  "borderedBoxes": 0,
+  "radii": [
+   [
+    30,
+    4
+   ],
+   [
+    9999,
+    2
+   ]
+  ],
+  "hueFamilies": 0,
+  "topSizes": [
+   [
+    14,
+    141
+   ],
+   [
+    16,
+    43
+   ],
+   [
+    12,
+    25
+   ],
+   [
+    20,
+    9
+   ]
+  ],
+  "bodyBg": "oklch(0.962 0.002 168)",
+  "colourPct": 16.7,
+  "greyPct": 81.6
+ }
+}

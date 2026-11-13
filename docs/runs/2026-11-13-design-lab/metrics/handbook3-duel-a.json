@@ -1,0 +1,132 @@
+{
+ "file": "/Users/hosoo/project/conclave/.design-lab/runs/handbook3/duel/a/ws/docs/mockups/a.html",
+ "template": "mobile-expo",
+ "phone": {
+  "title": "라인 위의 경주",
+  "headline": {
+   "text": "6일차 / 14일",
+   "px": 20,
+   "lines": 1,
+   "weight": 700
+  },
+  "seed": "{\"hue\":28,\"chroma\":0.19,\"lightness\":0.6,\"neutral_hue\":250,\"neutral_chroma\":0.003,\"corners\":\"soft\",\"face\":\"pretendard\",\"source\":\"코치가 모눈 체중표 위에 빨간 연필로 그어 주는 목표선, 그 선 아래에 머무는 것이 이 앱의 게임이라 그 빨강이 브랜드이고 종이는 차가운 흰 모눈이다.\"}",
+  "tokens": {
+   "--sz-brand": [
+    255,
+    111,
+    97
+   ],
+   "--sz-brand-soft": [
+    255,
+    228,
+    224
+   ],
+   "--sz-accent": [
+    155,
+    0,
+    7
+   ],
+   "--sz-bg": [
+    249,
+    250,
+    252
+   ],
+   "--sz-surface": [
+    254,
+    254,
+    255
+   ],
+   "--sz-fg": [
+    21,
+    22,
+    23
+   ],
+   "--sz-brand-2": null,
+   "--sz-second": [
+    0,
+    177,
+    206
+   ]
+  },
+  "viewport": {
+   "vw": 393,
+   "vh": 852
+  },
+  "screensLong": 1.5,
+  "type": {
+   "families": [
+    [
+     "Pretendard Variable",
+     305
+    ]
+   ],
+   "sizesFirstScreen": [
+    [
+     12,
+     74
+    ],
+    [
+     14,
+     111
+    ],
+    [
+     16,
+     12
+    ],
+    [
+     18,
+     14
+    ],
+    [
+     20,
+     12
+    ],
+    [
+     30,
+     3
+    ],
+    [
+     36,
+     3
+    ]
+   ],
+   "distinctSizes": 7,
+   "distinctSizesFirstScreen": 7,
+   "microSharePct": 24.6,
+   "microSharePctFirstScreen": 32.3,
+   "sentencesAtMicro": [],
+   "bodySharePct": 15.7,
+   "largestPx": 36,
+   "figuresAtLargest": [
+    "433"
+   ],
+   "heavyWeightSharePct": 47.5,
+   "turnedText": [],
+   "stackedText": [],
+   "endAlignedText": [],
+   "monoOutsideCode": []
+  },
+  "layout": {
+   "controlsFirstScreen": 4,
+   "cards": 5,
+   "cardsFirstScreen": 4,
+   "halfEmptyCards": [],
+   "nestedCards": 0,
+   "saidTwice": [
+    "/40 x2"
+   ],
+   "figuresTwice": [
+    "20 x2",
+    "40 x2"
+   ]
+  },
+  "colour": {
+   "saturatedPct": 6.6,
+   "darkPct": 1.4,
+   "brandPct": 6.2,
+   "secondPct": 0,
+   "blankLeftPct": 55.4,
+   "blankRightPct": 58.8
+  }
+ }
+}

@@ -1,0 +1,138 @@
+{
+ "file": "/Users/hosoo/project/conclave/.design-lab/runs/material/duel/b/ws/docs/mockups/b.html",
+ "template": "mobile-expo",
+ "phone": {
+  "title": "라인전 중계 전광판",
+  "headline": {
+   "text": "63점 뒤져 있어요",
+   "px": 24,
+   "lines": 1,
+   "weight": 700
+  },
+  "seed": "{\"hue\":258,\"chroma\":0.22,\"lightness\":0.5,\"neutral_hue\":250,\"neutral_chroma\":0.004,\"corners\":\"sharp\",\"face\":\"suit\",\"source\":\"야구장과 e스포츠 중계의 코발트 전광판과 하단 자막 띠에서 왔고, 라운드 칸이 줄 맞춰 서는 각진 판이 그 모양이다.\"}",
+  "tokens": {
+   "--sz-brand": [
+    0,
+    81,
+    178
+   ],
+   "--sz-brand-soft": [
+    223,
+    236,
+    255
+   ],
+   "--sz-accent": [
+    0,
+    72,
+    160
+   ],
+   "--sz-bg": [
+    248,
+    250,
+    253
+   ],
+   "--sz-surface": [
+    254,
+    254,
+    255
+   ],
+   "--sz-fg": [
+    21,
+    22,
+    24
+   ],
+   "--sz-brand-2": null,
+   "--sz-second": [
+    249,
+    137,
+    66
+   ]
+  },
+  "viewport": {
+   "vw": 393,
+   "vh": 852
+  },
+  "screensLong": 1.8,
+  "type": {
+   "families": [
+    [
+     "SUIT Variable",
+     334
+    ]
+   ],
+   "sizesFirstScreen": [
+    [
+     11,
+     1
+    ],
+    [
+     12,
+     22
+    ],
+    [
+     14,
+     117
+    ],
+    [
+     16,
+     11
+    ],
+    [
+     18,
+     30
+    ],
+    [
+     20,
+     10
+    ],
+    [
+     24,
+     9
+    ],
+    [
+     48,
+     6
+    ]
+   ],
+   "distinctSizes": 8,
+   "distinctSizesFirstScreen": 8,
+   "microSharePct": 8.4,
+   "microSharePctFirstScreen": 11.2,
+   "sentencesAtMicro": [],
+   "bodySharePct": 24,
+   "largestPx": 48,
+   "figuresAtLargest": [
+    "433",
+    "496"
+   ],
+   "heavyWeightSharePct": 32.9,
+   "turnedText": [],
+   "stackedText": [],
+   "endAlignedText": [],
+   "monoOutsideCode": []
+  },
+  "layout": {
+   "controlsFirstScreen": 9,
+   "cards": 8,
+   "cardsFirstScreen": 5,
+   "halfEmptyCards": [],
+   "nestedCards": 0,
+   "saidTwice": [
+    "100 x2"
+   ],
+   "figuresTwice": [
+    "40 x2",
+    "99 x3",
+    "100 x2"
+   ]
+  },
+  "colour": {
+   "saturatedPct": 30.4,
+   "darkPct": 2.1,
+   "brandPct": 14.3,
+   "secondPct": 10.1,
+   "blankLeftPct": 30.7,
+   "blankRightPct": 35.7
+  }
+ }
+}

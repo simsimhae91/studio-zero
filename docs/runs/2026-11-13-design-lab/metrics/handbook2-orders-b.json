@@ -1,0 +1,265 @@
+{
+ "file": "/Users/hosoo/project/conclave/.design-lab/runs/handbook2/orders/b/ws/docs/mockups/b.html",
+ "template": "web-vite-react",
+ "desktop": {
+  "title": "포장대 한 상자",
+  "headline": {
+   "text": "에티오피아 구지 200g핸드드립 분쇄 · 2개",
+   "px": 24,
+   "lines": 2,
+   "weight": 700
+  },
+  "seed": "{\"hue\":96,\"chroma\":0.17,\"lightness\":0.75,\"neutral_hue\":248,\"neutral_chroma\":0.005,\"corners\":\"round\",\"face\":\"suit\",\"source\":\"다 싼 상자에 붙이는 형광 노란 확인 스티커, 감열 라벨지의 푸른 흰빛, 상자 옆면에 찍힌 두꺼운 스텐실 글자에서 왔고, 모서리는 둥글게 말린 라벨 귀퉁이처럼 둥글다.\"}",
+  "tokens": {
+   "--sz-brand": [
+    203,
+    172,
+    0
+   ],
+   "--sz-brand-soft": [
+    245,
+    236,
+    198
+   ],
+   "--sz-accent": [
+    90,
+    75,
+    0
+   ],
+   "--sz-bg": [
+    247,
+    250,
+    253
+   ],
+   "--sz-surface": [
+    254,
+    254,
+    255
+   ],
+   "--sz-fg": [
+    20,
+    22,
+    24
+   ],
+   "--sz-brand-2": null,
+   "--sz-second": [
+    0,
+    85,
+    167
+   ]
+  },
+  "viewport": {
+   "vw": 1440,
+   "vh": 900
+  },
+  "screensLong": 1.2,
+  "type": {
+   "families": [
+    [
+     "SUIT Variable",
+     537
+    ]
+   ],
+   "sizesFirstScreen": [
+    [
+     12,
+     4
+    ],
+    [
+     14,
+     265
+    ],
+    [
+     16,
+     103
+    ],
+    [
+     18,
+     26
+    ],
+    [
+     20,
+     5
+    ],
+    [
+     24,
+     29
+    ],
+    [
+     30,
+     2
+    ],
+    [
+     96,
+     3
+    ]
+   ],
+   "distinctSizes": 8,
+   "distinctSizesFirstScreen": 8,
+   "microSharePct": 0.7,
+   "microSharePctFirstScreen": 0.9,
+   "sentencesAtMicro": [],
+   "bodySharePct": 25.1,
+   "largestPx": 96,
+   "figuresAtLargest": [
+    "오수민"
+   ],
+   "heavyWeightSharePct": 38.5,
+   "turnedText": [],
+   "stackedText": [],
+   "endAlignedText": [],
+   "monoOutsideCode": []
+  },
+  "layout": {
+   "controlsFirstScreen": 9,
+   "cards": 7,
+   "cardsFirstScreen": 7,
+   "halfEmptyCards": [],
+   "nestedCards": 0,
+   "saidTwice": [
+    "CJ대한통운 x2"
+   ],
+   "figuresTwice": [
+    "13 x2",
+    "21 x2",
+    "15 x2",
+    "200 x2",
+    "23 x3",
+    "6890 x3",
+    "1234 x3"
+   ]
+  },
+  "colour": {
+   "saturatedPct": 0.4,
+   "darkPct": 1.4,
+   "brandPct": 0.3,
+   "secondPct": 0,
+   "blankLeftPct": 55.5,
+   "blankRightPct": 57.1
+  }
+ },
+ "phone": {
+  "title": "포장대 한 상자",
+  "headline": {
+   "text": "오늘 출고",
+   "px": 20,
+   "lines": 1,
+   "weight": 800
+  },
+  "seed": "{\"hue\":96,\"chroma\":0.17,\"lightness\":0.75,\"neutral_hue\":248,\"neutral_chroma\":0.005,\"corners\":\"round\",\"face\":\"suit\",\"source\":\"다 싼 상자에 붙이는 형광 노란 확인 스티커, 감열 라벨지의 푸른 흰빛, 상자 옆면에 찍힌 두꺼운 스텐실 글자에서 왔고, 모서리는 둥글게 말린 라벨 귀퉁이처럼 둥글다.\"}",
+  "tokens": {
+   "--sz-brand": [
+    203,
+    172,
+    0
+   ],
+   "--sz-brand-soft": [
+    245,
+    236,
+    198
+   ],
+   "--sz-accent": [
+    90,
+    75,
+    0
+   ],
+   "--sz-bg": [
+    247,
+    250,
+    253
+   ],
+   "--sz-surface": [
+    254,
+    254,
+    255
+   ],
+   "--sz-fg": [
+    20,
+    22,
+    24
+   ],
+   "--sz-brand-2": null,
+   "--sz-second": [
+    0,
+    85,
+    167
+   ]
+  },
+  "viewport": {
+   "vw": 393,
+   "vh": 852
+  },
+  "screensLong": 1.5,
+  "type": {
+   "families": [
+    [
+     "SUIT Variable",
+     366
+    ]
+   ],
+   "sizesFirstScreen": [
+    [
+     12,
+     2
+    ],
+    [
+     14,
+     119
+    ],
+    [
+     16,
+     64
+    ],
+    [
+     18,
+     20
+    ],
+    [
+     20,
+     30
+    ],
+    [
+     72,
+     3
+    ]
+   ],
+   "distinctSizes": 6,
+   "distinctSizesFirstScreen": 6,
+   "microSharePct": 0.5,
+   "microSharePctFirstScreen": 0.8,
+   "sentencesAtMicro": [],
+   "bodySharePct": 32.2,
+   "largestPx": 72,
+   "figuresAtLargest": [
+    "오수민"
+   ],
+   "heavyWeightSharePct": 42.1,
+   "turnedText": [],
+   "stackedText": [],
+   "endAlignedText": [],
+   "monoOutsideCode": []
+  },
+  "layout": {
+   "controlsFirstScreen": 6,
+   "cards": 2,
+   "cardsFirstScreen": 1,
+   "halfEmptyCards": [],
+   "nestedCards": 0,
+   "saidTwice": [
+    "CJ대한통운 x2"
+   ],
+   "figuresTwice": [
+    "23 x2",
+    "15 x2"
+   ]
+  },
+  "colour": {
+   "saturatedPct": 1.2,
+   "darkPct": 3.4,
+   "brandPct": 0.7,
+   "secondPct": 0,
+   "blankLeftPct": 45.6,
+   "blankRightPct": 52.5
+  }
+ }
+}

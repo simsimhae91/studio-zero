@@ -1,0 +1,135 @@
+{
+ "file": "/Users/hosoo/project/conclave/.design-lab/runs/handbook2/dues/a/ws/docs/mockups/a.html",
+ "template": "mobile-expo",
+ "phone": {
+  "title": "모임 통장 한 권",
+  "headline": {
+   "text": "24,100",
+   "px": 36,
+   "lines": 1,
+   "weight": 800
+  },
+  "seed": "{\"hue\":33,\"chroma\":0.19,\"lightness\":0.57,\"neutral_hue\":250,\"neutral_chroma\":0.005,\"corners\":\"sharp\",\"face\":\"pretendard\",\"source\":\"총무가 영수증 뒷면에 찍는 '확인' 도장의 인주색과 금전출납부의 붉은 괘선에서 색이 왔고, 통장 표의 직각 괘선이 각진 모서리를, 장부 표지에 쓰는 명조가 제목 글꼴을 정한다.\"}",
+  "tokens": {
+   "--sz-brand": [
+    166,
+    31,
+    0
+   ],
+   "--sz-brand-soft": [
+    255,
+    228,
+    222
+   ],
+   "--sz-accent": [
+    148,
+    27,
+    0
+   ],
+   "--sz-bg": [
+    248,
+    250,
+    253
+   ],
+   "--sz-surface": [
+    254,
+    254,
+    255
+   ],
+   "--sz-fg": [
+    20,
+    22,
+    24
+   ],
+   "--sz-brand-2": null,
+   "--sz-second": [
+    0,
+    177,
+    206
+   ]
+  },
+  "viewport": {
+   "vw": 393,
+   "vh": 852
+  },
+  "screensLong": 1,
+  "type": {
+   "families": [
+    [
+     "Pretendard Variable",
+     383
+    ]
+   ],
+   "sizesFirstScreen": [
+    [
+     12,
+     14
+    ],
+    [
+     14,
+     184
+    ],
+    [
+     16,
+     145
+    ],
+    [
+     18,
+     25
+    ],
+    [
+     20,
+     7
+    ],
+    [
+     30,
+     2
+    ],
+    [
+     36,
+     6
+    ]
+   ],
+   "distinctSizes": 7,
+   "distinctSizesFirstScreen": 7,
+   "microSharePct": 3.7,
+   "microSharePctFirstScreen": 3.7,
+   "sentencesAtMicro": [],
+   "bodySharePct": 44.4,
+   "largestPx": 36,
+   "figuresAtLargest": [
+    "24,100"
+   ],
+   "heavyWeightSharePct": 51.2,
+   "turnedText": [],
+   "stackedText": [],
+   "endAlignedText": [],
+   "monoOutsideCode": []
+  },
+  "layout": {
+   "controlsFirstScreen": 9,
+   "cards": 4,
+   "cardsFirstScreen": 4,
+   "halfEmptyCards": [],
+   "nestedCards": 2,
+   "saidTwice": [
+    "물·간식 x3",
+    "망원한강공원점 x3",
+    "24,100 x2"
+   ],
+   "figuresTwice": [
+    "11 x6",
+    "24,100 x3",
+    "26,600 x2"
+   ]
+  },
+  "colour": {
+   "saturatedPct": 5.5,
+   "darkPct": 3,
+   "brandPct": 5,
+   "secondPct": 0,
+   "blankLeftPct": 55.7,
+   "blankRightPct": 59.2
+  }
+ }
+}

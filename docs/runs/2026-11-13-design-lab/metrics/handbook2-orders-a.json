@@ -1,0 +1,267 @@
+{
+ "file": "/Users/hosoo/project/conclave/.design-lab/runs/handbook2/orders/a/ws/docs/mockups/a.html",
+ "template": "web-vite-react",
+ "desktop": {
+  "title": "출고 장부 · 붉게 채워지는 송장 칸",
+  "headline": {
+   "text": "남은 상자",
+   "px": 96,
+   "lines": 1,
+   "weight": 800
+  },
+  "seed": "{\"hue\":29,\"chroma\":0.19,\"lightness\":0.53,\"neutral_hue\":82,\"neutral_chroma\":0.005,\"corners\":\"sharp\",\"face\":\"pretendard\",\"source\":\"손으로 쓰던 출고 장부의 붉은 괘선과 주문서에 찍는 주홍 확인 도장, 누렇게 바랜 장부 종이에서 왔고, 모서리는 장부 칸처럼 각졌다.\"}",
+  "tokens": {
+   "--sz-brand": [
+    174,
+    10,
+    8
+   ],
+   "--sz-brand-soft": [
+    255,
+    228,
+    224
+   ],
+   "--sz-accent": [
+    156,
+    0,
+    1
+   ],
+   "--sz-bg": [
+    252,
+    250,
+    246
+   ],
+   "--sz-surface": [
+    255,
+    254,
+    253
+   ],
+   "--sz-fg": [
+    23,
+    22,
+    20
+   ],
+   "--sz-brand-2": null,
+   "--sz-second": [
+    0,
+    177,
+    206
+   ]
+  },
+  "viewport": {
+   "vw": 1440,
+   "vh": 900
+  },
+  "screensLong": 1.5,
+  "type": {
+   "families": [
+    [
+     "Pretendard Variable",
+     1078
+    ]
+   ],
+   "sizesFirstScreen": [
+    [
+     12,
+     19
+    ],
+    [
+     14,
+     254
+    ],
+    [
+     16,
+     454
+    ],
+    [
+     18,
+     32
+    ],
+    [
+     20,
+     32
+    ],
+    [
+     96,
+     5
+    ]
+   ],
+   "distinctSizes": 6,
+   "distinctSizesFirstScreen": 6,
+   "microSharePct": 1.8,
+   "microSharePctFirstScreen": 2.4,
+   "sentencesAtMicro": [],
+   "bodySharePct": 65.3,
+   "largestPx": 96,
+   "figuresAtLargest": [
+    "남은 상자"
+   ],
+   "heavyWeightSharePct": 28.1,
+   "turnedText": [],
+   "stackedText": [],
+   "endAlignedText": [],
+   "monoOutsideCode": []
+  },
+  "layout": {
+   "controlsFirstScreen": 16,
+   "cards": 6,
+   "cardsFirstScreen": 6,
+   "halfEmptyCards": [],
+   "nestedCards": 1,
+   "saidTwice": [
+    "6890 1234 5671 x2",
+    "그대로 보내기 x2",
+    "주소 확인 중 x2",
+    "추가 배송비 요청함 x2",
+    "스마트스토어 x3",
+    "에티오피아 구지 200g · 핸드드립 분쇄 × 2 x2"
+   ],
+   "figuresTwice": [
+    "15 x2",
+    "16 x2",
+    "11 x3",
+    "13 x2",
+    "23 x2",
+    "10 x2",
+    "22 x4",
+    "14 x2",
+    "6890 x3",
+    "1234 x3",
+    "5671 x2",
+    "500 x2",
+    "24,000 x2",
+    "21 x4",
+    "12 x3",
+    "200 x3"
+   ]
+  },
+  "colour": {
+   "saturatedPct": 1.3,
+   "darkPct": 2.6,
+   "brandPct": 0.5,
+   "secondPct": 0,
+   "blankLeftPct": 49.2,
+   "blankRightPct": 38.1
+  }
+ },
+ "phone": {
+  "title": "출고 장부 · 붉게 채워지는 송장 칸",
+  "headline": {
+   "text": "남은 상자",
+   "px": 60,
+   "lines": 1,
+   "weight": 800
+  },
+  "seed": "{\"hue\":29,\"chroma\":0.19,\"lightness\":0.53,\"neutral_hue\":82,\"neutral_chroma\":0.005,\"corners\":\"sharp\",\"face\":\"pretendard\",\"source\":\"손으로 쓰던 출고 장부의 붉은 괘선과 주문서에 찍는 주홍 확인 도장, 누렇게 바랜 장부 종이에서 왔고, 모서리는 장부 칸처럼 각졌다.\"}",
+  "tokens": {
+   "--sz-brand": [
+    174,
+    10,
+    8
+   ],
+   "--sz-brand-soft": [
+    255,
+    228,
+    224
+   ],
+   "--sz-accent": [
+    156,
+    0,
+    1
+   ],
+   "--sz-bg": [
+    252,
+    250,
+    246
+   ],
+   "--sz-surface": [
+    255,
+    254,
+    253
+   ],
+   "--sz-fg": [
+    23,
+    22,
+    20
+   ],
+   "--sz-brand-2": null,
+   "--sz-second": [
+    0,
+    177,
+    206
+   ]
+  },
+  "viewport": {
+   "vw": 393,
+   "vh": 852
+  },
+  "screensLong": 2.7,
+  "type": {
+   "families": [
+    [
+     "Pretendard Variable",
+     799
+    ]
+   ],
+   "sizesFirstScreen": [
+    [
+     14,
+     107
+    ],
+    [
+     16,
+     146
+    ],
+    [
+     18,
+     24
+    ],
+    [
+     20,
+     5
+    ],
+    [
+     60,
+     5
+    ]
+   ],
+   "distinctSizes": 6,
+   "distinctSizesFirstScreen": 5,
+   "microSharePct": 1.5,
+   "microSharePctFirstScreen": 0,
+   "sentencesAtMicro": [],
+   "bodySharePct": 61.6,
+   "largestPx": 60,
+   "figuresAtLargest": [
+    "남은 상자"
+   ],
+   "heavyWeightSharePct": 37,
+   "turnedText": [],
+   "stackedText": [],
+   "endAlignedText": [],
+   "monoOutsideCode": []
+  },
+  "layout": {
+   "controlsFirstScreen": 7,
+   "cards": 6,
+   "cardsFirstScreen": 3,
+   "halfEmptyCards": [],
+   "nestedCards": 1,
+   "saidTwice": [],
+   "figuresTwice": [
+    "22 x2",
+    "500 x2",
+    "24,000 x2",
+    "21 x2"
+   ]
+  },
+  "colour": {
+   "saturatedPct": 2.6,
+   "darkPct": 4.3,
+   "brandPct": 0.8,
+   "secondPct": 0.1,
+   "blankLeftPct": 39.4,
+   "blankRightPct": 45.9
+  }
+ }
+}

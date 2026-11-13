@@ -1,0 +1,135 @@
+{
+ "file": "/Users/hosoo/project/conclave/.design-lab/runs/handbook2/dues/b/ws/docs/mockups/b.html",
+ "template": "mobile-expo",
+ "phone": {
+  "title": "영수증 꽂이 장부",
+  "headline": {
+   "text": "412,000",
+   "px": 36,
+   "lines": 1,
+   "weight": 800
+  },
+  "seed": "{\"hue\":122,\"chroma\":0.2,\"lightness\":0.75,\"neutral_hue\":265,\"neutral_chroma\":0.005,\"corners\":\"round\",\"face\":\"suit\",\"source\":\"총무가 영수증 합계에 긋는 형광펜과 새벽 러닝 때 입는 형광 연두 바람막이에서 색이 왔고, 감열지 영수증의 고정폭 글씨가 제목 글꼴을, 손에 쥐고 찍는 영수증 사진과 형광펜 끝의 둥근 획이 둥근 모서리를 정한다.\"}",
+  "tokens": {
+   "--sz-brand": [
+    155,
+    191,
+    0
+   ],
+   "--sz-brand-soft": [
+    229,
+    241,
+    204
+   ],
+   "--sz-accent": [
+    66,
+    83,
+    0
+   ],
+   "--sz-bg": [
+    248,
+    250,
+    254
+   ],
+   "--sz-surface": [
+    254,
+    254,
+    255
+   ],
+   "--sz-fg": [
+    21,
+    22,
+    24
+   ],
+   "--sz-brand-2": null,
+   "--sz-second": [
+    106,
+    62,
+    165
+   ]
+  },
+  "viewport": {
+   "vw": 393,
+   "vh": 852
+  },
+  "screensLong": 1,
+  "type": {
+   "families": [
+    [
+     "SUIT Variable",
+     314
+    ]
+   ],
+   "sizesFirstScreen": [
+    [
+     12,
+     27
+    ],
+    [
+     14,
+     136
+    ],
+    [
+     16,
+     60
+    ],
+    [
+     18,
+     11
+    ],
+    [
+     20,
+     24
+    ],
+    [
+     24,
+     8
+    ],
+    [
+     36,
+     7
+    ]
+   ],
+   "distinctSizes": 7,
+   "distinctSizesFirstScreen": 7,
+   "microSharePct": 8.6,
+   "microSharePctFirstScreen": 9.9,
+   "sentencesAtMicro": [],
+   "bodySharePct": 27.1,
+   "largestPx": 36,
+   "figuresAtLargest": [
+    "412,000"
+   ],
+   "heavyWeightSharePct": 45.9,
+   "turnedText": [],
+   "stackedText": [],
+   "endAlignedText": [],
+   "monoOutsideCode": []
+  },
+  "layout": {
+   "controlsFirstScreen": 5,
+   "cards": 6,
+   "cardsFirstScreen": 5,
+   "halfEmptyCards": [],
+   "nestedCards": 0,
+   "saidTwice": [
+    "32,000 x2"
+   ],
+   "figuresTwice": [
+    "412,000 x2",
+    "11 x6",
+    "12 x2",
+    "10 x2",
+    "32,000 x3"
+   ]
+  },
+  "colour": {
+   "saturatedPct": 6.3,
+   "darkPct": 2.6,
+   "brandPct": 6.2,
+   "secondPct": 0,
+   "blankLeftPct": 38.7,
+   "blankRightPct": 43.3
+  }
+ }
+}

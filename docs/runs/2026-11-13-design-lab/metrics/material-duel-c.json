@@ -1,0 +1,132 @@
+{
+ "file": "/Users/hosoo/project/conclave/.design-lab/runs/material/duel/c/ws/docs/mockups/c.html",
+ "template": "mobile-expo",
+ "phone": {
+  "title": "체중계 다이얼 대결",
+  "headline": {
+   "text": "63점 뒤져 있어요",
+   "px": 24,
+   "lines": 1,
+   "weight": 700
+  },
+  "seed": "{\"hue\":168,\"chroma\":0.14,\"lightness\":0.55,\"neutral_chroma\":0.002,\"corners\":\"round\",\"face\":\"suite\",\"source\":\"욕실 바닥의 오래된 법랑 아날로그 체중계, 민트빛 녹청 몸체와 둥근 유리 눈금판에서 색과 모양을 가져왔다.\"}",
+  "tokens": {
+   "--sz-brand": [
+    0,
+    98,
+    73
+   ],
+   "--sz-brand-soft": [
+    205,
+    246,
+    229
+   ],
+   "--sz-accent": [
+    0,
+    88,
+    65
+   ],
+   "--sz-bg": [
+    249,
+    250,
+    250
+   ],
+   "--sz-surface": [
+    253,
+    255,
+    254
+   ],
+   "--sz-fg": [
+    21,
+    22,
+    22
+   ],
+   "--sz-brand-2": null,
+   "--sz-second": [
+    142,
+    51,
+    108
+   ]
+  },
+  "viewport": {
+   "vw": 393,
+   "vh": 852
+  },
+  "screensLong": 1.7,
+  "type": {
+   "families": [
+    [
+     "SUITE Variable",
+     327
+    ]
+   ],
+   "sizesFirstScreen": [
+    [
+     11,
+     8
+    ],
+    [
+     12,
+     27
+    ],
+    [
+     14,
+     109
+    ],
+    [
+     16,
+     13
+    ],
+    [
+     18,
+     9
+    ],
+    [
+     20,
+     8
+    ],
+    [
+     24,
+     10
+    ],
+    [
+     30,
+     6
+    ]
+   ],
+   "distinctSizes": 8,
+   "distinctSizesFirstScreen": 8,
+   "microSharePct": 14.4,
+   "microSharePctFirstScreen": 18.4,
+   "sentencesAtMicro": [],
+   "bodySharePct": 11.3,
+   "largestPx": 30,
+   "figuresAtLargest": [
+    "433",
+    "496"
+   ],
+   "heavyWeightSharePct": 66.4,
+   "turnedText": [],
+   "stackedText": [],
+   "endAlignedText": [],
+   "monoOutsideCode": []
+  },
+  "layout": {
+   "controlsFirstScreen": 10,
+   "cards": 5,
+   "cardsFirstScreen": 4,
+   "halfEmptyCards": [],
+   "nestedCards": 1,
+   "saidTwice": [],
+   "figuresTwice": []
+  },
+  "colour": {
+   "saturatedPct": 2.7,
+   "darkPct": 0.9,
+   "brandPct": 30.1,
+   "secondPct": 1.8,
+   "blankLeftPct": 32.5,
+   "blankRightPct": 33.5
+  }
+ }
+}
