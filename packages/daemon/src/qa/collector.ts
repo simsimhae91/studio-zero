@@ -563,9 +563,28 @@ export function collectDigest(maxElements: number): unknown {
     const floating = (el: Element): boolean => floaters.some((f) => f === el || f.contains(el));
     const inked = written.filter((p) => p.turn <= 5 && p.chars >= 2).flatMap((p) => { const ink = inkOf(p.el); return ink ? [{ p, ink }] : []; });
     const overlapOf = (a: DOMRect, b: DOMRect): number => Math.max(0, Math.min(a.right, b.right) - Math.max(a.left, b.left)) * Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top));
-    // Text under a floating control while the screen is at rest. A bar from edge to edge is where a list scrolls away; a pill over a row is not.
-    const pills = floaters.filter((f) => rectOf(f).width < vw * 0.9);
-    const underFloat = inked.filter(({ p, ink }) => !floating(p.el) && pills.some((f) => overlapOf(ink, rectOf(f)) >= ink.width * ink.height * 0.5)).map(({ p }) => p.text);
+    // Text under a floating control while the screen is at rest. A bar from edge to edge is where a list scrolls
+    // away; a pill over a row's words is not. Asked of what is painted, not of how it was placed: a React Native
+    // screen floats its button with an absolute box and not a fixed one (the first real build showed it), so
+    // the question is what lies on top at the middle of each text, and whether that is a control narrower
+    // than the screen.
+    const underFloat: string[] = [];
+    for (const { p, ink } of inked) {
+      const top = document.elementFromPoint(Math.min(vw - 1, Math.max(0, ink.left + ink.width / 2)), Math.min(vh - 1, Math.max(0, ink.top + ink.height / 2)));
+      if (!top || top === p.el || p.el.contains(top) || top.contains(p.el)) continue;
+      // The box that covers it: from what is on top outwards to the first thing with a fill, stopping at whatever holds the text too.
+      let cover: Element | null = null;
+      for (let up: Element | null = top; up && !up.contains(p.el); up = up.parentElement) {
+        if (fillOf(up)[3] > 0.5) {
+          cover = up;
+          break;
+        }
+      }
+      if (!cover) continue;
+      const r = rectOf(cover);
+      const control = cover.matches(PRESSABLE) || cover.closest(PRESSABLE) !== null || cover.querySelector(PRESSABLE) !== null;
+      if (control && r.width < vw * 0.9 && r.height <= vh * 0.4 && overlapOf(ink, r) >= ink.width * ink.height * 0.5) underFloat.push(p.text);
+    }
     // Two texts on top of each other, neither inside the other, with nothing opaque painted between them.
     const overlappingText: string[] = [];
     for (let i = 0; i < inked.length && overlappingText.length < 40; i++) {
