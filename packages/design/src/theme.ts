@@ -1,4 +1,4 @@
-import { contrastRatio, formatOklch, oklchToRgb, solveForContrast, toSrgbGamut, type Oklch } from './color.ts';
+import { contrastRatio, formatOklch, oklchToRgb, relativeLuminance, solveForContrast, toSrgbGamut, type Oklch } from './color.ts';
 import { contract as defaultContract, faceStack, faces, lineHeightFor, typeStepNames, type DesignContract, type Face } from './contract.ts';
 
 /** What makes one project's skin different from another's. Everything else is derived. */
@@ -24,6 +24,11 @@ export interface ThemeSeed {
   lightness?: number;
   /** The hue the neutrals lean toward. Left out: the brand's. Warm paper under a cold brand is a choice. */
   neutralHue?: number;
+  /**
+   * The hue of the second colour: the other side, when a product has two (me and them, in and out). Left out: it
+   * is derived from the brand's complement, see `secondHueFor`. Chosen only when the two sides are the product's.
+   */
+  secondHue?: number;
 }
 
 export type Corners = 'sharp' | 'soft' | 'round';
@@ -48,9 +53,18 @@ export const colorTokens = [
   'brand',
   'on-brand',
   'brand-soft',
+  'second',
+  'on-second',
+  'second-soft',
   'danger',
   'success',
   'warning',
+  'series-1',
+  'series-2',
+  'series-3',
+  'series-4',
+  'series-5',
+  'series-6',
 ] as const;
 export type ColorToken = (typeof colorTokens)[number];
 export type Palette = Record<ColorToken, Oklch>;
@@ -87,6 +101,42 @@ function fillAndText(want: Oklch, ink: Oklch, paper: Oklch, target: number): { f
   throw new Error(`no fill near lightness ${want.l.toFixed(2)} carries text at ${target}:1`);
 }
 
+/** The hues that mean state: danger, warning, success. No other colour of a theme may be mistaken for one. */
+const STATE_HUE = { danger: 27, warning: 75, success: 152 } as const;
+/** Two hues closer than this read as one colour. */
+const SAME_HUE_DEG = 30;
+const hueApart = (a: number, b: number): number => Math.min(Math.abs(a - b), 360 - Math.abs(a - b));
+
+/**
+ * The hue of a theme's second colour: the seed's own when it names one, else the brand's complement, moved by the
+ * least it takes to sit clear of the hues that mean state.
+ *
+ * A theme had one colour, so a screen with two sides (two players, in and out) drew one side in the brand and the
+ * other in white, and one whole card turned blue. The complement is the hue furthest from the brand, which is
+ * what "the other side" should be; a complement that lands on red, amber or green would say danger, warning or
+ * success instead.
+ */
+export function secondHueFor(seed: ThemeSeed): number {
+  if (seed.secondHue !== undefined) return seed.secondHue;
+  const complement = (seed.hue + 180) % 360;
+  const clear = (hue: number): boolean => Object.values(STATE_HUE).every((state) => hueApart(hue, state) >= SAME_HUE_DEG);
+  for (let move = 0; move <= 180; move++) {
+    for (const hue of [(complement + move) % 360, (complement - move + 360) % 360]) if (clear(hue)) return hue;
+  }
+  return complement;
+}
+
+/** The second colour is never louder than this, however vivid the brand: it marks a side, it does not compete. */
+const SECOND_MAX_CHROMA = 0.16;
+
+/**
+ * The data series: six hues a sixth of the wheel apart, starting at the brand's, at one chroma. Lightness
+ * alternates from one to the next, so neighbours are told apart by someone who cannot tell their hues apart.
+ * Both steps of each scheme hold 3:1 (WCAG 1.4.11) on every background of that scheme. On paper that puts the
+ * lighter step at 0.60: at 0.70, where a chart palette usually sits, the greens are 2.4:1 on the page.
+ */
+const SERIES = { count: 6, chroma: 0.14, lightness: { light: [0.48, 0.6], dark: [0.7, 0.82] } } as const;
+
 function palette(seed: ThemeSeed, mode: 'light' | 'dark', c: DesignContract): Palette {
   const neutral = (l: number): Oklch => ({ l, c: seed.neutralChroma, h: seed.neutralHue ?? seed.hue });
   const light = mode === 'light';
@@ -102,6 +152,20 @@ function palette(seed: ThemeSeed, mode: 'light' | 'dark', c: DesignContract): Pa
   const accent = text(seed.hue, seed.chroma);
   // The brand is the same colour in both schemes: it is the product's, not the page's.
   const brand = fillAndText({ l: seed.lightness ?? text(seed.hue, seed.chroma).l, c: seed.chroma, h: seed.hue }, neutral(0.13), neutral(0.995), c.contrast.text + MARGIN);
+  // The second colour is a fill like the brand, as light as the brand so the two sides weigh the same, and solved
+  // the same way for the text it carries.
+  const secondHue = secondHueFor(seed);
+  const secondChroma = Math.min(seed.chroma, SECOND_MAX_CHROMA);
+  const second = fillAndText({ l: brand.fill.l, c: secondChroma, h: secondHue }, neutral(0.13), neutral(0.995), c.contrast.text + MARGIN);
+  // Its wash is one more background text sits on. Text was solved against the hardest background there was, so
+  // this one is kept no harder than that: no darker than it on paper, no lighter than it in the dark. Nothing
+  // that was solved before there was a second colour moves.
+  const luminance = (colour: Oklch): number => relativeLuminance(oklchToRgb(colour));
+  let secondSoft = toSrgbGamut({ l: soft.l, c: Math.min(0.05, secondChroma * 0.35), h: secondHue });
+  for (let nudge = 0; nudge < 50 && (light ? luminance(secondSoft) < luminance(hardest) : luminance(secondSoft) > luminance(hardest)); nudge++) {
+    secondSoft = toSrgbGamut({ ...secondSoft, l: secondSoft.l + (light ? 0.002 : -0.002) });
+  }
+  const series = (n: number): Oklch => toSrgbGamut({ l: SERIES.lightness[mode][n % 2]!, c: SERIES.chroma, h: (seed.hue + (n * 360) / SERIES.count) % 360 });
   return {
     bg,
     surface,
@@ -117,9 +181,18 @@ function palette(seed: ThemeSeed, mode: 'light' | 'dark', c: DesignContract): Pa
     brand: brand.fill,
     'on-brand': brand.on,
     'brand-soft': soft,
-    danger: text(27, 0.17),
-    success: text(152, 0.13),
-    warning: text(75, 0.13),
+    second: second.fill,
+    'on-second': second.on,
+    'second-soft': secondSoft,
+    danger: text(STATE_HUE.danger, 0.17),
+    success: text(STATE_HUE.success, 0.13),
+    warning: text(STATE_HUE.warning, 0.13),
+    'series-1': series(0),
+    'series-2': series(1),
+    'series-3': series(2),
+    'series-4': series(3),
+    'series-5': series(4),
+    'series-6': series(5),
   };
 }
 
@@ -220,7 +293,7 @@ export function renderThemeCss(theme: Theme, c: DesignContract = defaultContract
 
   return `/* Generated by @studio-zero/design from the design contract. Edit the seed, not this file. */
 /* generator ${THEME_GENERATOR} */
-/* seed: hue ${theme.seed.hue}, chroma ${theme.seed.chroma},${theme.seed.lightness === undefined ? '' : ` brand lightness ${theme.seed.lightness},`} neutral chroma ${theme.seed.neutralChroma}${theme.seed.neutralHue === undefined ? '' : ` toward hue ${theme.seed.neutralHue}`}, ${theme.seed.corners} corners, set in ${c.fonts.face[face][0]} */
+/* seed: hue ${theme.seed.hue}, chroma ${theme.seed.chroma},${theme.seed.lightness === undefined ? '' : ` brand lightness ${theme.seed.lightness},`} neutral chroma ${theme.seed.neutralChroma}${theme.seed.neutralHue === undefined ? '' : ` toward hue ${theme.seed.neutralHue}`}, ${theme.seed.corners} corners, set in ${c.fonts.face[face][0]}${theme.seed.secondHue === undefined ? '' : `, second colour at hue ${theme.seed.secondHue}`} */
 
 ${fontFace}:root {
   color-scheme: light dark;
@@ -252,7 +325,9 @@ ${vars(theme.light, '  ')}
 
 @theme inline {
   /* Semantic colours only. Text tokens are solved to WCAG AAA (${c.contrast.text}:1) on every background token.
-     brand is a fill (the product's own colour, as bright as it needs to be) and on-brand the text it carries. */
+     brand is a fill (the product's own colour, as bright as it needs to be) and on-brand the text it carries.
+     second and on-second are the same for the other side, when a product has two. series-1 to series-${SERIES.count} are
+     the colours of data, used in that order: each holds ${c.contrast.nonText}:1 on every background. */
   --color-*: initial;
 ${colorTokens.map((t) => `  --color-${t}: var(--sz-${t});`).join('\n')}
 

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { referenceSeed, referenceThemePath, renderReferenceTheme } from '../src/build.ts';
-import { KOREAN_TEXT_SLOP_PATTERNS, THEME_GENERATOR, colorTokens, contract, contractFamilies, contrastRatio, cornerRadii, createTheme, faceStack, faces, hostedFamilies, isAllowedDuration, isAllowedRadius, isDisplayInProportion, isOnTypeScale, lineHeightFor, lintInterfaceText, lintSources, mobileTokens, oklchToRgb, parseHex, renderThemeCss, seedFromName, textSlopScore, typeStepNames, type InterfaceText, type Palette } from '../src/index.ts';
+import { KOREAN_TEXT_SLOP_PATTERNS, THEME_GENERATOR, colorTokens, contract, contractFamilies, contrastRatio, cornerRadii, createTheme, faceStack, faces, hostedFamilies, isAllowedDuration, isAllowedRadius, isDisplayInProportion, isOnTypeScale, lineHeightFor, lintInterfaceText, lintSources, mobileTokens, oklchToRgb, parseHex, renderThemeCss, secondHueFor, seedFromName, textSlopScore, typeStepNames, type InterfaceText, type Palette } from '../src/index.ts';
 
 const TEXT_TOKENS = ['fg', 'fg-muted', 'accent', 'danger', 'success', 'warning'] as const;
 const BACKGROUNDS = ['bg', 'surface', 'sunken'] as const;
@@ -255,6 +255,67 @@ test('the sheet points at the one file of its face, beside itself, unless it is 
     assert.equal(tokens, css.replace(/@font-face \{[^}]+\}\n\n/, ''), 'and is otherwise the same sheet');
     assert.deepEqual(lintSources([{ path: 'src/styles/theme.css', content: css }]), []);
   }
+});
+
+const SERIES = ['series-1', 'series-2', 'series-3', 'series-4', 'series-5', 'series-6'] as const;
+const STATE_HUES = [27, 75, 152];
+const hueApart = (a: number, b: number): number => Math.min(Math.abs(a - b), 360 - Math.abs(a - b));
+
+test('a second colour for the other side: derived clear of the state colours, a fill that carries its text, with a wash text holds on', () => {
+  for (let hue = 0; hue < 360; hue += 15) {
+    for (const chroma of [0.12, 0.2, 0.28]) {
+      const second = secondHueFor({ hue, chroma, neutralChroma: 0.005, corners: 'soft' });
+      for (const state of STATE_HUES) assert.ok(hueApart(second, state) >= 30, `brand hue ${hue}: the second colour at ${second} would read as the state colour at ${state}`);
+      assert.ok(hueApart(second, hue) >= 60, `brand hue ${hue}: the second colour at ${second} is too near the brand to be the other side`);
+      for (const lightness of [undefined, 0.4, 0.55, 0.75]) {
+        const theme = createTheme({ hue, chroma, neutralChroma: 0.005, corners: 'soft', ...(lightness === undefined ? {} : { lightness }) });
+        for (const mode of ['light', 'dark'] as const) {
+          const p = theme[mode];
+          const at = `${mode} hue ${hue} chroma ${chroma} lightness ${lightness}`;
+          assert.ok(ratio(p, 'on-second', 'second') >= contract.contrast.text, `${at}: on-second on second = ${ratio(p, 'on-second', 'second').toFixed(2)}`);
+          for (const token of TEXT_TOKENS) assert.ok(ratio(p, token, 'second-soft') >= contract.contrast.text, `${at}: ${token} on second-soft = ${ratio(p, token, 'second-soft').toFixed(2)}`);
+          assert.equal(p.second.h, second, `${at}: the fill is at the derived hue`);
+          assert.ok(p.second.c <= Math.min(chroma, 0.16) + 1e-9, `${at}: the second colour is no louder than the brand, and never past 0.16`);
+          assert.ok(Math.abs(p.second.l - p.brand.l) <= 0.17, `${at}: the two sides weigh about the same (${p.second.l.toFixed(2)} beside ${p.brand.l.toFixed(2)})`);
+        }
+      }
+    }
+  }
+  // Where the complement is already clear it is the complement; where it is not, it moves by the least it takes.
+  assert.equal(secondHueFor({ hue: 60, chroma: 0.2, neutralChroma: 0, corners: 'soft' }), 240);
+  assert.equal(secondHueFor({ hue: 255, chroma: 0.2, neutralChroma: 0, corners: 'soft' }), 105, 'the complement at 75 is the warning hue: moved to the nearer clear side');
+  assert.equal(secondHueFor({ hue: 332, chroma: 0.2, neutralChroma: 0, corners: 'soft' }), 182, 'the complement at 152 is the success hue: as far to either side, and it goes on round');
+  assert.equal(secondHueFor({ hue: 320, chroma: 0.2, neutralChroma: 0, corners: 'soft' }), 122, 'and back when that is nearer');
+  // A seed that names its second colour keeps it, whatever it is.
+  const chosen = { hue: 48, chroma: 0.19, neutralChroma: 0.004, corners: 'round', secondHue: 200 } as const;
+  assert.equal(secondHueFor(chosen), 200);
+  assert.equal(createTheme(chosen).light.second.h, 200);
+  assert.match(renderThemeCss(createTheme(chosen)), /seed: hue 48, [^\n]*round corners, set in Pretendard Variable, second colour at hue 200 \*\//);
+  // A seed from before there was a second colour keeps every token it had, value for value.
+  const before = renderThemeCss(createTheme(referenceSeed));
+  for (const [token, value] of [['fg-muted', 'oklch(41.81% 0.0050 168.0)'], ['accent', 'oklch(40.84% 0.0828 168.0)'], ['brand-soft', 'oklch(94.00% 0.0420 168.0)'], ['danger', 'oklch(43.94% 0.1700 27.0)']] as const) assert.ok(before.includes(`--sz-${token}: ${value};`), token);
+});
+
+test('six colours for data: spread from the brand, seen on every surface, and told apart by lightness as well as hue', () => {
+  for (let hue = 0; hue < 360; hue += 15) {
+    for (const chroma of [0.12, 0.2, 0.28]) {
+      const theme = createTheme({ hue, chroma, neutralChroma: 0.005, corners: 'soft' });
+      for (const mode of ['light', 'dark'] as const) {
+        const p = theme[mode];
+        assert.equal(p['series-1'].h, hue, 'the series starts at the brand\'s hue');
+        SERIES.forEach((token, i) => {
+          // A mark of data is a meaningful graphic (WCAG 1.4.11) wherever it is drawn: on paper, on a surface, in a well, on a wash.
+          for (const bg of [...BACKGROUNDS, 'brand-soft', 'second-soft'] as const) assert.ok(ratio(p, token, bg) >= contract.contrast.nonText, `${mode} hue ${hue}: ${token} on ${bg} = ${ratio(p, token, bg).toFixed(2)}`);
+          assert.equal(Math.round(hueApart(p[token].h, hue)), Math.min(i * 60, 360 - i * 60), `${token} is ${i} sixths of the way round`);
+          const next = p[SERIES[(i + 1) % SERIES.length]!];
+          assert.ok(Math.abs(p[token].l - next.l) >= 0.1, `${mode} hue ${hue}: ${token} and its neighbour differ by ${Math.abs(p[token].l - next.l).toFixed(3)} in lightness`);
+        });
+      }
+    }
+  }
+  const css = renderThemeCss(createTheme(referenceSeed));
+  for (const utility of ['second', 'on-second', 'second-soft', 'series-1', 'series-3', 'series-6']) assert.ok(css.includes(`--color-${utility}: var(--sz-${utility});`), `bg-${utility} compiles`);
+  assert.equal(colorTokens.filter((token) => /^series-\d$/.test(token)).length, 6);
 });
 
 const t = (role: InterfaceText['role'], text: string): InterfaceText => ({ role, text });

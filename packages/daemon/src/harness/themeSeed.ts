@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { contract, createTheme, faceFiles, faces, formatOklch, renderThemeCss, seedFromName, type Face, type ThemeSeed } from '@studio-zero/design';
+import { contract, createTheme, faceFiles, faces, formatOklch, renderThemeCss, secondHueFor, seedFromName, type Face, type ThemeSeed } from '@studio-zero/design';
 import type { Project } from '@studio-zero/protocol';
 import type { OrbStackManager } from '../sandbox/OrbStackManager.ts';
 import { FONT_DIR, fontFile } from './fontKit.ts';
@@ -31,6 +31,12 @@ export const ThemeChoice = z.object({
   neutral_hue: z.number().min(0).max(360).optional().describe('The hue the paper and ink lean toward, barely. Leave out to follow the brand; set it to about 250 for a cool slate grey.'),
   neutral_chroma: z.number().min(0).max(0.005).describe('How much the neutrals lean: 0 pure grey, 0.005 the faintest lean the paper may have. Paper that reads as cream, peach or yellow, or as any colour at all, is not available: the canvas stays near-white (or a cool grey) so the brand is what is seen.'),
   corners: z.enum(['sharp', 'soft', 'round']).describe('The shape of the product: sharp (0 to 12px), soft (4 to 20px) or round (6 to 30px).'),
+  second_hue: z
+    .number()
+    .min(0)
+    .max(360)
+    .optional()
+    .describe('The hue of a second colour, in OKLCH degrees. Choose it only when the product has two sides or two kinds to tell apart (two players, mine and theirs, in and out): it is the other side, as the brand is this one. Otherwise leave it out: one is derived from the brand, kept clear of the red, amber and green that mean state.'),
   face: z
     .enum(faces)
     .describe('The one typeface the whole product is set in, titles included (a title is the same face, heavier). pretendard: neutral, for products dense with information. suit: geometric and crisp. suite: wide and soft, for consumer products. There is no serif, no second face and no italic to choose.'),
@@ -38,7 +44,7 @@ export const ThemeChoice = z.object({
 });
 export type ThemeChoice = z.infer<typeof ThemeChoice>;
 
-const toSeed = (c: ThemeChoice): ThemeSeed => ({ hue: c.hue, chroma: c.chroma, lightness: c.lightness, neutralChroma: c.neutral_chroma, ...(c.neutral_hue === undefined ? {} : { neutralHue: c.neutral_hue }), corners: c.corners, face: c.face });
+const toSeed = (c: ThemeChoice): ThemeSeed => ({ hue: c.hue, chroma: c.chroma, lightness: c.lightness, neutralChroma: c.neutral_chroma, ...(c.neutral_hue === undefined ? {} : { neutralHue: c.neutral_hue }), corners: c.corners, face: c.face, ...(c.second_hue === undefined ? {} : { secondHue: c.second_hue }) });
 
 /**
  * What a theme is, ready to be written: the decision, the stylesheet generated from it, and the face the sheet
@@ -72,9 +78,11 @@ export function chosenTheme(choice: ThemeChoice): ThemeFiles & { report: string 
   const theme = createTheme(seed);
   const { brand, accent, bg } = theme.light;
   const moved = Math.abs(brand.l - choice.lightness) > 0.004 ? ` The brand was asked for at lightness ${choice.lightness} and set at ${brand.l.toFixed(2)}: at the lightness asked, neither dark nor light text holds on it.` : '';
+  const where = choice.second_hue === undefined ? `derived from the brand, at hue ${Math.round(secondHueFor(seed))} (its complement, kept clear of the red, amber and green that mean state): choose second_hue yourself only if the product has two sides or kinds` : 'at the hue you chose: the other side, as the brand is this one';
+  const second = ` second ${formatOklch(theme.light.second)} carries text ${formatOklch(theme.light['on-second'])}, ${where}. series-1 to series-6 are the colours of data, used in that order.`;
   return {
     ...themeFiles(seed, choice.source),
-    report: `Theme set. brand ${formatOklch(brand)} carries text ${formatOklch(theme.light['on-brand'])}; brand-soft ${formatOklch(theme.light['brand-soft'])} is its wash; accent (the brand's hue as a text colour) is ${formatOklch(accent)} on ${formatOklch(bg)}.${moved} The product is set in ${contract.fonts.face[choice.face][0]}, titles included: its file is already in the project at ${FONT_DIR}/${faceFiles[choice.face].file} and the stylesheet loads it, so there is no font to install. The stylesheet has every token for light and dark: read it and use those values.`,
+    report: `Theme set. brand ${formatOklch(brand)} carries text ${formatOklch(theme.light['on-brand'])}; brand-soft ${formatOklch(theme.light['brand-soft'])} is its wash; accent (the brand's hue as a text colour) is ${formatOklch(accent)} on ${formatOklch(bg)}.${moved}${second} The product is set in ${contract.fonts.face[choice.face][0]}, titles included: its file is already in the project at ${FONT_DIR}/${faceFiles[choice.face].file} and the stylesheet loads it, so there is no font to install. The stylesheet has every token for light and dark: read it and use those values.`,
   };
 }
 
@@ -88,6 +96,7 @@ const StoredSeed = z.looseObject({
   lightness: z.number().min(0).max(1).optional(),
   neutralChroma: z.number().min(0).max(0.4),
   neutralHue: z.number().min(0).max(360).optional(),
+  secondHue: z.number().min(0).max(360).optional(),
   corners: z.enum(['sharp', 'soft', 'round']),
   face: z.enum(faces).optional(),
   source: z.string().optional(),
@@ -113,8 +122,8 @@ export function regeneratedTheme(storedJson: string): ThemeFiles | null {
   }
   const parsed = StoredSeed.safeParse(value);
   if (!parsed.success) return null;
-  const { display: _display, source, hue, chroma, lightness, neutralChroma, neutralHue, corners, face, ...kept } = parsed.data;
-  const seed: ThemeSeed = { hue, chroma, neutralChroma, corners, ...(lightness === undefined ? {} : { lightness }), ...(neutralHue === undefined ? {} : { neutralHue }), ...(face === undefined ? {} : { face }) };
+  const { display: _display, source, hue, chroma, lightness, neutralChroma, neutralHue, secondHue, corners, face, ...kept } = parsed.data;
+  const seed: ThemeSeed = { hue, chroma, neutralChroma, corners, ...(lightness === undefined ? {} : { lightness }), ...(neutralHue === undefined ? {} : { neutralHue }), ...(secondHue === undefined ? {} : { secondHue }), ...(face === undefined ? {} : { face }) };
   try {
     return themeFiles(seed, source, kept);
   } catch {
