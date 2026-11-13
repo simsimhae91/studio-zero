@@ -37,7 +37,7 @@ test('engines are told to ask the platform first, and a mock-up may be made of t
   assert.match(web, /Platform first\. Before you hand-write a behaviour the browser may already have, ask web_guidance/);
   assert.match(web, /run web_guidance with action "scan" and act on what holds under its own keep and drop conditions; what it lists is provisional/);
   assert.ok(!codingSystemPrompt('mobile-expo').includes('Platform first'), 'the guidance is the web platform\'s');
-  for (const brief of [MOCKUP_RULES, directionBrief({ file: 'docs/mockups/a.html', themeFile: 't', seed: 's', scene: 'sc', row: 'r', others: 'o' })]) {
+  for (const brief of [MOCKUP_RULES, directionBrief({ file: 'docs/mockups/a.html', themeFile: 't', seed: 's', scene: 'sc', row: 'r', others: 'o', template: 'web-vite-react' })]) {
     assert.match(brief, /<details name="\.\.\."> for one panel open at a time\), a popover opened by a button's popovertarget/);
     assert.match(brief, /@starting-style with transition-behavior: allow-discrete/);
     assert.match(brief, /a guide that needs a script does not apply to a mock-up/);

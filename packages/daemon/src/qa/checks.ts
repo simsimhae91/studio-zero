@@ -15,8 +15,8 @@ export interface CheckContext {
   scope: 'full' | 'color-only';
   /** What the product is built as, when the caller knows: some rules hold for a phone app and not for a web page. */
   template?: Template;
-  /** How the pixels of the first screenful divide (`colourShares`), when a picture of it was taken. */
-  shares?: { saturated: number; dark: number };
+  /** How the pixels of the first screenful divide (`colourShares`), when a picture of it was taken. `coloured` is absent from a caller that counted before it was. */
+  shares?: { saturated: number; dark: number; coloured?: number };
   /** Whether this is a screen a person meets the product on: what a screen is made of is asked of those only. */
   firstScreen?: boolean;
 }
@@ -282,6 +282,18 @@ export function runDomChecks(digest: PageDigest, ctx: CheckContext, c: DesignCon
         largest('saturated'),
       );
     }
+    // E5: a phone app's first screen opens on colour. Pictures are left out of the count, so a screen that is
+    // mostly photographs is not held to it.
+    const pictures = (digest.composition?.mediaBoxes ?? []).reduce((sum, [, , w, h]) => sum + w * h, 0) / Math.max(1, digest.width * digest.height);
+    if (ctx.template === 'mobile-expo' && ctx.viewport === 'iphone-15-pro' && ctx.firstScreen && ctx.shares.coloured !== undefined && ctx.shares.coloured < COLOUR_LIMITS.grey && pictures < COLOUR_LIMITS.pictures) {
+      add(
+        'color/grey-screen',
+        'color',
+        'major',
+        `${percent(ctx.shares.coloured)}% of the first screen is colour: a grey screen. A hero begins at ${percent(COLOUR_LIMITS.grey)}%.`,
+        'E5: Open with a band or a hero card in bg-brand (text-on-brand) that holds the product\'s state and its drawing, over a fifth to a third of the first screen. Tint icon tiles and badges with washes of the series colours, and give the other side the second colour.',
+      );
+    }
     // A band is dark against a light screen. A product that is dark all over, or a viewer laid over the whole
     // screen, has dark paper, and is not counted. A web page may carry one inverted section, and nothing
     // measured tells a page from an app, so this is held on the phone app's phone screen only.
@@ -315,6 +327,14 @@ export const COLOUR_LIMITS = {
    * 0.23 to 0.34 here.
    */
   flood: 0.45,
+  /**
+   * Colour of any strength over less of a phone app's first screen than this, with no pictures to carry it, is
+   * a grey screen: the handbook's hero (E5) begins at a fifth. With the collector's count at the audit's size,
+   * the pages the owner chose measure 0.29 to 0.38 and the ones they called flat 0 to 0.14.
+   */
+  grey: 0.2,
+  /** Pictures over this share of the screen carry its colour themselves (a feed of photographs), and it is not asked for twice. */
+  pictures: 0.15,
   /**
    * Near-black over more of a light phone screen than this is a band. The page that showed the need for the
    * rule measures 0.20 here (its band runs on below the first screenful) and 0.30 at the taller size; pages

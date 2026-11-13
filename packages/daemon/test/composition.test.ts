@@ -244,6 +244,7 @@ const sandboxWith = (files: Record<string, string>): OrbStackManager =>
 const NOBODY = { availability: async () => ({ status: 'off', paths: [], reason: 'no reviewer in this test' }), review: async () => Promise.reject(new Error('nobody is asked')) } as unknown as QaVisionBridge;
 const phoneProject = { ...sampleProject('duel'), template: 'mobile-expo' } as const;
 const BOTH = ['color/dark-band', 'color/flood'];
+const GREY = 'color/grey-screen';
 
 /** A picture that is one strong colour all over, carried inside the page: to a count of pixels, what a photograph is. */
 const PICTURE = `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="40" height="20"><rect width="40" height="20" fill="#0051b2"/></svg>')}`;
@@ -264,9 +265,9 @@ test('the pixel count: the shares of a picture that are colour at strength and n
     await page.setContent('<body style="margin:0;background:#f8fafd"><div style="height:100px;background:#0051b2"></div><div style="height:50px;background:#000"></div></body>');
     const png = await page.screenshot({ type: 'png' });
     await context.close();
-    assert.deepEqual(await colourShares(browser, png, { mask: [], scale: 2 }), { saturated: 0.5, dark: 0.25 });
-    assert.deepEqual(await colourShares(browser, png, { mask: [[0, 0, 200, 100]], scale: 2 }), { saturated: 0, dark: 0.5 }, 'shares are of the pixels left when the mask is taken out');
-    assert.deepEqual(await colourShares(browser, png, { mask: [[-50, -50, 900, 900]], scale: 2 }), { saturated: 0, dark: 0 }, 'a picture that is all mask has nothing to count');
+    assert.deepEqual(await colourShares(browser, png, { mask: [], scale: 2 }), { saturated: 0.5, dark: 0.25, coloured: 0.5 });
+    assert.deepEqual(await colourShares(browser, png, { mask: [[0, 0, 200, 100]], scale: 2 }), { saturated: 0, dark: 0.5, coloured: 0 }, 'shares are of the pixels left when the mask is taken out');
+    assert.deepEqual(await colourShares(browser, png, { mask: [[-50, -50, 900, 900]], scale: 2 }), { saturated: 0, dark: 0, coloured: 0 }, 'a picture that is all mask has nothing to count');
     await assert.rejects(colourShares(browser, Buffer.from('not a picture'), { mask: [], scale: 1 }), 'a picture that cannot be read is an error, not a clean count');
     assert.equal(browser.contexts().length, 0, 'the page the count was made on is closed');
   } finally {
@@ -282,10 +283,19 @@ test('colour by the pixel, through the auditor: a flood of brand and a dark band
     const { store, events } = d.daemon;
     store.insertProject(phoneProject);
     const auditor = new VisualAuditor({ config: d.config, store, events, browser: localBrowser(browser), vision: NOBODY, clock: () => 1000, log: quietLog });
-    const measured = async (change: Change, project: Project = phoneProject): Promise<Finding[]> => (await auditor.measurePages({ project, taskId: null, pages: [{ route: `${MOCKUP_DIR}/a.html`, html: withFaces(screen(change)) }] })).findings.filter((f) => f.rule.startsWith('color/'));
+    const measured = async (change: Change, project: Project = phoneProject): Promise<Finding[]> => (await auditor.measurePages({ project, taskId: null, pages: [{ route: `${MOCKUP_DIR}/a.html`, html: withFaces(screen(change)) }] })).findings.filter((f) => f.rule.startsWith('color/') && f.rule !== GREY);
+    const grey = async (change: Change, project: Project = phoneProject): Promise<Finding[]> => (await auditor.measurePages({ project, taskId: null, pages: [{ route: `${MOCKUP_DIR}/a.html`, html: withFaces(screen(change)) }] })).findings.filter((f) => f.rule === GREY);
     const atPhone = (findings: readonly Finding[]): string[] => rules(findings.filter((f) => f.viewport === 'iphone-15-pro'));
 
     assert.deepEqual(rules(await measured({})), [], 'the dock\'s one button is colour where colour belongs');
+
+    // E5: the same screen has one button of colour and no hero. On the phone's first screen that is a grey screen.
+    const plain = await grey({});
+    assert.deepEqual(plain.map((f) => [f.viewport, f.severity]), [['iphone-15-pro', 'major']]);
+    assert.match(plain[0]!.message, /^\d% of the first screen is colour: a grey screen\. A hero begins at 20%\.$/);
+    assert.ok(plain[0]!.fix!.startsWith('E5: '), plain[0]!.fix!);
+    assert.deepEqual(await grey(PANEL), [], 'a hero in the brand over a quarter of the screen');
+    assert.deepEqual(await grey({ css: '.panel{display:block;width:100%;height:200px;border-radius:8px}', extra: `<img class="panel" alt="새벽 산길" src="${PICTURE}">` }), [], 'a photograph over a quarter of the screen carries its own colour');
 
     // A brand panel over a quarter of the first screen is a hero, which is where strong colour lives (C2).
     assert.deepEqual(rules(await measured(PANEL)), [], 'one hero in the brand is inside the budget');
@@ -318,6 +328,7 @@ test('colour by the pixel, through the auditor: a flood of brand and a dark band
     const web = { ...sampleProject('quote'), id: 'prj_quote_web' };
     store.insertProject(web);
     assert.deepEqual(rules(await measured(BAND, web)), []);
+    assert.deepEqual(await grey({}, web), [], 'and so is the hero: a web product is not held to it');
 
     // A measurement is not an audit: the picture it counted is not kept, and nothing is recorded.
     assert.deepEqual(store.listAudits(phoneProject.id, 10), []);

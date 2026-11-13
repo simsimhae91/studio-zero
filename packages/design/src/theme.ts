@@ -33,9 +33,13 @@ export interface ThemeSeed {
 
 export type Corners = 'sharp' | 'soft' | 'round';
 
-/** The radius steps of each corner style, in px: sm, md, lg, xl. `round` is the organic end: capsules and deep curves. */
+/**
+ * The radius steps of each corner style, in px: sm, md, lg, xl. `round` is the organic end: capsules and deep
+ * curves. Every style's xl is 16px or more: a card is rounded-xl (the handbook's rule E4), and the look the owner
+ * chose has no card tighter than that. `sharp` was 0, 4, 8, 12 until then.
+ */
 export const cornerRadii: Record<Corners, { sm: number; md: number; lg: number; xl: number }> = {
-  sharp: { sm: 0, md: 4, lg: 8, xl: 12 },
+  sharp: { sm: 2, md: 6, lg: 10, xl: 16 },
   soft: { sm: 4, md: 8, lg: 12, xl: 20 },
   round: { sm: 6, md: 14, lg: 22, xl: 30 },
 };
@@ -246,7 +250,7 @@ const px = (n: number): string => `${n / 16}rem`;
  * goes up and the studio regenerates the older sheet from the project's stored seed instead of auditing it
  * against rules it was never written for.
  */
-export const THEME_GENERATOR = 3;
+export const THEME_GENERATOR = 4;
 const GENERATOR_LINE = /^\/\* generator (\d+) \*\/$/m;
 
 /** The generator a stylesheet says wrote it; 0 for a sheet from before sheets said. */

@@ -193,7 +193,7 @@ test('a design task is asked for at least two drawn directions, and ends by putt
   assert.ok(IDEATION_REQUIRED_FILES.includes(SCREEN_SPEC_FILE), 'the screen spec is owed like the other documents');
   // What a mock-up is asked to be, said to the engine that draws one direction and to one that draws them all:
   // something that works, with something to look at, in the product's own words, and measured.
-  const one = directionBrief({ file: `${MOCKUP_DIR}/b.html`, themeFile: directionThemeFile('b'), seed: 'SEED', scene: 'SCENE', row: 'ROW', others: 'OTHERS' });
+  const one = directionBrief({ file: `${MOCKUP_DIR}/b.html`, themeFile: directionThemeFile('b'), seed: 'SEED', scene: 'SCENE', row: 'ROW', others: 'OTHERS', template: 'mobile-expo' });
   for (const brief of [one, MOCKUP_RULES]) {
     assert.match(brief, /no scripts, no external requests/);
     assert.match(brief, /The page opens in the state before the person acts, never frozen in the moment after/);

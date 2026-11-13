@@ -896,6 +896,7 @@ export class Harness {
           scene: untrusted('sandbox-output', scene.trim(), { file: DIRECTIONS_FILE, field: 'scene' }),
           row: untrusted('sandbox-output', renderDirection(row), { file: DIRECTIONS_FILE, direction: row.id }),
           others: untrusted('sandbox-output', others, { file: DIRECTIONS_FILE, field: 'others' }),
+          template: project.template,
         }),
       );
     };

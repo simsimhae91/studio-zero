@@ -156,7 +156,7 @@ test('the engines are told that colour is chosen from the subject, through the t
   assert.match(prompt, /bg-brand with text-on-brand/);
   // Each direction has a look of its own: said in the table it is drawn from, and recorded in the page that is drawn.
   assert.match(IDEATION_BRIEF, /"theme": the palette and shape that belong to that concept, with the same fields set_theme takes/);
-  assert.match(directionBrief({ file: 'docs/mockups/a.html', themeFile: '.studio-zero/themes/a.css', seed: '{}', scene: 's', row: 'r', others: 'o' }), /copy that file's custom properties into the page's :root[\s\S]*<meta name="theme-seed"/);
+  assert.match(directionBrief({ file: 'docs/mockups/a.html', themeFile: '.studio-zero/themes/a.css', seed: '{}', scene: 's', row: 'r', others: 'o', template: 'mobile-expo' }), /copy that file's custom properties into the page's :root[\s\S]*<meta name="theme-seed"/);
   assert.match(MOCKUP_RULES, /For each direction call set_theme with a palette and a shape that belong to that concept[\s\S]*<meta name="theme-seed"/, 'and the same when one engine draws them all');
   assert.match(prompt, /using the seed the page records in its theme-seed meta tag/, 'the build takes the approved page\'s look');
   assert.match(chosenTheme(DIET).json, /"source": "2주 동안/);

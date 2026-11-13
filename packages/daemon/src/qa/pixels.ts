@@ -3,11 +3,13 @@ import { z } from 'zod';
 
 /**
  * What a pixel is counted as, in HSL terms. Colour at strength is neither a tint of the paper nor an ink:
- * saturated, and of middling lightness. Near-black is what an inverted band is painted in.
+ * saturated, and of middling lightness. Near-black is what an inverted band is painted in. `coloured` is the
+ * wider cut the design lab laid on the owner's references: any colour a person would call a colour, a deep
+ * brand green included, which the cut for strength leaves out.
  */
-export const PIXEL_CUTS = { saturation: 0.45, lightness: [0.2, 0.8], dark: 0.12 } as const;
+export const PIXEL_CUTS = { saturation: 0.45, lightness: [0.2, 0.8], dark: 0.12, coloured: { saturation: 0.35, lightness: [0.15, 0.85] } } as const;
 
-const Shares = z.object({ saturated: z.number().min(0).max(1), dark: z.number().min(0).max(1) });
+const Shares = z.object({ saturated: z.number().min(0).max(1), dark: z.number().min(0).max(1), coloured: z.number().min(0).max(1) });
 export type ColourShares = z.infer<typeof Shares>;
 
 /** One sRGB colour, 0 to 1 a channel, by the cuts the pixel count uses: so a finding can point at the surface the count was mostly of. */
@@ -24,7 +26,7 @@ export function pixelKind(rgb: readonly [number, number, number]): 'saturated' |
  * Runs in a blank page (serialised by Playwright, so it must not reference anything outside itself): how the
  * pixels of one picture divide, with the boxes of `mask` left out of the count.
  */
-async function countPixels(input: { b64: string; mask: number[][]; scale: number; cuts: { saturation: number; lightness: readonly [number, number]; dark: number } }): Promise<unknown> {
+async function countPixels(input: { b64: string; mask: number[][]; scale: number; cuts: { saturation: number; lightness: readonly [number, number]; dark: number; coloured: { saturation: number; lightness: readonly [number, number] } } }): Promise<unknown> {
   const picture = new Image();
   picture.src = `data:image/png;base64,${input.b64}`;
   await picture.decode();
@@ -42,6 +44,7 @@ async function countPixels(input: { b64: string; mask: number[][]; scale: number
   let counted = 0;
   let saturated = 0;
   let dark = 0;
+  let coloured = 0;
   // Every other pixel each way: a quarter of them says the same as all of them, and the count is of a whole screen.
   for (let row = 0; row < height; row += 2) {
     for (let col = 0; col < width; col += 2) {
@@ -54,10 +57,11 @@ async function countPixels(input: { b64: string; mask: number[][]; scale: number
       counted += 1;
       if (lightness < input.cuts.dark) dark += 1;
       else if (saturation > input.cuts.saturation && lightness > input.cuts.lightness[0] && lightness < input.cuts.lightness[1]) saturated += 1;
+      if (saturation > input.cuts.coloured.saturation && lightness > input.cuts.coloured.lightness[0] && lightness < input.cuts.coloured.lightness[1]) coloured += 1;
     }
   }
   const share = (n: number): number => (counted === 0 ? 0 : Math.round((n / counted) * 1000) / 1000);
-  return { saturated: share(saturated), dark: share(dark) };
+  return { saturated: share(saturated), dark: share(dark), coloured: share(coloured) };
 }
 
 /**

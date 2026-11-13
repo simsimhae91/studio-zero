@@ -82,6 +82,7 @@ if (mode === 'draw') {
       scene: untrusted('sandbox-output', table.scene.trim(), { file: DIRECTIONS_FILE, field: 'scene' }),
       row: untrusted('sandbox-output', renderDirection(row), { file: DIRECTIONS_FILE, direction: row.id }),
       others: untrusted('sandbox-output', others, { file: DIRECTIONS_FILE, field: 'others' }),
+      template,
     });
     writeFileSync(join(dir, 'prompt.md'), `# System prompt (the studio's, for a ${template} project)\n\n${system}\n\n# Your task\n\n${brief}${labNotes(ws, file, port)}`);
     process.stdout.write(`${dir}\n`);
