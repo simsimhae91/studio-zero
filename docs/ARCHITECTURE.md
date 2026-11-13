@@ -4,8 +4,8 @@ Studio Zero는 생각을 정리하고, 조사하고, 문서를 쓰고, 앱을 �
 이 문서는 저장소에 실제로 있는 코드를 기준으로 쓴 설계서다. 구현되지 않은 것과 검증되지 않은 것은 §17, §18에 따로 적었다.
 
 - 코드: `packages/protocol` (계약), `packages/design` (디자인 계약·테마·UI 린트·문장 린트), `packages/ax` (AX 키트: 블록 어휘·이벤트 스트림·렌더러·텔레메트리), `packages/daemon` (코어 데몬), `apps/desktop` (Tauri 2 클라이언트)
-- 규모: 소스 156개 파일 약 27,100줄
-- 테스트: `pnpm test` 192개 (그중 13개는 옵트인)
+- 규모: 소스 169개 파일 약 31,200줄
+- 테스트: `pnpm test` 215개 (그중 15개는 옵트인)
 - 런타임: Node.js 24 (개발은 TypeScript를 그대로 실행, 상시 가동은 `pnpm build`의 esbuild 번들), SQLite(`node:sqlite`), Fastify 5
 
 ## 1. 컨테이너 다이어그램 (C4 Level 2)
@@ -281,7 +281,7 @@ API 키는 선택 사항이다. 금고에 Anthropic 키가 없으면 데몬은 �
 
 ## 5. 프로토콜
 
-`packages/protocol/src/rpc.ts`의 테이블 하나가 서버 검증, 클라이언트 타입, 이 문서의 근거다. 메서드 79개, 이벤트 42종.
+`packages/protocol/src/rpc.ts`의 테이블 하나가 서버 검증, 클라이언트 타입, 이 문서의 근거다. 메서드 80개, 이벤트 42종.
 
 - 연결: `ws://127.0.0.1:49200/v1/ws`. 첫 프레임은 `{t:"hello", protocol, token, client}`. 5초 안에 오지 않거나 토큰이 틀리면 닫는다.
 - 프레임: 클라이언트 `hello | req | sub | unsub | terminal.data`, 서버 `ready | res | err | evt | sub_closed | terminal.output | terminal.exit`.
@@ -296,7 +296,7 @@ API 키는 선택 사항이다. 금고에 Anthropic 키가 없으면 데몬은 �
 
 ## 6. 데이터베이스
 
-`~/.studio-zero/studio-zero.db`, WAL, `STRICT` 테이블 30개(`db/schema.ts`). 마이그레이션은 전진 전용이다(현재 9단계).
+`~/.studio-zero/studio-zero.db`, WAL, `STRICT` 테이블 30개(`db/schema.ts`). 마이그레이션은 전진 전용이다(현재 11단계).
 
 | 영역 | 테이블 |
 |---|---|
@@ -836,7 +836,7 @@ pnpm sz task ledger build "미결제 청구서 화면을 만들어줘"
 
 ## 17. 검증 현황
 
-`pnpm typecheck`와 `pnpm test`가 통과한다: 192개 가운데 179개 통과, 13개는 옵트인이라 기본 실행에서 건너뛴다(실제 Keychain 1개, 실제 컨테이너 엔진 6개, 실제 구독 CLI 6개). 헤드리스 Chrome이 필요한 테스트는 Chrome이 없으면 건너뛴다. 옵트인 `SZ_TEST_ENGINE=1`은 이 Mac의 OrbStack에서 9개 하위 테스트가 모두 통과했다.
+`pnpm typecheck`와 `pnpm test`가 통과한다: 215개 가운데 200개 통과, 15개는 옵트인이라 기본 실행에서 건너뛴다(실제 Keychain 1개, 실제 컨테이너 엔진 6개, 실제 구독 CLI 8개). 헤드리스 Chrome이 필요한 테스트는 Chrome이 없으면 건너뛴다. 옵트인 `SZ_TEST_ENGINE=1`은 이 Mac의 OrbStack에서 9개 하위 테스트가 모두 통과했다.
 
 | 검증됨 | 방법 |
 |---|---|
