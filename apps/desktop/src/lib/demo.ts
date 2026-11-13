@@ -1,4 +1,4 @@
-import type { Approval, AuditReport, AxBlock, Checkpoint, Eval, EventBody, EventEnvelope, FileEntry, FlowTaskWalk, KnowledgeJob, LedgerEntry, Lesson, MethodName, ParamsOf, Project, ProposalCard, ResultOf, SandboxInfo, ScratchEntry, Scratchpad, ScreenSpec, Session, SubscriptionQuota, Task } from '@studio-zero/protocol';
+import type { Approval, AuditReport, AxBlock, Checkpoint, Eval, EventBody, EventEnvelope, FileEntry, FlowTaskWalk, KnowledgeJob, LedgerEntry, Lesson, MethodName, ParamsOf, Project, ProposalCard, ResultOf, SandboxInfo, ScratchEntry, Scratchpad, ScreenSpec, Session, SubscriptionQuota, Task, OwnerSettings } from '@studio-zero/protocol';
 import { matchesFilter } from '@studio-zero/protocol';
 import type { Backend } from './backend.ts';
 
@@ -426,6 +426,14 @@ const demoModels: Record<string, { id: string; label: string }[]> = {
   ].map(([id, label]) => ({ id: id!, label: label! })),
 };
 
+const demoSettings: OwnerSettings = {
+  ntfy: { enabled: true, server: 'https://ntfy.sh', topic: 'sz-7c1e0a44b9d2', commandTopic: 'sz-cmd-2f90d6c81a35' },
+  telegram: { enabled: false, allowedUserIds: [] },
+  slack: { enabled: false, allowedUserIds: [] },
+  budgets: { taskTokens: 2_000_000, projectDailyTokens: 20_000_000 },
+  approvals: { ttlSec: 3600 },
+};
+
 const handlers: Handlers = {
   'system.status': () => ({
     version: '0.1.0', protocol: 1, uptimeSec: 86_400, runtime: { context: 'orbstack', reachable: true, detail: '29.8.2 linux/arm64' }, relays: [{ id: 'telegram', state: 'connected' }, { id: 'slack', state: 'disabled' }, { id: 'ntfy', state: 'disabled' }], queue: { queued: 0, running: 1 },
@@ -480,6 +488,9 @@ const handlers: Handlers = {
           decisionLog: '# 결정 기록: 현장 기사용 청구서 앱\n\n## 1. 첫 사용자는 누구인가\n\n- 결정: 혼자 일하는 설비 기사\n- 결정한 쪽: 에이전트 (확신도 높음)\n- 기각한 대안:\n  - 5인 이상 업체의 경리 담당: 기존 회계 도구와 정면으로 겹칩니다.',
           readiness: { ready: false, missing: ['기획 명세의 "범위: 포함" 항목', '기획 명세의 "요구사항" 항목', '답하지 않은 질문 1건'] },
         },
+  'config.get': () => ({ settings: demoSettings, writable: true, restartRequired: false, supervised: true, file: '~/.studio-zero/config.json', logFile: '~/Library/Logs/studio-zero/daemon.log' }),
+  'config.set': (p) => ({ settings: p.settings, restartRequired: true }),
+  'system.restart': () => ({ accepted: true as const }),
   'knowledge.list': () => ({ jobs: [capexJob] }),
   'knowledge.get': () => ({ job: capexJob, markdown: capexBrief, report: null, lint: [] }),
   'ax.calibration': () => ({ levels: { high: { total: 14, overridden: 1 }, medium: { total: 9, overridden: 4 }, speculative: { total: 3, overridden: 2 } }, highDemoted: false }),

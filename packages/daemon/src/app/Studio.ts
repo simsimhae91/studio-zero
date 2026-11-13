@@ -794,6 +794,17 @@ export class Studio implements PromotionHost {
     return markdown === '' ? null : markdown;
   }
 
+  /**
+   * What a restart would cut short, as a sentence for the owner; null when nothing is in flight. A task that is
+   * interrupted is queued again and starts over, and a job or a note's turn is simply lost.
+   */
+  inFlight(): string | null {
+    const { running, queued } = this.#d.store.countTasks();
+    const jobs = this.#d.knowledge.list().filter((job) => job.state === 'running').length;
+    const parts = [running > 0 ? `진행 중인 작업 ${running}건` : null, queued > 0 ? `대기 중인 작업 ${queued}건` : null, jobs > 0 ? `조사·문서 작업 ${jobs}건` : null, this.#d.scratch.busy ? '생각 중인 작업 노트' : null].filter((part) => part !== null);
+    return parts.length === 0 ? null : parts.join(', ');
+  }
+
   archiveScratchpad(scratchId: string): Scratchpad {
     return this.#d.scratch.archive(scratchId);
   }

@@ -5,7 +5,7 @@ import type { Logger as PinoLogger } from 'pino';
 import type { WebSocket } from 'ws';
 import { z } from 'zod';
 import { ClientFrame, CloseCode, PROTOCOL_VERSION, isMethodName, matchesFilter, methods, type EventEnvelope, type EventFilter, type RpcErrorCode, type ServerFrame } from '@studio-zero/protocol';
-import { ConflictError, NotFoundError, UnavailableError } from '../app/errors.ts';
+import { ConflictError, LocalOnlyError, NotFoundError, UnavailableError } from '../app/errors.ts';
 import type { BridgeSessions } from '../bridge/BridgeSessions.ts';
 import type { Config } from '../config.ts';
 import type { Store } from '../db/Store.ts';
@@ -108,7 +108,7 @@ export class DaemonServer {
             if (origin !== undefined && !this.#d.config.listen.allowedOrigins.includes(origin)) return reply.code(403).send({ error: 'origin not allowed' });
           },
         },
-        (socket) => this.#connection(socket),
+        (socket, req) => this.#connection(socket, openedHere(req)),
       );
     });
 
@@ -160,7 +160,7 @@ export class DaemonServer {
     return loopback && typeof auth === 'string' && auth.startsWith('Bearer ') ? this.#d.bridgeSessions.resolve(auth.slice(7)) : null;
   }
 
-  #connection(socket: WebSocket): void {
+  #connection(socket: WebSocket, local: boolean): void {
     let authed = false;
     const subs = new Map<string, EventFilter>();
     let unsubscribeLive: (() => void) | null = null;
@@ -170,6 +170,7 @@ export class DaemonServer {
     const helloTimer = setTimeout(() => socket.close(CloseCode.helloTimeout, 'hello timeout'), HELLO_TIMEOUT_MS);
     const conn: ClientConnection = {
       id: newId('con'),
+      local,
       terminals: {
         output: (terminalId, data) => send({ t: 'terminal.output', terminalId, data }),
         exit: (terminalId, exitCode, reason) => send({ t: 'terminal.exit', terminalId, exitCode, reason }),
@@ -265,12 +266,33 @@ export class DaemonServer {
     if (err instanceof InvalidParamsError) return as('invalid_params');
     if (err instanceof NotFoundError) return as('not_found');
     if (err instanceof ConflictError) return as('conflict');
-    if (err instanceof PolicyDeniedError) return as('policy_denied');
+    if (err instanceof PolicyDeniedError || err instanceof LocalOnlyError) return as('policy_denied');
     if (err instanceof ApprovalDeniedError) return as('approval_denied');
     if (err instanceof UnavailableError || err instanceof SandboxError || err instanceof VaultError || err instanceof ModelRefusedError) return as('unavailable');
     this.#d.log.error({ method, err: errorMessage(err) }, 'rpc handler failed');
     return { code: 'internal', message: 'internal error; see the daemon log' };
   }
+}
+
+/** Headers a forwarder adds on the way in. A connection that carries one did not start on this machine. */
+const FORWARDED = ['x-forwarded-for', 'x-forwarded-host', 'x-forwarded-proto', 'forwarded', 'x-real-ip', 'via', 'cf-connecting-ip', 'cf-ray', 'tailscale-user-login', 'tailscale-user-name'];
+
+/**
+ * Whether a control connection was opened on this Mac itself.
+ *
+ * Remote access is this same listener behind Tailscale Serve or a Cloudflare Tunnel, so every connection
+ * arrives from loopback and the address alone says nothing. What tells them apart is what the forwarder leaves
+ * on the request: the name it was asked for (the tailnet or tunnel name, which has to be on `allowedHosts`
+ * to get in at all) and the forwarding headers it adds. Local means a loopback address, a loopback name, and
+ * none of those headers.
+ *
+ * A forwarder that adds nothing (an SSH port forward, a bare TCP proxy) passes as local. Setting one up takes
+ * a shell on this Mac, which is the same access as editing the file.
+ */
+export function openedHere(req: Pick<FastifyRequest, 'ip' | 'headers'>): boolean {
+  const host = (req.headers.host ?? '').toLowerCase().replace(/:\d+$/, '');
+  const loopback = req.ip === '127.0.0.1' || req.ip === '::1' || req.ip === '::ffff:127.0.0.1';
+  return loopback && LOOPBACK_HOSTS.includes(host) && FORWARDED.every((name) => req.headers[name] === undefined);
 }
 
 class UnknownMethodError extends Error {

@@ -736,3 +736,23 @@ export const CredentialMeta = z.object({
   updatedAt: z.number().int(),
 });
 export type CredentialMeta = z.infer<typeof CredentialMeta>;
+
+/**
+ * What an owner changes about the daemon from the app: where it sends word and who may answer there, how much
+ * a task and a day may spend, and how long an approval waits. A part of the daemon's configuration file, by
+ * these names. Tokens are not here: they are credentials and live in the keychain.
+ */
+export const OwnerSettings = z.object({
+  ntfy: z.object({
+    enabled: z.boolean(),
+    server: z.string().url().max(200),
+    /** Where notifications go, and where button presses come back. On a public server the names are the only thing keeping them private. */
+    topic: z.string().max(64),
+    commandTopic: z.string().max(64),
+  }),
+  telegram: z.object({ enabled: z.boolean(), allowedUserIds: z.array(z.number().int().positive()).max(20) }),
+  slack: z.object({ enabled: z.boolean(), allowedUserIds: z.array(z.string().regex(/^[UW][A-Z0-9]{6,}$/)).max(20) }),
+  budgets: z.object({ taskTokens: z.number().int().min(100_000).max(200_000_000), projectDailyTokens: z.number().int().min(100_000).max(2_000_000_000) }),
+  approvals: z.object({ ttlSec: z.number().int().min(30).max(86_400) }),
+});
+export type OwnerSettings = z.infer<typeof OwnerSettings>;

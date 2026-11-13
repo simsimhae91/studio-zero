@@ -164,6 +164,11 @@ export class ScratchService {
     return pad;
   }
 
+  /** Whether any note is in the middle of a turn. */
+  get busy(): boolean {
+    return this.#running.size > 0;
+  }
+
   /** Resolves when no turn is running. For shutdown and tests. */
   async idle(): Promise<void> {
     while (this.#running.size > 0) await Promise.allSettled([...this.#running.values()]);

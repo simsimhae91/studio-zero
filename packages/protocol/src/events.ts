@@ -177,6 +177,8 @@ export const EventBody = z.discriminatedUnion('type', [
   z.object({ type: z.literal('image.generated'), path: z.string(), purpose: z.string(), width: z.number().int(), height: z.number().int(), bytes: z.number().int(), durationMs: z.number() }),
   z.object({ type: z.literal('ledger.recorded'), entryId: z.string(), proof: z.string() }),
   z.object({ type: z.literal('power.changed'), mode: PowerMode }),
+  /** The owner's settings were written to the configuration file. They take effect when the daemon next starts. */
+  z.object({ type: z.literal('config.changed'), sections: z.array(z.string()) }),
   z.object({ type: z.literal('quota.changed'), subscription: ReviewerPref, state: z.enum(['ok', 'limited']), resetsAt: z.number().int().nullable() }),
   /** A finished task on the studio's own repository was copied out to this Mac's checkout as a feature branch. Nothing is merged by this. */
   z.object({ type: z.literal('selfhost.exported'), branch: z.string(), base: z.string(), files: z.number().int(), insertions: z.number().int(), deletions: z.number().int() }),

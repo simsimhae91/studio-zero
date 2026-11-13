@@ -31,6 +31,7 @@ import {
   TaskKind,
   TaskTrack,
   Template,
+  OwnerSettings,
 } from './domain.ts';
 import { AxResponse, Calibration, DocumentKind, KnowledgeJob, PromotionResult, Readiness, ResearchReport, ScratchEntry, ScratchMode, ScratchMove, Scratchpad, TextFinding } from './ax.ts';
 import { EventEnvelope, EventFilter } from './events.ts';
@@ -67,6 +68,18 @@ export const methods = {
       brain: z.enum(['api', 'session', 'none']),
     }),
   },
+
+  /**
+   * The owner's settings as the configuration file has them, and what stands between a change and its effect.
+   * `writable` is false on a connection that was not opened on the daemon's own Mac: such a client reads and
+   * cannot change. `restartRequired` is true while the file differs from what the daemon started with.
+   * `supervised` says whether something will start the daemon again if it stops itself.
+   */
+  'config.get': { params: empty, result: z.object({ settings: OwnerSettings, writable: z.boolean(), restartRequired: z.boolean(), supervised: z.boolean(), file: z.string(), logFile: z.string().nullable() }) },
+  /** Writes the settings to the file. Refused (`policy_denied`) on a connection that is not local. Takes effect at the next start. */
+  'config.set': { params: z.object({ settings: OwnerSettings }), result: z.object({ settings: OwnerSettings, restartRequired: z.boolean() }) },
+  /** Stops the daemon so that its supervisor starts it again. Local connections only; refused while anything is in flight. */
+  'system.restart': { params: empty, result: z.object({ accepted: z.literal(true) }) },
 
   /**
    * What can be chosen on an engine. `models` is what the vendor's own tooling lists for this login: empty when the

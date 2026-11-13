@@ -21,3 +21,14 @@ export class UnavailableError extends Error {
     this.name = 'UnavailableError';
   }
 }
+
+/**
+ * Asked over a connection that is not allowed to ask it: something only a client on the daemon's own Mac may
+ * do was requested from elsewhere. Maps to RPC `policy_denied`.
+ */
+export class LocalOnlyError extends Error {
+  constructor(what: string) {
+    super(`${what}은(는) 데몬이 도는 이 Mac에서 연 앱에서만 할 수 있습니다. 다른 기기에서는 볼 수만 있습니다.`);
+    this.name = 'LocalOnlyError';
+  }
+}

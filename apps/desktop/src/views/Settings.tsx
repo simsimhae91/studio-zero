@@ -4,6 +4,7 @@ import type { McpServerInfo } from '@studio-zero/protocol';
 import { engineLabel, slugify } from '../lib/format.ts';
 import { forgetToken } from '../lib/platform.ts';
 import { MONO_FONTS, THEME_PRESETS, fontInstalled, setPrefs, usePrefs } from '../lib/prefs.ts';
+import { DaemonSettings } from './DaemonSettings.tsx';
 import { EffortDefaults } from './enginePicker.tsx';
 import { useAction, useQuery, useStudio } from '../lib/studio.tsx';
 import { Button, ConfirmButton, Field, inputClass, Problem, Segmented, Sheet, Status } from '../ui.tsx';
@@ -113,6 +114,8 @@ export function Settings({ open, onOpenChange, onDisconnect }: { open: boolean; 
         </div>
         <EffortDefaults />
       </section>
+
+      <DaemonSettings open={open} />
 
       <section className="flex flex-col gap-4">
         <div className="flex flex-col gap-1">

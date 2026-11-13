@@ -1,5 +1,7 @@
 import type { z } from 'zod';
 import type { MethodName, ResultOf, methods } from '@studio-zero/protocol';
+import { ConflictError, LocalOnlyError } from '../app/errors.ts';
+import type { OwnerConfig } from '../app/OwnerConfig.ts';
 import type { Studio } from '../app/Studio.ts';
 import type { Actor } from '../policy/actions.ts';
 import type { TerminalSink } from '../sandbox/PtyManager.ts';
@@ -10,6 +12,19 @@ export interface ClientConnection {
   /** Unique per socket. Terminals are owned by it and die with it. */
   id: string;
   terminals: TerminalSink;
+  /**
+   * Whether the connection was opened on the daemon's own Mac, and not through whatever carries the listener
+   * to another machine. Decided by the server when the socket opens (see `DaemonServer`); never by the client.
+   */
+  local: boolean;
+}
+
+/** What the handlers need beside the studio: the owner's settings, and how this process is brought down to be started again. */
+export interface HandlerDeps {
+  ownerConfig: OwnerConfig;
+  /** Stops the process so that its supervisor restarts it. Null when nothing supervises it: then it would only stop. */
+  restart: (() => void) | null;
+  logFile: string | null;
 }
 
 /** Handler signature per method: validated params in, a value matching the result schema out. */
@@ -19,9 +34,26 @@ export type Handlers = { [M in MethodName]: (params: z.output<(typeof methods)[M
 const OWNER: Actor = { type: 'owner', via: 'desktop' };
 
 /** The RPC surface, mapped one-to-one onto `Studio`. No logic lives here; that is the point. */
-export function createHandlers(studio: Studio): Handlers {
+export function createHandlers(studio: Studio, deps: HandlerDeps): Handlers {
   return {
     'system.status': () => studio.status(),
+    'config.get': (_p, conn) => ({ settings: deps.ownerConfig.get(), writable: conn.local, restartRequired: deps.ownerConfig.restartRequired, supervised: deps.restart !== null, file: deps.ownerConfig.file, logFile: deps.logFile }),
+    // These sections say who the owner is on other channels and what may be spent. Holding the token is enough
+    // to run the studio; changing this takes being at the Mac, as editing the file always did.
+    'config.set': (p, conn) => {
+      if (!conn.local) throw new LocalOnlyError('설정 변경');
+      const settings = deps.ownerConfig.set(p.settings);
+      return { settings, restartRequired: deps.ownerConfig.restartRequired };
+    },
+    'system.restart': (_p, conn) => {
+      if (!conn.local) throw new LocalOnlyError('데몬 다시 시작');
+      if (deps.restart === null) throw new ConflictError('이 데몬은 다시 켜 줄 관리자(LaunchAgent) 없이 돌고 있어서 스스로 다시 시작할 수 없습니다. 데몬을 띄운 터미널에서 다시 시작해 주세요.');
+      const busy = studio.inFlight();
+      if (busy !== null) throw new ConflictError(`지금 다시 시작하면 끊기는 일이 있습니다: ${busy}. 끝나거나 멈춘 뒤에 다시 시작해 주세요.`);
+      // After the answer has gone out: the socket this was asked on is about to close.
+      setTimeout(deps.restart, 250).unref();
+      return { accepted: true as const };
+    },
     'engines.models': (p) => studio.engineCatalog(p.engine),
 
     'projects.create': (p) => studio.createProject(OWNER, p),

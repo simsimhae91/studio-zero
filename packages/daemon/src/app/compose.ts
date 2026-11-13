@@ -1,4 +1,6 @@
 import { randomBytes } from 'node:crypto';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 import type Anthropic from '@anthropic-ai/sdk';
 import type { Logger as PinoLogger } from 'pino';
 import { ConfidenceCalibration } from '../ax/Calibration.ts';
@@ -51,6 +53,7 @@ import { SandboxFileService } from '../sandbox/SandboxFileService.ts';
 import { ScratchService } from '../scratch/ScratchService.ts';
 import { DaemonServer } from '../server/DaemonServer.ts';
 import { createHandlers } from '../server/handlers.ts';
+import { OwnerConfig } from './OwnerConfig.ts';
 import { CaffeinateManager, type PowerSpawner } from '../util/CaffeinateManager.ts';
 import { Secret, errorMessage, systemClock, type Clock } from '../util/core.ts';
 import type { CommandRunner } from '../util/run.ts';
@@ -65,6 +68,8 @@ export const VERSION = '0.1.0';
 /** Seams for tests: everything that would otherwise touch Docker, the Keychain, or the network. */
 export interface DaemonOverrides {
   clock?: Clock;
+  /** Replaces how the process is brought down to be started again; null stands for a daemon nothing supervises. */
+  restart?: (() => void) | null;
   /** Replaces `docker` and the vendor CLIs. */
   run?: CommandRunner;
   /** Replaces `/usr/bin/security`. */
@@ -249,7 +254,13 @@ export async function createDaemon(config: Config, log: PinoLogger, overrides: D
     store.upsertCredential(CredentialIds.clientToken, clock());
   }
 
-  const server = new DaemonServer({ config, handlers: createHandlers(studio), events, store, toolbox, bridgeSessions, terminals: pty, clientToken, version: VERSION, log });
+  // Under the LaunchAgent a process that stops is started again (KeepAlive), so stopping is how it restarts.
+  // Anywhere else it would only stop, and says so instead.
+  const supervised = process.env.XPC_SERVICE_NAME === 'zero.studio.daemon';
+  const restart = overrides.restart !== undefined ? overrides.restart : supervised ? () => void process.kill(process.pid, 'SIGTERM') : null;
+  const ownerConfig = new OwnerConfig({ config, events });
+  const logFile = supervised ? join(homedir(), 'Library', 'Logs', 'studio-zero', 'daemon.log') : null;
+  const server = new DaemonServer({ config, handlers: createHandlers(studio, { ownerConfig, restart, logFile }), events, store, toolbox, bridgeSessions, terminals: pty, clientToken, version: VERSION, log });
   const gateway = new LlmGateway({ config, store, events, policy, vault, clock, log: log.child({ mod: 'gateway' }), upstreams: overrides.gatewayUpstreams, external });
 
   if (config.telegram.enabled) {
