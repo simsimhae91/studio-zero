@@ -35,6 +35,9 @@ const page = (family: string): string => `<!doctype html>
   body { margin: 0; font-family: "${family}", sans-serif; background: var(--sz-bg); color: var(--sz-fg); }
   main { padding: 24px; display: grid; gap: 24px; }
   h1 { font-size: 30px; line-height: 1.3; margin: 0; }
+  /* The page opens on a band in the brand that holds what it is about (the handbook's rule E5). */
+  header { display: grid; gap: 24px; margin: -24px -24px 0; padding: 24px; background: var(--sz-brand); color: var(--sz-on-brand); }
+  header p { color: var(--sz-on-brand); }
   p { font-size: 16px; line-height: 1.6; margin: 0; color: var(--sz-fg-muted); }
   a.action { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 0 16px; border-radius: 8px; background: var(--sz-accent); color: var(--sz-on-accent); font-size: 16px; text-decoration: none; transition: transform 120ms; }
   /* It answers the hand: held down it gives way, and the keyboard's focus can be seen. The audit tries both. */
@@ -42,7 +45,7 @@ const page = (family: string): string => `<!doctype html>
   a.action:focus-visible { outline: 3px solid var(--sz-fg); outline-offset: 2px; }
 </style>
 </head>
-<body><main><h1>미결제 청구서</h1><p>결제를 기다리는 청구서가 3건 있습니다.</p><svg viewBox="0 0 320 96" width="320" height="96" role="img" aria-label="청구서 세 장"><rect x="8" y="20" width="96" height="68" rx="6" fill="var(--sz-brand-soft)"/><rect x="112" y="12" width="96" height="76" rx="6" fill="var(--sz-brand-soft)"/><rect x="216" y="4" width="96" height="84" rx="6" fill="var(--sz-brand)"/><rect x="228" y="20" width="56" height="6" rx="3" fill="var(--sz-on-brand)"/><rect x="228" y="36" width="72" height="6" rx="3" fill="var(--sz-on-brand)"/></svg><a class="action" href="/invoices">청구서 보기</a></main></body>
+<body><main><header><h1>미결제 청구서</h1><p>결제를 기다리는 청구서가 3건 있습니다.</p><svg viewBox="0 0 320 96" width="320" height="96" role="img" aria-label="청구서 세 장"><rect x="8" y="20" width="96" height="68" rx="6" fill="var(--sz-on-brand)" fill-opacity="0.28"/><rect x="112" y="12" width="96" height="76" rx="6" fill="var(--sz-on-brand)" fill-opacity="0.28"/><rect x="216" y="4" width="96" height="84" rx="6" fill="var(--sz-on-brand)"/><rect x="228" y="20" width="56" height="6" rx="3" fill="var(--sz-brand)"/><rect x="228" y="36" width="72" height="6" rx="3" fill="var(--sz-brand)"/></svg></header><a class="action" href="/invoices">청구서 보기</a></main></body>
 </html>
 `;
 

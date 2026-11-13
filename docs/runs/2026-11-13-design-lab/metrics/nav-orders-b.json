@@ -1,0 +1,258 @@
+{
+ "file": "/Users/hosoo/project/conclave/.design-lab/runs/nav/orders/b/ws/docs/mockups/b.html",
+ "template": "web-vite-react",
+ "desktop": {
+  "title": "포장대 한 상자",
+  "headline": {
+   "text": "11월 13일 금요일 출고",
+   "px": 24,
+   "lines": 1,
+   "weight": 700
+  },
+  "seed": "{\"hue\":96,\"chroma\":0.17,\"lightness\":0.75,\"neutral_hue\":248,\"neutral_chroma\":0.005,\"corners\":\"round\",\"face\":\"suit\",\"source\":\"다 싼 상자에 붙이는 형광 노란 확인 스티커, 감열 라벨지의 푸른 흰빛, 상자 옆면에 찍힌 두꺼운 스텐실 글자에서 왔고, 모서리는 둥글게 말린 라벨 귀퉁이처럼 둥글다.\"}",
+  "tokens": {
+   "--sz-brand": [
+    203,
+    172,
+    0
+   ],
+   "--sz-brand-soft": [
+    245,
+    236,
+    198
+   ],
+   "--sz-accent": [
+    90,
+    75,
+    0
+   ],
+   "--sz-bg": [
+    247,
+    250,
+    253
+   ],
+   "--sz-surface": [
+    254,
+    254,
+    255
+   ],
+   "--sz-fg": [
+    20,
+    22,
+    24
+   ],
+   "--sz-brand-2": null,
+   "--sz-second": [
+    0,
+    85,
+    167
+   ]
+  },
+  "viewport": {
+   "vw": 1440,
+   "vh": 900
+  },
+  "screensLong": 1.1,
+  "type": {
+   "families": [
+    [
+     "SUIT Variable",
+     408
+    ]
+   ],
+   "sizesFirstScreen": [
+    [
+     12,
+     35
+    ],
+    [
+     14,
+     228
+    ],
+    [
+     16,
+     54
+    ],
+    [
+     18,
+     39
+    ],
+    [
+     20,
+     5
+    ],
+    [
+     24,
+     42
+    ],
+    [
+     36,
+     2
+    ],
+    [
+     96,
+     3
+    ]
+   ],
+   "distinctSizes": 8,
+   "distinctSizesFirstScreen": 8,
+   "microSharePct": 8.6,
+   "microSharePctFirstScreen": 8.6,
+   "sentencesAtMicro": [],
+   "bodySharePct": 22.8,
+   "largestPx": 96,
+   "figuresAtLargest": [
+    "오수민"
+   ],
+   "heavyWeightSharePct": 29.2,
+   "turnedText": [],
+   "stackedText": [],
+   "endAlignedText": [],
+   "monoOutsideCode": []
+  },
+  "layout": {
+   "controlsFirstScreen": 7,
+   "cards": 5,
+   "cardsFirstScreen": 5,
+   "halfEmptyCards": [],
+   "nestedCards": 0,
+   "saidTwice": [],
+   "figuresTwice": [
+    "23 x3",
+    "15 x2",
+    "200 x3"
+   ]
+  },
+  "colour": {
+   "saturatedPct": 20.7,
+   "darkPct": 1.9,
+   "brandPct": 13,
+   "secondPct": 6.7,
+   "blankLeftPct": 32.4,
+   "blankRightPct": 29.9
+  }
+ },
+ "phone": {
+  "title": "포장대 한 상자",
+  "headline": {
+   "text": "11월 13일 금요일 출고",
+   "px": 24,
+   "lines": 1,
+   "weight": 700
+  },
+  "seed": "{\"hue\":96,\"chroma\":0.17,\"lightness\":0.75,\"neutral_hue\":248,\"neutral_chroma\":0.005,\"corners\":\"round\",\"face\":\"suit\",\"source\":\"다 싼 상자에 붙이는 형광 노란 확인 스티커, 감열 라벨지의 푸른 흰빛, 상자 옆면에 찍힌 두꺼운 스텐실 글자에서 왔고, 모서리는 둥글게 말린 라벨 귀퉁이처럼 둥글다.\"}",
+  "tokens": {
+   "--sz-brand": [
+    203,
+    172,
+    0
+   ],
+   "--sz-brand-soft": [
+    245,
+    236,
+    198
+   ],
+   "--sz-accent": [
+    90,
+    75,
+    0
+   ],
+   "--sz-bg": [
+    247,
+    250,
+    253
+   ],
+   "--sz-surface": [
+    254,
+    254,
+    255
+   ],
+   "--sz-fg": [
+    20,
+    22,
+    24
+   ],
+   "--sz-brand-2": null,
+   "--sz-second": [
+    0,
+    85,
+    167
+   ]
+  },
+  "viewport": {
+   "vw": 393,
+   "vh": 852
+  },
+  "screensLong": 1.6,
+  "type": {
+   "families": [
+    [
+     "SUIT Variable",
+     364
+    ]
+   ],
+   "sizesFirstScreen": [
+    [
+     12,
+     33
+    ],
+    [
+     14,
+     62
+    ],
+    [
+     16,
+     57
+    ],
+    [
+     20,
+     33
+    ],
+    [
+     24,
+     14
+    ],
+    [
+     30,
+     2
+    ],
+    [
+     72,
+     3
+    ]
+   ],
+   "distinctSizes": 8,
+   "distinctSizesFirstScreen": 7,
+   "microSharePct": 11.3,
+   "microSharePctFirstScreen": 16.2,
+   "sentencesAtMicro": [],
+   "bodySharePct": 20.3,
+   "largestPx": 72,
+   "figuresAtLargest": [
+    "오수민"
+   ],
+   "heavyWeightSharePct": 31,
+   "turnedText": [],
+   "stackedText": [],
+   "endAlignedText": [],
+   "monoOutsideCode": []
+  },
+  "layout": {
+   "controlsFirstScreen": 7,
+   "cards": 3,
+   "cardsFirstScreen": 2,
+   "halfEmptyCards": [],
+   "nestedCards": 0,
+   "saidTwice": [],
+   "figuresTwice": []
+  },
+  "colour": {
+   "saturatedPct": 20.7,
+   "darkPct": 4.1,
+   "brandPct": 7.3,
+   "secondPct": 12.4,
+   "blankLeftPct": 26.6,
+   "blankRightPct": 31.7
+  }
+ }
+}

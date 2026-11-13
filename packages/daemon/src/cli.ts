@@ -8,7 +8,7 @@ const USAGE = `sz — Studio Zero command line
   sz project list
   sz project create <slug> <name> [${Template.options.join('|')}]
   sz project rm <slug> [--delete-workspace]
-  sz task <project-slug> <build|refactor|inline_edit|ideate> <prompt...>     submit and follow a task
+  sz task <project-slug> <build|refactor|inline_edit|ideate> [--draft] <prompt...>   submit and follow a task (--draft: the fast track)
   sz events [project-slug]                                                   follow the event stream
   sz approvals                                                               list pending approvals
   sz approve <approval-id> | sz deny <approval-id>
@@ -161,7 +161,9 @@ async function main(argv: string[]): Promise<number> {
       }
       case 'task': {
         const project = await projectBySlug(client, args[0]);
-        const task = await client.call('tasks.submit', { projectId: project.id, kind: args[1] as Exclude<TaskKind, 'kirby_materialize'>, prompt: args.slice(2).join(' ') });
+        // --draft: the fast track (Draft 0), as the desktop client's composer offers it.
+        const draft = args.includes('--draft');
+        const task = await client.call('tasks.submit', { projectId: project.id, kind: args[1] as Exclude<TaskKind, 'kirby_materialize'>, prompt: args.slice(2).filter((word) => word !== '--draft').join(' '), ...(draft ? { track: 'fast' as const } : {}) });
         process.stdout.write(`task ${task.id}\n`);
         return await new Promise<number>((resolve) => {
           client.subscribe({ taskId: task.id }, (e) => {

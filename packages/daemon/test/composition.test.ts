@@ -182,27 +182,29 @@ test('composition, read off a real page: a screen that keeps the handbook is cle
     // E1 and E4: what a first screen is made of. The clean screen above keeps every rule of type and layout and
     // is still text and rules: asked as a screen a person meets the product on, it has nothing drawn.
     const first: CheckContext = { ...phone, firstScreen: true };
+    /** What is said of material and colour, apart from the frame, which has its own cases below. */
+    const made = (found: readonly Finding[]): Finding[] => found.filter((f) => f.rule !== 'layout/no-tab-bar');
     assert.deepEqual(clean.composition!.material, { drawnShare: 0, icons: 0, boxes: 3, ruledBoxes: 2 }, 'the comparison block and the dock are ruled; the dock\'s button is a box with no rule');
-    const flat = runDomChecks(clean, first, contract);
+    const flat = made(runDomChecks(clean, first, contract));
     assert.deepEqual(rules(flat), ['material/nothing-drawn'], said(flat));
     assert.equal(flat[0]!.severity, 'major');
     assert.match(flat[0]!.message, /^Next to nothing is drawn on the first screen besides text: 0% of it is picture or drawing, and it has 0 icons\./);
     assert.ok(flat[0]!.fix!.startsWith('E1: '));
     // A chart is a drawing, and so are ten faces: either is enough to say the screen is made of something.
     assert.ok(charted.composition!.material!.drawnShare > 0.25);
-    assert.deepEqual(rules(runDomChecks(charted, first, contract)), []);
+    assert.deepEqual(rules(made(runDomChecks(charted, first, contract))), []);
     const FACE = '<svg class="face" viewBox="0 0 40 40" width="40" height="40" aria-hidden="true"><circle cx="20" cy="20" r="20" fill="#dbe7fb"/><circle cx="20" cy="16" r="7" fill="#0051b2"/></svg>';
     const faces = await measure(screen({ css: '.faces{display:flex;gap:4px}', extra: `<div class="faces">${FACE.repeat(10)}</div>` }));
     assert.deepEqual([faces.composition!.material!.icons, faces.composition!.material!.drawnShare], [10, 0]);
-    assert.deepEqual(rules(runDomChecks(faces, first, contract)), []);
-    assert.deepEqual(rules(runDomChecks(await measure(screen({ css: '.faces{display:flex;gap:4px}', extra: `<div class="faces">${FACE.repeat(9)}</div>` })), first, contract)), ['material/nothing-drawn'], 'nine are not yet a screen with faces on it');
+    assert.deepEqual(rules(made(runDomChecks(faces, first, contract))), []);
+    assert.deepEqual(rules(made(runDomChecks(await measure(screen({ css: '.faces{display:flex;gap:4px}', extra: `<div class="faces">${FACE.repeat(9)}</div>` })), first, contract))), ['material/nothing-drawn'], 'nine are not yet a screen with faces on it');
     // Three boxes drawn with a hairline: the comparison block, the dock, and one more.
     const BOXES = { css: '.box{padding:16px;min-height:80px;border:1px solid var(--sz-border);border-radius:8px;background:var(--sz-surface)}.faces{display:flex;gap:4px}', extra: `<div class="faces">${FACE.repeat(10)}</div><div class="box">오늘 미션</div>` };
-    const boxed = runDomChecks(await measure(screen(BOXES)), first, contract);
+    const boxed = made(runDomChecks(await measure(screen(BOXES)), first, contract));
     assert.deepEqual(rules(boxed), ['material/ruled-boxes'], said(boxed));
     assert.match(boxed[0]!.message, /^3 of the 4 boxes on the first screen are drawn with a hairline/);
     assert.ok(boxed[0]!.fix!.startsWith('E4: ') && boxed[0]!.severity === 'major');
-    assert.deepEqual(rules(runDomChecks(await measure(screen({ ...BOXES, css: `${BOXES.css}.box,.compare,.dock{border:0}` })), first, contract)), [], 'the same boxes with no rule on them');
+    assert.deepEqual(rules(made(runDomChecks(await measure(screen({ ...BOXES, css: `${BOXES.css}.box,.compare,.dock{border:0}` })), first, contract))), [], 'the same boxes with no rule on them');
     // Asked only where a person meets the product, and at the size of a hand.
     assert.deepEqual(rules(runDomChecks(clean, phone, contract)), []);
     assert.deepEqual(rules(runDomChecks(clean, { ...first, viewport: 'desktop-1440', viewportWidth: 1440, touch: false }, contract)), []);
@@ -210,6 +212,37 @@ test('composition, read off a real page: a screen that keeps the handbook is cle
     // The tabs of a tab bar are the frame, not what the screen offers.
     const TABS = '<nav class="tabs">' + ['대결', '점수', '지난 대결', '내 정보'].map((name) => `<a href="#${name}">${name}</a>`).join('') + '</nav>';
     assert.equal((await measure(screen({ css: '.tabs{position:fixed;left:0;right:0;bottom:84px;display:flex;gap:16px}.tabs a{min-height:44px}', extra: TABS }))).composition!.controls, 6, 'five rows and the dock, as without the tabs');
+
+    // M1: the frame. The clean screen has a dock and no tab bar; on a phone app's first screen that is said.
+    assert.deepEqual(clean.composition!.frame, { tabs: 0, brokenFigures: [], overlappingText: [], underFloat: [], endUnderFixed: 0 }, 'one wide button along the foot is a dock');
+    const bare = runDomChecks(clean, first, contract).find((f) => f.rule === 'layout/no-tab-bar')!;
+    assert.match(bare.message, /^The first screen has no tab bar: nothing sits along its foot where 3 to 5 tabs belong\.$/);
+    assert.ok(bare.severity === 'major' && bare.fix!.startsWith('M1: '));
+    const BAR = '.dock{display:none}.tabs{position:fixed;left:0;right:0;bottom:0;display:grid;grid-template-columns:repeat(4,1fr);background:var(--sz-surface)}.tabs a{display:flex;align-items:center;justify-content:center;min-height:56px;color:inherit;text-decoration:none}';
+    const tabbed = await measure(screen({ css: BAR, extra: TABS }));
+    assert.equal(tabbed.composition!.frame!.tabs, 4);
+    assert.ok(!rules(runDomChecks(tabbed, first, contract)).includes('layout/no-tab-bar'));
+    assert.ok(!rules(runDomChecks(clean, phone, contract)).includes('layout/no-tab-bar'), 'asked of a first screen only');
+    // T7: a figure that broke onto a second line, and text drawn over text.
+    const split = runDomChecks(await measure(screen({ css: '.fig{display:block;width:44px;overflow-wrap:anywhere}' })), phone, contract);
+    assert.deepEqual(rules(split), ['type/broken-figure'], said(split));
+    assert.match(split[0]!.message, /^The figure "433" breaks onto a second line \(1 more\)\.$/);
+    assert.ok(split[0]!.severity === 'major' && split[0]!.fix!.startsWith('T7: '));
+    const stacked = runDomChecks(await measure(screen({ css: '.note{margin-top:-48px}' })), phone, contract);
+    assert.deepEqual(rules(stacked), ['layout/overlapping-text'], said(stacked));
+    assert.match(stacked[0]!.message, /^Text is drawn over other text: "63점 뒤져 있어요 \/ 정오 전에 기록하면 스무 점을 더 받고 미션"/);
+    assert.ok(stacked[0]!.fix!.startsWith('T7: '));
+    // The same two texts with an opaque card between them: the one beneath is not seen, and nothing is said.
+    assert.deepEqual(rules(runDomChecks(await measure(screen({ css: '.note{margin-top:-48px;position:relative;background:var(--sz-surface)}' })), phone, contract)), []);
+    // E4: a pill floating over a row's words at rest, and a page whose last line stays under its dock.
+    // The dock made a pill and lifted over the second row: its score lies under it.
+    const pill = runDomChecks(await measure(screen({ css: '.dock{left:auto;right:16px;bottom:196px;width:200px;padding:0;border:0;background:none}' })), phone, contract);
+    assert.deepEqual(rules(pill), ['layout/under-float'], said(pill));
+    assert.ok(pill[0]!.severity === 'minor' && pill[0]!.fix!.startsWith('E4: '));
+    const buried = runDomChecks(await measure(screen({ css: 'main{padding-bottom:0}' })), phone, contract);
+    assert.deepEqual(rules(buried), ['layout/end-under-bar'], said(buried));
+    assert.match(buried[0]!.message, /^Scrolled to its end, the page leaves its last \d+px of text under the bar or the control that floats over it\.$/);
+    assert.ok(buried[0]!.severity === 'major' && buried[0]!.fix!.startsWith('E4: '));
 
     // A desk has no thumb to crowd: the count of controls is a touch-screen rule.
     const crowded = await measure(screen({ extra: CHIPS }), 'desk');
@@ -330,7 +363,8 @@ test('colour by the pixel, through the auditor: a flood of brand and a dark band
     const web = { ...sampleProject('quote'), id: 'prj_quote_web' };
     store.insertProject(web);
     assert.deepEqual(rules(await measured(BAND, web)), []);
-    assert.deepEqual(await grey({}, web), [], 'and so is the hero: a web product is not held to it');
+    // The hero is asked of a web product too, where it is first met: at a desk.
+    assert.deepEqual((await grey({}, web)).map((f) => f.viewport), ['desktop-1440']);
 
     // A measurement is not an audit: the picture it counted is not kept, and nothing is recorded.
     assert.deepEqual(store.listAudits(phoneProject.id, 10), []);
@@ -379,7 +413,7 @@ test('a draft is looked at once: its first route at the size it is first met at,
   }
 });
 
-test('the page a real engine drew on 2026-11-13, which the check of its own page called clean: a black band, nothing drawn, boxes ruled, and five more', async (t) => {
+test('the page a real engine drew on 2026-11-13, which the check of its own page called clean: a black band, nothing drawn, boxes ruled, no tab bar, and five more', async (t) => {
   const browser = await launch();
   if (!browser) return t.skip('headless Chrome cannot be launched here');
   const d = await testDaemon();
@@ -395,7 +429,7 @@ test('the page a real engine drew on 2026-11-13, which the check of its own page
     const found = check.findings!.filter((f) => f.viewport === 'iphone-15-pro');
     const handbook = found.filter((f) => /^[A-Z]\d+: /.test(f.fix ?? ''));
     // Its brand panel is a sixth of the screen: inside the budget of one hero since the lab's second round, and no longer said.
-    assert.deepEqual(rules(handbook), ['color/dark-band', 'layout/half-empty-card', 'material/nothing-drawn', 'material/ruled-boxes', 'type/end-aligned-block', 'type/micro-overuse', 'type/second-family', 'type/stacked-text'], said(found));
+    assert.deepEqual(rules(handbook), ['color/dark-band', 'layout/half-empty-card', 'layout/no-tab-bar', 'material/nothing-drawn', 'material/ruled-boxes', 'type/end-aligned-block', 'type/micro-overuse', 'type/second-family', 'type/stacked-text'], said(found));
     for (const rule of ['color/dark-band', 'material/nothing-drawn', 'material/ruled-boxes']) assert.equal(found.find((f) => f.rule === rule)?.severity, 'major');
     const text = renderMockupCheck(file, check);
     assert.match(text, /- \[major\] material\/nothing-drawn \(measured\)\n  iphone-15-pro \| docs\/mockups\/b\.html[^\n]*\n  Next to nothing is drawn on the first screen besides text: 0% of it is picture or drawing, and it has \d icons?\./);

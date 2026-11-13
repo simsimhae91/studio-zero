@@ -35,6 +35,9 @@ const CLEAN_PAGE = `<!doctype html>
   body { margin: 0; font-family: "Pretendard Variable", sans-serif; background: var(--sz-bg); color: var(--sz-fg); }
   main { padding: 24px; display: grid; gap: 24px; }
   h1 { font-size: 30px; line-height: 1.3; margin: 0; }
+  /* The page opens on a band in the brand that holds what it is about (the handbook's rule E5). */
+  header { display: grid; gap: 24px; margin: -24px -24px 0; padding: 24px; background: var(--sz-brand); color: var(--sz-on-brand); }
+  header p { color: var(--sz-on-brand); }
   p { font-size: 16px; line-height: 1.6; margin: 0; color: var(--sz-fg-muted); }
   section { background: var(--sz-surface); border: 1px solid var(--sz-border); border-radius: 8px; padding: 16px; display: grid; gap: 8px; }
   a.action { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 0 16px; border-radius: 8px; background: var(--sz-accent); color: var(--sz-on-accent); font-size: 16px; text-decoration: none; transition: transform 120ms; }
@@ -45,9 +48,11 @@ const CLEAN_PAGE = `<!doctype html>
 </head>
 <body>
 <main>
+  <header>
   <h1>미결제 청구서</h1>
   <p>결제를 기다리는 청구서가 3건 있습니다.</p>
-  <svg viewBox="0 0 320 96" width="320" height="96" role="img" aria-label="청구서 세 장"><rect x="8" y="20" width="96" height="68" rx="6" fill="var(--sz-brand-soft)"/><rect x="112" y="12" width="96" height="76" rx="6" fill="var(--sz-brand-soft)"/><rect x="216" y="4" width="96" height="84" rx="6" fill="var(--sz-brand)"/><rect x="228" y="20" width="56" height="6" rx="3" fill="var(--sz-on-brand)"/><rect x="228" y="36" width="72" height="6" rx="3" fill="var(--sz-on-brand)"/></svg>
+  <svg viewBox="0 0 320 96" width="320" height="96" role="img" aria-label="청구서 세 장"><rect x="8" y="20" width="96" height="68" rx="6" fill="var(--sz-on-brand)" fill-opacity="0.28"/><rect x="112" y="12" width="96" height="76" rx="6" fill="var(--sz-on-brand)" fill-opacity="0.28"/><rect x="216" y="4" width="96" height="84" rx="6" fill="var(--sz-on-brand)"/><rect x="228" y="20" width="56" height="6" rx="3" fill="var(--sz-brand)"/><rect x="228" y="36" width="72" height="6" rx="3" fill="var(--sz-brand)"/></svg>
+  </header>
   <section><p>Northwind Trading</p><a class="action" href="/invoices/1">청구서 다시 보내기</a></section>
 </main>
 </body>
@@ -234,7 +239,7 @@ test('one task, end to end: plan → execute → audit fails → repair → audi
     assert.match(audit.ownMeasure ?? '', /\d+px/);
     assert.equal(audit.rubric?.hierarchy, 9);
     const visionFinding = audit.findings.find((f) => f.source === 'vlm')!;
-    assert.equal(visionFinding.selector, 'main > h1', 'a reviewer finding is tied back to a selector through the element id');
+    assert.equal(visionFinding.selector, 'main > header', 'a reviewer finding is tied back to a selector through the element id');
     const shot = audit.screenshots.find((s) => s.viewport === 'iphone-15-pro' && s.fold === 0)!;
     const png = await fetch(`http://127.0.0.1:${d.port()}/v1/artifacts/${shot.artifactId}`, { headers: { authorization: `Bearer ${d.daemon.clientToken.expose()}` } });
     assert.equal(png.headers.get('content-type'), 'image/png');

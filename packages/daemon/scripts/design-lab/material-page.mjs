@@ -23,12 +23,12 @@ const REFS = [['chzzk', '치지직'], ['naver-shopping', '네이버쇼핑'], ['d
 // direction that did not fit from the start, so no drawing of it is a measure of the guidance.
 const ROWS = [['dues', 'a', '모임 회비 장부 · 방향 a'], ['dues', 'b', '모임 회비 장부 · 방향 b'], ['duel', 'a', '다이어트 결투 · 방향 a'], ['duel', 'b', '다이어트 결투 · 방향 b']];
 const WEB = [['quote', 'a', '견적 링크 (웹 페이지) · 방향 a'], ['quote', 'b', '견적 링크 (웹 페이지) · 방향 b'], ['orders', 'a', '출고 장부 (웹 앱) · 방향 a'], ['orders', 'b', '출고 장부 (웹 앱) · 방향 b']];
-const webDone = WEB.every(([b, r]) => existsSync(join(lab, 'metrics', `handbook4-${b}-${r}-desktop.png`)));
+const webDone = WEB.every(([b, r]) => existsSync(join(lab, 'metrics', `nav-${b}-${r}-desktop.png`)));
 const ARMS = {
   refs: REFS.map(([n]) => n),
   before: ROWS.map(([b, r]) => `ours-${b}-${r}-before`),
   after: ROWS.map(([b, r]) => `ours-${b}-${r}-after`),
-  product: ROWS.map(([b, r]) => `hb4-${b}-${r}`),
+  product: ROWS.map(([b, r]) => `nav-${b}-${r}`),
   bolted: ROWS.map(([b, r]) => `material-${b}-${r}`),
 };
 const COLUMNS = [['refs', '레퍼런스 5곳'], ['before', '전 (옛 지침)'], ['after', '후 (첫 핸드북)'], ['bolted', '덧붙임 실험'], ['product', '지금의 제품']];
@@ -52,9 +52,12 @@ const fig = (name, label, cls = '') => `<figure class="${cls}"><figcaption><b>${
 const wide = (arm, brief, row, label, cls = '') => `<figure class="${cls}"><figcaption><b>${esc(label)}</b></figcaption><img src="${desk(arm, brief, row)}" alt="${esc(label)} 첫 화면, 책상 크기" loading="lazy" width="1440" height="900"></figure>`;
 
 const refStrip = REFS.map(([n, label]) => fig(n, label)).join('');
-const rows = ROWS.map(([b, r, label]) => `<section class="row"><h3>${esc(label)}</h3><div class="strip four">${fig(`ours-${b}-${r}-before`, '전')}${fig(`ours-${b}-${r}-after`, '후')}${fig(`material-${b}-${r}`, '덧붙임 실험 (고른 것)')}${fig(`hb4-${b}-${r}`, '지금의 제품', 'pick')}</div></section>`).join('');
-const webRows = WEB.map(([b, r, label]) => `<section class="row"><h3>${esc(label)}</h3><div class="strip desk">${wide('baseline', b, r, '전')}${wide('treatment', b, r, '후')}${webDone ? wide('handbook4', b, r, '지금의 제품', 'pick') : wide('handbook2', b, r, '재료 규칙의 첫 판')}</div></section>`).join('');
-const earlier = [['hb2', '재료 규칙의 첫 판: 상한과 조건으로 적었을 때'], ['hb3', '둘째 판: 하한을 넣었을 때']].map(([arm, label]) => `<h3>${label}</h3><div class="strip">${ROWS.map(([b, r, name]) => fig(`${arm}-${b}-${r}`, name.replace('모임 ', '').replace('다이어트 ', ''))).join('')}</div>`).join('');
+const motion = existsSync(join(lab, 'motion', 'motion.json')) ? JSON.parse(readFileSync(join(lab, 'motion', 'motion.json'), 'utf8')) : {};
+const film = (name, label) => { const file = `film-${name}.png`; copyFileSync(join(lab, 'motion', `${name}-film.png`), join(out, 'shots', file)); published.set(`shots/${file}`, join(out, 'shots', file)); const r = motion[name]; return `<figure><figcaption><b>${esc(label)}</b> · 누름에 답함 ${r.presses.filter((x) => x.answered).length}/${r.presses.length} · 정지 뒤에도 도는 것 ${r.running} · 전환 ${esc(r.transitionMs.slice(0, 3).join(', ') || '없음')}</figcaption><img src="shots/${file}" alt="${esc(label)}: 로드 뒤 0.15초에서 5초까지 여섯 장" loading="lazy" width="1242" height="470"></figure>`; };
+const films = REFS.every(([n]) => motion[n]) && ROWS.every(([b, r]) => motion[`nav-${b}-${r}`]) ? `${REFS.map(([n, label]) => film(n, label)).join('')}${ROWS.map(([b, r, label]) => film(`nav-${b}-${r}`, `지금의 제품 · ${label}`)).join('')}` : '';
+const rows = ROWS.map(([b, r, label]) => `<section class="row"><h3>${esc(label)}</h3><div class="strip four">${fig(`ours-${b}-${r}-before`, '전')}${fig(`ours-${b}-${r}-after`, '후')}${fig(`material-${b}-${r}`, '덧붙임 실험 (고른 것)')}${fig(`nav-${b}-${r}`, '지금의 제품', 'pick')}</div></section>`).join('');
+const webRows = WEB.map(([b, r, label]) => `<section class="row"><h3>${esc(label)}</h3><div class="strip desk">${wide('baseline', b, r, '전')}${wide('treatment', b, r, '후')}${webDone ? wide('nav', b, r, '지금의 제품', 'pick') : wide('handbook2', b, r, '재료 규칙의 첫 판')}</div></section>`).join('');
+const earlier = [['hb2', '재료 규칙의 첫 판: 상한과 조건으로 적었을 때'], ['hb3', '둘째 판: 하한을 넣었을 때'], ['hb4', '셋째 판: 고른 글을 지시의 끝에 놓았을 때 (탭 바는 한 장뿐)']].map(([arm, label]) => `<h3>${label}</h3><div class="strip">${ROWS.map(([b, r, name]) => fig(`${arm}-${b}-${r}`, name.replace('모임 ', '').replace('다이어트 ', ''))).join('')}</div>`).join('');
 const perPage = Object.entries(m).filter(([n]) => n !== 'toss-web').map(([n, v]) => `<tr><td class="rule">${esc(n)}</td><td>${fmt(v.colourPct, '%')}</td><td>${fmt(v.greyPct, '%')}</td><td>${v.icons}</td><td>${fmt(v.picturePct, '%')}</td><td>${fmt(v.textPct, '%')}</td><td>${v.borderedBoxes} / ${v.boxes}</td></tr>`).join('');
 
 const html = `<title>화면의 재료 비교</title>
@@ -86,6 +89,7 @@ table.small { font-size: 13px; } table.small td.rule { font-weight: 500; white-s
 figure { margin: 0; min-width: 0; } figcaption { font-size: 14px; margin: 0 0 6px; }
 figure img { display: block; width: 100%; height: auto; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
 .strip.desk img { border-radius: 6px; }
+.films { display: grid; gap: 20px; } .films img { border-radius: 6px; } .films figure { overflow-x: auto; } .films img { min-width: 760px; }
 figure.pick figcaption b { color: var(--accent); } figure.pick img { border-color: var(--accent); border-width: 2px; }
 .nums { font-size: 12px; line-height: 1.5; margin-top: 6px; font-variant-numeric: tabular-nums; }
 details { margin: 8px 0 24px; } summary { cursor: pointer; font-weight: 700; padding: 8px 0; }
@@ -95,7 +99,7 @@ a { color: var(--accent); } :focus-visible { outline: 2px solid var(--accent); o
 <header class="col">
 <h1>화면의 재료</h1>
 <p class="date">2026년 11월 13일 · 디자인 랩, 둘째 회차</p>
-<p class="lede">전과 후가 둘 다 밋밋했던 까닭은 재료가 같았기 때문이다. 둘 다 회색 종이 위의 글자와 선으로 만든 화면이었다. 살아 있다고 꼽은 다섯 곳을 같은 자로 재고, 그 재료를 규칙으로 덧붙여 그려 봤고, 그 덧붙임 실험이 고른 것이 됐다. 지금의 제품은 덧붙이지 않고도 그 수준으로 그린다.</p>
+<p class="lede">전과 후가 둘 다 밋밋했던 까닭은 재료가 같았기 때문이다. 둘 다 회색 종이 위의 글자와 선으로 만든 화면이었다. 살아 있다고 꼽은 다섯 곳을 같은 자로 재고, 그 재료를 규칙으로 덧붙여 그려 봤고, 그 덧붙임 실험이 고른 것이 됐다. 지금의 제품은 덧붙이지 않고도 그 수준으로 그리고, 화면마다 내비게이션을 둔다.</p>
 </header>
 
 <h2>잰 값</h2>
@@ -108,7 +112,7 @@ a { color: var(--accent); } :focus-visible { outline: 2px solid var(--accent); o
 <li><b>갈라놓는 것은 색과 아이콘과 헤어라인이다.</b> 레퍼런스는 화면의 4분의 1이 강한 색이고, 아이콘이 열 개를 넘고, 헤어라인을 그은 상자가 없다. 전과 후의 화면은 무채색이 열에 아홉이고 상자마다 선이 그어졌다.</li>
 <li><b>첫 핸드북은 이 값을 하나도 움직이지 못했다.</b> 고친 것은 결함이었고 재료가 아니었다.</li>
 <li><b>덧붙임 실험이 고른 것이다.</b> 재료 규칙 여덟 개와 위의 비교표를 프롬프트 맨 뒤에 붙인 것이다.</li>
-<li><b>지금의 제품은 그 수준으로 그린다.</b> 덧붙였던 글이 핸드북의 마지막 절이 됐고, 방향을 그리는 엔진의 지시 맨 끝에 한 번 더 놓인다. 네 장 모두 감사를 메이저 0건으로 통과했다.</li>
+<li><b>지금의 제품은 그 수준으로 그린다.</b> 덧붙였던 글이 핸드북의 마지막 절이 됐고, 방향을 그리는 엔진의 지시 맨 끝에 한 번 더 놓인다. 네 장 모두 감사를 메이저 0건으로 통과했다.</li>\n<li><b>내비게이션.</b> 폰 화면은 위에 바, 아래에 고정 탭 바(탭 셋에서 다섯, 아이콘과 이름), 그 위에 떠 있는 주 버튼. 네이버쇼핑과 치지직의 아래 탭 바, 고른 덧붙임 화면의 탭 바와 같은 틀이다. 감사가 첫 화면의 탭 바를 찾는다. 웹은 위에 로고와 아이콘 붙은 구획이 있는 바.</li>
 <li>다이어트 결투의 방향 c(체중계 다이얼)는 뺐다. 처음부터 맞지 않는 방향이었다는 판정에 따랐다.</li>
 </ul>
 </div>
@@ -123,21 +127,25 @@ a { color: var(--accent); } :focus-visible { outline: 2px solid var(--accent); o
 <li><b>전</b>: 어제까지의 지침.</li>
 <li><b>후</b>: 첫 핸드북. 강한 색은 10분의 1, 아이콘은 잉크색, 카드는 헤어라인.</li>
 <li><b>덧붙임 실험</b>: 첫 핸드북 뒤에 재료 규칙을 붙인 것. 고른 것이다.</li>
-<li><b>지금의 제품</b>: 브랜치의 프롬프트 그대로, 덧붙임 없이 그린 것. 덧붙임 실험과 같은 그림이 아니라 같은 수준인지를 본다. 한 방향에 한 장씩이라 그릴 때마다 구성은 달라진다.</li>
+<li><b>지금의 제품</b>: 지금의 프롬프트 그대로, 덧붙임 없이 그린 것. 덧붙임 실험과 같은 그림이 아니라 같은 수준인지를 본다. 한 방향에 한 장씩이라 그릴 때마다 구성은 달라진다. 탭 바가 네 장 모두에 있다.</li>
 </ul></div>
 ${rows}
 
 <h2>웹: 같은 브리프, 세 가지 지침</h2>
-<div class="col"><p>책상 크기(1440×900)의 첫 화면이다. ${webDone ? '웹에도 같은 절을 웹의 말로 넣었다: 페이지는 브랜드 색 히어로로 열고 첫 화면의 5분의 1은 그린 것, 앱 화면은 머리의 수치 카드에 색을 두고 탐색과 수치와 구획마다 아이콘. 웹에는 덧붙임 실험이 없었으므로 이 칸이 처음 보는 세기다. 네 장 모두 아이콘과 그린 것이 생겼다(폰 크기에서 잰 아이콘이 0~3개에서 12~18개). 색 있는 히어로로 연 것은 출고 장부 a 한 장이고, 견적 a는 방향이 종이 견적서여서 색을 도장과 버튼에만 뒀다. 웹에는 색의 하한을 재는 검사가 없다: 폰에서만 쟀기 때문이다.' : '오른쪽 칸은 재료 규칙의 첫 판으로 그린 것이다. 지금의 제품으로는 그리는 중이다.'}</p></div>
+<div class="col"><p>책상 크기(1440×900)의 첫 화면이다. ${webDone ? '출고 장부 a의 앞선 그림(빨간 띠로 연 것)이 좋다는 판정에 따라 웹도 그 수준으로 올렸다: 페이지와 앱 화면 모두 브랜드 색 히어로로 열고, 위에는 로고와 아이콘 붙은 구획이 있는 내비게이션 바를 두며, 감사가 책상 크기의 첫 화면에서 색을 잰다. 네 장 모두 색 있는 히어로로 열렸다(폰 크기에서 잰 강한 색 21~32%, 전에는 한 장만).' : '오른쪽 칸은 재료 규칙의 첫 판으로 그린 것이다. 지금의 제품으로는 그리는 중이다.'}</p></div>
 ${webRows}
+
+<h2>움직임</h2>
+<div class="col"><p>같은 자로 처음 5초를 찍고, 첫 화면의 누를 것 여섯 개를 눌러 봤다. 레퍼런스는 누름에 답하는 것이 다섯에 넷쯤이고, 전환은 150~300ms(시트나 넘김은 500ms), 절반은 가만히 있을 때에도 무언가가 돈다(넘어가는 배너, 라이브 표시). 우리 화면은 누름에 모두 답하고 속도도 같은 범위인데, 로드된 뒤에는 아무것도 움직이지 않았다. 그래서 규칙에 넣은 것: 첫 화면에 하나는 가만히 있을 때에도 살아 있고, 히어로는 한 번 들어오며, 주된 동작의 결과는 움직임으로 내려앉는다. 이 규칙으로 그린 화면은 아직 없다(아래의 우리 화면은 규칙을 넣기 전의 것이다).</p></div>
+<div class="films">${films}</div>
 
 <h2>아직 안 된 것</h2>
 <div class="col">
 <ul>
-<li><b>깨진 곳이 여전하다.</b> 떠 있는 버튼이 목록의 줄 위에 얹히고(회비 a), 좁은 칸에서 "100"이 "10"으로 잘린다(결투 b). 재는 검사가 아직 없다. 다음에 할 일이다.</li>
-<li><b>탭 바가 한 장에만 있다.</b> 랩의 브리프는 옛 지침으로 쓰인 것이라 도크를 지정한다. 새 핸드북은 최상위 화면에 탭 바를 두라고 하고, 브리프를 새로 쓰게 하면 달라지는지는 보지 못했다.</li>
+<li><b>깨진 곳을 재는 검사를 넣었다.</b> 두 줄로 갈라진 숫자, 겹쳐 그려진 글자, 떠 있는 버튼 아래의 글자, 스크롤 끝에서 바에 가려지는 내용. 앞선 그림들에서 결투 b의 "100" 갈라짐을 네 번 모두 잡았고, 지금의 네 장에는 한 건도 없다. 다만 떠 있는 버튼이 줄을 가리는 것은 버튼이 고정 배치일 때만 잡는다.</li>
 <li><b>그림의 질.</b> 아바타와 물건은 엔진이 선과 면으로 그린 것이다. 레퍼런스의 사진이나 입체 아이콘에는 못 미친다. 이미지 생성기를 붙이면 달라지는 자리이고, 비용이 드는 일이라 쓰지 않았다.</li>
-<li><b>시안만 봤다.</b> 빌드에서는 재지 않았다. 방향마다 한 장씩이다. 움직임은 아직 보지 않았다.</li>
+<li><b>움직임 규칙은 그려 보지 않았다.</b> 재서 넣기만 했다.</li>
+<li><b>시안만 봤다.</b> 방향마다 한 장씩이다. 실제 빌드는 이 페이지의 범위 밖이다.</li>
 </ul>
 </div>
 

@@ -88,6 +88,16 @@ export const Composition = z.object({
    * off from the one above. Absent in digests read before it was counted.
    */
   material: z.object({ drawnShare: z.number(), icons: z.number(), boxes: z.number(), ruledBoxes: z.number() }).optional(),
+  /**
+   * The frame and what is broken in it. `tabs` counts the controls whose middle is in the bottom 90px of the
+   * screen and which are narrower than half of it: three or more are a tab bar, one wide button is a dock.
+   * `brokenFigures` are numbers of two digits or more that wrapped onto a second line. `overlappingText` are
+   * pairs of texts drawn on top of each other with nothing opaque between them, each as `one / other`.
+   * `underFloat` is text that a floating control covers while the screen is at rest. `endUnderFixed` is how
+   * many px of the page's last content stay under a bar or a floating control when it is scrolled to its end.
+   * Absent in digests read before these were counted.
+   */
+  frame: z.object({ tabs: z.number(), brokenFigures: Lines, overlappingText: Lines, underFloat: Lines, endUnderFixed: z.number() }).optional(),
 });
 export type Composition = z.infer<typeof Composition>;
 
@@ -402,12 +412,18 @@ export function collectDigest(maxElements: number): unknown {
 
     // What can be pressed. An input that cannot be seen is pressed through the label around it.
     const pressed = new Set<Element>();
+    let tabs = 0;
     for (const el of document.body.querySelectorAll('button, a[href], summary, select, textarea, input:not([type=hidden]), label[for], [role=button], [role=tab], [role=switch], [role=radio], [role=checkbox], [popovertarget]')) {
       let target: Element | null = el;
       if (el instanceof HTMLInputElement) {
         if (el.id && document.querySelector(`label[for="${CSS.escape(el.id)}"]`)) continue;
         const r = rectOf(el);
         if (r.width < 4 || r.height < 4 || parseFloat(styleOf(el).opacity) < 0.05) target = el.closest('label');
+      }
+      if (target && shown(target)) {
+        const r = rectOf(target);
+        const middle = (r.top + r.bottom) / 2;
+        if (middle >= vh - 90 && middle < vh && r.width >= 24 && r.width < vw * 0.5) tabs += 1;
       }
       // Tabs are the frame, as the app bar's title is: the handbook's count (M7) is of what the screen itself offers.
       if (target && target.closest('[role=tablist], [role=tab], nav')) continue;
@@ -508,6 +524,89 @@ export function collectDigest(maxElements: number): unknown {
       if (ruled) ruledBoxes += 1;
     }
 
+    // What is broken in the frame. Text is measured by the boxes of its own characters, not of its element.
+    const inkOf = (el: Element): DOMRect | null => {
+      let [x0, y0, x1, y1] = [Infinity, Infinity, -Infinity, -Infinity];
+      for (const node of el.childNodes) {
+        if (node.nodeType !== Node.TEXT_NODE || (node.textContent ?? '').trim() === '') continue;
+        const range = document.createRange();
+        range.selectNode(node);
+        for (const r of range.getClientRects()) {
+          if (r.width < 0.5 || r.height < 0.5) continue;
+          [x0, y0, x1, y1] = [Math.min(x0, r.left), Math.min(y0, r.top), Math.max(x1, r.right), Math.max(y1, r.bottom)];
+        }
+      }
+      return x1 > x0 && y1 > y0 ? new DOMRect(x0, y0, x1 - x0, y1 - y0) : null;
+    };
+    // A number that broke onto a second line: one run of characters with no space in it, on two lines.
+    const brokenFigures: string[] = [];
+    for (const p of written) {
+      if (p.turn > 5) continue;
+      for (const node of p.el.childNodes) {
+        const text = (node.textContent ?? '').trim();
+        if (node.nodeType !== Node.TEXT_NODE || /\s/.test(text) || !/\d{2,}/.test(text) || !FIGURE.test(text)) continue;
+        const range = document.createRange();
+        range.selectNode(node);
+        const tops = new Set([...range.getClientRects()].filter((r) => r.width > 0.5 && r.height > 0.5).map((r) => Math.round(r.top / 4)));
+        if (tops.size > 1) brokenFigures.push(text.slice(0, 30));
+      }
+    }
+    // What floats over the page: fixed or stuck in the lower half, small enough to be a bar or a control, holding something to press.
+    const PRESSABLE = 'button, a[href], label[for], [role=button], [role=tab], summary, input, select, textarea';
+    const floaters = all.filter((el) => {
+      if (el instanceof SVGElement) return false;
+      const position = styleOf(el).position;
+      if (position !== 'fixed' && position !== 'sticky') return false;
+      const r = rectOf(el);
+      return r.top > vh * 0.5 && r.bottom <= vh + 2 && r.height >= 32 && r.height <= vh * 0.4 && shown(el) && (el.matches(PRESSABLE) || el.querySelector(PRESSABLE) !== null);
+    });
+    const floating = (el: Element): boolean => floaters.some((f) => f === el || f.contains(el));
+    const inked = written.filter((p) => p.turn <= 5 && p.chars >= 2).flatMap((p) => { const ink = inkOf(p.el); return ink ? [{ p, ink }] : []; });
+    const overlapOf = (a: DOMRect, b: DOMRect): number => Math.max(0, Math.min(a.right, b.right) - Math.max(a.left, b.left)) * Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top));
+    // Text under a floating control while the screen is at rest. A bar from edge to edge is where a list scrolls away; a pill over a row is not.
+    const pills = floaters.filter((f) => rectOf(f).width < vw * 0.9);
+    const underFloat = inked.filter(({ p, ink }) => !floating(p.el) && pills.some((f) => overlapOf(ink, rectOf(f)) >= ink.width * ink.height * 0.5)).map(({ p }) => p.text);
+    // Two texts on top of each other, neither inside the other, with nothing opaque painted between them.
+    const overlappingText: string[] = [];
+    for (let i = 0; i < inked.length && overlappingText.length < 40; i++) {
+      for (let j = i + 1; j < inked.length; j++) {
+        const [a, b] = [inked[i]!, inked[j]!];
+        if (a.p.el.contains(b.p.el) || b.p.el.contains(a.p.el) || floating(a.p.el) !== floating(b.p.el)) continue;
+        const shared = overlapOf(a.ink, b.ink);
+        if (shared < Math.min(a.ink.width * a.ink.height, b.ink.width * b.ink.height) * 0.5) continue;
+        const [cx, cy] = [(Math.max(a.ink.left, b.ink.left) + Math.min(a.ink.right, b.ink.right)) / 2, (Math.max(a.ink.top, b.ink.top) + Math.min(a.ink.bottom, b.ink.bottom)) / 2];
+        const top = document.elementFromPoint(cx, cy);
+        if (!top) continue;
+        // From what is on top down to what holds both: an opaque fill on the way means the one beneath is not seen.
+        let hidden = false;
+        for (let up: Element | null = top; up && !(up.contains(a.p.el) && up.contains(b.p.el)); up = up.parentElement) hidden ||= fillOf(up)[3] > 0.9;
+        if (!hidden) {
+          overlappingText.push(`${a.p.text.slice(0, 24)} / ${b.p.text.slice(0, 24)}`);
+          break;
+        }
+      }
+    }
+    // The end of the page: what scrolls, how far its last text reaches, and whether that stays under what floats.
+    let endUnderFixed = 0;
+    if (floaters.length > 0) {
+      const page = document.scrollingElement ?? document.documentElement;
+      const inner = all.filter((el) => !(el instanceof SVGElement) && /auto|scroll/.test(styleOf(el).overflowY) && el.scrollHeight > el.clientHeight + 8 && rectOf(el).width > vw * 0.5).sort((x, y) => y.clientHeight - x.clientHeight)[0];
+      const scroller = page.scrollHeight > vh + 8 || !inner ? page : inner;
+      const left = scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop;
+      let last = -Infinity;
+      for (const el of scroller === page ? all : scroller.querySelectorAll('*')) {
+        if (el instanceof SVGElement || floating(el) || styleOf(el).position === 'fixed') continue;
+        if (![...el.childNodes].some((n) => n.nodeType === Node.TEXT_NODE && (n.textContent ?? '').trim() !== '')) continue;
+        const r = rectOf(el);
+        if (r.width < 1 || r.height < 1 || styleOf(el).visibility !== 'visible') continue;
+        last = Math.max(last, r.bottom);
+      }
+      // Only a bar from edge to edge draws the line the page must end above: a pill sits over the page wherever it is.
+      const bars = floaters.filter((f) => rectOf(f).width >= vw * 0.9);
+      const clear = Math.min(...bars.map((f) => rectOf(f).top));
+      if (bars.length > 0 && left > 0 && Number.isFinite(last)) endUnderFixed = Math.max(0, Math.round(last - left - clear));
+    }
+
     const lines = (list: readonly string[]): string[] => list.slice(0, 40);
     return {
       microShare: total === 0 ? 0 : Math.round((micro.reduce((n, p) => n + p.chars, 0) / total) * 1000) / 1000,
@@ -525,6 +624,7 @@ export function collectDigest(maxElements: number): unknown {
       mediaBoxes: mediaBoxes.sort((a, b) => b[2] * b[3] - a[2] * a[3]).slice(0, 80),
       paper,
       material: { drawnShare, icons, boxes, ruledBoxes },
+      frame: { tabs, brokenFigures: lines(brokenFigures), overlappingText: lines(overlappingText), underFloat: lines(underFloat), endUnderFixed },
     };
   };
   // A page this cannot be read off (a browser without one of the calls, a document built strangely) is still

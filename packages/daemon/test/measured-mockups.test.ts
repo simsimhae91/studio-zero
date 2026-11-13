@@ -246,7 +246,7 @@ test('mock-ups are audited as a built screen is: sealed, each page a first scree
     assert.equal(report.passed, false);
     assert.equal(store.getAudit(report.id)?.id, report.id, 'the audit is kept like any other, and shows in the audit pane');
     // Each page was also tried by hand, at the phone's size: its one button held down, with nothing clicked.
-    assert.deepEqual([report.measures?.pressAnswer, report.measures?.focusVisible, report.measures?.layoutShift], [{ passed: 2, total: 2 }, { passed: 0, total: 0 }, null], 'a sealed page has nothing arriving late, so no shift is measured on it');
+    assert.deepEqual([report.measures?.pressAnswer, report.measures?.focusVisible, report.measures?.layoutShift], [{ passed: 8, total: 8 }, { passed: 6, total: 6 }, null], 'a sealed page has nothing arriving late, so no shift is measured on it');
     assert.ok(report.findings.every((f) => f.rule !== 'touch/no-press-answer'));
   } finally {
     await d.cleanup();

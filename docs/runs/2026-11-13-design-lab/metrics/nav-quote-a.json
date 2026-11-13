@@ -1,0 +1,254 @@
+{
+ "file": "/Users/hosoo/project/conclave/.design-lab/runs/nav/quote/a/ws/docs/mockups/a.html",
+ "template": "web-vite-react",
+ "desktop": {
+  "title": "서식 한 장 견적서",
+  "headline": {
+   "text": "일금 구십구만 원정",
+   "px": 48,
+   "lines": 1,
+   "weight": 800
+  },
+  "seed": "{\"hue\":35,\"chroma\":0.19,\"lightness\":0.56,\"neutral_hue\":85,\"neutral_chroma\":0.005,\"corners\":\"sharp\",\"face\":\"pretendard\",\"source\":\"한국식 견적서 서식을 찍던 누런 갱지와, 서명 자리에 도장을 찍는 인주의 주홍에서 왔다: 도장이 찍혀야 견적서가 나간다.\"}",
+  "tokens": {
+   "--sz-brand": [
+    163,
+    39,
+    0
+   ],
+   "--sz-brand-soft": [
+    255,
+    228,
+    221
+   ],
+   "--sz-accent": [
+    144,
+    33,
+    0
+   ],
+   "--sz-bg": [
+    252,
+    250,
+    246
+   ],
+   "--sz-surface": [
+    255,
+    254,
+    253
+   ],
+   "--sz-fg": [
+    23,
+    22,
+    19
+   ],
+   "--sz-brand-2": null,
+   "--sz-second": [
+    0,
+    177,
+    206
+   ]
+  },
+  "viewport": {
+   "vw": 1440,
+   "vh": 900
+  },
+  "screensLong": 2.3,
+  "type": {
+   "families": [
+    [
+     "Pretendard Variable",
+     489
+    ]
+   ],
+   "sizesFirstScreen": [
+    [
+     12,
+     14
+    ],
+    [
+     14,
+     110
+    ],
+    [
+     16,
+     21
+    ],
+    [
+     18,
+     66
+    ],
+    [
+     20,
+     2
+    ],
+    [
+     30,
+     13
+    ],
+    [
+     48,
+     10
+    ]
+   ],
+   "distinctSizes": 7,
+   "distinctSizesFirstScreen": 7,
+   "microSharePct": 3.5,
+   "microSharePctFirstScreen": 5.9,
+   "sentencesAtMicro": [],
+   "bodySharePct": 54,
+   "largestPx": 48,
+   "figuresAtLargest": [
+    "일금 구십구만 원정"
+   ],
+   "heavyWeightSharePct": 43.8,
+   "turnedText": [],
+   "stackedText": [],
+   "endAlignedText": [],
+   "monoOutsideCode": []
+  },
+  "layout": {
+   "controlsFirstScreen": 10,
+   "cards": 4,
+   "cardsFirstScreen": 3,
+   "halfEmptyCards": [],
+   "nestedCards": 2,
+   "saidTwice": [],
+   "figuresTwice": [
+    "11 x2"
+   ]
+  },
+  "colour": {
+   "saturatedPct": 23.3,
+   "darkPct": 2.1,
+   "brandPct": 0,
+   "secondPct": 23.1,
+   "blankLeftPct": 40.7,
+   "blankRightPct": 41.2
+  }
+ },
+ "phone": {
+  "title": "서식 한 장 견적서",
+  "headline": {
+   "text": "일금 구십구만 원정",
+   "px": 48,
+   "lines": 1,
+   "weight": 800
+  },
+  "seed": "{\"hue\":35,\"chroma\":0.19,\"lightness\":0.56,\"neutral_hue\":85,\"neutral_chroma\":0.005,\"corners\":\"sharp\",\"face\":\"pretendard\",\"source\":\"한국식 견적서 서식을 찍던 누런 갱지와, 서명 자리에 도장을 찍는 인주의 주홍에서 왔다: 도장이 찍혀야 견적서가 나간다.\"}",
+  "tokens": {
+   "--sz-brand": [
+    163,
+    39,
+    0
+   ],
+   "--sz-brand-soft": [
+    255,
+    228,
+    221
+   ],
+   "--sz-accent": [
+    144,
+    33,
+    0
+   ],
+   "--sz-bg": [
+    252,
+    250,
+    246
+   ],
+   "--sz-surface": [
+    255,
+    254,
+    253
+   ],
+   "--sz-fg": [
+    23,
+    22,
+    19
+   ],
+   "--sz-brand-2": null,
+   "--sz-second": [
+    0,
+    177,
+    206
+   ]
+  },
+  "viewport": {
+   "vw": 393,
+   "vh": 852
+  },
+  "screensLong": 2.4,
+  "type": {
+   "families": [
+    [
+     "Pretendard Variable",
+     488
+    ]
+   ],
+   "sizesFirstScreen": [
+    [
+     12,
+     22
+    ],
+    [
+     14,
+     89
+    ],
+    [
+     16,
+     88
+    ],
+    [
+     18,
+     2
+    ],
+    [
+     20,
+     2
+    ],
+    [
+     30,
+     13
+    ],
+    [
+     48,
+     10
+    ]
+   ],
+   "distinctSizes": 7,
+   "distinctSizesFirstScreen": 7,
+   "microSharePct": 5.1,
+   "microSharePctFirstScreen": 9.7,
+   "sentencesAtMicro": [],
+   "bodySharePct": 56.6,
+   "largestPx": 48,
+   "figuresAtLargest": [
+    "일금 구십구만 원정"
+   ],
+   "heavyWeightSharePct": 43.9,
+   "turnedText": [],
+   "stackedText": [],
+   "endAlignedText": [],
+   "monoOutsideCode": []
+  },
+  "layout": {
+   "controlsFirstScreen": 10,
+   "cards": 3,
+   "cardsFirstScreen": 2,
+   "halfEmptyCards": [],
+   "nestedCards": 0,
+   "saidTwice": [],
+   "figuresTwice": [
+    "11 x2"
+   ]
+  },
+  "colour": {
+   "saturatedPct": 22.7,
+   "darkPct": 7,
+   "brandPct": 0,
+   "secondPct": 22.1,
+   "blankLeftPct": 41.8,
+   "blankRightPct": 47
+  }
+ }
+}

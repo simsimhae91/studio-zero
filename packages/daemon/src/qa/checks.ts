@@ -285,7 +285,10 @@ export function runDomChecks(digest: PageDigest, ctx: CheckContext, c: DesignCon
     // E5: a phone app's first screen opens on colour. Pictures are left out of the count, so a screen that is
     // mostly photographs is not held to it.
     const pictures = (digest.composition?.mediaBoxes ?? []).reduce((sum, [, , w, h]) => sum + w * h, 0) / Math.max(1, digest.width * digest.height);
-    if (ctx.template === 'mobile-expo' && ctx.viewport === 'iphone-15-pro' && ctx.firstScreen && ctx.shares.coloured !== undefined && ctx.shares.coloured < COLOUR_LIMITS.grey && pictures < COLOUR_LIMITS.pictures) {
+    // Asked where the product is first met: a phone app on the phone, a web product at a desk. The floor was set
+    // on phone pages; the one web page the owner singled out as right measures 0.28 at a desk and the rest under 0.07.
+    const firstMet = ctx.template === 'mobile-expo' ? ctx.viewport === 'iphone-15-pro' : ctx.template !== undefined && ctx.viewport === 'desktop-1440';
+    if (firstMet && ctx.firstScreen && ctx.shares.coloured !== undefined && ctx.shares.coloured < COLOUR_LIMITS.grey && pictures < COLOUR_LIMITS.pictures) {
       add(
         'color/grey-screen',
         'color',
@@ -369,6 +372,13 @@ export const MATERIAL_LIMITS = {
   /** This many boxes drawn with a hairline box the screen in. */
   ruledBoxes: 3,
 } as const;
+
+/**
+ * The frame. Three controls along the foot of the screen are a tab bar: the pages the owner chose carry four
+ * and the references four or five, where a dock is one wide button. Text left under what floats at the end of
+ * the page is said from 16px, about a line.
+ */
+export const FRAME_LIMITS = { tabs: 3, endUnderPx: 16 } as const;
 
 export const COMPOSITION_LIMITS = {
   /** Share of the first screen's characters set at 12px or under. Above it, small text is carrying the screen. */
@@ -525,6 +535,60 @@ export function compositionFindings(digest: PageDigest, ctx: CheckContext): Find
       `${read.controls} controls can be pressed on the first screen, not counting its tabs; ${limits.controls} is the limit.`,
       'M7: A first screen offers up to 7 controls beside its rows, app bar and tab bar. Keep the main action where M1 puts it, move the rest into a sheet or onto the screen a row opens, and let a row be pressed whole in place of carrying buttons.',
     );
+  }
+
+  // T7 and E4: what is broken, on any screen at any size -----------------------------------------------------
+  const frame = read.frame;
+  if (frame) {
+    if (frame.brokenFigures.length > 0) {
+      add(
+        'type/broken-figure',
+        'typography',
+        'major',
+        `The figure "${frame.brokenFigures[0]}" breaks onto a second line${more(frame.brokenFigures)}.`,
+        'T7: A figure never breaks. Give its column the width of its longest value (min-width, or fewer columns), set it one step smaller, or let the row scroll sideways; white-space: nowrap on the figure keeps it whole.',
+        at(frame.brokenFigures[0]!),
+      );
+    }
+    if (frame.overlappingText.length > 0) {
+      add(
+        'layout/overlapping-text',
+        'hierarchy',
+        'major',
+        `Text is drawn over other text: "${frame.overlappingText[0]}"${more(frame.overlappingText)}.`,
+        'T7: No text over other text. Two states of one place are never both shown: hide the one that is not current (display: none, not opacity alone over a transparent layer), and give what is positioned by hand a place of its own.',
+        at(frame.overlappingText[0]!.split(' / ')[0]!),
+      );
+    }
+    if (frame.endUnderFixed >= FRAME_LIMITS.endUnderPx) {
+      add(
+        'layout/end-under-bar',
+        'spacing',
+        'major',
+        `Scrolled to its end, the page leaves its last ${frame.endUnderFixed}px of text under the bar or the control that floats over it.`,
+        'E4: The page ends clear of what floats. Give the scrolling body padding at its foot as tall as the tab bar and the floating action together, plus 16px.',
+      );
+    }
+    if (frame.underFloat.length > 0) {
+      add(
+        'layout/under-float',
+        'spacing',
+        'minor',
+        `"${frame.underFloat[0]}" lies under a floating control while the screen is at rest${more(frame.underFloat)}.`,
+        'E4: What floats covers no text at rest. Move the floating action to the end side above the tab bar, where it sits over the margin of a row and not its words, or let the first screenful end before it.',
+        at(frame.underFloat[0]!),
+      );
+    }
+    // M1: a phone app's first screen carries its tab bar.
+    if (ctx.template === 'mobile-expo' && ctx.viewport === 'iphone-15-pro' && ctx.firstScreen && frame.tabs < FRAME_LIMITS.tabs) {
+      add(
+        'layout/no-tab-bar',
+        'hierarchy',
+        'major',
+        `The first screen has no tab bar: ${frame.tabs === 0 ? 'nothing' : `${frame.tabs} control${frame.tabs === 1 ? '' : 's'}`} sits along its foot where ${FRAME_LIMITS.tabs} to 5 tabs belong.`,
+        'M1: Give the screen the app\'s navigation: fixed at the foot, a tab bar of three to five tabs, each an icon and a label, one for each top-level screen of the screen spec, the current one marked in the brand. The one primary action floats above it as a pill at the end side.',
+      );
+    }
   }
 
   // E1 and E4: what the screen is made of, on a screen a person meets the product on. Held to the phone's

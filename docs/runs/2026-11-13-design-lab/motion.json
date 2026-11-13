@@ -1,0 +1,555 @@
+{
+ "chzzk": {
+  "where": "https://chzzk.naver.com/",
+  "frameAtMs": [
+   1060,
+   1539,
+   1559,
+   1576,
+   3002,
+   5000
+  ],
+  "changedShare": [
+   0,
+   0,
+   0,
+   0,
+   0.466
+  ],
+  "withTransition": 4,
+  "pressables": 36,
+  "pressablesWithTransition": 0,
+  "keyframed": 4,
+  "transitionMs": [
+   "200ms ×3",
+   "500ms ×2"
+  ],
+  "easing": [
+   "cubic-bezier(0.4, 0, 0.2, 1) ×2",
+   "ease-out ×2",
+   "ease-in-out ×1"
+  ],
+  "running": 3,
+  "looping": 1,
+  "runningMs": [
+   700,
+   900,
+   5000
+  ],
+  "video": 1,
+  "presses": [
+   {
+    "text": "치지직",
+    "answered": false
+   },
+   {
+    "text": "추천",
+    "answered": false
+   },
+   {
+    "text": "스포츠",
+    "answered": false
+   },
+   {
+    "text": "라이브 엔드로 이동",
+    "answered": false
+   },
+   {
+    "text": "잠실 더 라스트 이닝 ⚾️ 마",
+    "answered": false
+   },
+   {
+    "text": "팔로잉",
+    "answered": false
+   }
+  ]
+ },
+ "naver-shopping": {
+  "where": "https://shopping.naver.com/ns/home",
+  "frameAtMs": [
+   290,
+   1486,
+   1514,
+   1690,
+   3002,
+   5002
+  ],
+  "changedShare": [
+   0,
+   0,
+   0.004,
+   0.58,
+   0.008
+  ],
+  "withTransition": 6,
+  "pressables": 32,
+  "pressablesWithTransition": 0,
+  "keyframed": 3,
+  "transitionMs": [
+   "250ms ×3",
+   "200ms ×3",
+   "300ms ×1"
+  ],
+  "easing": [
+   "linear ×3",
+   "cubic-bezier(0.165, 0.84, 0.44, 1) ×3",
+   "cubic-bezier(0.33, 1, 0.68, 1) ×1"
+  ],
+  "running": 5,
+  "looping": 2,
+  "runningMs": [
+   150,
+   500,
+   3000
+  ],
+  "video": 0,
+  "presses": [
+   {
+    "text": "본문으로 바로가기",
+    "answered": false
+   },
+   {
+    "text": "AI 에게 물어보기",
+    "answered": true
+   },
+   {
+    "text": "오늘끝딜",
+    "answered": true
+   },
+   {
+    "text": "지금배달",
+    "answered": true
+   },
+   {
+    "text": "홈쇼핑패션",
+    "answered": true
+   },
+   {
+    "text": "N배송",
+    "answered": true
+   }
+  ]
+ },
+ "daangn": {
+  "where": "https://www.daangn.com/kr/buy-sell/",
+  "frameAtMs": [
+   392,
+   666,
+   802,
+   1503,
+   3000,
+   5002
+  ],
+  "changedShare": [
+   0.046,
+   0.003,
+   0.141,
+   0,
+   0
+  ],
+  "withTransition": 19,
+  "pressables": 21,
+  "pressablesWithTransition": 14,
+  "keyframed": 0,
+  "transitionMs": [
+   "150ms ×41",
+   "300ms ×4",
+   "200ms ×1"
+  ],
+  "easing": [
+   "cubic-bezier(0.35, 0, 0.35, 1) ×29",
+   "cubic-bezier(0, 0, 0.15, 1) ×13",
+   "ease ×4"
+  ],
+  "running": 0,
+  "looping": 0,
+  "runningMs": [],
+  "video": 0,
+  "presses": [
+   {
+    "text": "당근 홈",
+    "answered": false
+   },
+   {
+    "text": "전체",
+    "answered": false
+   },
+   {
+    "text": "중고차",
+    "answered": true
+   },
+   {
+    "text": "필터",
+    "answered": true
+   },
+   {
+    "text": "아이폰",
+    "answered": true
+   },
+   {
+    "text": "자전거",
+    "answered": true
+   }
+  ]
+ },
+ "nintendo-kr": {
+  "where": "https://www.nintendo.com/kr/",
+  "frameAtMs": [
+   196,
+   1630,
+   1674,
+   1706,
+   3003,
+   5003
+  ],
+  "changedShare": [
+   0.257,
+   0,
+   0,
+   0.642,
+   0.001
+  ],
+  "withTransition": 66,
+  "pressables": 45,
+  "pressablesWithTransition": 36,
+  "keyframed": 0,
+  "transitionMs": [
+   "150ms ×59",
+   "500ms ×13"
+  ],
+  "easing": [
+   "ease ×48",
+   "linear ×23",
+   "cubic-bezier(1, 0, 1, 1) ×1"
+  ],
+  "running": 0,
+  "looping": 0,
+  "runningMs": [],
+  "video": 0,
+  "presses": [
+   {
+    "text": "Nintendo Store",
+    "answered": false
+   },
+   {
+    "text": "젤다의 전설 시간의 오카리나",
+    "answered": true
+   },
+   {
+    "text": "A",
+    "answered": true
+   },
+   {
+    "text": "A",
+    "answered": true
+   },
+   {
+    "text": "A",
+    "answered": true
+   }
+  ]
+ },
+ "nintendo-store": {
+  "where": "https://store.nintendo.co.kr/",
+  "frameAtMs": [
+   331,
+   3682,
+   3725,
+   3759,
+   3791,
+   5001
+  ],
+  "changedShare": [
+   0,
+   0,
+   0,
+   0,
+   0.246
+  ],
+  "withTransition": 17,
+  "pressables": 26,
+  "pressablesWithTransition": 10,
+  "keyframed": 0,
+  "transitionMs": [
+   "300ms ×13",
+   "500ms ×3",
+   "100ms ×1"
+  ],
+  "easing": [
+   "ease ×16",
+   "cubic-bezier(0.411, 0, 0.174, 1) ×1"
+  ],
+  "running": 0,
+  "looping": 0,
+  "runningMs": [],
+  "video": 0,
+  "presses": [
+   {
+    "text": "A",
+    "answered": false
+   },
+   {
+    "text": "A",
+    "answered": false
+   },
+   {
+    "text": "A",
+    "answered": false
+   },
+   {
+    "text": "A",
+    "answered": false
+   },
+   {
+    "text": "A",
+    "answered": false
+   }
+  ]
+ },
+ "nav-dues-a": {
+  "where": "file:///Users/hosoo/project/conclave/.design-lab/runs/nav/dues/a/ws/docs/mockups/a.html",
+  "frameAtMs": [
+   152,
+   403,
+   803,
+   1503,
+   3003,
+   5002
+  ],
+  "changedShare": [
+   0.168,
+   0.013,
+   0,
+   0,
+   0
+  ],
+  "withTransition": 8,
+  "pressables": 7,
+  "pressablesWithTransition": 2,
+  "keyframed": 1,
+  "transitionMs": [
+   "120ms ×8",
+   "200ms ×3",
+   "320ms ×2"
+  ],
+  "easing": [
+   "cubic-bezier(0.16, 1, 0.3, 1) ×10",
+   "ease ×3"
+  ],
+  "running": 0,
+  "looping": 0,
+  "runningMs": [],
+  "video": 0,
+  "presses": [
+   {
+    "text": "같이 보기",
+    "answered": true
+   },
+   {
+    "text": "회원 화면으로 보기",
+    "answered": true
+   },
+   {
+    "text": "11월 회비 19/22명 아직",
+    "answered": true
+   },
+   {
+    "text": "영수증 찍기",
+    "answered": true
+   },
+   {
+    "text": "장부",
+    "answered": true
+   },
+   {
+    "text": "회비",
+    "answered": true
+   }
+  ]
+ },
+ "nav-dues-b": {
+  "where": "file:///Users/hosoo/project/conclave/.design-lab/runs/nav/dues/b/ws/docs/mockups/b.html",
+  "frameAtMs": [
+   153,
+   402,
+   803,
+   1503,
+   3003,
+   5002
+  ],
+  "changedShare": [
+   0.094,
+   0.039,
+   0,
+   0,
+   0
+  ],
+  "withTransition": 7,
+  "pressables": 7,
+  "pressablesWithTransition": 3,
+  "keyframed": 2,
+  "transitionMs": [
+   "120ms ×8",
+   "200ms ×3",
+   "710ms ×1"
+  ],
+  "easing": [
+   "cubic-bezier(0.16, 1, 0.3, 1) ×12"
+  ],
+  "running": 0,
+  "looping": 0,
+  "runningMs": [],
+  "video": 0,
+  "presses": [
+   {
+    "text": "망원 새벽런",
+    "answered": true
+   },
+   {
+    "text": "회원 화면으로 보기",
+    "answered": true
+   },
+   {
+    "text": "영수증 찍기",
+    "answered": true
+   },
+   {
+    "text": "꽂이",
+    "answered": true
+   },
+   {
+    "text": "회비",
+    "answered": true
+   },
+   {
+    "text": "설정",
+    "answered": true
+   }
+  ]
+ },
+ "nav-duel-a": {
+  "where": "file:///Users/hosoo/project/conclave/.design-lab/runs/nav/duel/a/ws/docs/mockups/a.html",
+  "frameAtMs": [
+   152,
+   402,
+   803,
+   1502,
+   3003,
+   5002
+  ],
+  "changedShare": [
+   0.006,
+   0.004,
+   0,
+   0,
+   0
+  ],
+  "withTransition": 17,
+  "pressables": 8,
+  "pressablesWithTransition": 8,
+  "keyframed": 2,
+  "transitionMs": [
+   "200ms ×14",
+   "120ms ×7",
+   "320ms ×7",
+   "640ms ×6"
+  ],
+  "easing": [
+   "ease ×19",
+   "cubic-bezier(0.34, 1.56, 0.64, 1) ×15"
+  ],
+  "running": 0,
+  "looping": 0,
+  "runningMs": [],
+  "video": 0,
+  "presses": [
+   {
+    "text": "더보기",
+    "answered": true
+   },
+   {
+    "text": "서연 433 새벽등산 496 ",
+    "answered": true
+   },
+   {
+    "text": "68.0 67.5 67.0 3",
+    "answered": true
+   },
+   {
+    "text": "걸음 8,000보 0/40",
+    "answered": true
+   },
+   {
+    "text": "오늘 체중 기록",
+    "answered": true
+   },
+   {
+    "text": "대결",
+    "answered": true
+   }
+  ]
+ },
+ "nav-duel-b": {
+  "where": "file:///Users/hosoo/project/conclave/.design-lab/runs/nav/duel/b/ws/docs/mockups/b.html",
+  "frameAtMs": [
+   152,
+   401,
+   802,
+   1501,
+   3001,
+   5002
+  ],
+  "changedShare": [
+   0.021,
+   0.004,
+   0,
+   0,
+   0
+  ],
+  "withTransition": 16,
+  "pressables": 8,
+  "pressablesWithTransition": 8,
+  "keyframed": 10,
+  "transitionMs": [
+   "320ms ×20",
+   "120ms ×11",
+   "200ms ×3"
+  ],
+  "easing": [
+   "cubic-bezier(0.16, 1, 0.3, 1) ×15",
+   "ease ×13",
+   "cubic-bezier(0.34, 1.56, 0.64, 1) ×6",
+   "linear ×1"
+  ],
+  "running": 0,
+  "looping": 0,
+  "runningMs": [],
+  "video": 0,
+  "presses": [
+   {
+    "text": "응원 보내기 3",
+    "answered": true
+   },
+   {
+    "text": "1 96 98 2 97 100",
+    "answered": true
+   },
+   {
+    "text": "오늘 체중 기록",
+    "answered": true
+   },
+   {
+    "text": "다 걸었어요",
+    "answered": true
+   },
+   {
+    "text": "대결",
+    "answered": true
+   },
+   {
+    "text": "점수 내역",
+    "answered": true
+   }
+  ]
+ }
+}
