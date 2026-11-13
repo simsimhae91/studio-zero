@@ -13,6 +13,7 @@ import type { ReferenceCapture, RefKit } from '../qa/RefKit.ts';
 import type { SmokeRunner } from '../qa/SmokeTester.ts';
 import type { OrbStackManager } from '../sandbox/OrbStackManager.ts';
 import { ANCHOR_FILE, AnchorTableShape, anchorTableJson, readAnchorTable, renderAnchorTable, type AnchorRead, type AnchorTable } from '../scratch/AnchorTable.ts';
+import { DIRECTIONS_FILE, directionOf, directionThemeFile, readDirections, renderDirection, type Direction, type DirectionId, type DirectionsRead } from '../scratch/Directions.ts';
 import { SCREEN_SPEC_FILE, readScreenSpec, renderScreenSpec, type FlowTask, type ScreenSpecRead } from '../scratch/ScreenSpec.ts';
 import { untrusted, type UntrustedSource } from '../trust/dataBlock.ts';
 import { errorMessage, excerpt, type Clock, type Logger } from '../util/core.ts';
@@ -23,7 +24,9 @@ import { visualOutcome, type EvalRunner } from './EvalRunner.ts';
 import type { EngineResult, EngineSession } from './engines/Engine.ts';
 import { countCompilerErrors, emptyRun, renderEvidence, type Ledger, type RunRecord } from './Ledger.ts';
 import type { LessonBook } from './LessonBook.ts';
-import { ANCHOR_BRIEF, DRAFT_BRIEF, IDEATION_BRIEF, IDEATION_REQUIRED_FILES, IDEATION_REVISION_BRIEF, PLANNER_SYSTEM_PROMPT, SCREEN_SPEC_RULES, codingSystemPrompt } from './prompts.ts';
+import { ANCHOR_BRIEF, DEEP_DIVE_BRIEF, DRAFT_BRIEF, DRAW_ALL_BRIEF, IDEATION_BRIEF, IDEATION_REQUIRED_FILES, IDEATION_REVISION_BRIEF, PLANNER_SYSTEM_PROMPT, SCREEN_SPEC_RULES, THEME_FILE, codingSystemPrompt, directionBrief } from './prompts.ts';
+import { THEME_SEED_FILE, chosenTheme } from './themeSeed.ts';
+import { renderAuditFeedback } from '../qa/VisualAuditor.ts';
 import type { ReflectionAgent } from './ReflectionAgent.ts';
 import { renderCritique, renderPatch, type Acceptance, type PlanCritique, type SandwichReviewer } from './SandwichReviewer.ts';
 import type { SelfHosting } from './SelfHosting.ts';
@@ -53,6 +56,8 @@ const ANCHOR_CORRECTIONS = 2;
  * clean is something they are told, not a reason to throw the design away.
  */
 const MOCKUP_CORRECTIONS = 2;
+/** How many times a design task's lead engine is sent back to its directions table before it draws the directions itself, one after another. */
+const DIRECTION_CORRECTIONS = 1;
 
 /** One thing a verification round found wrong. `detail` is tool or page output: it reaches the engine inside a data block. */
 interface Failure {
@@ -209,6 +214,11 @@ export class Harness {
     let task = initial;
     // Held in an object because it is opened from inside a closure, on first use.
     const engine: { session: EngineSession | null } = { session: null };
+    /** A design task's other conversations: one per direction, each drawing its own page while the lead writes on. */
+    const lanes = new Map<DirectionId, EngineSession>();
+    const closeAll = async (): Promise<void> => {
+      await Promise.all([engine.session, ...lanes.values()].map((session) => session?.close().catch(() => undefined)));
+    };
     let onBranch = false;
     let appliedLessons: string[] = [];
     const resume = this.#resumeState(initial.id);
@@ -251,24 +261,38 @@ export class Harness {
       // Sends a message to the engine. If the task's own budget runs out mid-way, the owner is asked whether to
       // extend it (an approval, so it reaches the phone) and the engine carries on from where it stopped.
       let extensions = 0;
-      const send = async (content: string): Promise<EngineResult> => {
-        const engineSession = await open();
+      /** An extension being asked for now. Conversations that run out together share the one question. */
+      let extending: Promise<void> | null = null;
+      const sendTo = async (engineSession: EngineSession, content: string): Promise<EngineResult> => {
         let result = await engineSession.send(content);
         while (result.stopped === 'budget') {
           const spent = this.#store.getTask(task.id)?.spentTokens ?? 0;
           if (result.deniedRule !== 'budget.task') throw new Error(`the project's daily token budget is used up (task has spent ${spent} tokens)`);
-          if (extensions >= MAX_BUDGET_EXTENSIONS) throw new Error(`token budget exhausted after ${extensions} extensions (${spent} tokens used)`);
-          try {
-            await this.#policy.authorize({ type: 'system' }, { kind: 'task.extend-budget', projectId: project.id, taskId: task.id, addTokens: initial.budgetTokens, spentTokens: spent }, { taskId: task.id, signal, onWaiting });
-          } catch (err) {
-            if (err instanceof ApprovalDeniedError) throw new Error(`token budget exhausted (${spent} tokens used) and an extension was not approved`);
-            throw err;
-          }
-          extensions += 1;
-          this.#store.extendTaskBudget(task.id, initial.budgetTokens);
+          extending ??= (async () => {
+            if (extensions >= MAX_BUDGET_EXTENSIONS) throw new Error(`token budget exhausted after ${extensions} extensions (${spent} tokens used)`);
+            try {
+              await this.#policy.authorize({ type: 'system' }, { kind: 'task.extend-budget', projectId: project.id, taskId: task.id, addTokens: initial.budgetTokens, spentTokens: spent }, { taskId: task.id, signal, onWaiting });
+            } catch (err) {
+              if (err instanceof ApprovalDeniedError) throw new Error(`token budget exhausted (${spent} tokens used) and an extension was not approved`);
+              throw err;
+            }
+            extensions += 1;
+            this.#store.extendTaskBudget(task.id, initial.budgetTokens);
+          })().finally(() => {
+            extending = null;
+          });
+          await extending;
           result = await engineSession.send('Your token budget was extended. Continue from where you stopped.');
         }
         return result;
+      };
+      const send = async (content: string): Promise<EngineResult> => sendTo(await open(), content);
+      /** One more conversation with the task's engine, beside the main one. */
+      const openLane = async (lane: DirectionId): Promise<EngineSession> => {
+        const decided = await routed();
+        const session = await decided.engine.open({ project, task, route: decided.candidate, system: codingSystemPrompt(project.template), signal, onWaiting, lane });
+        lanes.set(lane, session);
+        return session;
       };
 
       let plan: Plan | null;
@@ -331,6 +355,11 @@ export class Harness {
         const revising = ideation && (await this.#ideationDocuments(project)).length === 0;
         result = await send(executeMessage(task, plan, lessons.text, { anchor, critique, references, revising, specOwed }));
         checkCancel();
+        // A new design: its directions are drawn from the table the lead just wrote, each by an engine of its own.
+        if (ideation && !revising) {
+          result = await this.#drawDirections(project, task, { send, sendTo, openLane, lanes, checkCancel });
+          checkCancel();
+        }
       }
 
       // ---------------------------------------------------------------- Verify
@@ -369,7 +398,21 @@ export class Harness {
           }
 
           phase('execute', round + 1);
-          result = await send(repairMessage(failures));
+          // A page goes back to the engine that drew it, all of them at once. What no such engine answers for
+          // (a document, the spec, a page the lead drew itself) goes to the lead, as everything used to.
+          const byPage = [...(looked?.pages ?? [])].flatMap(([file, found]) => {
+            const lane = directionOf(file);
+            const session = lane === null ? undefined : lanes.get(lane);
+            return session ? [{ file, found, session }] : [];
+          });
+          if (byPage.length === 0) result = await send(repairMessage(failures));
+          else {
+            const theirs = new Set(byPage.map((page) => page.file));
+            const rest = [...(looked?.pages ?? [])].flatMap(([file, found]) => (theirs.has(file) ? [] : found));
+            const reworked = await Promise.allSettled([...byPage.map((page) => sendTo(page.session, pageRepairMessage(page.file, page.found))), ...(rest.length > 0 ? [send(repairMessage(rest))] : [])]);
+            checkCancel();
+            for (const outcome of reworked) if (outcome.status === 'rejected') this.#log.warn({ taskId: task.id, err: errorMessage(outcome.reason) }, 'a direction could not be reworked');
+          }
           checkCancel();
         }
       };
@@ -470,7 +513,7 @@ export class Harness {
       if (signal.aborted && signal.reason instanceof ShutdownSignal) {
         // Not a verdict on the task: leave it in flight so the queue re-queues it on the next boot.
         if (onBranch) await this.#parkBranch(project, task, 'interrupted');
-        await engine.session?.close().catch(() => undefined);
+        await closeAll();
         return;
       }
       const cancelled = err instanceof Cancelled || signal.aborted;
@@ -478,7 +521,7 @@ export class Harness {
       if (onBranch) await this.#parkBranch(project, task, cancelled ? 'cancelled' : 'failed');
       task = this.#finish(task, cancelled ? 'cancelled' : 'failed', { error: cancelled ? 'cancelled by the owner' : errorMessage(err) });
     } finally {
-      await engine.session?.close().catch(() => undefined);
+      await closeAll();
     }
 
     // ---------------------------------------------------------------- Ledger
@@ -775,9 +818,9 @@ export class Harness {
    * A design review that could not run leaves the mock-ups measured and not judged; that is said and not
    * waited for. The owner is the one who chooses between them.
    */
-  async #verifyIdeation(project: Project, task: Task, signal: AbortSignal): Promise<{ failures: Failure[]; unverified: string[]; waitingOn: null; advisory: boolean; drawn: MockupMeasurement | null }> {
+  async #verifyIdeation(project: Project, task: Task, signal: AbortSignal): Promise<{ failures: Failure[]; unverified: string[]; waitingOn: null; advisory: boolean; drawn: MockupMeasurement | null; pages: Map<string, Failure[]> | null }> {
     const scope = { projectId: project.id, taskId: task.id };
-    const owed = (failures: Failure[]) => ({ failures, unverified: [], waitingOn: null, advisory: false, drawn: null });
+    const owed = (failures: Failure[]) => ({ failures, unverified: [], waitingOn: null, advisory: false, drawn: null, pages: null });
     const missing = await this.#ideationDocuments(project);
     if (missing.length > 0) return owed(missing);
 
@@ -792,6 +835,10 @@ export class Harness {
     const drawn = await this.#mockups.measure(project, { taskId: task.id, tasks, signal });
     const failures: Failure[] = [];
     const unverified: string[] = [];
+    /** The same failures page by page, for when each page has an engine of its own to send it back to. */
+    const pages = new Map<string, Failure[]>();
+    const mine = (file: string, failure: Failure): void => void pages.set(file, [...(pages.get(file) ?? []), failure]);
+    for (const page of drawn.flowProblems) mine(page.file, { name: 'mockup-flow', source: 'browser-page', detail: `${MOCKUP_FLOW_NOTE}\n\n${page.file}\n${page.problems.map((line) => `- ${line}`).join('\n')}` });
     if (drawn.flowProblems.length > 0 || drawn.options.some((o) => o.flow)) {
       const detail = drawn.flowProblems.map((page) => `${page.file}\n${page.problems.map((line) => `- ${line}`).join('\n')}`).join('\n\n');
       this.#events.emit(scope, { type: 'gate.result', gate: 'flow', name: drawn.options.map((o) => o.file).join(' '), passed: drawn.flowProblems.length === 0, exitCode: null, durationMs: Date.now() - walkStarted, detail });
@@ -800,9 +847,105 @@ export class Harness {
     if (drawn.audit) {
       const outcome = visualOutcome(drawn.audit, this.#config.audit.threshold);
       if (outcome.unverified) unverified.push(`the mock-ups: the design review did not run (${drawn.audit.vision.reason ?? 'no reason recorded'}), so they are measured and not judged`);
-      else if (!outcome.passed) failures.push({ name: 'mockup-audit', source: 'browser-page', detail: `${MOCKUP_AUDIT_NOTE}\n\n${outcome.detail}` });
+      else if (!outcome.passed) {
+        failures.push({ name: 'mockup-audit', source: 'browser-page', detail: `${MOCKUP_AUDIT_NOTE}\n\n${outcome.detail}` });
+        const audit = drawn.audit;
+        for (const { file } of drawn.options) {
+          const findings = audit.findings.filter((f) => f.route === file);
+          const redesignPatches = audit.redesignPatches.filter((patch) => patch.route === file);
+          // A page with nothing but minors and no plan from the reviewer is not what held the set back.
+          if (findings.some((f) => f.severity !== 'minor') || redesignPatches.length > 0) mine(file, { name: 'mockup-audit', source: 'browser-page', detail: `${MOCKUP_AUDIT_NOTE}\n\n${renderAuditFeedback({ ...audit, findings, redesignPatches })}` });
+        }
+      }
     }
-    return { failures, unverified, waitingOn: null, advisory: true, drawn };
+    return { failures, unverified, waitingOn: null, advisory: true, drawn, pages };
+  }
+
+  async #readDirections(project: Project): Promise<DirectionsRead> {
+    const res = await this.#sandboxes.exec(project, `[ -f ${DIRECTIONS_FILE} ] && head -c 65536 ${DIRECTIONS_FILE}`, { timeoutSec: 20, maxOutputBytes: 80_000 });
+    return res.exitCode !== 0 || res.stdout.trim() === '' ? { ok: false, problems: [`${DIRECTIONS_FILE} is missing or empty.`] } : readDirections(res.stdout);
+  }
+
+  /**
+   * Draws a new design's directions side by side: one conversation per row of the directions table, each
+   * given that row and the scene they all share and nothing of the others' pages, while the lead engine
+   * writes the deep dive.
+   *
+   * One engine used to write page a, then b, then c in the conversation that had written the documents. That
+   * took the three in a row (seventeen minutes of a real forty-minute task before the owner saw anything),
+   * and what made them different was a sentence asking that they be. Here the difference is in what each
+   * engine is handed, and is checked before anyone draws.
+   *
+   * A table that does not hold after being sent back is not a reason to fail a design: the lead then draws
+   * every direction itself, in turn. A direction whose engine fails is said; the others stand.
+   */
+  async #drawDirections(
+    project: Project,
+    task: Task,
+    p: { send: (content: string) => Promise<EngineResult>; sendTo: (session: EngineSession, content: string) => Promise<EngineResult>; openLane: (lane: DirectionId) => Promise<EngineSession>; lanes: Map<DirectionId, EngineSession>; checkCancel: () => void },
+  ): Promise<EngineResult> {
+    const scope = { projectId: project.id, taskId: task.id };
+    const started = Date.now();
+    // The pages are drawn against the screen spec as well as the table, so both are looked at before anyone
+    // draws. The spec is still owed at verification, where a spec that never comes to hold fails the task.
+    const specProblems = async (): Promise<string[]> => {
+      const spec = await this.#readSpec(project);
+      return spec === null ? [`${SCREEN_SPEC_FILE} is missing or empty.`] : spec.ok ? [] : spec.problems;
+    };
+    let read = await this.#readDirections(project);
+    let spec = await specProblems();
+    for (let asked = 0; (!read.ok || spec.length > 0) && asked < DIRECTION_CORRECTIONS; asked++) {
+      if (!read.ok) this.#events.emit(scope, { type: 'gate.result', gate: 'directions', name: DIRECTIONS_FILE, passed: false, exitCode: null, durationMs: Date.now() - started, detail: read.problems.join('\n') });
+      const owed = [
+        read.ok ? null : `${DIRECTIONS_FILE} does not hold as the directions table yet:\n${untrusted('sandbox-output', read.problems.map((line) => `- ${line}`).join('\n'), { check: 'directions' })}`,
+        spec.length === 0 ? null : `${SCREEN_SPEC_FILE} does not hold as the screen spec yet:\n${untrusted('sandbox-output', spec.map((line) => `- ${line}`).join('\n'), { check: 'screen-spec' })}`,
+      ].filter((block) => block !== null);
+      await p.send(`Before the directions are drawn, correct exactly these, keeping each file's shape, and change nothing else. Do not start the fifth pass yet.\n\n${owed.join('\n\n')}`);
+      p.checkCancel();
+      read = await this.#readDirections(project);
+      spec = await specProblems();
+    }
+    this.#events.emit(scope, { type: 'gate.result', gate: 'directions', name: DIRECTIONS_FILE, passed: read.ok, exitCode: null, durationMs: Date.now() - started, detail: read.ok ? '' : read.problems.join('\n') });
+    if (!read.ok) {
+      this.#events.emit(scope, { type: 'notice', level: 'warn', message: `${DIRECTIONS_FILE} does not hold, so the directions are not drawn side by side: one engine draws them in turn.` });
+      return p.send(DRAW_ALL_BRIEF);
+    }
+
+    const { scene, directions } = read.table;
+    // Each direction's theme is generated here, from its row, and left in a file only that direction reads.
+    for (const row of directions) await this.#sandboxes.writeFile(project, directionThemeFile(row.id), chosenTheme(row.theme).css);
+    const draw = async (row: Direction): Promise<void> => {
+      const session = await p.openLane(row.id);
+      const others = directions.filter((other) => other.id !== row.id).map((other) => `${other.id}: ${other.concept.trim()}`).join('\n');
+      await p.sendTo(
+        session,
+        directionBrief({
+          file: `${MOCKUP_DIR}/${row.id}.html`,
+          themeFile: directionThemeFile(row.id),
+          seed: untrusted('sandbox-output', JSON.stringify(row.theme), { file: DIRECTIONS_FILE, field: 'theme' }),
+          scene: untrusted('sandbox-output', scene.trim(), { file: DIRECTIONS_FILE, field: 'scene' }),
+          row: untrusted('sandbox-output', renderDirection(row), { file: DIRECTIONS_FILE, direction: row.id }),
+          others: untrusted('sandbox-output', others, { file: DIRECTIONS_FILE, field: 'others' }),
+        }),
+      );
+    };
+    this.#events.emit(scope, { type: 'notice', level: 'info', message: `${directions.length} directions are being drawn side by side (${directions.map((row) => row.id).join(', ')}), each by its own engine, while the deep dive is written.` });
+    const [lead, ...drawn] = await Promise.allSettled([p.send(DEEP_DIVE_BRIEF), ...directions.map(draw)]);
+    p.checkCancel();
+    for (const [i, outcome] of drawn.entries()) {
+      if (outcome.status !== 'rejected') continue;
+      const id = directions[i]!.id;
+      // Its conversation is not one to send a rework to. Whether its page is there is found out by the checks.
+      await p.lanes.get(id)?.close().catch(() => undefined);
+      p.lanes.delete(id);
+      this.#events.emit(scope, { type: 'notice', level: 'warn', message: `Direction ${id} was not finished by its engine (${excerpt(errorMessage(outcome.reason), 300)}). The other directions stand.` });
+    }
+    if (lead!.status === 'rejected') throw lead.reason;
+    // The project's own theme is the recommended direction's, as it was when one engine drew them all.
+    const recommended = chosenTheme(directions[0]!.theme);
+    await this.#sandboxes.writeFile(project, THEME_SEED_FILE, recommended.json);
+    await this.#sandboxes.writeFile(project, THEME_FILE, recommended.css);
+    return lead.value;
   }
 
   /** Keep the unfinished work on its branch for inspection and put the workspace back on the integration branch. */
@@ -881,6 +1024,11 @@ function patchMessage(acceptance: Acceptance): string {
  * What the engine is told after a failed round. A compiler failure keeps its own frame (the command and the exit
  * code are the daemon's; the output inside is the tool's, fenced as data like any other sandbox output).
  */
+/** The same, for the engine that drew one page of a design and answers for that page alone. */
+export function pageRepairMessage(file: string, failures: readonly Failure[]): string {
+  return `${repairMessage(failures)}\n\nOnly ${file} is yours to change: findings that name another page are for the engine that drew it. When yours is fixed, check it with check_mockup before you stop.`;
+}
+
 export function repairMessage(failures: readonly Failure[]): string {
   const blocks = failures.map((f) => {
     const data = untrusted(f.source, excerpt(f.detail, 12_000), { check: f.name });

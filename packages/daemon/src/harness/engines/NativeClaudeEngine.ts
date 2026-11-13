@@ -136,7 +136,7 @@ export class NativeClaudeEngine implements Engine {
       // user message, which is what keeps the model issuing parallel calls.
       const results: Anthropic.Beta.BetaToolResultBlockParam[] = [];
       for (const call of calls) {
-        const outcome = await this.#toolbox.call({ project: run.project, taskId: run.task.id, signal: run.signal, onWaiting: run.onWaiting }, call.name, call.input);
+        const outcome = await this.#toolbox.call({ project: run.project, taskId: run.task.id, signal: run.signal, onWaiting: run.onWaiting, ...(run.lane === undefined ? {} : { lane: run.lane }) }, call.name, call.input);
         results.push({ type: 'tool_result', tool_use_id: call.id, content: outcome.content, is_error: outcome.isError });
       }
       const ctx = { project: run.project, taskId: run.task.id };

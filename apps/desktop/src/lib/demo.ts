@@ -16,11 +16,17 @@ const projects: Project[] = [
   { id: 'prj_ledger', slug: 'ledger', name: 'Ledger', template: 'web-vite-react', createdAt: min(-600) },
   { id: 'prj_atlas', slug: 'atlas', name: 'Atlas 모바일', template: 'mobile-expo', createdAt: min(-300) },
   { id: 'prj_tide', slug: 'tide', name: 'Tide 정산', template: 'web-vite-react', createdAt: min(-70) },
+  { id: 'prj_pace', slug: 'pace', name: 'Pace 2주 식단', template: 'mobile-expo', createdAt: min(-12) },
 ];
 
 const baseTask = { projectId: 'prj_ledger', origin: 'desktop', engine: 'native-claude', model: 'claude-opus-5-5', budgetTokens: 2_000_000, error: null, baseBranch: null, enginePref: null, modelPref: null, effort: 'high', effortPref: null, sessionId: null, reviewerPref: null, references: [] as string[], track: 'full' } as const;
 const sessions: Session[] = [{ id: 'ses_refactor', projectId: 'prj_ledger', name: 'refactor/dates', createdAt: min(-241) }];
 const tasks: Task[] = [
+  {
+    // A design task still at work: the documents are written and two directions are being drawn side by side.
+    ...baseTask, id: 'tsk_pace_design', projectId: 'prj_pace', engine: 'claude-code', model: 'opus', kind: 'ideate', prompt: '둘씩 짝지어 2주 동안 같이 하는 식단 기록 앱. 상대가 오늘 기록했는지가 먼저 보여야 한다.', state: 'running', phase: 'execute', branch: 'sz/tsk_pace_design',
+    spentTokens: 412_000, spentUsdMicros: 0, baseCheckpointId: null, summary: null, createdAt: min(-12), startedAt: min(-12), finishedAt: null,
+  },
   {
     // A design task that ended: documents written, three first screens drawn, the build waiting for the owner's pick.
     ...baseTask, id: 'tsk_tide_design', projectId: 'prj_tide', engine: 'claude-code', model: 'opus', kind: 'ideate', prompt: '프리랜서 셋이 같이 쓰는 정산 도구. 누가 누구에게 얼마를 줘야 하는지 한눈에 보여야 한다.', state: 'succeeded', phase: null, branch: 'sz/tsk_tide_design',
@@ -116,6 +122,26 @@ const designBodies: EventBody[] = [
   },
   { type: 'task.state', state: 'succeeded', error: null },
 ];
+/** The design task that is still drawing: each direction's engine has had its page measured, one of them twice. */
+const draftingBodies: EventBody[] = [
+  { type: 'task.state', state: 'running', error: null },
+  { type: 'task.phase', phase: 'execute', round: 1 },
+  { type: 'tool.call', callId: 'pace_1', tool: 'write_file', input: 'docs/prd.md (6120 chars)' },
+  { type: 'tool.result', callId: 'pace_1', ok: true, exitCode: null, durationMs: 40, preview: 'wrote docs/prd.md' },
+  { type: 'tool.call', callId: 'pace_2', tool: 'write_file', input: 'docs/mockups/directions.json (2210 chars)' },
+  { type: 'tool.result', callId: 'pace_2', ok: true, exitCode: null, durationMs: 38, preview: 'wrote docs/mockups/directions.json' },
+  { type: 'gate.result', gate: 'directions', name: 'docs/mockups/directions.json', passed: true, exitCode: null, durationMs: 31, detail: '' },
+  { type: 'tool.call', callId: 'pace_3', tool: 'write_file', input: 'docs/mockups/b.html (24120 chars)', lane: 'b' },
+  { type: 'tool.result', callId: 'pace_3', ok: true, exitCode: null, durationMs: 52, preview: 'wrote docs/mockups/b.html' },
+  { type: 'tool.call', callId: 'pace_4', tool: 'write_file', input: 'docs/mockups/a.html (27310 chars)', lane: 'a' },
+  { type: 'tool.result', callId: 'pace_4', ok: true, exitCode: null, durationMs: 49, preview: 'wrote docs/mockups/a.html' },
+  { type: 'tool.call', callId: 'pace_5', tool: 'check_mockup', input: 'docs/mockups/b.html', lane: 'b' },
+  { type: 'mockups.drafted', option: { file: 'docs/mockups/b.html', title: '둘이 채우는 2주 달력', idea: '', artifactId: 'art_mock_b', width: 393, height: 852, flow: { filmArtifactId: null, tasks: [walked('log', 2, 48)] }, measures: { blockers: 1, majors: 2, copyHabits: 0, slopScore: null } } },
+  { type: 'tool.result', callId: 'pace_5', ok: true, exitCode: null, durationMs: 21_400, preview: 'Measured: 1 blocker, 2 major, 3 minor.' },
+  { type: 'tool.call', callId: 'pace_6', tool: 'check_mockup', input: 'docs/mockups/a.html', lane: 'a' },
+  { type: 'mockups.drafted', option: { file: 'docs/mockups/a.html', title: '오늘의 맞대결 접시', idea: '', artifactId: 'art_mock_a', width: 393, height: 852, flow: { filmArtifactId: null, tasks: [walked('log', 1, 56)] }, measures: { blockers: 0, majors: 0, copyHabits: 0, slopScore: null } } },
+  { type: 'tool.result', callId: 'pace_6', ok: true, exitCode: null, durationMs: 19_800, preview: 'Nothing here holds the page back.' },
+];
 /** One task of a walk that went through, for the demo's mock-ups. */
 function walked(id: string, presses: number, smallestTargetPx: number | null): FlowTaskWalk {
   return { id, reached: true, stopped: null, stoppedAtStep: null, presses, typed: 0, scrolls: 0, smallestTargetPx, answered: presses, responseMs: presses > 0 ? 320 : null };
@@ -123,6 +149,7 @@ function walked(id: string, presses: number, smallestTargetPx: number | null): F
 const events: EventEnvelope[] = [
   ...bodies.map((body, i): EventEnvelope => ({ seq: 100 + i, at: min(-18) + i * 35_000, projectId: 'prj_ledger', taskId: 'tsk_detail', body })),
   ...designBodies.map((body, i): EventEnvelope => ({ seq: 40 + i, at: min(-66) + i * 50_000, projectId: 'prj_tide', taskId: 'tsk_tide_design', body })),
+  ...draftingBodies.map((body, i): EventEnvelope => ({ seq: 70 + i, at: min(-12) + i * 38_000, projectId: 'prj_pace', taskId: 'tsk_pace_design', body })),
 ];
 
 /** The Tide design task's three first screens: small real pages, each arranged its own way, in the project's tokens. */
@@ -413,7 +440,7 @@ const handlers: Handlers = {
   }),
   // Cursor's level is part of its model names; the others take it as a setting of their own.
   'engines.models': (p) => ({ models: demoModels[p.engine] ?? [], efforts: p.engine === 'cursor' || p.engine === 'antigravity' ? [] : ['low', 'medium', 'high', 'xhigh', 'max'] }),
-  'projects.list': () => ({ projects, live: [{ projectId: 'prj_core', sandbox: 'running', busy: false }, { projectId: 'prj_ledger', sandbox: 'running', busy: true }, { projectId: 'prj_atlas', sandbox: 'stopped', busy: false }, { projectId: 'prj_tide', sandbox: 'stopped', busy: false }] }),
+  'projects.list': () => ({ projects, live: [{ projectId: 'prj_core', sandbox: 'running', busy: false }, { projectId: 'prj_ledger', sandbox: 'running', busy: true }, { projectId: 'prj_atlas', sandbox: 'stopped', busy: false }, { projectId: 'prj_tide', sandbox: 'stopped', busy: false }, { projectId: 'prj_pace', sandbox: 'running', busy: true }] }),
   'ledger.list': (p) => ({ entries: ledger.filter((e) => e.projectId === p.projectId) }),
   'external.list': (p) => ({ apis: p.projectId === 'prj_ledger' ? [{ projectId: 'prj_ledger', name: 'tosspay', origin: 'https://api.tosspayments.com', variables: ['SECRET_KEY'], createdAt: min(-200) }] : [] }),
   'power.get': () => ({ mode: 'system', supported: true }),

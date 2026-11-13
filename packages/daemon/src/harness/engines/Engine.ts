@@ -9,6 +9,11 @@ export interface EngineRun {
   system: string;
   signal: AbortSignal;
   onWaiting: (waiting: boolean) => void;
+  /**
+   * Which of the task's conversations this is, when it has more than one at once (a design task draws its
+   * directions side by side: "a", "b", "c"). Travels with every tool call the conversation makes.
+   */
+  lane?: string;
 }
 
 export interface EngineResult {

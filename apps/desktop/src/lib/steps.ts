@@ -231,7 +231,7 @@ function refresh(group: Building): void {
 /** A lane as the owner reads it: a direction's engine is named by its direction. */
 const laneName = (lane: string): string => (/^[abc]$/.test(lane) ? `${lane.toUpperCase()}안` : lane);
 
-const gateLabel = { compiler: '컴파일', smoke: '스모크 테스트', anchor: '고정표', build: '프로덕션 빌드', screens: '화면 명세', flow: '시안에서 핵심 흐름 걷기' } as const;
+const gateLabel = { compiler: '컴파일', smoke: '스모크 테스트', anchor: '고정표', build: '프로덕션 빌드', screens: '화면 명세', flow: '시안에서 핵심 흐름 걷기', directions: '시안 방향표' } as const;
 
 /**
  * A task's event stream as what the owner reads: a short list of steps with their outcome, the agent's closing

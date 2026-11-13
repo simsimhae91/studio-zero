@@ -81,7 +81,7 @@ export const EventBody = z.discriminatedUnion('type', [
      * `anchor`: the anchor table a design task owes before code. `build`: the production build, measured for the ledger.
      * `screens`: the screen spec a design task owes. `flow`: the core flow of that spec, walked on the mock-ups.
      */
-    gate: z.enum(['compiler', 'smoke', 'anchor', 'build', 'screens', 'flow']),
+    gate: z.enum(['compiler', 'smoke', 'anchor', 'build', 'screens', 'flow', 'directions']),
     /** What ran: the command line for the compiler gate, the routes for the smoke gate. */
     name: z.string(),
     passed: z.boolean(),

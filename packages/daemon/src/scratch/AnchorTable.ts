@@ -84,7 +84,8 @@ const RULED_OUT = /(?:일러스트(?:레이션)?|클립 ?아트|스톡 ?(?:이�
 const VALUE = /\d+(?:\.\d+)?\s?(?:px|rem|em|ms|s|%|deg)\b|#[0-9a-f]{6}\b/gi;
 
 const words = (text: string): Set<string> => new Set(text.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter((w) => w.length > 1));
-function overlap(a: string, b: string): number {
+/** How much of the shorter text's vocabulary the other shares: near 1 when two texts say the same thing in the same words. */
+export function overlap(a: string, b: string): number {
   const [x, y] = [words(a), words(b)];
   const shared = [...x].filter((w) => y.has(w)).length;
   return shared / Math.max(1, Math.min(x.size, y.size));

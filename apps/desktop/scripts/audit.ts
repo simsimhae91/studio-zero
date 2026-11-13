@@ -122,6 +122,10 @@ const screens: { name: string; url: string; go: (page: Page, narrow: boolean) =>
     await page.getByRole('menu').waitFor();
   } },
   { name: 'core', url: '/?demo', go: openFromIndex('Studio Zero Core') },
+  { name: 'design-drafting', url: '/?demo', go: async (page, narrow) => {
+    await openFromIndex('Pace 2주 식단')(page, narrow);
+    await page.getByRole('region', { name: '그리는 중인 시안' }).waitFor();
+  } },
   { name: 'design-mockups', url: '/?demo', go: async (page, narrow) => {
     await openFromIndex('Tide 정산')(page, narrow);
     await page.getByTitle('C안 첫 화면 시안').waitFor();

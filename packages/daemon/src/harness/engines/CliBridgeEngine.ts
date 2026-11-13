@@ -432,7 +432,7 @@ export class CliBridgeEngine implements Engine {
     // The real path, because that is what a sandbox profile matches against (/var is a link to /private/var).
     const scratch = await realpath(await mkdtemp(join(tmpdir(), 'sz-bridge-')));
     await chmod(scratch, 0o700);
-    const ctx = { project: run.project, taskId: run.task.id, signal: run.signal, onWaiting: run.onWaiting };
+    const ctx = { project: run.project, taskId: run.task.id, signal: run.signal, onWaiting: run.onWaiting, ...(run.lane === undefined ? {} : { lane: run.lane }) };
     const toolbox = this.#toolbox;
     const token = this.#sessions.create({ definitions: () => toolbox.definitions(), call: (name, args) => toolbox.call(ctx, name, args) }, 6 * 60 * 60 * 1000);
     const system = `${run.system}\n\n${this.#adapter.jailed ? 'Your own shell and file tools do not work in this session: they are confined to an empty folder and cannot run commands.' : 'You have no local tools in this session.'} Act on the project only through the "${MCP_SERVER}" MCP tools (bash, read_file, write_file, edit_file work inside the project sandbox at /workspace; find_tools and use_tool reach external services).`;

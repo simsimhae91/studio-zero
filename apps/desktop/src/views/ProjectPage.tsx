@@ -1048,7 +1048,7 @@ function DraftMockups({ mockups, running }: { mockups: Mockup[]; running: boolea
     <section aria-label="그리는 중인 시안" className="flex flex-col gap-3 rounded-lg border border-border bg-surface px-4 py-3">
       <div className="flex flex-col gap-1">
         <p className="text-base font-semibold">{running ? `시안 ${mockups.length}개를 그리는 중입니다` : `끝나기 전에 그린 시안 ${mockups.length}개`}</p>
-        <p className="text-sm text-fg-muted">엔진이 측정을 맡길 때마다 그때의 화면으로 바뀝니다. 아직 고치는 중이고 디자인 심사 전입니다. 고르는 것은 작업이 끝난 뒤입니다.</p>
+        <p className="text-base text-fg-muted">엔진이 측정을 맡길 때마다 그때 화면으로 바뀌는 초안입니다. 고르는 것은 작업이 끝난 뒤입니다.</p>
       </div>
       <div className={`grid grid-cols-2 gap-3 ${mockups.length > 2 ? '@xl:grid-cols-3' : ''}`}>
         {mockups.map((m) => {
