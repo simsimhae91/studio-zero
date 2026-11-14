@@ -31,7 +31,7 @@ const Reflection = z.object({
   evalSuggestions: z.array(
     z.object({
       name: z.string().describe('Short kebab-case name, e.g. "typecheck" or "unit-tests".'),
-      command: z.string().describe('Copied exactly from a bash tool call in the trace that exited 0.'),
+      command: z.string().describe('Copied exactly from a bash tool call in the trace that exited 0. Never a pipeline: piped into tail, head or grep, the exit code is the last command\'s, and a check made of it passes whatever the tests did. Not the type check either: it runs first in every round already.'),
       rationale: z.string(),
     }),
   ),

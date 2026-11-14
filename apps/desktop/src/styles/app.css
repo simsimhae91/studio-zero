@@ -405,6 +405,8 @@ body {
   border-block-start: 1px solid var(--color-border);
 }
 .diff-head {
+  /* A bar across the whole diff, not a paragraph held to a reading measure. */
+  max-inline-size: none;
   padding: 0.25rem 0.75rem;
   color: var(--color-fg-muted);
   background: var(--color-sunken);

@@ -88,8 +88,11 @@ export function Changes({ task, comments, onComments, onDone }: { task: Task; co
       if (e.pointerType !== 'mouse' || e.button !== 0) return;
       e.preventDefault();
       dragging.current = true;
-      setWriting(false);
-      setPicked({ ...at, from: line, to: line });
+      // With the comment box open on this hunk and side, a press reaches from where the selection began to this
+      // line, as a second tap does, and what is typed in the box stays. Anywhere else it begins a new selection.
+      const reaching = writing && picked !== null && picked.path === at.path && picked.hunk === at.hunk && picked.side === at.side;
+      if (!reaching) setWriting(false);
+      setPicked((prev) => (reaching && prev ? { ...prev, to: line } : { ...at, from: line, to: line }));
     },
     enter: (at: Omit<Picked, 'from' | 'to'>, line: number): void => {
       if (!dragging.current) return;

@@ -454,6 +454,16 @@ const migrations: string[] = [
   CREATE INDEX task_reviews_by_task ON task_reviews(task_id, created_at);
   CREATE INDEX task_reviews_by_rerun ON task_reviews(rerun_task_id);
   `,
+  // 16: checks promoted from an engine's own commands that could not fail. Every one kept so far was a pipeline
+  // (`pnpm test 2>&1 | tail -25`), whose exit code is the pager's: it passed whatever the tests did, and ran the
+  // suite a second time each round to say so. They are removed (their runs go with them); new ones are refused
+  // where they are promoted (`EvalRunner.addCommandEval`).
+  `
+  DELETE FROM evals
+   WHERE origin_task_id IS NOT NULL
+     AND json_extract(spec_json, '$.kind') = 'command'
+     AND replace(json_extract(spec_json, '$.command'), '||', '') LIKE '%|%';
+  `,
 ];
 
 export function migrate(db: DatabaseSync): void {

@@ -71,11 +71,18 @@ export class EvalRunner {
     this.#add(project.id, 'visual-audit', { kind: 'visual', routes: ['/'], minScore: this.#config.audit.threshold }, null);
   }
 
-  /** Promotes a command the agent ran successfully into a standing regression check. */
+  /**
+   * Promotes a command the agent ran successfully into a standing regression check. Refused when its exit code is
+   * not its own verdict (see `keepsItsVerdict`), and when it is a check the project already has, however it was
+   * typed: the type check the compiler gate runs first in every round, or a command already kept.
+   */
   addCommandEval(projectId: string, name: string, command: string, timeoutSec: number, originTaskId: string): boolean {
     const existing = this.#store.listEvals(projectId);
     if (existing.filter((e) => e.spec.kind === 'command').length >= MAX_COMMAND_EVALS) return false;
-    if (existing.some((e) => e.spec.kind === 'command' && e.spec.command === command)) return false;
+    if (!keepsItsVerdict(command)) return false;
+    const bare = bareCommand(command);
+    if (/^(pnpm|yarn|npm run)( --silent)? typecheck$/.test(bare)) return false;
+    if (existing.some((e) => e.spec.kind === 'command' && bareCommand(e.spec.command) === bare)) return false;
     return this.#add(projectId, name, { kind: 'command', command, timeoutSec }, originTaskId);
   }
 
@@ -183,6 +190,28 @@ export class EvalRunner {
     const { files } = parseExtraction(res.stdout, limits);
     return lintSources(files.flatMap((f) => (f.content === null ? [] : [{ path: f.path, content: f.content }])));
   }
+}
+
+/**
+ * Whether a command's exit code is its own verdict. An engine trims its output as it works (`pnpm test 2>&1 |
+ * tail -25`), and that line exits with the pager's code: kept as a check it passes whatever the tests did. So
+ * does one that ends by throwing the code away (`|| true`). Quoted text is not shell syntax and is not read.
+ */
+export function keepsItsVerdict(command: string): boolean {
+  const syntax = command.replace(/'[^']*'|"(?:[^"\\]|\\.)*"/g, '""');
+  const piped = /(^|[^|])\|([^|]|$)/.test(syntax);
+  const thrownAway = /(\|\||;)\s*(true|:)\s*($|[;&)])/.test(syntax);
+  return !piped && !thrownAway;
+}
+
+/** A command without what an engine wraps round it: going to the workspace first, a time limit, folding the error stream in. */
+export function bareCommand(command: string): string {
+  return command
+    .trim()
+    .replace(/^cd\s+\S+\s*&&\s*/, '')
+    .replace(/^timeout\s+(-\S+\s+)*\d+\S*\s+/, '')
+    .replace(/\s+2>&1$/, '')
+    .replace(/\s+/g, ' ');
 }
 
 /**
