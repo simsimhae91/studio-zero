@@ -232,6 +232,16 @@ test('composition, read off a real page: a screen that keeps the handbook is cle
     assert.deepEqual(rules(stacked), ['layout/overlapping-text'], said(stacked));
     assert.match(stacked[0]!.message, /^Text is drawn over other text: "63점 뒤져 있어요 \/ 정오 전에 기록하면 스무 점을 더 받고 미션"/);
     assert.ok(stacked[0]!.fix!.startsWith('T7: '));
+    // A phrase that wraps onto a second line, and the words that follow it on that line: side by side, not one over
+    // the other. Its box is as wide as the column and two lines tall, and it is not the box that is asked about.
+    const wrapped = runDomChecks(await measure(screen({ css: '.runs{width:220px;line-height:1.6}', extra: '<p class="runs"><ins>오늘 입항 목록을 맨 위에 도착 시각 순으로 세우고</ins><del>정박지 표를 먼저 둔다</del></p>' })), phone, contract);
+    assert.ok(!rules(wrapped).includes('layout/overlapping-text'), said(wrapped));
+    // A line a pane has scrolled away sits, in the document, where the title above the pane is. It is not on the
+    // screen there: the pane clips it. Without the pane's clipping it is drawn over the title, and that is said.
+    const SCROLLED = { extra: '<section><h2 class="clip-title">지난 대결 기록</h2><div class="clip"><p>정오 전에 기록하면 스무 점을 더 받는다</p></div></section>', css: '.clip-title{margin:16px 0 0;font-size:16px;line-height:24px}.clip{height:72px}.clip p{margin:-24px 0 0;line-height:24px}' };
+    assert.ok(rules(runDomChecks(await measure(screen(SCROLLED)), phone, contract)).includes('layout/overlapping-text'), 'drawn over the title when nothing clips it');
+    const clipped = runDomChecks(await measure(screen({ ...SCROLLED, css: `${SCROLLED.css}.clip{overflow:hidden}` })), phone, contract);
+    assert.ok(!rules(clipped).includes('layout/overlapping-text'), said(clipped));
     // The same two texts with an opaque card between them: the one beneath is not seen, and nothing is said.
     assert.deepEqual(rules(runDomChecks(await measure(screen({ css: '.note{margin-top:-48px;position:relative;background:var(--sz-surface)}' })), phone, contract)), []);
     // E4: a pill floating over a row's words at rest, and a page whose last line stays under its dock.

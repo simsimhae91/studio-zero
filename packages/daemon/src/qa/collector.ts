@@ -525,17 +525,20 @@ export function collectDigest(maxElements: number): unknown {
     }
 
     // What is broken in the frame. Text is measured by the boxes of its own characters, not of its element.
-    const inkOf = (el: Element): DOMRect | null => {
-      let [x0, y0, x1, y1] = [Infinity, Infinity, -Infinity, -Infinity];
+    // A text's own lines: one box for each line its characters stand on.
+    const linesOf = (el: Element): DOMRect[] => {
+      const boxes: DOMRect[] = [];
       for (const node of el.childNodes) {
         if (node.nodeType !== Node.TEXT_NODE || (node.textContent ?? '').trim() === '') continue;
         const range = document.createRange();
         range.selectNode(node);
-        for (const r of range.getClientRects()) {
-          if (r.width < 0.5 || r.height < 0.5) continue;
-          [x0, y0, x1, y1] = [Math.min(x0, r.left), Math.min(y0, r.top), Math.max(x1, r.right), Math.max(y1, r.bottom)];
-        }
+        for (const r of range.getClientRects()) if (r.width >= 0.5 && r.height >= 0.5) boxes.push(r);
       }
+      return boxes;
+    };
+    const inkOf = (boxes: readonly DOMRect[]): DOMRect | null => {
+      let [x0, y0, x1, y1] = [Infinity, Infinity, -Infinity, -Infinity];
+      for (const r of boxes) [x0, y0, x1, y1] = [Math.min(x0, r.left), Math.min(y0, r.top), Math.max(x1, r.right), Math.max(y1, r.bottom)];
       return x1 > x0 && y1 > y0 ? new DOMRect(x0, y0, x1 - x0, y1 - y0) : null;
     };
     // A number that broke onto a second line: one run of characters with no space in it, on two lines.
@@ -561,7 +564,7 @@ export function collectDigest(maxElements: number): unknown {
       return r.top > vh * 0.5 && r.bottom <= vh + 2 && r.height >= 32 && r.height <= vh * 0.4 && shown(el) && (el.matches(PRESSABLE) || el.querySelector(PRESSABLE) !== null);
     });
     const floating = (el: Element): boolean => floaters.some((f) => f === el || f.contains(el));
-    const inked = written.filter((p) => p.turn <= 5 && p.chars >= 2).flatMap((p) => { const ink = inkOf(p.el); return ink ? [{ p, ink }] : []; });
+    const inked = written.filter((p) => p.turn <= 5 && p.chars >= 2).flatMap((p) => { const boxes = linesOf(p.el); const ink = inkOf(boxes); return ink ? [{ p, ink, boxes }] : []; });
     const overlapOf = (a: DOMRect, b: DOMRect): number => Math.max(0, Math.min(a.right, b.right) - Math.max(a.left, b.left)) * Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top));
     // Text under a floating control while the screen is at rest. A bar from edge to edge is where a list scrolls
     // away; a pill over a row's words is not. Asked of what is painted, not of how it was placed: a React Native
@@ -585,15 +588,43 @@ export function collectDigest(maxElements: number): unknown {
       const control = cover.matches(PRESSABLE) || cover.closest(PRESSABLE) !== null || cover.querySelector(PRESSABLE) !== null;
       if (control && r.width < vw * 0.9 && r.height <= vh * 0.4 && overlapOf(ink, r) >= ink.width * ink.height * 0.5) underFloat.push(p.text);
     }
+    // Whether a point of a text is where it can be seen: inside every box above it that clips what runs past its edge.
+    const seenAt = (el: Element, x: number, y: number): boolean => {
+      for (let up = el.parentElement; up && up !== document.documentElement; up = up.parentElement) {
+        const s = styleOf(up);
+        const [clipsX, clipsY] = [s.overflowX !== 'visible', s.overflowY !== 'visible'];
+        if (!clipsX && !clipsY) continue;
+        const r = rectOf(up);
+        if ((clipsX && (x < r.left || x > r.right)) || (clipsY && (y < r.top || y > r.bottom))) return false;
+      }
+      return true;
+    };
     // Two texts on top of each other, neither inside the other, with nothing opaque painted between them.
     const overlappingText: string[] = [];
     for (let i = 0; i < inked.length && overlappingText.length < 40; i++) {
       for (let j = i + 1; j < inked.length; j++) {
         const [a, b] = [inked[i]!, inked[j]!];
         if (a.p.el.contains(b.p.el) || b.p.el.contains(a.p.el) || floating(a.p.el) !== floating(b.p.el)) continue;
-        const shared = overlapOf(a.ink, b.ink);
-        if (shared < Math.min(a.ink.width * a.ink.height, b.ink.width * b.ink.height) * 0.5) continue;
-        const [cx, cy] = [(Math.max(a.ink.left, b.ink.left) + Math.min(a.ink.right, b.ink.right)) / 2, (Math.max(a.ink.top, b.ink.top) + Math.min(a.ink.bottom, b.ink.bottom)) / 2];
+        // Line against line, not box against box: a phrase that wraps onto a second line has a box as wide as the
+        // column and two lines tall, and the words after it stand inside that box without touching a letter of it.
+        // (Seen on the studio's own plan diff, where every wrapped insertion read as lying over the next words.)
+        if (overlapOf(a.ink, b.ink) === 0) continue;
+        let shared = 0;
+        let most = 0;
+        let meet: DOMRect | null = null;
+        for (const x of a.boxes) {
+          for (const y of b.boxes) {
+            const over = overlapOf(x, y);
+            shared += over;
+            if (over > most) [most, meet] = [over, new DOMRect(Math.max(x.left, y.left), Math.max(x.top, y.top), Math.min(x.right, y.right) - Math.max(x.left, y.left), Math.min(x.bottom, y.bottom) - Math.max(x.top, y.top))];
+          }
+        }
+        const areaOf = (boxes: readonly DOMRect[]): number => boxes.reduce((sum, r) => sum + r.width * r.height, 0);
+        if (meet === null || shared < Math.min(areaOf(a.boxes), areaOf(b.boxes)) * 0.5) continue;
+        const [cx, cy] = [meet.left + meet.width / 2, meet.top + meet.height / 2];
+        // What a pane has scrolled away is in the document and not on the screen: it is over nothing. (Every screen of
+        // the studio's own client with a list under a title was read as text over text until this was asked.)
+        if (!seenAt(a.p.el, cx, cy) || !seenAt(b.p.el, cx, cy)) continue;
         const top = document.elementFromPoint(cx, cy);
         if (!top) continue;
         // From what is on top down to what holds both: an opaque fill on the way means the one beneath is not seen.
