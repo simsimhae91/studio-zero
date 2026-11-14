@@ -172,6 +172,9 @@ test('a build is held to its scenarios: what the walk found goes back as it was 
     [say('The ledger is up.')],
     [use('tu_4', 'write_file', { path: 'src/App.tsx', content: 'export const rows: string[] = ["shared"];\n' })],
     [say('The second person now sees the first one\'s entries.')],
+    // A later task that is not a build: a small edit to the product that is there.
+    [use('tu_5', 'write_file', { path: 'src/App.tsx', content: 'export const rows: string[] = ["shared"];\nexport const title = "집안일";\n' })],
+    [say('Titled.')],
   ]);
   const d = await testDaemon({}, { anthropic: model.sdk, smoke, scenarios });
   await d.daemon.start();
@@ -196,6 +199,15 @@ test('a build is held to its scenarios: what the walk found goes back as it was 
     // What was found goes back to the engine whole, fenced as what a page said.
     const repair = String((model.sent[2] as Anthropic.Beta.MessageCreateParams).messages.at(-1)!.content);
     assert.match(repair, /Check "scenarios" failed:\n<untrusted-data id="[0-9a-f]{24}" source="browser-page" check="scenarios">\nThe studio walked the plan's scenarios on the running build as new people: 1 of 2 reached the end\.\n- Scenario "second" \(같이 사는 사람\) follows "first", and its last screen shows none of what that person saved \(looked for "설거지"\)/);
+
+    // A task that is not a build owes no plan, and the product it changes has one: what worked is walked again.
+    await studio.merge(OWNER, project.id, task.branch!);
+    const edit = await studio.submitTask(OWNER, { projectId: project.id, kind: 'inline_edit', prompt: '화면에 제목을 붙인다', track: 'fast' }, 'desktop');
+    await finished(studio, edit.id);
+    const edited = events.history({ taskId: edit.id }, 0, 1000);
+    assert.equal(studio.getTask(edit.id).state, 'succeeded', edited.map((e) => JSON.stringify(e.body)).join('\n').slice(0, 3000));
+    assert.deepEqual(bodies(edited, 'gate.result').map((g) => `${g.gate}:${g.passed}`), ['compiler:true', 'smoke:true', 'scenarios:true'], 'the edit is held to the scenarios the product already walked');
+    assert.equal(walks.length, 3);
   } finally {
     await d.cleanup();
   }

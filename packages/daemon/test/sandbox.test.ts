@@ -124,6 +124,11 @@ test('merge produces one revertable commit and aborts cleanly on conflict', asyn
   await assert.rejects(sandboxes.merge(project, 'sz/conflict', 'main'), /conflicts/);
   assert.equal((await sandboxes.exec(project, 'git status --porcelain')).stdout, '', 'a failed merge leaves a clean tree');
   assert.equal(readFileSync(file('a.txt'), 'utf8'), 'ours\n');
+  // Tried from the branch the owner was looking at, it leaves them on that branch.
+  await sandboxes.checkout(project, 'sz/conflict');
+  await assert.rejects(sandboxes.merge(project, 'sz/conflict', 'main'), /conflicts/);
+  assert.equal((await sandboxes.exec(project, 'git branch --show-current')).stdout.trim(), 'sz/conflict');
+  assert.equal(readFileSync(file('a.txt'), 'utf8'), 'theirs\n');
   cleanup();
 });
 

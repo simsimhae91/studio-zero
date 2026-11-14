@@ -761,7 +761,10 @@ export class Harness {
         this.#events.emit(scope, { type: 'gate.result', gate: 'smoke', name: smoke.routes.join(' '), passed: smoke.passed, exitCode: null, durationMs: smoke.durationMs, detail: excerpt(smoke.detail, 2000) });
         if (!smoke.passed) return { failures: [{ name: 'smoke', source: 'browser-page', detail: smoke.detail }], unverified: [], waitingOn: null };
         // It runs. Does it work? The plan's scenarios are walked as people who sign up, and the build is held to them.
-        const planned = run.spec?.works && this.#scenarios ? await this.#readSpec(project, run.spec) : null;
+        // A task that is not a build owes no plan, and changes a product that may have one: what worked before
+        // it has to work after it, so a plan that is there and holds is walked for it too. (The first proposal
+        // implemented on a real project was a module of twenty lines, checked for everything but this.)
+        const planned = !this.#scenarios ? null : run.spec?.works ? await this.#readSpec(project, run.spec) : run.spec === null && variantOf(project.template) !== null ? await this.#readSpec(project, { works: true, draft: true }) : null;
         if (planned?.ok && planned.spec.scenarios.length > 0 && this.#scenarios) {
           try {
             const walked = await this.#scenarios.run(project, planned.spec, { signal });
@@ -795,7 +798,11 @@ export class Harness {
       }
     }
 
-    const outcomes = await this.#evals.runAll(project, task.id, { extraRoutes: plan?.auditRoutes, commandsOnly: task.track === 'fast', devServerRunning: served, signal });
+    // A practice taken from another repository changes how the code is kept, not what the product is. It is
+    // held to what the project already passed: its commands and, above, its scenarios. The visual audit is a
+    // bar a build sets out to clear; held to it, that twenty-line module spent three rounds redrawing the first
+    // screen of a product that had been built as a draft and never cleared it.
+    const outcomes = await this.#evals.runAll(project, task.id, { extraRoutes: plan?.auditRoutes, commandsOnly: task.track === 'fast' || task.kind === 'kirby_materialize', devServerRunning: served, signal });
     const commands = outcomes.filter((o) => o.eval.spec.kind === 'command');
     record.checksPassed = commands.filter((o) => o.passed).length;
     record.checksFailed = commands.filter((o) => !o.passed).map((o) => o.eval.name);

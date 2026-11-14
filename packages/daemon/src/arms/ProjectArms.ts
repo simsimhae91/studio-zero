@@ -77,12 +77,16 @@ export class ProjectArms {
 
     // The file is this machine's and never the repository's: the ports are this stack's. `.git/info/exclude`
     // keeps it out of every commit without touching the project's own ignore file.
-    const held = await this.#sandboxes.exec(project, `grep -qxF ${ENV_FILE} .git/info/exclude 2>/dev/null || echo ${ENV_FILE} >> .git/info/exclude; test -f ${ARMS_KIT_ENTRY} && echo SZ_KIT_PRESENT; cat ${ENV_FILE} 2>/dev/null; true`, { timeoutSec: 15 });
-    const hasKit = held.stdout.startsWith('SZ_KIT_PRESENT');
-    const existing = hasKit ? held.stdout.slice(held.stdout.indexOf('\n') + 1) : held.stdout;
+    const held = await this.#sandboxes.exec(project, `grep -qxF ${ENV_FILE} .git/info/exclude 2>/dev/null || echo ${ENV_FILE} >> .git/info/exclude; echo "SZ kit=$(test -f ${ARMS_KIT_ENTRY} && echo 1 || echo 0) schema=$(ls ${MIGRATIONS_DIR}/*.sql >/dev/null 2>&1 && echo 1 || echo 0)"; cat ${ENV_FILE} 2>/dev/null; true`, { timeoutSec: 15 });
+    const first = held.stdout.indexOf('\n');
+    const flags = held.stdout.slice(0, first === -1 ? undefined : first);
+    const existing = first === -1 ? '' : held.stdout.slice(first + 1);
     const wanted = withEnvBlock(existing, envBlock(project.template, info)!);
     if (wanted !== existing) await this.#sandboxes.writeFile(project, ENV_FILE, wanted);
-    if (!hasKit) {
+    // The client goes where the product is: a branch that holds a schema. The integration branch of a product
+    // that is not merged yet holds none, and a kit committed there too is added twice: the two copies meet
+    // when the product's branch is merged, and if the studio's kit changed in between, they conflict.
+    if (flags.includes('kit=0') && flags.includes('schema=1')) {
       // Like the other kits: once it is in the repository it is the project's to change.
       for (const file of await armsKitFiles(project.template)) await this.#sandboxes.writeFile(project, `${ARMS_KIT_DIR}/${file.path}`, file.content);
       added.push('backend kit');

@@ -254,6 +254,19 @@ test('a project gets its backend with its first schema: started, its address and
     assert.deepEqual(await arms.hostPorts(project), [21459]);
     assert.equal(starts(), before + 1, 'asking where it is does not start it again');
 
+    // A branch that holds no schema is not given the client: it is not where the product is. (After a task fails
+    // the workspace is on the integration branch, and a kit committed there is a second copy to merge with.)
+    const schema = readFileSync(at('supabase/migrations/0001_ledger.sql'), 'utf8');
+    rmSync(at('supabase/migrations'), { recursive: true });
+    rmSync(at(ARMS_KIT_DIR), { recursive: true });
+    await provisioner.ensure(project);
+    assert.ok(!existsSync(at(ARMS_KIT_DIR)), 'no kit where there is no schema');
+    assert.equal(readFileSync(at(ENV_FILE), 'utf8'), env, 'the address is still there for whatever is checked out next');
+    mkdirSync(at('supabase/migrations'), { recursive: true });
+    writeFileSync(at('supabase/migrations/0001_ledger.sql'), schema);
+    await provisioner.ensure(project);
+    assert.ok(existsSync(at(`${ARMS_KIT_DIR}/index.ts`)));
+
     // A person coming back from a login provider is passed on to the backend that sent them out, and only to that.
     const flow = '0b9f6a52-3c1e-4d1a-9f0e-6f2d1c3b4a59';
     const comeBack = async (state: string): Promise<{ status: number; location: string | null }> => {

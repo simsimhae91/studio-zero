@@ -109,15 +109,21 @@ git diff --cached --quiet || git ${GIT_ID} commit -q -m ${shq(p.message)}
 git rev-parse HEAD`;
 }
 
-/** Merges with a merge commit so one task (or one Kirby proposal) is one revertable unit. Aborts cleanly on conflict. */
+/**
+ * Merges with a merge commit so one task (or one Kirby proposal) is one revertable unit. On a conflict nothing
+ * is merged and the workspace is put back on the branch it was on: the owner was looking at that branch's
+ * product, and is not left looking at the integration branch because a merge was tried.
+ */
 export function mergeScript(p: { workspace: string; branch: string; into: string }): string {
   assertBranchName(p.branch);
   assertBranchName(p.into);
   return `set -eu
 cd ${shq(p.workspace)}
+was=$(git symbolic-ref --quiet --short HEAD || git rev-parse HEAD)
 git checkout -q ${shq(p.into)}
 if ! git ${GIT_ID} merge -q --no-ff -m ${shq(`merge: ${p.branch}`)} ${shq(p.branch)}; then
   git merge --abort || true
+  git checkout -q "$was" || true
   echo 'merge conflict' >&2
   exit 3
 fi
