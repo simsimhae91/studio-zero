@@ -112,9 +112,16 @@ test('rule table: what each kind of actor may do', () => {
 test('repository URLs: https, allow-listed host, no credentials, no extras', () => {
   const hosts = ['github.com'];
   assert.deepEqual(parseRepoUrl('https://github.com/n8n-io/nod', hosts), { ok: true, url: 'https://github.com/n8n-io/nod', host: 'github.com', path: '/n8n-io/nod' });
-  for (const bad of ['http://github.com/a/b', 'git@github.com:a/b.git', 'https://user:pw@github.com/a/b', 'https://github.com:8443/a/b', 'https://github.com/a/b?x=1', 'https://github.com/a', 'https://github.com.evil.io/a/b', 'file:///etc/passwd', 'https://github.com/a/b/../../c', 'https://github.com/a/b --upload-pack=x']) {
+  for (const bad of ['http://github.com/a/b', 'git@evil.example:a/b.git', 'https://user:pw@github.com/a/b', 'https://github.com:8443/a/b', 'https://github.com/a', 'https://github.com.evil.io/a/b', 'github.com.evil.io/a/b', 'file:///etc/passwd', 'https://github.com/a/b/../../c', 'https://github.com/a/b --upload-pack=x', 'https://github.com/a/--upload-pack=x', '--upload-pack=x']) {
     assert.equal(parseRepoUrl(bad, hosts).ok, false, bad);
   }
+  // What a person pastes is the address bar's or the clone box's. All of these are the same repository, and
+  // nothing but its host and its two names goes on to the clone.
+  for (const pasted of ['github.com/n8n-io/nod', ' https://github.com/n8n-io/nod/ ', 'https://github.com/n8n-io/nod.git', 'git@github.com:n8n-io/nod.git', 'https://github.com/n8n-io/nod/tree/main/packages/core', 'https://github.com/n8n-io/nod/blob/main/README.md?plain=1#L3', 'https://github.com/n8n-io/nod?tab=readme-ov-file']) {
+    assert.deepEqual(parseRepoUrl(pasted, hosts), { ok: true, url: 'https://github.com/n8n-io/nod', host: 'github.com', path: '/n8n-io/nod' }, pasted);
+  }
+  // Elsewhere a repository may sit deeper, and the page inside it is marked.
+  assert.equal((parseRepoUrl('https://gitlab.com/group/sub/project/-/tree/main/src', ['gitlab.com']) as { url: string }).url, 'https://gitlab.com/group/sub/project');
 });
 
 test('budgets are enforced by the server: task budget, then daily project budget', async () => {

@@ -157,11 +157,18 @@ ${untrusted('foreign-repo', `Rationale: ${row.card.rationale}\n\nPlanned changes
     // The analyser brings in the TypeScript compiler (about 58 MB resident); load it only when Kirby runs.
     const { analyzeRepo } = await import('./analyze.ts');
     const source = analyzeRepo(files, partial);
+    // The reader parses JavaScript and TypeScript. A repository in another language has nothing it can see, and
+    // "no gaps" would say that there was nothing worth taking.
+    if (source.sourceFiles === 0) throw new Error(`it holds no JavaScript or TypeScript source (${files.length} files listed), and that is all this reads`);
     const target = analyzeRepo((await this.#extractWorkspace(project, '/workspace')).files);
     const gaps = fitGap(source, target);
     // Evidence is kept for provenance; module lists are dropped so a large repository does not bloat the row.
     this.#store.finishIngest(ingestId, { commit, profileJson: JSON.stringify({ ...source, modules: [] }) });
     this.#events.emit(scope, { type: 'kirby.ingested', ingestId, repoUrl: url, files: source.totalFiles, gaps: gaps.length });
+    if (gaps.length === 0) {
+      const theirs = source.practices.filter((practice) => practice.present).map((practice) => practice.title);
+      this.#events.emit(scope, { type: 'notice', level: 'info', message: `Kirby read ${url} (${source.sourceFiles} source files${source.partial ? ', not all of it' : ''}) and has nothing to propose: ${theirs.length === 0 ? 'it found none of the practices it looks for there' : `what it found there (${theirs.join('; ')}) ${project.name} already has`}.` });
+    }
 
     for (const gap of gaps.slice(0, maxProposals)) {
       const draft = await this.#draftCard(project, url, gap, source, target);
@@ -201,7 +208,11 @@ cd /tmp/src
 printf 'commit %s\\n' "$(git rev-parse HEAD)"
 exec node -`;
     const res = await this.#sandboxes.runEphemeral({ script, stdin: extractorScript(this.#limits), timeoutSec: 180, maxOutputBytes: this.#limits.maxTotalBytes * 2 });
-    if (res.exitCode !== 0) throw new Error(`clone failed: ${excerpt(res.stderr.trim(), 300)}`);
+    if (res.exitCode !== 0) {
+      // Asked for a name and a password: the host's way of saying there is nothing here for someone who is not signed in.
+      if (/could not read Username|Authentication failed|Repository not found|not found/i.test(res.stderr)) throw new Error('the repository was not found. It does not exist, or it is private: the studio reads a repository without signing in to anything');
+      throw new Error(`clone failed: ${excerpt(res.stderr.trim(), 300)}`);
+    }
     const newline = res.stdout.indexOf('\n');
     const commit = /^commit ([0-9a-f]{40,64})$/.exec(res.stdout.slice(0, newline))?.[1];
     if (!commit) throw new Error('clone did not report a commit');

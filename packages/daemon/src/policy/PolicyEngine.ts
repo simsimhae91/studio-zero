@@ -348,19 +348,37 @@ export function parseReferenceUrl(raw: string): { ok: true; url: string; host: s
   return { ok: true, url: url.toString(), host: url.hostname };
 }
 
+/** Hosts where a repository is always two names deep, so a page inside one can be cut back to it. */
+const TWO_DEEP = new Set(['github.com', 'codeberg.org']);
+
+/**
+ * Reads what a person pasted as the address of a repository: what the address bar held (a page inside the
+ * repository, with a query or a fragment), the address without its scheme, or the one the "clone" box gives.
+ * What comes out is built again from an allowed host and a path of plain names, and nothing else of the input
+ * reaches a command.
+ */
 export function parseRepoUrl(raw: string, allowedHosts: readonly string[]): { ok: true; url: string; host: string; path: string } | { ok: false; reason: string } {
+  const typed = raw.trim();
+  const ssh = /^git@([A-Za-z0-9.-]+):(.+)$/.exec(typed);
+  const address = ssh ? `https://${ssh[1]}/${ssh[2]}` : allowedHosts.some((host) => typed.startsWith(`${host}/`)) ? `https://${typed}` : typed;
   let url: URL;
   try {
-    url = new URL(raw);
+    url = new URL(address);
   } catch {
     return { ok: false, reason: 'not a valid URL' };
   }
   if (url.protocol !== 'https:') return { ok: false, reason: 'only https:// repositories are accepted' };
   if (url.username !== '' || url.password !== '') return { ok: false, reason: 'URLs with embedded credentials are rejected' };
-  if (url.port !== '' || url.search !== '' || url.hash !== '') return { ok: false, reason: 'repository URL must not carry a port, query or fragment' };
+  if (url.port !== '') return { ok: false, reason: 'repository URL must not carry a port' };
   if (!allowedHosts.includes(url.hostname)) return { ok: false, reason: `host ${url.hostname} is not in kirby.allowedHosts` };
-  if (!/^\/[A-Za-z0-9._-]+(\/[A-Za-z0-9._-]+){1,3}$/.test(url.pathname)) return { ok: false, reason: 'repository path must look like /owner/name' };
-  return { ok: true, url: `https://${url.hostname}${url.pathname}`, host: url.hostname, path: url.pathname };
+  // A page inside a repository names the repository first. GitLab marks where it ends with "/-/".
+  let path = url.pathname.replace(/\/+$/, '');
+  const inside = path.indexOf('/-/');
+  if (inside !== -1) path = path.slice(0, inside);
+  else if (TWO_DEEP.has(url.hostname)) path = path.split('/').slice(0, 3).join('/');
+  path = path.replace(/\.git$/, '');
+  if (!/^\/[A-Za-z0-9._-]+(\/[A-Za-z0-9._-]+){1,3}$/.test(path)) return { ok: false, reason: 'repository path must look like /owner/name' };
+  return { ok: true, url: `https://${url.hostname}${path}`, host: url.hostname, path };
 }
 
 interface Waiter {
