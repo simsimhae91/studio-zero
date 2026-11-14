@@ -117,6 +117,11 @@ export function createHandlers(studio: Studio, deps: HandlerDeps): Handlers {
       return { deleted: true as const };
     },
 
+    'roadmap.get': (p) => ({ roadmap: studio.getRoadmap(p.projectId) }),
+    'roadmap.plan': (p) => studio.planRoadmap(OWNER, p.projectId, p.request),
+    'roadmap.run': (p) => studio.runRoadmap(OWNER, p.projectId, { autoMerge: p.autoMerge }),
+    'roadmap.stop': (p) => studio.stopRoadmap(OWNER, p.projectId),
+
     'plans.list': (p) => studio.listPlanVersions(p.taskId),
     'plans.resolve': (p) => studio.resolvePlanReview(OWNER, p),
 

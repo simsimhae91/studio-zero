@@ -7,7 +7,7 @@ import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
-import { chromium } from 'playwright-core';
+import { chromium, devices } from 'playwright-core';
 import { ScreenSpec, type Project } from '@studio-zero/protocol';
 import { ProjectArms } from '../src/arms/ProjectArms.ts';
 import { SupabaseStack } from '../src/arms/SupabaseStack.ts';
@@ -150,7 +150,7 @@ test('a real walk: a product that works passes; one that fakes its sign-up, forg
 
     // --- a product that works: both scenarios to the end, a restart survived, a second sign-in, nothing leaked
     const good = await walk('aaaa1111');
-    assert.deepEqual(good, { walked: 2, problems: [] }, renderScenarioFeedback({ ...good, scenarios: 2 }));
+    assert.deepEqual(good, { walked: 2, problems: [], logins: [], looks: [] }, renderScenarioFeedback({ ...good, scenarios: 2 }));
     assert.equal(restarts, 1);
     assert.equal(await users('aaaa1111'), '3', 'the treasurer, the member and the stranger all signed up for real');
     // The second person typed the code the first one picked, and both carried this walk's name.
@@ -195,5 +195,74 @@ test('a real walk: a product that works passes; one that fakes its sign-up, forg
     await arms.forget(project).catch(() => undefined);
     rmSync(home, { recursive: true, force: true });
     rmSync(workspace, { recursive: true, force: true });
+  }
+});
+
+/** A two-screen product nobody signs in to: a count on the first screen and its result on the second, kept in the browser. */
+const COUNTER_PLAN = ScreenSpec.parse({
+  coreMoment: '오늘 마신 물을 한 번 눌러 적고 결과를 본다.',
+  screens: [
+    { id: 'H-01', name: '오늘', purpose: '마신 물을 적는다.', entry: ['앱을 열 때'], elements: [], states: [], exceptions: [] },
+    { id: 'R-01', name: '결과', purpose: '오늘 마신 양을 본다.', entry: ['H-01'], elements: [], states: [], exceptions: [] },
+  ],
+  tasks: [{ id: 'drink', goal: '물 한 잔을 적는다', outcome: '오늘 칸에 한 잔이 보인다', screen: 'H-01' }],
+  events: [],
+  roles: [{ id: 'visitor', name: '쓰는 사람', does: '마신 물을 적고 결과를 본다.' }],
+  entry: null,
+  noAccounts: '이 기기에만 적는 메모라서 계정이 없다.',
+  scenarios: [
+    { id: 'drinks', role: 'visitor', steps: [
+      { id: 'drink', screen: 'H-01', does: '물 한 잔을 적는다', saves: null, outcome: '오늘 칸에 한 잔이 보인다' },
+      { id: 'result', screen: 'R-01', does: '결과를 연다', saves: null, outcome: '오늘 마신 양이 보인다' },
+      { id: 'share', screen: 'R-01', does: '결과를 자랑한다', saves: null, outcome: '자랑했다는 표시가 보인다' },
+    ] },
+  ],
+  data: [],
+});
+
+/** `faint` gives the second screen a line of text nobody can read. */
+const counter = (faint: boolean): string => `<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>물</title>
+<style>body{margin:0;padding:24px;font:16px/1.6 system-ui;background:#fff;color:#111}button{font:inherit;min-height:48px;padding:0 20px;border:0;border-radius:8px;background:#124;color:#fff;display:block;margin:12px 0}button:active{background:#000}h1{font-size:24px;margin:0}p{margin:8px 0}.note{color:${faint ? '#d8d8d8' : '#333'}}</style></head>
+<body><div id="app"></div><script>
+const s=JSON.parse(localStorage.getItem('s')||'{"cups":0,"at":"home","shared":false}');
+const keep=()=>{localStorage.setItem('s',JSON.stringify(s));render();};
+function render(){const app=document.getElementById('app');
+ if(s.at==='home'){app.innerHTML='<h1>오늘</h1><button id="drink" data-step="drink:1">물 한 잔</button>'+(s.cups>0?'<p data-done="drink">'+s.cups+'잔 마셨어요</p><button id="open" data-step="result:1">결과 보기</button>':'<p>아직 적은 물이 없어요</p>');
+  document.getElementById('drink').onclick=()=>{s.cups+=1;keep();};const open=document.getElementById('open');if(open)open.onclick=()=>{s.at='result';keep();};return;}
+ app.innerHTML='<h1 data-done="result">오늘 '+(s.cups*200)+'mL</h1><p class="note">하루 권장량은 1.5리터에서 2리터 사이입니다</p><button id="share" data-step="share:1">자랑하기</button>'+(s.shared?'<p data-done="share">자랑했어요</p>':'');
+ document.getElementById('share').onclick=()=>{s.shared=true;keep();};}
+render();
+</script></body></html>`;
+
+test('what a walk stands on is measured where it stands: once a screen, at the size walked, and a line nobody can read is found on the screen it is on', async (t) => {
+  const browser = await chromium.launch({ channel: 'chrome', headless: true, timeout: 15_000 }).catch(() => null);
+  if (!browser) return t.skip('headless Chrome cannot be launched here');
+  assert.deepEqual([...checkScreenSpec(COUNTER_PLAN, { draft: true }), ...checkWorks(COUNTER_PLAN)], []);
+  let faint = true;
+  const server = createServer((_req, res) => res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' }).end(counter(faint)));
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  const walk = (look: boolean) => walkScenarios({ browser, base, phone: devices['iPhone 15 Pro']!, spec: COUNTER_PLAN, backend: null, run: 'ffff6666', restart: async () => undefined, ...(look ? { look: { template: 'mobile-expo' as const } } : {}) });
+  try {
+    const seen = await walk(true);
+    assert.deepEqual([seen.walked, seen.problems], [1, []]);
+    // Three steps stood on two screens: each is measured the first time a step stands on it.
+    assert.deepEqual(seen.looks.map((look) => [look.screen, look.scenario]), [['H-01', 'drinks'], ['R-01', 'drinks']]);
+    const heavy = (screen: string): string[] => seen.looks.find((look) => look.screen === screen)!.findings.filter((f) => f.severity !== 'minor' && f.category === 'contrast').map((f) => `${f.rule} ${f.viewport} ${f.route}: ${f.message}`);
+    assert.deepEqual(heavy('H-01'), [], 'the first screen is readable');
+    assert.equal(heavy('R-01').length, 1);
+    assert.match(heavy('R-01')[0]!, /^contrast\/text iphone-15-pro R-01: "하루 권장량은 1\.5리터에서 2리터 사이입니다" has contrast 1\.\d+:1; .*it fails AA/);
+    // The picture is of the screen as the person had it: a PNG, taken on the second screen with their figure on it.
+    for (const look of seen.looks) assert.deepEqual([...look.png!.subarray(0, 4)], [0x89, 0x50, 0x4e, 0x47]);
+
+    // The same product with the line readable: nothing above minor about its colours on either screen.
+    faint = false;
+    const clean = await walk(true);
+    assert.deepEqual(clean.looks.flatMap((look) => look.findings.filter((f) => f.severity !== 'minor' && f.category === 'contrast')), []);
+    // And a walk nobody asked to measure measures nothing.
+    assert.deepEqual((await walk(false)).looks, []);
+  } finally {
+    await browser.close().catch(() => undefined);
+    await new Promise((resolve) => server.close(resolve));
   }
 });

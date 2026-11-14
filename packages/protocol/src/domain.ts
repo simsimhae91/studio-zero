@@ -136,6 +136,8 @@ export const Task = z.object({
   parkCount: z.number().int(),
   /** Whether the task stops after planning for the owner to approve the plan (see `plans.resolve`). Absent from daemons before this existed. */
   reviewPlan: z.boolean().optional(),
+  /** The milestone of the project's product map this task builds, counted from 0 (see `Roadmap`). Null or absent for any other task. */
+  milestone: z.number().int().min(0).nullable().optional(),
   createdAt: z.number().int(),
   startedAt: z.number().int().nullable(),
   finishedAt: z.number().int().nullable(),
@@ -517,6 +519,8 @@ export const ScreenSpec = z.object({
         id: z.string(),
         role: z.string(),
         after: z.string().nullable().optional(),
+        /** The feature of the product map this scenario walks, by its id. Absent in a plan with no map. */
+        feature: z.string().nullable().optional(),
         steps: z.array(z.object({ id: z.string(), screen: z.string(), does: z.string(), saves: z.string().nullable().optional(), outcome: z.string() })),
       }),
     )

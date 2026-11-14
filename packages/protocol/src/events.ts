@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { ScratchState } from './ax.ts';
 import { AdvisorId, ApprovalState, DesignGrade, FlowWalk, LessonState, MockupMeasures, Origin, Phase, PowerMode, ProposalState, ReviewerId, ReviewerPref, SandboxState, TaskKind, TaskState } from './domain.ts';
+import { MilestoneState, RoadmapState } from './product.ts';
 
 /** One direction of a design task as the owner sees it: a picture, the page's own name and idea, and what was measured on it. */
 const MockupOption = z.object({
@@ -22,6 +23,11 @@ export const EventBody = z.discriminatedUnion('type', [
   // `parkCapHit`: the task failed on a usage limit that named its reset time, after it had already waited out
   // as many limits as it may (`quotaPark.maxParks`). Absent otherwise.
   z.object({ type: z.literal('task.state'), state: TaskState, error: z.string().nullable(), parkCapHit: z.boolean().optional() }),
+  /**
+   * A project's roadmap changed: its map was written, a milestone started, was built or failed, or the whole of it
+   * stopped or finished. `milestone` (from 0) and its state and name are given when the change is a milestone's.
+   */
+  z.object({ type: z.literal('roadmap.changed'), state: RoadmapState, milestone: z.number().int().nullable(), milestoneState: MilestoneState.nullable(), name: z.string().nullable() }),
   /** One of the owner's schedules submitted its prompt as task `taskId`. */
   z.object({ type: z.literal('schedule.fired'), scheduleId: z.string(), taskId: z.string(), firedAt: z.number().int() }),
   /**
@@ -97,7 +103,7 @@ export const EventBody = z.discriminatedUnion('type', [
      * `anchor`: the anchor table a design task owes before code. `build`: the production build, measured for the ledger.
      * `screens`: the screen spec a design task owes. `flow`: the core flow of that spec, walked on the mock-ups.
      */
-    gate: z.enum(['compiler', 'smoke', 'anchor', 'build', 'screens', 'flow', 'directions', 'scenarios']),
+    gate: z.enum(['compiler', 'smoke', 'anchor', 'build', 'screens', 'flow', 'directions', 'scenarios', 'coverage', 'looks']),
     /** What ran: the command line for the compiler gate, the routes for the smoke gate. */
     name: z.string(),
     passed: z.boolean(),

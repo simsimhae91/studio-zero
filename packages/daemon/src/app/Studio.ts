@@ -40,6 +40,7 @@ import type {
   ResultOf,
   ReviewDiff,
   ReviewOutcome,
+  Roadmap,
   SandboxInfo,
   Schedule,
   Session,
@@ -90,6 +91,7 @@ import type { ProjectArms } from '../arms/ProjectArms.ts';
 import type { ExternalApis } from './ExternalApis.ts';
 import type { ProjectNamer } from './ProjectNamer.ts';
 import type { QuotaTracker } from './QuotaTracker.ts';
+import type { RoadmapRunner } from './RoadmapRunner.ts';
 import { nextSlot } from './Scheduler.ts';
 
 /** A vendor CLI that can be asked one question with no tools in reach (see `CliBridgeEngine.ask`). */
@@ -175,6 +177,7 @@ const NO_MODEL = '쓸 수 있는 모델이 없습니다. Claude Code에 로그�
 
 export class Studio implements PromotionHost {
   readonly #d: StudioDeps;
+  #runner: RoadmapRunner | null = null;
   readonly #startedAt: number;
   readonly #background = new Set<Promise<void>>();
   readonly #promotion: PromotionWorkflow;
@@ -473,7 +476,7 @@ export class Studio implements PromotionHost {
 
   // ----------------------------------------------------------------- tasks
 
-  async submitTask(actor: Actor, p: { projectId: string; kind: TaskKind; prompt: string; budgetTokens?: number; branch?: string; baseBranch?: string; engine?: EngineId; model?: string; effort?: Effort; sessionId?: string; track?: TaskTrack; reviewer?: ReviewerPref; references?: string[]; reviewPlan?: boolean }, origin: Origin): Promise<Task> {
+  async submitTask(actor: Actor, p: { projectId: string; kind: TaskKind; prompt: string; budgetTokens?: number; branch?: string; baseBranch?: string; engine?: EngineId; model?: string; effort?: Effort; sessionId?: string; track?: TaskTrack; reviewer?: ReviewerPref; references?: string[]; reviewPlan?: boolean; milestone?: number }, origin: Origin): Promise<Task> {
     this.getProject(p.projectId);
     assertPick(p, this.#d.router);
     // A reference is refused here, before the task exists, so a mistyped address is not found out mid-build.
@@ -496,7 +499,7 @@ export class Studio implements PromotionHost {
     const track = p.track ?? 'full';
     const reviewPlan = (p.reviewPlan ?? this.#d.config.planReview.defaultOn) && track === 'full' && (p.kind === 'build' || p.kind === 'refactor' || p.kind === 'kirby_materialize');
     await this.#d.policy.authorize(actor, { kind: 'task.submit', projectId: p.projectId, taskKind: p.kind, budgetTokens });
-    const task = this.#d.store.insertTask({ id: newId('tsk'), projectId: p.projectId, kind: p.kind, prompt: p.prompt, origin, budgetTokens, branch: p.branch ?? null, baseBranch: p.baseBranch ?? null, enginePref: p.engine ?? null, modelPref: p.model ?? null, effortPref: p.effort ?? null, sessionId: p.sessionId ?? null, track, reviewerPref: p.reviewer ?? null, references, reviewPlan, createdAt: this.#d.clock() });
+    const task = this.#d.store.insertTask({ id: newId('tsk'), projectId: p.projectId, kind: p.kind, prompt: p.prompt, origin, budgetTokens, branch: p.branch ?? null, baseBranch: p.baseBranch ?? null, enginePref: p.engine ?? null, modelPref: p.model ?? null, effortPref: p.effort ?? null, sessionId: p.sessionId ?? null, track, reviewerPref: p.reviewer ?? null, references, reviewPlan, milestone: p.milestone ?? null, createdAt: this.#d.clock() });
     this.#d.events.emit({ projectId: task.projectId, taskId: task.id }, { type: 'task.state', state: 'queued', error: null });
     this.#d.queue.pump();
     return task;
@@ -533,6 +536,50 @@ export class Studio implements PromotionHost {
     this.getTask(taskId);
     this.#d.queue.cancel(taskId);
     return this.getTask(taskId);
+  }
+
+  // --------------------------------------------------------------- roadmap
+
+  /** A project's product map and how far it is built, or null. */
+  getRoadmap(projectId: string): Roadmap | null {
+    this.getProject(projectId);
+    return this.#roadmaps().get(projectId);
+  }
+
+  /** Has the product map written from the owner's words (see `RoadmapRunner.plan`). */
+  async planRoadmap(actor: Actor, projectId: string, request: string): Promise<Roadmap> {
+    const project = this.#productOf(projectId);
+    await this.#d.policy.authorize(actor, { kind: 'roadmap.configure', projectId, op: 'plan' });
+    if (!this.#d.claude.isConfigured()) throw new UnavailableError(NO_MODEL);
+    return this.#roadmaps().plan(project, request);
+  }
+
+  async runRoadmap(actor: Actor, projectId: string, opts: { autoMerge?: boolean } = {}): Promise<Roadmap> {
+    this.#productOf(projectId);
+    await this.#d.policy.authorize(actor, { kind: 'roadmap.configure', projectId, op: 'run' });
+    return this.#roadmaps().run(projectId, opts);
+  }
+
+  async stopRoadmap(actor: Actor, projectId: string): Promise<Roadmap> {
+    this.#productOf(projectId);
+    await this.#d.policy.authorize(actor, { kind: 'roadmap.configure', projectId, op: 'stop' });
+    return this.#roadmaps().stop(projectId);
+  }
+
+  /** A roadmap builds a product. The studio's own repository is changed a task at a time, each read before it is merged. */
+  #productOf(projectId: string): Project {
+    if (projectId === CORE_PROJECT_ID) throw new ConflictError('Studio Zero Core에는 로드맵을 두지 않습니다. 스튜디오 자신의 코드는 작업 하나씩 읽고 합칩니다.');
+    return this.getProject(projectId);
+  }
+
+  /** The runner is made after the studio it submits through, and handed in (`compose.ts`). */
+  #roadmaps(): RoadmapRunner {
+    if (!this.#runner) throw new UnavailableError('the roadmap runner is not set up');
+    return this.#runner;
+  }
+
+  useRoadmaps(runner: RoadmapRunner): void {
+    this.#runner = runner;
   }
 
   // ----------------------------------------------------------- plan review

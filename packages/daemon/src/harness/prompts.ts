@@ -10,6 +10,7 @@ import { ANCHOR_FILE } from '../scratch/AnchorTable.ts';
 import { DIRECTIONS_FILE } from '../scratch/Directions.ts';
 import { ARMS_KIT_DIR } from '../arms/kit.ts';
 import { MIGRATIONS_DIR, SEED_FILE } from '../arms/schema.ts';
+import { PRODUCT_DOC_FILE, PRODUCT_MAP_FILE } from '../product/ProductMap.ts';
 import { SCREEN_DOC_FILE, SCREEN_SPEC_FILE } from '../scratch/ScreenSpec.ts';
 import { DATA_HANDLING_CONTRACT } from '../trust/dataBlock.ts';
 
@@ -246,6 +247,29 @@ Close with two or three sentences: what is on screen now, and the assumptions yo
  * when it stopped is still on its branch. A constant; it goes after the request.
  */
 export const CONTINUED_BRIEF = `This task was stopped part-way: the subscription it runs on reached its usage limit. The limit has reset and the task has been started again. What was done before it stopped is committed on this branch and is in the workspace now. Read what is there first, then carry on from it. Do not start over and do not redo what is already done; finish what is missing.`;
+
+/**
+ * What a task is told when it builds one milestone of a product map (`RoadmapRunner`), in place of the draft's
+ * brief. A draft is one screen that works; a milestone is a slice of a whole product, built on what earlier
+ * milestones left and walked together with them. A constant; the milestone's own features follow in the request.
+ */
+export const MILESTONE_BRIEF = `This task builds one milestone of a product that is being built to the end of its product map (${PRODUCT_MAP_FILE}; ${PRODUCT_DOC_FILE} is the same map written out to read). Earlier milestones are in this workspace, merged and working; later ones are built after this one. The owner is not watching and meets the product when the whole map is built, so nothing a feature of this milestone needs is left for later: each is built whole. Do not ask questions. Where the map leaves something open, decide it as a senior product engineer would and say what you decided at the end.
+
+Build each feature of this milestone as a person meets it.
+- It is reached from the product's navigation, the way a person would look for it: on a phone, the tab bar (three to five tabs for the product's top-level places; a tab is added when its first feature lands, never an empty one) and what its screens lead to. Nothing is reachable only by typing an address.
+- It works against the backend. What a person enters is written to tables (new migration files in ${MIGRATIONS_DIR}/, never an edit to one already applied), read back after a reload, and kept from people it does not belong to. Seed rows in ${SEED_FILE} make it alive for a new person: other people with names, a ranking with someone above and below, a history that goes back. Where the feature is about what two people share, the other's screen changes without a reload.
+- Every screen of it has its other states: nothing yet (with the way to make the first one), loading, and a failure that says what to do. No screen says that something is coming.
+- Its moment is designed. Where the feature has an instant a person waits for (a match is found, a meal is counted, a result lands, a rank moves), that instant gets motion made for it and for nothing else, by the handbook's motion rules, and the figure it changes is seen changing.
+- A feature the map marks simulated or device only is still built whole. The part the preview lacks sits behind one module of its own (src/capabilities/<name>.ts: one interface, the stand-in the map describes, and a comment saying what the real implementation calls). The stand-in's values are realistic and vary. Where a person could take a stand-in's value for a real one, the screen says it is an example ("예시").
+
+The screen plan grows with the product. ${SCREEN_SPEC_FILE} is this product's plan; if this is the first milestone and there is none, write it in the short form below. For this milestone add its screens to "screens", its tables to "data", and for each feature of this milestone one scenario that carries the feature's id: { "id", "role", "feature": the feature's id in the map, "after", "steps" }. A scenario is a new person signing up and using that feature to its outcome, so its first step is "sign-up"; what the feature needs to exist first (a meal to count, an opponent) the scenario makes in its own steps, or it follows another scenario with "after" when it needs what a second person did. Keep every screen, table and scenario that earlier milestones wrote: the studio walks all of them again with this milestone, and one that used to reach its end and no longer does comes back to you. "tasks" stays the core flow and is not added to.
+
+The short screen plan, for a first milestone: one JSON object with "coreMoment" (one sentence: the one thing the product exists for a person to do); "screens" (each exactly { "id" such as "H-01", "name", "purpose": one line, "entry": ["where a person arrives from"], "elements": [], "states": [], "exceptions": [] }); "tasks" (the core flow, one to three things a person gets done, each { "id", "goal", "outcome", "screen" }); "events": []; and the four parts that say how it works:
+${SCREEN_SPEC_WORKS}
+
+Order of work. Read ${PRODUCT_DOC_FILE} and what is already built before you write anything. Extend the screen plan, then the schema and the seed, and apply them. Build the milestone's features one at a time, each to its end (its screens, their states, its scenario's marks) before the next. Keep .studio-zero/project.json accurate, with every screen a person can open by an address in "routes". Run the type check yourself. When you stop, the harness compiles the project, loads it, checks that each feature of the milestones built so far has a scenario that walks it, walks every scenario of the plan as people it makes up, and measures each screen those people stood on at the size of a phone (contrast, the size of what is pressed, overflow, type, how the screen is composed). What fails comes back to you.
+
+Close with a few sentences for the owner: what a person can do now, what stands in for what in the preview, and anything you decided that they may want otherwise.`;
 
 /**
  * System prompt for work on the studio's own repository (the pinned Core project). A constant, like the other.

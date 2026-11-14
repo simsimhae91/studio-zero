@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-import { DEFAULT_DAEMON_PORT, RpcCallError, RpcClient, Template, type EventEnvelope, type Project, type TaskKind } from '@studio-zero/protocol';
+import { DEFAULT_DAEMON_PORT, RpcCallError, RpcClient, Template, type EventEnvelope, type Project, type Roadmap, type TaskKind } from '@studio-zero/protocol';
+import { notYetReal, renderProductMap } from './product/ProductMap.ts';
 import { CredentialIds, KeychainVault } from './vault/KeychainVault.ts';
 
 const USAGE = `sz — Studio Zero command line
@@ -14,6 +15,12 @@ const USAGE = `sz — Studio Zero command line
   sz cancel <task-id>                                                        stop a task that is queued, running or waiting; its work stays on its branch
   sz plan <task-id>                                                          the plan a task is waiting with, and the other model's notes on it
   sz plan approve <task-id> | sz plan change <task-id> <what to change...>   approve it (the build starts), or send it back to be drafted again
+  sz roadmap plan <project-slug> <what the product is...>                    plan the whole product: every feature a product of its kind has, in milestones
+  sz roadmap show <project-slug> [--map]                                     how far the map is built (--map: the whole map as well)
+  sz roadmap run <project-slug> [--no-merge]                                 build the milestones one after another, each an ordinary task, merging each that passes
+                                                                             (--no-merge: each stays on its branch and the next starts from it); on a roadmap that
+                                                                             stopped, goes on from the milestone that stopped it
+  sz roadmap stop <project-slug>                                             start no further milestone; the one being built finishes
   sz schedule add <project-slug> <build|refactor|inline_edit|ideate> <prompt...> [--every <n>h|<n>m] [--at 2026-11-15T07:00]
                                                                              submit the prompt as a task every n hours or minutes (at least 1h), once at that local time,
                                                                              or with both from that time on: --every 24h --at 2026-11-15T07:00 is every day at seven
@@ -94,6 +101,8 @@ function printEvent(e: EventEnvelope): void {
         return `usage ${b.model}: ${b.inputTokens} in / ${b.outputTokens} out`;
       case 'notice':
         return `${b.level}: ${b.message}`;
+      case 'roadmap.changed':
+        return `roadmap ${b.state}${b.milestone === null ? '' : `: milestone ${b.milestone + 1} "${b.name ?? ''}" ${b.milestoneState ?? ''}`}`;
       default:
         return JSON.stringify(b);
     }
@@ -210,6 +219,56 @@ async function main(argv: string[]): Promise<number> {
             if (e.body.type === 'task.state' && ['succeeded', 'failed', 'cancelled'].includes(e.body.state)) resolve(e.body.state === 'succeeded' ? 0 : 1);
           }, 0);
         });
+      }
+      case 'roadmap': {
+        const project = await projectBySlug(client, args[1]);
+        const show = (roadmap: Roadmap, whole: boolean): void => {
+          const map = roadmap.map;
+          const out = [`roadmap of ${project.slug}: ${roadmap.state}${roadmap.error ? ` (${roadmap.error})` : ''}`];
+          if (map) {
+            const byId = new Map(map.features.map((feature) => [feature.id, feature.name]));
+            out.push(`${map.features.length} features in ${map.milestones.length} milestones; ${roadmap.autoMerge ? 'each milestone that passes is merged' : 'each milestone stays on its branch'}`, '');
+            for (const [i, milestone] of map.milestones.entries()) {
+              const progress = roadmap.milestones[i];
+              out.push(`  ${String(i + 1).padStart(2)}. ${(progress?.state ?? 'planned').padEnd(8)} ${milestone.name}  [${milestone.features.map((id) => byId.get(id) ?? id).join(', ')}]${progress && progress.taskIds.length > 0 ? `  ${progress.taskIds.join(' ')}` : ''}`);
+              if (progress?.error) out.push(`      ${progress.error}`);
+              for (const debt of progress?.debt ?? []) out.push(`      left: ${debt}`);
+            }
+            const later = notYetReal(map);
+            if (later.length > 0) out.push('', 'Not real in the preview until you connect or build it:', ...later.map((line) => `  - ${line}`));
+            if (whole) out.push('', renderProductMap(map));
+          }
+          process.stdout.write(`${out.join('\n')}\n`);
+        };
+        if (args[0] === 'plan') {
+          const request = args.slice(2).join(' ').trim();
+          if (request === '') throw new Error('say what the product is: sz roadmap plan <project-slug> <what the product is...>');
+          let roadmap = await client.call('roadmap.plan', { projectId: project.id, request });
+          process.stdout.write('writing the product map (a few minutes)...\n');
+          while (roadmap.state === 'planning') {
+            await new Promise((resolve) => setTimeout(resolve, 3000));
+            roadmap = (await client.call('roadmap.get', { projectId: project.id })).roadmap ?? roadmap;
+          }
+          show(roadmap, true);
+          if (roadmap.state === 'planned') process.stdout.write(`\nRead it. To build it to the end: sz roadmap run ${project.slug}\n`);
+          return roadmap.state === 'planned' ? 0 : 1;
+        }
+        if (args[0] === 'run') {
+          show(await client.call('roadmap.run', { projectId: project.id, ...(args.includes('--no-merge') ? { autoMerge: false } : {}) }), false);
+          process.stdout.write(`\nIt builds by itself from here, one milestone after another. Follow it: sz roadmap show ${project.slug}, or sz events ${project.slug}. Stop it: sz roadmap stop ${project.slug}\n`);
+          return 0;
+        }
+        if (args[0] === 'stop') {
+          show(await client.call('roadmap.stop', { projectId: project.id }), false);
+          return 0;
+        }
+        if (args[0] === 'show') {
+          const { roadmap } = await client.call('roadmap.get', { projectId: project.id });
+          if (!roadmap) throw new Error(`${project.slug} has no roadmap. Plan one: sz roadmap plan ${project.slug} <what the product is...>`);
+          show(roadmap, args.includes('--map'));
+          return 0;
+        }
+        throw new Error('sz roadmap plan|show|run|stop <project-slug>');
       }
       case 'schedule': {
         if (args[0] === 'add') {

@@ -1,6 +1,7 @@
-import { readFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { z } from 'zod';
-import { AcceptanceVerdict, Effort, ReviewerId, ReviewerPref, ScreenSpec as ScreenSpecShape, type AuditReport, type Phase, type PlanFeedback, type Project, type Task, type TaskState } from '@studio-zero/protocol';
+import { AcceptanceVerdict, Effort, ReviewerId, ReviewerPref, ScreenSpec as ScreenSpecShape, type AuditReport, type Phase, type PlanFeedback, type ProductMap, type Project, type Task, type TaskState } from '@studio-zero/protocol';
 import { EngineId, type Config } from '../config.ts';
 import { classifyQuotaFailure } from '../app/QuotaTracker.ts';
 import type { PlanVersionRow, Store } from '../db/Store.ts';
@@ -15,11 +16,11 @@ import type { SmokeRunner } from '../qa/SmokeTester.ts';
 import type { OrbStackManager } from '../sandbox/OrbStackManager.ts';
 import { ANCHOR_FILE, AnchorTableShape, anchorTableJson, readAnchorTable, renderAnchorTable, type AnchorRead, type AnchorTable } from '../scratch/AnchorTable.ts';
 import { DIRECTIONS_FILE, directionThemeFile, readDirections, renderDirection, type Direction, type DirectionId, type DirectionsRead } from '../scratch/Directions.ts';
-import { renderScenarioFeedback, type ScenarioRunnerLike } from '../qa/ScenarioRunner.ts';
+import { renderScenarioFeedback, type ScenarioRunnerLike, type ScreenLook } from '../qa/ScenarioRunner.ts';
 import { variantOf } from '../arms/kit.ts';
 import { SCREEN_DOC_FILE, SCREEN_SPEC_FILE, readScreenSpec, renderScreenSpec, screenSpecMarkdown, type FlowTask, type ScreenSpecRead } from '../scratch/ScreenSpec.ts';
 import { untrusted, type UntrustedSource } from '../trust/dataBlock.ts';
-import { errorMessage, excerpt, type Clock, type Logger } from '../util/core.ts';
+import { errorMessage, excerpt, newId, type Clock, type Logger } from '../util/core.ts';
 import type { WorkspaceProvisioner } from './bootstrap.ts';
 import type { BuildMeter } from './BuildMeter.ts';
 import type { CompilerGate } from './CompilerGate.ts';
@@ -28,12 +29,14 @@ import type { EngineResult, EngineSession } from './engines/Engine.ts';
 import { countCompilerErrors, emptyRun, renderEvidence, type Ledger, type RunRecord } from './Ledger.ts';
 import type { LessonBook } from './LessonBook.ts';
 import { materialFor } from './handbook.ts';
-import { ANCHOR_BRIEF, CONTINUED_BRIEF, DEEP_DIVE_BRIEF, DRAFT_BRIEF, DRAW_ALL_BRIEF, IDEATION_BRIEF, IDEATION_REQUIRED_FILES, IDEATION_REVISION_BRIEF, PLAN_REVISION_BRIEF, PLANNER_SYSTEM_PROMPT, SCREEN_SPEC_RULES, codingSystemPrompt, directionBrief } from './prompts.ts';
+import { ANCHOR_BRIEF, CONTINUED_BRIEF, DEEP_DIVE_BRIEF, DRAFT_BRIEF, MILESTONE_BRIEF, DRAW_ALL_BRIEF, IDEATION_BRIEF, IDEATION_REQUIRED_FILES, IDEATION_REVISION_BRIEF, PLAN_REVISION_BRIEF, PLANNER_SYSTEM_PROMPT, SCREEN_SPEC_RULES, codingSystemPrompt, directionBrief } from './prompts.ts';
 import { hashPlan, renderPlanMarkdown, type PlanGate } from './PlanGate.ts';
 import { chosenTheme, writeProjectTheme } from './themeSeed.ts';
 import type { ReflectionAgent } from './ReflectionAgent.ts';
 import { PlanCritique, renderCritique, renderPatch, type Acceptance, type SandwichReviewer } from './SandwichReviewer.ts';
 import { foldListing } from './fileListing.ts';
+import { uncovered } from '../product/coverage.ts';
+import { PRODUCT_DOC_FILE, PRODUCT_MAP_FILE, renderProductMap } from '../product/ProductMap.ts';
 import type { SelfHosting } from './SelfHosting.ts';
 import { copyBlock } from './TextSlopAuditor.ts';
 
@@ -148,6 +151,16 @@ export class ShutdownSignal extends Error {
 interface SpecDemand {
   works: boolean;
   draft: boolean;
+  /** A product built to a map: a scenario a feature, so many more of them than a first version has. */
+  wide?: boolean;
+}
+
+/** The milestone of a product map a task builds: the map, and which of its milestones (from 0). */
+interface Building {
+  map: ProductMap;
+  index: number;
+  /** Whether what was measured on the walked screens has been sent back already: it is, once. */
+  sentBack: boolean;
 }
 
 export class Harness {
@@ -259,7 +272,10 @@ export class Harness {
     // what each does and what is kept. A draft writes the short plan; it does not get to skip it.
     // What is taken from another repository is built as a build is: it is something the product now does.
     const working = (initial.kind === 'build' || initial.kind === 'kirby_materialize') && this.#evals.usesBrowser(project.id) && variantOf(project.template) !== null;
-    const specFor: SpecDemand | null = design || working ? { works: working, draft } : null;
+    // A milestone of a product map: built on the map, its plan as wide as the map, each feature built so far walked.
+    const mapped = initial.milestone === null || initial.milestone === undefined ? null : (this.#store.getRoadmap(project.id)?.map ?? null);
+    const building: Building | null = mapped && mapped.milestones[initial.milestone ?? -1] ? { map: mapped, index: initial.milestone!, sentBack: false } : null;
+    const specFor: SpecDemand | null = design || working ? { works: working, draft, ...(building ? { wide: true } : {}) } : null;
     // The two cross-checks by another vendor's model go with a full build, unless the owner switched them off.
     const crossChecked = initial.kind === 'build' && !draft && this.#config.review.sandwich;
     const reviewerPref = ReviewerPref.nullable().catch(null).parse(initial.reviewerPref);
@@ -356,6 +372,8 @@ export class Harness {
         onBranch = true;
         // The branch the engine works on may predate a kit the prompt is about to promise it.
         await this.#provisioner.ensure(project);
+        // The map a milestone is built to is in the workspace before the engine opens it: the brief points at the file.
+        if (building) await this.#writeProductMap(project, building.map);
         // The table has a level for every engine; it is recorded only where the engine was actually run at one.
         task = this.#store.updateTask(task.id, { engine: decided.candidate.engine, model: decided.candidate.model, effort: decided.engine.efforts.length > 0 ? decided.candidate.effort : null, branch, baseCheckpointId: base.id });
 
@@ -446,7 +464,7 @@ export class Harness {
           round += 1;
           phase('verify', round);
           const looked = ideation ? await this.#verifyIdeation(project, task, signal) : null;
-          const checked = looked ?? (await this.#verify(project, task, plan, signal, { design, spec: specFor, record }));
+          const checked = looked ?? (await this.#verify(project, task, plan, signal, { design, spec: specFor, record, building }));
           record.rounds = round;
           const failures = checked.failures;
           unverified = checked.unverified;
@@ -462,8 +480,11 @@ export class Harness {
             outstanding = failures.map((f) => f.name);
             return;
           }
-          if (used >= corrections) throw new Error(`verification still failing after ${corrections} corrections: ${failures.map((f) => f.name).join(', ')}`);
-          used += 1;
+          // What was measured on a milestone's walked screens is sent back once and never again (`#walkedScreens`),
+          // so it cannot loop, and it is not charged to the corrections a product that does not yet work needs.
+          const looksOnly = failures.every((f) => f.name === 'looks');
+          if (!looksOnly && used >= corrections) throw new Error(`verification still failing after ${corrections} corrections: ${failures.map((f) => f.name).join(', ')}`);
+          if (!looksOnly) used += 1;
 
           phase('execute', round + 1);
           result = await send(repairMessage(failures));
@@ -750,6 +771,61 @@ export class Harness {
   }
 
   /**
+   * What was measured on the screens a milestone's scenarios stood on. Blockers and majors go back to the builder
+   * once. What that one round does not clear is written against the milestone as work still owed, and the
+   * milestone is not held on it: a product is not left half built over a contrast ratio, and the owner is told
+   * the ratio. Each screen's picture is kept either way.
+   */
+  async #walkedScreens(project: Project, task: Task, building: Building, looks: readonly ScreenLook[]): Promise<Failure | null> {
+    const scope = { projectId: project.id, taskId: task.id };
+    const lines = [
+      ...new Set(
+        looks.flatMap((look) =>
+          look.findings
+            .filter((finding) => finding.severity !== 'minor')
+            .map((finding) => `Screen ${look.screen} (scenario "${look.scenario}"), ${finding.severity}, ${finding.rule}: ${finding.message}${finding.selector ? ` At ${finding.selector}.` : ''}${finding.fix ? ` ${finding.fix}` : ''}`),
+        ),
+      ),
+    ];
+    const shots: { screen: string; artifactId: string }[] = [];
+    const dir = join(this.#config.artifactsDir, project.id, task.id);
+    await mkdir(dir, { recursive: true, mode: 0o700 });
+    for (const look of looks) {
+      if (!look.png) continue;
+      const artifactId = newId('art');
+      const file = join(dir, `${artifactId}.png`);
+      await writeFile(file, look.png, { mode: 0o600 });
+      this.#store.insertArtifact({ id: artifactId, projectId: project.id, mime: 'image/png', file, createdAt: this.#clock() });
+      shots.push({ screen: look.screen, artifactId });
+    }
+    const sendBack = lines.length > 0 && !building.sentBack;
+    this.#events.emit(scope, { type: 'gate.result', gate: 'looks', name: `${looks.length} screens`, passed: lines.length === 0, exitCode: null, durationMs: 0, detail: lines.length === 0 ? `${looks.length} screens measured as the walk stood on them: nothing above minor` : excerpt(lines.join('\n'), 3000) });
+    this.#store.noteMilestone(project.id, building.index, { shots, debt: sendBack ? [] : lines.slice(0, 60) }, this.#clock());
+    if (!sendBack) {
+      if (lines.length > 0) this.#events.emit(scope, { type: 'notice', level: 'warn', message: `마일스톤 ${building.index + 1}: 걸은 화면에서 잰 결함 ${lines.length}건이 한 번 고친 뒤에도 남았습니다. 로드맵에 남은 일로 적었습니다.` });
+      return null;
+    }
+    building.sentBack = true;
+    return {
+      name: 'looks',
+      source: 'browser-page',
+      detail: `Every scenario reached its end. The studio then measured each screen its people stood on, signed in, at the size they were walked at. These are measurements, not opinions; fix each in the code of the screen it names, and change nothing about how the scenarios are walked:\n${lines.map((line) => `- ${line}`).join('\n')}`,
+    };
+  }
+
+  /** Puts the product map and its written-out form in the workspace, where they differ from what is there. Committed with the task's work. */
+  async #writeProductMap(project: Project, map: ProductMap): Promise<void> {
+    const files: [string, string][] = [
+      [PRODUCT_MAP_FILE, `${JSON.stringify(map, null, 2)}\n`],
+      [PRODUCT_DOC_FILE, renderProductMap(map)],
+    ];
+    for (const [path, content] of files) {
+      const held = await this.#sandboxes.exec(project, `cat ${path} 2>/dev/null; true`, { timeoutSec: 15, maxOutputBytes: 600_000 });
+      if (held.stdout !== content) await this.#sandboxes.writeFile(project, path, content);
+    }
+  }
+
+  /**
    * Writes the plan out for a person to read, beside the JSON it is made from, whenever that JSON holds and
    * the document on disk says something else. The owner reads this one; nobody edits it.
    */
@@ -869,7 +945,7 @@ export class Harness {
     }
   }
 
-  async #verify(project: Project, task: Task, plan: Pick<Plan, 'auditRoutes'> | null, signal: AbortSignal, run: { design: boolean; spec: SpecDemand | null; record: RunRecord }): Promise<{ failures: Failure[]; unverified: string[]; waitingOn: string | null }> {
+  async #verify(project: Project, task: Task, plan: Pick<Plan, 'auditRoutes'> | null, signal: AbortSignal, run: { design: boolean; spec: SpecDemand | null; record: RunRecord; building?: Building | null }): Promise<{ failures: Failure[]; unverified: string[]; waitingOn: string | null }> {
     const scope = { projectId: project.id, taskId: task.id };
     const record = run.record;
 
@@ -900,6 +976,12 @@ export class Harness {
         this.#events.emit(scope, { type: 'gate.result', gate: 'screens', name: SCREEN_SPEC_FILE, passed: false, exitCode: null, durationMs: 0, detail });
         return { failures: [{ name: 'screen-spec', source: 'sandbox-output', detail: `${SCREEN_SPEC_FILE} does not hold as the screen spec for this work. Write or correct it in the shape you were given:\n${detail}` }], unverified: [], waitingOn: null };
       }
+      // A milestone is not done while a feature built so far has nothing that walks it: what the plan does not list, nobody checks.
+      if (run.building) {
+        const missing = uncovered(run.building.map, spec.spec, run.building.index);
+        this.#events.emit(scope, { type: 'gate.result', gate: 'coverage', name: `milestone ${run.building.index + 1}`, passed: missing.length === 0, exitCode: null, durationMs: 0, detail: excerpt(missing.join('\n'), 2000) });
+        if (missing.length > 0) return { failures: [{ name: 'coverage', source: 'sandbox-output', detail: `Every feature of the milestones built so far is walked by a scenario of the screen plan. These are not:\n${missing.map((line) => `- ${line}`).join('\n')}` }], unverified: [], waitingOn: null };
+      }
     }
 
     // The owner's switch for browser-backed checks is the visual eval: with it off, nothing here starts a browser.
@@ -919,9 +1001,14 @@ export class Harness {
         const planned = !this.#scenarios ? null : run.spec?.works ? await this.#readSpec(project, run.spec) : run.spec === null && variantOf(project.template) !== null ? await this.#readSpec(project, { works: true, draft: true }) : null;
         if (planned?.ok && planned.spec.scenarios.length > 0 && this.#scenarios) {
           try {
-            const walked = await this.#scenarios.run(project, planned.spec, { signal });
+            const walked = await this.#scenarios.run(project, planned.spec, { signal, look: !!run.building });
             this.#events.emit(scope, { type: 'gate.result', gate: 'scenarios', name: planned.spec.scenarios.map((scenario) => scenario.id).join(' '), passed: walked.passed, exitCode: null, durationMs: walked.durationMs, detail: walked.passed ? walked.detail : excerpt(renderScenarioFeedback(walked), 3000) });
             if (!walked.passed) return { failures: [{ name: 'scenarios', source: 'browser-page', detail: renderScenarioFeedback(walked) }], unverified: [], waitingOn: null };
+            // It works. The screens its people stood on, signed in, are the ones the audit never opens: measured here.
+            if (run.building && walked.looks && walked.looks.length > 0) {
+              const found = await this.#walkedScreens(project, task, run.building, walked.looks);
+              if (found) return { failures: [found], unverified: [], waitingOn: null };
+            }
           } catch (err) {
             if (signal.aborted) throw err;
             // The backend or the browser not answering is the studio's problem. It is said, and the work is not vouched for.
@@ -1190,7 +1277,9 @@ function executeMessage(task: Task, plan: Plan | null, lessonText: string, hande
   // is a codebase with conventions: a quick change there is still held to its type check, tests and build, and
   // is not told to build any of that.
   const drafted = task.track === 'fast' && task.kind !== 'ideate' && handed.template !== 'studio-core';
-  const parts = [task.kind === 'ideate' ? (handed.revising ? IDEATION_REVISION_BRIEF : IDEATION_BRIEF) : '', drafted ? DRAFT_BRIEF : '', `The owner's request:\n${task.prompt}`];
+  // A milestone of a product map is not a draft of a product: it is told how a slice of a whole one is built.
+  const milestone = drafted && task.milestone !== null && task.milestone !== undefined;
+  const parts = [task.kind === 'ideate' ? (handed.revising ? IDEATION_REVISION_BRIEF : IDEATION_BRIEF) : '', milestone ? MILESTONE_BRIEF : drafted ? DRAFT_BRIEF : '', `The owner's request:\n${task.prompt}`];
   if (handed.continued) parts.push(CONTINUED_BRIEF);
   if (plan) parts.push(`Plan drafted for this request (follow it unless the code shows it is wrong; say so if you deviate):\n${planText(plan)}`);
   // The table's cells were written by a model that had read reference pages, so they travel as data; the instruction to build to it is the harness's.
@@ -1213,7 +1302,7 @@ function executeMessage(task: Task, plan: Plan | null, lessonText: string, hande
   if (lessonText) parts.push(lessonText);
   // A draft is built from no approved page, so what a screen is made of reaches it here: last, where the design lab found it acted on.
   if (drafted && handed.template && handed.template !== 'studio-core') {
-    parts.push(`One more thing is not left to defaults in a draft: what its first screen is made of. This is the handbook's last section, said again here because it is the first thing the owner sees.\n\n${materialFor(handed.template)}`);
+    parts.push(`${milestone ? 'What every screen of this milestone is made of.' : 'One more thing is not left to defaults in a draft: what its first screen is made of.'} This is the handbook's last section, said again here because it is the first thing the owner sees.\n\n${materialFor(handed.template)}`);
   }
   return parts.filter(Boolean).join('\n\n');
 }

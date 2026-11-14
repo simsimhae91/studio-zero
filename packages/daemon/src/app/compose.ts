@@ -67,6 +67,7 @@ import { SupabaseStack } from '../arms/SupabaseStack.ts';
 import { ExternalApis } from './ExternalApis.ts';
 import { ProjectNamer } from './ProjectNamer.ts';
 import { QuotaTracker } from './QuotaTracker.ts';
+import { RoadmapRunner } from './RoadmapRunner.ts';
 import { Scheduler } from './Scheduler.ts';
 import { Studio } from './Studio.ts';
 
@@ -137,6 +138,7 @@ export interface Daemon {
   resumer: ReviewResumer;
   planGate: PlanGate;
   scheduler: Scheduler;
+  roadmaps: RoadmapRunner;
   pty: PtyManager;
   files: SandboxFileService;
   ledger: Ledger;
@@ -232,7 +234,9 @@ export async function createDaemon(config: Config, log: PinoLogger, overrides: D
   // daemon stopped is queued again on boot (see `Store.recoverInterruptedTasks`) and comes back to its stored plan.
   const planGate = new PlanGate({ store, events, config: config.planReview, clock });
   const harness = new Harness({ config, store, events, policy, sandboxes, provisioner, router, claude, evals, compiler, smoke, scenarios, lessons, reflection, refkit, reviewer, ledger, build: new BuildMeter({ sandboxes }), mockups, selfHosting, planGate, clock, log: log.child({ mod: 'harness' }) });
-  const queue = new TaskQueue({ store, events, execute: (task, signal) => harness.run(task, signal), clock, log: log.child({ mod: 'queue' }) });
+  // The roadmap runner is made further down, after the studio it submits through: the queue tells it of each task that has wholly ended.
+  const settled: { tell: ((taskId: string) => void) | null } = { tell: null };
+  const queue = new TaskQueue({ store, events, execute: (task, signal) => harness.run(task, signal), clock, log: log.child({ mod: 'queue' }), onSettled: (taskId) => settled.tell?.(taskId) });
   // Tasks suspended for want of a design reviewer are queued again when one answers.
   const resumer = new ReviewResumer({ store, vision, queue, log: log.child({ mod: 'resumer' }) });
   const kirby = new KirbyEngine({ config, store, events, sandboxes, claude, clock, log: log.child({ mod: 'kirby' }) });
@@ -284,6 +288,10 @@ export async function createDaemon(config: Config, log: PinoLogger, overrides: D
 
   // The owner's schedules: each run goes in through the same `submitTask` as a task typed at the desk.
   const scheduler = new Scheduler({ store, events, studio, clock, log: log.child({ mod: 'scheduler' }) });
+  // A product built to the end of its map: each milestone an ordinary task through the same `submitTask`.
+  const roadmaps = new RoadmapRunner({ store, events, claude, studio, external, sandboxes, clock, log: log.child({ mod: 'roadmap' }) });
+  studio.useRoadmaps(roadmaps);
+  settled.tell = (taskId) => roadmaps.taskSettled(taskId);
 
   // The token every owner client presents. Created on first boot and kept in the Keychain, where the desktop
   // client on this Mac reads it directly; a second machine is paired by copying it once (`sz token`).
@@ -365,6 +373,7 @@ export async function createDaemon(config: Config, log: PinoLogger, overrides: D
     resumer,
     planGate,
     scheduler,
+    roadmaps,
     pty,
     files,
     ledger,
@@ -389,6 +398,7 @@ export async function createDaemon(config: Config, log: PinoLogger, overrides: D
       queue.start();
       resumer.start();
       if (config.scheduler.enabled) scheduler.start();
+      roadmaps.start();
       // The relay is a convenience channel: if Telegram is unreachable at boot the daemon still comes up.
       await relay?.start().catch((err: unknown) => log.error({ err: errorMessage(err) }, 'telegram relay failed to start'));
       await slack?.start().catch((err: unknown) => log.error({ err: errorMessage(err) }, 'slack relay failed to start'));

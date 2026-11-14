@@ -13,6 +13,8 @@ const EMPTY = /^(?:없음|해당 ?없음|미정|n\/?a|none|tbd|todo|-+|\.+)?$/i;
 const MAX_SCREENS = 40;
 const MAX_TASKS = 5;
 const MAX_SCENARIOS = 6;
+/** In a product built to a map there is a scenario for each feature, and a map has many. */
+const MAX_SCENARIOS_WIDE = 30;
 const MAX_SCENARIO_STEPS = 12;
 const TABLE_NAME = /^[a-z][a-z0-9_]{0,62}$/;
 /** Who may read a table, as the spec may say it. The first two are checked against a stranger: see `ScenarioRunner`. */
@@ -37,7 +39,7 @@ const blank = (value: string): boolean => EMPTY.test(value.trim());
  * the references between them resolve, and that the core flow is stated as things a person gets done, each
  * with an outcome a browser could look for. Whether the flow is a good one is the owner's question.
  */
-export function checkScreenSpec(spec: ScreenSpec, opts: { draft?: boolean } = {}): string[] {
+export function checkScreenSpec(spec: ScreenSpec, opts: { draft?: boolean; wide?: boolean } = {}): string[] {
   const problems: string[] = [];
   // A draft's plan is the short one: which screens there are and what a person does, not every element and state.
   const full = opts.draft !== true;
@@ -103,7 +105,7 @@ export function checkScreenSpec(spec: ScreenSpec, opts: { draft?: boolean } = {}
     eventNames.add(event.name);
     if (blank(event.when) || blank(event.measures)) problems.push(`${at}: say when it fires and which measure it feeds.`);
   }
-  if (saysHowItWorks(spec)) problems.push(...checkWorkingParts(spec));
+  if (saysHowItWorks(spec)) problems.push(...checkWorkingParts(spec, opts.wide === true));
   return problems.slice(0, 24);
 }
 
@@ -117,7 +119,7 @@ const saysHowItWorks = (spec: ScreenSpec): boolean => spec.roles.length > 0 || s
  * role; a product people sign in to starts each scenario with a person signing up, says what it keeps, and
  * says for each table who may read it in one of four words a check can act on.
  */
-function checkWorkingParts(spec: ScreenSpec): string[] {
+function checkWorkingParts(spec: ScreenSpec, wide: boolean): string[] {
   const problems: string[] = [];
   const inFirstVersion = (id: string): boolean => spec.screens.some((screen) => screen.id === id && !screen.later);
 
@@ -147,7 +149,9 @@ function checkWorkingParts(spec: ScreenSpec): string[] {
   }
 
   if (spec.scenarios.length === 0) problems.push('scenarios is empty: for each role, give what that person does from arriving for the first time to having done what they came for, as numbered steps.');
-  if (spec.scenarios.length > MAX_SCENARIOS) problems.push(`scenarios has ${spec.scenarios.length} entries; give at most ${MAX_SCENARIOS}: one a role, and a second only where a person's way through truly differs.`);
+  if (wide ? spec.scenarios.length > MAX_SCENARIOS_WIDE : spec.scenarios.length > MAX_SCENARIOS) {
+    problems.push(wide ? `scenarios has ${spec.scenarios.length} entries; ${MAX_SCENARIOS_WIDE} is the most. One a feature: fold a feature's variations into its one scenario.` : `scenarios has ${spec.scenarios.length} entries; give at most ${MAX_SCENARIOS}: one a role, and a second only where a person's way through truly differs.`);
+  }
   const scenarioIds: string[] = [];
   for (const scenario of spec.scenarios) {
     const at = `scenario ${scenario.id || '(no id)'}`;
@@ -209,7 +213,7 @@ export type ScreenSpecRead = { ok: true; spec: ScreenSpec } | { ok: false; probl
  * must also say how the product works (roles, entry, scenarios, data): what a build is held to. With `draft`,
  * the screens may be listed without their elements and states.
  */
-export function readScreenSpec(input: unknown, opts: { works?: boolean; draft?: boolean } = {}): ScreenSpecRead {
+export function readScreenSpec(input: unknown, opts: { works?: boolean; draft?: boolean; wide?: boolean } = {}): ScreenSpecRead {
   let value = input;
   if (typeof input === 'string') {
     try {

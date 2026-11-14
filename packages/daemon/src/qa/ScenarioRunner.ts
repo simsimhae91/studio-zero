@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import type { Browser, BrowserContextOptions, Page } from 'playwright-core';
-import type { Project, ScreenSpec } from '@studio-zero/protocol';
+import { contract } from '@studio-zero/design';
+import type { Finding, Project, ScreenSpec, Template, ViewportId } from '@studio-zero/protocol';
 import type { ProjectArms } from '../arms/ProjectArms.ts';
 import type { StackInfo } from '../arms/SupabaseStack.ts';
 import type { Config } from '../config.ts';
@@ -9,6 +10,8 @@ import { readProjectFile } from '../harness/projectFile.ts';
 import type { OrbStackManager } from '../sandbox/OrbStackManager.ts';
 import { SIGN_IN, SIGN_UP } from '../scratch/ScreenSpec.ts';
 import { excerpt } from '../util/core.ts';
+import { runDomChecks } from './checks.ts';
+import { PageDigest, collectDigest } from './collector.ts';
 import { DONE_ATTR, STEP_ATTR, walkFlow } from './FlowWalker.ts';
 import { LOGIN_ATTR, walkLogins } from './LoginWalk.ts';
 import type { QaBrowser } from './QaBrowser.ts';
@@ -49,10 +52,25 @@ export interface ScenarioOutcome {
   /** One line for the receipt. */
   detail: string;
   durationMs: number;
+  /** Each screen the scenarios stood on, measured once, when the caller asked for it (`look`). */
+  looks?: ScreenLook[];
 }
 
 export interface ScenarioRunnerLike {
-  run(project: Project, spec: ScreenSpec, opts?: { signal?: AbortSignal }): Promise<ScenarioOutcome>;
+  run(project: Project, spec: ScreenSpec, opts?: { signal?: AbortSignal; look?: boolean }): Promise<ScenarioOutcome>;
+}
+
+/**
+ * A screen as it was when a scenario's person stood on it: signed in, with what they had entered on it. The
+ * audit opens a product's routes as a visitor, so in a product people sign in to it measures the door and
+ * nothing behind it; this is the same measurement taken where the walk already is.
+ */
+export interface ScreenLook {
+  /** The screen's id in the plan, as the step that stood on it names it. */
+  screen: string;
+  scenario: string;
+  findings: Finding[];
+  png: Buffer | null;
 }
 
 /** How long a press on a running app is waited on: a sign-up wakes a service that was asleep. */
@@ -190,6 +208,20 @@ export interface ScenarioWalk {
   problems: string[];
   /** The providers the product offers a sign-in with, each pressed as far as the provider. */
   logins: string[];
+  /** Each screen a step stood on, measured the first time one did. Empty unless `look` was given. */
+  looks: ScreenLook[];
+}
+
+/** How long a screen is left to come to rest before it is measured: what a step leaves may still be arriving. */
+const REST_MS = 700;
+
+/** Measures the page as it stands, against the design contract, at the size it is being walked at. */
+async function lookAt(page: Page, at: { screen: string; scenario: string; viewport: ViewportId; width: number; touch: boolean; template: Template }): Promise<ScreenLook> {
+  await page.waitForTimeout(REST_MS).catch(() => undefined);
+  const digest = PageDigest.safeParse(await page.evaluate(collectDigest, 600).catch(() => null));
+  const findings = digest.success ? runDomChecks(digest.data, { viewport: at.viewport, viewportWidth: at.width, route: at.screen, touch: at.touch, scope: 'full', template: at.template }, contract) : [];
+  const png = await page.screenshot({ type: 'png' }).catch(() => null);
+  return { screen: at.screen, scenario: at.scenario, findings, png };
 }
 
 /**
@@ -200,17 +232,20 @@ export interface ScenarioWalk {
  * `backend` is null for a product nobody signs in to: its scenarios are walked as a visitor and that is all.
  * `restart` takes the backend down and brings it back. `run` names the walk (see `walkFlow`).
  */
-export async function walkScenarios(deps: { browser: Browser; base: string; phone: BrowserContextOptions | null; spec: ScreenSpec; backend: Backend | null; restart: () => Promise<void>; run: string; signal?: AbortSignal }): Promise<ScenarioWalk> {
+export async function walkScenarios(deps: { browser: Browser; base: string; phone: BrowserContextOptions | null; spec: ScreenSpec; backend: Backend | null; restart: () => Promise<void>; run: string; signal?: AbortSignal; look?: { template: Template } }): Promise<ScenarioWalk> {
   const { browser, base, spec, backend, run } = deps;
   const touch = deps.phone !== null;
   const problems: string[] = [];
   const people = new Map<string, { email: string; password: string }>();
   const made = new Map<string, Tables>();
   let walked = 0;
+  const looks: ScreenLook[] = [];
+  const looked = new Set<string>();
+  const size = { viewport: (touch ? 'iphone-15-pro' : 'desktop-1440') as ViewportId, width: deps.phone?.viewport?.width ?? 1440 };
 
   const stranger = person('stranger', run);
   const strangerToken = backend ? await backend.stranger(stranger.email, stranger.password) : null;
-  if (backend && strangerToken === null) return { walked: 0, logins: [], problems: ['The studio could not make an account through the backend\'s own sign-up (email and password). The scenarios are walked as people who sign up that way: leave it switched on.'] };
+  if (backend && strangerToken === null) return { walked: 0, logins: [], looks, problems: ['The studio could not make an account through the backend\'s own sign-up (email and password). The scenarios are walked as people who sign up that way: leave it switched on.'] };
 
   const open = async (): Promise<{ page: Page; refused: string[]; close: () => Promise<void> }> => {
     const context = await browser.newContext({ ...(deps.phone ?? { viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 }), serviceWorkers: 'block' });
@@ -251,6 +286,10 @@ export async function walkScenarios(deps: { browser: Browser; base: string; phon
           through = false;
           break;
         }
+        if (deps.look && step.screen.trim() !== '' && !looked.has(step.screen)) {
+          looked.add(step.screen);
+          looks.push(await lookAt(page, { screen: step.screen, scenario: scenario.id, ...size, touch, template: deps.look.template }));
+        }
       }
       if (!through) continue;
       const last = scenario.steps.at(-1)!;
@@ -283,10 +322,10 @@ export async function walkScenarios(deps: { browser: Browser; base: string; phon
       await close();
     }
   }
-  if (!backend) return { walked, problems, logins: [] };
+  if (!backend) return { walked, problems, logins: [], looks };
   // Whatever became of the scenarios, the provider buttons are pressed: a builder is told everything in one go.
   const pressed = await walkLogins({ browser, base, phone: deps.phone, apiOrigin: backend.apiOrigin, on: backend.logins });
-  if (problems.length > 0 || walked === 0) return { walked, problems: [...problems, ...pressed.problems], logins: pressed.offered };
+  if (problems.length > 0 || walked === 0) return { walked, problems: [...problems, ...pressed.problems], logins: pressed.offered, looks };
 
   // The backend goes down and comes back: every row is still there, and a person can sign in again on a browser that has never seen them.
   const kept = await backend.tables();
@@ -326,7 +365,7 @@ export async function walkScenarios(deps: { browser: Browser; base: string; phon
       if (n > 0) problems.push(`Table ${table} (${policy}): a visitor who was not signed in read ${plural(n, 'row')} that the scenarios' people made. Take the grant or the policy for "anon" off it.`);
     }
   }
-  return { walked, problems: [...problems, ...pressed.problems], logins: pressed.offered };
+  return { walked, problems: [...problems, ...pressed.problems], logins: pressed.offered, looks };
 }
 
 export class ScenarioRunner implements ScenarioRunnerLike {
@@ -342,10 +381,10 @@ export class ScenarioRunner implements ScenarioRunnerLike {
     this.#arms = deps.arms;
   }
 
-  async run(project: Project, spec: ScreenSpec, opts: { signal?: AbortSignal } = {}): Promise<ScenarioOutcome> {
+  async run(project: Project, spec: ScreenSpec, opts: { signal?: AbortSignal; look?: boolean } = {}): Promise<ScenarioOutcome> {
     const started = Date.now();
     const total = spec.scenarios.length;
-    const finish = (walked: number, problems: string[], logins: string[] = []): ScenarioOutcome => ({
+    const finish = (walked: number, problems: string[], logins: string[] = [], looks: ScreenLook[] = []): ScenarioOutcome => ({
       passed: problems.length === 0,
       scenarios: total,
       walked,
@@ -356,6 +395,7 @@ export class ScenarioRunner implements ScenarioRunnerLike {
           ? `${plural(total, 'scenario')} walked to the end as new people${spec.entry !== null ? '; their data outlived a reload and a restart and was closed to a stranger' : ''}${logins.length > 0 ? `; signing in with ${logins.join(' and ')} leaves for the provider from its button` : ''}`
           : `${walked} of ${plural(total, 'scenario')} walked to the end; ${plural(problems.length, 'finding')}`,
       durationMs: Date.now() - started,
+      looks,
     });
     if (spec.entry !== null && !this.#arms.has(project)) {
       return finish(0, ['The plan says people sign in, and the project has no backend: apply_schema was never called. Write the schema in supabase/migrations, apply it, and sign people up through the client in .studio-zero/arms-kit.']);
@@ -373,7 +413,7 @@ export class ScenarioRunner implements ScenarioRunnerLike {
     };
     try {
       const result = await this.#browser.use(project, opts.signal, ({ browser, host, devices }) =>
-        walkScenarios({ browser, base: `http://${host}:${file.dev.port}`, phone: project.template === 'mobile-expo' ? devices['iPhone 15 Pro']! : null, spec, backend, restart, run, ...(opts.signal ? { signal: opts.signal } : {}) }),
+        walkScenarios({ browser, base: `http://${host}:${file.dev.port}`, phone: project.template === 'mobile-expo' ? devices['iPhone 15 Pro']! : null, spec, backend, restart, run, ...(opts.signal ? { signal: opts.signal } : {}), ...(opts.look ? { look: { template: project.template === 'studio-core' ? 'web-vite-react' : project.template } } : {}) }),
       );
       const problems = [...result.problems];
       if (backend) {
@@ -388,7 +428,7 @@ export class ScenarioRunner implements ScenarioRunnerLike {
           if (where.length > 0) problems.push(`The product signs people in with a provider (signInWithOAuth in ${where.join(', ')}), and no button marked ${LOGIN_ATTR} was found on the signed-out screen or one press of the sign-in or sign-up marks from it. Mark each provider's button with the provider's name (${LOGIN_ATTR}="kakao"; React Native: dataSet={{ login: 'kakao' }}) so that the studio can press it.`);
         }
       }
-      return finish(result.walked, problems, result.logins);
+      return finish(result.walked, problems, result.logins, result.looks);
     } finally {
       // The project's database is the owner's to look at, and is not left filling with one walk's people after another.
       await backend?.forget(run);

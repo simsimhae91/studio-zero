@@ -31,8 +31,14 @@ export class TaskQueue {
   readonly #running = new Map<string, { abort: AbortController; done: Promise<void> }>();
   #accepting = false;
   #wakeTimer: ReturnType<typeof setTimeout> | null = null;
+  readonly #onSettled: ((taskId: string) => void) | null;
 
-  constructor(deps: { store: Store; events: EventLog; execute: (task: Task, signal: AbortSignal) => Promise<void>; concurrency?: number; clock: Clock; log: Logger }) {
+  /**
+   * `onSettled` is told when a task's run has wholly ended, whatever became of it: after its verdict, its receipt
+   * and its reflection, with its workspace no longer in use. A task's `succeeded` event is earlier than that.
+   */
+  constructor(deps: { store: Store; events: EventLog; execute: (task: Task, signal: AbortSignal) => Promise<void>; concurrency?: number; clock: Clock; log: Logger; onSettled?: (taskId: string) => void }) {
+    this.#onSettled = deps.onSettled ?? null;
     this.#store = deps.store;
     this.#events = deps.events;
     this.#execute = deps.execute;
@@ -105,6 +111,11 @@ export class TaskQueue {
           // The task may have been parked: its wake time may now be the soonest.
           this.#armWake();
           this.pump();
+          try {
+            this.#onSettled?.(task.id);
+          } catch (err) {
+            this.#log.error({ taskId: task.id, err: errorMessage(err) }, 'a listener for a settled task failed');
+          }
         });
       this.#running.set(task.id, { abort, done });
     }

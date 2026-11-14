@@ -29,7 +29,11 @@ import {
   type LessonState,
   type Origin,
   type Phase,
+  type MilestoneProgress,
   type PlanFeedback,
+  type ProductMap,
+  type Roadmap,
+  type RoadmapState,
   type Project,
   type ReviewComment,
   type ProposalState,
@@ -331,12 +335,12 @@ export class Store {
 
   // ---------------------------------------------------------------- tasks
 
-  insertTask(t: { id: string; projectId: string; kind: TaskKind; prompt: string; origin: Origin; budgetTokens: number; branch: string | null; baseBranch?: string | null; enginePref?: string | null; modelPref?: string | null; effortPref?: string | null; sessionId?: string | null; track?: TaskTrack; reviewerPref?: string | null; references?: readonly string[]; reviewPlan?: boolean; createdAt: number }): Task {
+  insertTask(t: { id: string; projectId: string; kind: TaskKind; prompt: string; origin: Origin; budgetTokens: number; branch: string | null; baseBranch?: string | null; enginePref?: string | null; modelPref?: string | null; effortPref?: string | null; sessionId?: string | null; track?: TaskTrack; reviewerPref?: string | null; references?: readonly string[]; reviewPlan?: boolean; milestone?: number | null; createdAt: number }): Task {
     const { references, ...row } = t;
     this.#run(
-      `INSERT INTO tasks (id, project_id, kind, prompt, origin, state, branch, base_branch, engine_pref, model_pref, effort_pref, session_id, track, reviewer_pref, references_json, review_plan, budget_tokens, created_at)
-       VALUES (:id, :projectId, :kind, :prompt, :origin, 'queued', :branch, :baseBranch, :enginePref, :modelPref, :effortPref, :sessionId, :track, :reviewerPref, :referencesJson, :reviewPlan, :budgetTokens, :createdAt)`,
-      { ...row, baseBranch: t.baseBranch ?? null, enginePref: t.enginePref ?? null, modelPref: t.modelPref ?? null, effortPref: t.effortPref ?? null, sessionId: t.sessionId ?? null, track: t.track ?? 'full', reviewerPref: t.reviewerPref ?? null, referencesJson: JSON.stringify(references ?? []), reviewPlan: t.reviewPlan ? 1 : 0 },
+      `INSERT INTO tasks (id, project_id, kind, prompt, origin, state, branch, base_branch, engine_pref, model_pref, effort_pref, session_id, track, reviewer_pref, references_json, review_plan, milestone, budget_tokens, created_at)
+       VALUES (:id, :projectId, :kind, :prompt, :origin, 'queued', :branch, :baseBranch, :enginePref, :modelPref, :effortPref, :sessionId, :track, :reviewerPref, :referencesJson, :reviewPlan, :milestone, :budgetTokens, :createdAt)`,
+      { ...row, baseBranch: t.baseBranch ?? null, enginePref: t.enginePref ?? null, modelPref: t.modelPref ?? null, effortPref: t.effortPref ?? null, sessionId: t.sessionId ?? null, track: t.track ?? 'full', reviewerPref: t.reviewerPref ?? null, referencesJson: JSON.stringify(references ?? []), reviewPlan: t.reviewPlan ? 1 : 0, milestone: t.milestone ?? null },
     );
     return this.getTask(t.id)!;
   }
@@ -476,6 +480,41 @@ export class Store {
    */
   wakeTask(id: string): Task | null {
     return this.#run(`UPDATE tasks SET state = 'queued', phase = NULL, parked_until = NULL, attempt = 0 WHERE id = :id AND state = 'parked'`, { id }) > 0 ? this.getTask(id) : null;
+  }
+
+  // ------------------------------------------------------------- roadmaps
+
+  /** A project's product map and how far it is built, or null when it has none. */
+  getRoadmap(projectId: string): Roadmap | null {
+    const r = this.#get('SELECT * FROM roadmaps WHERE project_id = :projectId', { projectId });
+    return r ? toRoadmap(r) : null;
+  }
+
+  /** Writes a project's roadmap whole: there is one a project, and whoever changes it read it first. */
+  putRoadmap(roadmap: Roadmap): Roadmap {
+    this.#run(
+      `INSERT INTO roadmaps (project_id, request, state, map_json, milestones_json, auto_merge, error, created_at, updated_at)
+       VALUES (:projectId, :request, :state, :map, :milestones, :autoMerge, :error, :createdAt, :updatedAt)
+       ON CONFLICT (project_id) DO UPDATE SET request = excluded.request, state = excluded.state, map_json = excluded.map_json, milestones_json = excluded.milestones_json,
+         auto_merge = excluded.auto_merge, error = excluded.error, created_at = excluded.created_at, updated_at = excluded.updated_at`,
+      { projectId: roadmap.projectId, request: roadmap.request, state: roadmap.state, map: roadmap.map ? JSON.stringify(roadmap.map) : null, milestones: JSON.stringify(roadmap.milestones), autoMerge: roadmap.autoMerge ? 1 : 0, error: roadmap.error, createdAt: roadmap.createdAt, updatedAt: roadmap.updatedAt },
+    );
+    return this.getRoadmap(roadmap.projectId)!;
+  }
+
+  /**
+   * Adds to what is recorded of one milestone (what was found on its screens and left, how they looked), read
+   * and written in one step: the harness records this while the runner keeps the milestone's state.
+   */
+  noteMilestone(projectId: string, index: number, found: Partial<Pick<MilestoneProgress, 'debt' | 'shots'>>, now: number): void {
+    const roadmap = this.getRoadmap(projectId);
+    if (!roadmap || !roadmap.milestones[index]) return;
+    this.putRoadmap({ ...roadmap, updatedAt: now, milestones: roadmap.milestones.map((m, i) => (i === index ? { ...m, ...found } : m)) });
+  }
+
+  /** Every roadmap in one state, oldest first. */
+  listRoadmaps(state: RoadmapState): Roadmap[] {
+    return this.#all('SELECT * FROM roadmaps WHERE state = :state ORDER BY created_at', { state }).map(toRoadmap);
   }
 
   // ---------------------------------------------------------- plan review
@@ -1367,6 +1406,7 @@ function toTask(r: Row): Task {
     parkedUntil: nnum(r.parked_until),
     parkCount: num(r.park_count),
     reviewPlan: num(r.review_plan) === 1,
+    milestone: nnum(r.milestone),
     createdAt: num(r.created_at),
     startedAt: nnum(r.started_at),
     finishedAt: nnum(r.finished_at),
@@ -1382,6 +1422,21 @@ function toTaskReview(r: Row): TaskReviewRow {
     blockingCount: num(r.blocking_count),
     rerunTaskId: nstr(r.rerun_task_id),
     createdAt: num(r.created_at),
+  };
+}
+
+function toRoadmap(r: Row): Roadmap {
+  const map = nstr(r.map_json);
+  return {
+    projectId: str(r.project_id),
+    request: str(r.request),
+    state: str(r.state) as RoadmapState,
+    map: map === null ? null : (JSON.parse(map) as ProductMap),
+    milestones: JSON.parse(str(r.milestones_json)) as MilestoneProgress[],
+    autoMerge: num(r.auto_merge) === 1,
+    error: nstr(r.error),
+    createdAt: num(r.created_at),
+    updatedAt: num(r.updated_at),
   };
 }
 

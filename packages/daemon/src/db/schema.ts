@@ -469,6 +469,22 @@ const migrations: string[] = [
   ALTER TABLE knowledge_jobs ADD COLUMN revised_from TEXT REFERENCES knowledge_jobs(id) ON DELETE SET NULL;
   CREATE INDEX knowledge_by_revised_from ON knowledge_jobs(revised_from);
   `,
+  // 18: a project's product map and how far its milestones are built (one row a project), and on a task the
+  // milestone it builds. map_json is the map as the daemon checked it; milestones_json is one entry a milestone.
+  `
+  CREATE TABLE roadmaps (
+    project_id       TEXT PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,
+    request          TEXT NOT NULL,
+    state            TEXT NOT NULL,
+    map_json         TEXT,
+    milestones_json  TEXT NOT NULL DEFAULT '[]',
+    auto_merge       INTEGER NOT NULL DEFAULT 1,
+    error            TEXT,
+    created_at       INTEGER NOT NULL,
+    updated_at       INTEGER NOT NULL
+  ) STRICT;
+  ALTER TABLE tasks ADD COLUMN milestone INTEGER;
+  `,
 ];
 
 /** Brings the database to the latest version, or to `target` (a test replaying one migration on rows it put in). */

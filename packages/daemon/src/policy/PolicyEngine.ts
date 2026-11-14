@@ -224,6 +224,15 @@ const rules: Rule[] = [
     },
   },
   {
+    // A roadmap builds a whole product by itself, a task a milestone, and merges what passes. Only the owner sets
+    // one going or stops it; an agent that could would be an agent booking its own work.
+    id: 'roadmap.configure-owner-only',
+    evaluate: (actor, action) => {
+      if (action.kind !== 'roadmap.configure') return undefined;
+      return actor.type === 'owner' ? allow('owner-initiated') : deny('only the owner can plan, run or stop a roadmap');
+    },
+  },
+  {
     // A schedule starts paid work later with nobody watching. Only the owner sets one up; nothing an agent reads
     // or writes can, so injected text cannot book work for itself. Each run is still a `task.submit`.
     id: 'schedule.configure-owner-only',

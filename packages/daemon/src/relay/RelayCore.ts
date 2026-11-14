@@ -298,6 +298,22 @@ export class RelayCore {
         if (task) this.#broadcast(this.#taskMessage(task, body.parkCapHit === true));
         return;
       }
+      case 'roadmap.changed': {
+        // A roadmap runs for hours with nobody at the desk: its map being ready, each milestone built, and its end
+        // or its stopping are said. A milestone starting is not news.
+        if (e.projectId === null) return;
+        const roadmap = this.#d.store.getRoadmap(e.projectId);
+        const map = roadmap?.map;
+        const name = bold(this.#d.store.getProject(e.projectId)?.name ?? e.projectId);
+        if (!roadmap) return;
+        if (body.state === 'failed') return this.#broadcast({ lines: [[name], ['제품 지도를 쓰지 못했습니다.'], [roadmap.error ?? '']], priority: 'high' });
+        if (!map) return;
+        if (body.state === 'planned' && body.milestone === null) return this.#broadcast({ lines: [[name], [`제품 지도가 준비됐습니다. 기능 ${map.features.length}개를 마일스톤 ${map.milestones.length}개로 짓습니다.`], ['읽어 보고 짓기를 시작해 주세요.']] });
+        if (body.state === 'done') return this.#broadcast({ lines: [[name], [`제품 지도의 마일스톤 ${map.milestones.length}개를 모두 지었습니다.`]], priority: 'high' });
+        if (body.state === 'stopped') return this.#broadcast({ lines: [[name], ['로드맵이 멈췄습니다.'], [roadmap.error ?? ''], ['다시 짓기를 누르면 멈춘 마일스톤부터 이어 갑니다.']], priority: 'high' });
+        if (body.milestoneState === 'built' && body.milestone !== null) return this.#broadcast({ lines: [[name], [`마일스톤 ${body.milestone + 1}/${map.milestones.length} "${body.name ?? ''}"을 지었습니다.`]] });
+        return;
+      }
       case 'task.parked': {
         // Work stopped for hours is news; that it starts again by itself is what makes it nothing to act on.
         const task = e.taskId === null ? null : this.#d.store.getTask(e.taskId);

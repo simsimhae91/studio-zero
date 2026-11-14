@@ -39,6 +39,7 @@ import {
 import { AxResponse, Calibration, DocumentAnnotation, DocumentKind, KnowledgeJob, PromotionResult, Readiness, ResearchReport, ScratchEntry, ScratchMode, ScratchMove, Scratchpad, TextFinding } from './ax.ts';
 import { EventEnvelope, EventFilter } from './events.ts';
 import { ReviewDiff, ReviewOutcome, ReviewResult } from './review.ts';
+import { Roadmap } from './product.ts';
 
 const empty = z.object({});
 
@@ -239,6 +240,18 @@ export const methods = {
     params: z.object({ taskId: z.string(), version: z.number().int().min(1), planHash: z.string().regex(/^[0-9a-f]{64}$/), verdict: z.enum(['approve', 'changes']), feedback: z.array(PlanFeedback).max(20).optional() }),
     result: PlanVersion,
   },
+
+  /**
+   * A project's product map and how far it is built (null when it has none). `plan` has the map written from the
+   * owner's words (it comes back `planning`; `roadmap.changed` says when the map is there). `run` builds its
+   * milestones one after another, each an ordinary task, merging each that passes unless `autoMerge` is false;
+   * run on a roadmap that stopped, it goes on from the milestone that stopped it. `stop` lets the milestone being
+   * built finish and starts no other.
+   */
+  'roadmap.get': { params: z.object({ projectId: z.string() }), result: z.object({ roadmap: Roadmap.nullable() }) },
+  'roadmap.plan': { params: z.object({ projectId: z.string(), request: z.string().trim().min(1).max(20_000) }), result: Roadmap },
+  'roadmap.run': { params: z.object({ projectId: z.string(), autoMerge: z.boolean().optional() }), result: Roadmap },
+  'roadmap.stop': { params: z.object({ projectId: z.string() }), result: Roadmap },
 
   'approvals.list': { params: z.object({ state: ApprovalState.optional() }), result: z.object({ approvals: z.array(Approval) }) },
   'approvals.resolve': { params: z.object({ approvalId: z.string(), decision: z.enum(['approve', 'deny']) }), result: Approval },
