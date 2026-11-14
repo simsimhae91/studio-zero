@@ -150,7 +150,7 @@ function moving(): number[] {
  * sample that has to be unique (a code a person picks, a handle) carries `{run}`, which is filled with it, so
  * that the same walk can be made again tomorrow and two people in one walk can type the same code.
  */
-export async function walkFlow(page: Page, tasks: readonly FlowTask[], opts: { touch: boolean; patienceMs?: number; identity?: { email: string; password: string }; run?: string; maxPresses?: number }): Promise<Walk> {
+export async function walkFlow(page: Page, tasks: readonly FlowTask[], opts: { touch: boolean; patienceMs?: number; identity?: { email: string; password: string }; run?: string; maxPresses?: number; afterPress?: () => Promise<void> }): Promise<Walk> {
   const patience = opts.patienceMs ?? 0;
   // A mock-up's core flow is a few presses a task. A step of a running product (a profile form) is longer, and its walker says how long.
   const most = opts.maxPresses ?? MAX_STEPS;
@@ -263,6 +263,8 @@ export async function walkFlow(page: Page, tasks: readonly FlowTask[], opts: { t
       const answer = await settle();
       if (answer > 0) result.responseMs = Math.round(Math.max(result.responseMs ?? 0, answer));
       await shoot(taskIndex, step);
+      // Whoever walks may want to look at where the press led (a screen passed through on the way to the outcome).
+      await opts.afterPress?.();
     }
 
     if (result.stopped === null) {

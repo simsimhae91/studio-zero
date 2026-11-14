@@ -282,7 +282,7 @@ test('a step longer than a core flow\'s is carried out to its end; one past what
 <style>body{margin:0;padding:24px;font:16px/1.6 system-ui;background:#fff;color:#111}button{font:inherit;min-height:48px;padding:0 20px;border:0;border-radius:8px;background:#124;color:#fff}button:active{background:#000}</style></head>
 <body><div id="app"></div><script>
 let at=Number(localStorage.getItem('at')||'1');
-function render(){document.getElementById('app').innerHTML=at>${presses}?'<p data-done="profile">프로필을 저장했어요</p>':'<button id="next" data-step="profile:'+at+'">'+at+'번째 칸 채우기</button>';
+function render(){document.getElementById('app').innerHTML='<main data-screen="'+(at>6?'R-01':'H-01')+'">'+(at>${presses}?'<p data-done="profile">프로필을 저장했어요</p>':'<button id="next" data-step="profile:'+at+'">'+at+'번째 칸 채우기</button>')+'</main>';
  const next=document.getElementById('next');if(next)next.onclick=()=>{at+=1;localStorage.setItem('at',String(at));render();};}
 render();
 </script></body></html>`;
@@ -294,11 +294,13 @@ render();
   const server = createServer((_req, res) => res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' }).end(form(presses)));
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
-  const walk = () => walkScenarios({ browser, base, phone: devices['iPhone 15 Pro']!, spec: plan, backend: null, run: 'abab7777', restart: async () => undefined });
+  const walk = () => walkScenarios({ browser, base, phone: devices['iPhone 15 Pro']!, spec: plan, backend: null, run: 'abab7777', restart: async () => undefined, look: { template: 'mobile-expo' } });
   try {
     // Twelve presses: more than a mock-up's core flow is walked for (eight), and a step of a real product.
     const long = await walk();
     assert.deepEqual([long.walked, long.problems], [1, []]);
+    // The form's second page is a screen of its own that no step of the plan names: it was passed through, and measured.
+    assert.deepEqual(long.looks.map((look) => look.screen), ['H-01', 'R-01']);
     presses = 30;
     const tooLong = await walk();
     assert.equal(tooLong.walked, 0);

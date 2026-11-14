@@ -1041,7 +1041,9 @@ export class Harness {
         if (!(planned?.ok && planned.spec.entry !== null)) record.flow = await this.#walkApp(project, task, signal);
         // A draft is held to nothing past this point, and is still looked at once: measured at the size it
         // is first met at, with no reviewer, for the owner to see. A look that cannot be had is said and no more.
-        if (task.track === 'fast') {
+        // (A milestone's screens were measured where its people stood, signed in: the door too. One more look at
+        // the door as a visitor would say less, and say it as if it were the product's first screen.)
+        if (task.track === 'fast' && !run.building) {
           try {
             record.audit = (await this.#evals.measureDraft(project, task.id, { signal })) ?? record.audit;
           } catch (err) {

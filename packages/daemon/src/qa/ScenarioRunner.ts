@@ -239,16 +239,17 @@ const shownScreen = (attr: string): string | null => {
 };
 
 /**
- * Measures the page as it stands, against the design contract, at the size it is being walked at. `first` is
- * the screen the product exists for (the core flow's): what a screen is made of, its tab bar and its colour
- * are asked of that one, as the audit asks them of the first screen a visitor meets.
+ * Measures the page as it stands, against the design contract, at the size it is being walked at. `first` marks
+ * the two screens a person meets the product on: the one it exists for (`core`, the core flow's) and the one a
+ * visitor sees before signing in (`door`). What a screen is made of and its colour are asked of those, as the
+ * audit asks them of a first screen; the tab bar is asked of the first and not of the door.
  */
-async function lookAt(browser: Browser, page: Page, at: { screen: string; scenario: string; viewport: ViewportId; width: number; scale: number; touch: boolean; template: Template; first: boolean }): Promise<ScreenLook> {
+async function lookAt(browser: Browser, page: Page, at: { screen: string; scenario: string; viewport: ViewportId; width: number; scale: number; touch: boolean; template: Template; first: 'core' | 'door' | null }): Promise<ScreenLook> {
   const digest = PageDigest.safeParse(await page.evaluate(collectDigest, 600).catch(() => null));
   const png = await page.screenshot({ type: 'png' }).catch(() => null);
-  const shares = at.first && png && digest.success && digest.data.composition ? await colourShares(browser, png, { mask: digest.data.composition.mediaBoxes, scale: at.scale }).catch(() => null) : null;
+  const shares = at.first !== null && png && digest.success && digest.data.composition ? await colourShares(browser, png, { mask: digest.data.composition.mediaBoxes, scale: at.scale }).catch(() => null) : null;
   const findings = digest.success
-    ? runDomChecks(digest.data, { viewport: at.viewport, viewportWidth: at.width, route: at.screen, touch: at.touch, scope: 'full', template: at.template, ...(at.first ? { firstScreen: true } : {}), ...(shares ? { shares } : {}) }, contract)
+    ? runDomChecks(digest.data, { viewport: at.viewport, viewportWidth: at.width, route: at.screen, touch: at.touch, scope: 'full', template: at.template, ...(at.first !== null ? { firstScreen: true, door: at.first === 'door' } : {}), ...(shares ? { shares } : {}) }, contract)
     : [];
   return { screen: at.screen, scenario: at.scenario, findings, png };
 }
@@ -304,10 +305,32 @@ export async function walkScenarios(deps: { browser: Browser; base: string; phon
     const role = spec.roles.find((r) => r.id === scenario.role)?.name ?? scenario.role;
     const at = `Scenario "${scenario.id}" (${role})`;
     const { page, refused, close } = await open();
+    /**
+     * Measures the screen the page is on, if no walk has measured it yet. A screen says which it is where its
+     * root is marked; where it is not, `planSays` (the plan's word for where a step happens) is the best there
+     * is, and with neither nothing is measured. Asked after every press, so a screen passed through on the way
+     * to an outcome (a form, a sheet) is measured too, and at the start, for the door.
+     */
+    const see = async (planSays: string | null, door = false): Promise<void> => {
+      if (!deps.look) return;
+      const which = async (): Promise<string> => {
+        const shown = await page.evaluate(shownScreen, SCREEN_ATTR).catch(() => null);
+        return shown !== null && planned.has(shown) ? shown : (planSays ?? '');
+      };
+      const now = await which();
+      if (now === '' || looked.has(now)) return;
+      // What a press leaves may still be arriving (a figure counting up, a sheet sliding in): measured once it is still.
+      await page.waitForTimeout(REST_MS).catch(() => undefined);
+      const screen = await which();
+      if (screen === '' || looked.has(screen)) return;
+      looked.add(screen);
+      looks.push(await lookAt(browser, page, { screen, scenario: scenario.id, ...size, touch, template: deps.look.template, first: screen === core ? 'core' : door ? 'door' : null }));
+    };
     try {
+      await see(null, backend !== null);
       let through = true;
       for (const [i, step] of scenario.steps.entries()) {
-        const walk = (await walkFlow(page, [{ id: step.id, goal: step.does, outcome: step.outcome }], { touch, patienceMs: PATIENCE_MS, identity: who, run, maxPresses: MAX_STEP_PRESSES })).tasks[0];
+        const walk = (await walkFlow(page, [{ id: step.id, goal: step.does, outcome: step.outcome }], { touch, patienceMs: PATIENCE_MS, identity: who, run, maxPresses: MAX_STEP_PRESSES, afterPress: () => see(null) })).tasks[0];
         // A step may be something the person only sees. Signing up is never that.
         const reached = walk?.reached === true || (i > 0 && walk?.stopped === 'already-done');
         if (!reached) {
@@ -320,23 +343,7 @@ export async function walkScenarios(deps: { browser: Browser; base: string; phon
           through = false;
           break;
         }
-        if (deps.look) {
-          // A step often ends on another screen than the one it starts on. The screen says which it is, where
-          // its root is marked; where it is not, the plan's word for where the step happens is the best there is.
-          const which = async (): Promise<string> => {
-            const shown = await page.evaluate(shownScreen, SCREEN_ATTR).catch(() => null);
-            return shown !== null && planned.has(shown) ? shown : step.screen.trim();
-          };
-          if (!looked.has(await which())) {
-            // What a step leaves may still be arriving (a figure counting up, a sheet sliding in): measured once it is still.
-            await page.waitForTimeout(REST_MS).catch(() => undefined);
-            const screen = await which();
-            if (screen !== '' && !looked.has(screen)) {
-              looked.add(screen);
-              looks.push(await lookAt(browser, page, { screen, scenario: scenario.id, ...size, touch, template: deps.look.template, first: screen === core }));
-            }
-          }
-        }
+        await see(step.screen.trim());
       }
       if (!through) continue;
       const last = scenario.steps.at(-1)!;

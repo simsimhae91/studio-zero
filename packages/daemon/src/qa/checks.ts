@@ -19,6 +19,8 @@ export interface CheckContext {
   shares?: { saturated: number; dark: number; coloured?: number };
   /** Whether this is a screen a person meets the product on: what a screen is made of is asked of those only. */
   firstScreen?: boolean;
+  /** Whether that screen is the one a visitor meets before signing in: the app's tabs are behind it, not on it. */
+  door?: boolean;
 }
 
 const GENERIC_FAMILIES = new Set(['serif', 'sans-serif', 'monospace', 'system-ui', 'ui-sans-serif', 'ui-serif', 'ui-monospace', 'cursive', 'fantasy', '-apple-system', 'blinkmacsystemfont']);
@@ -580,7 +582,7 @@ export function compositionFindings(digest: PageDigest, ctx: CheckContext): Find
       );
     }
     // M1: a phone app's first screen carries its tab bar.
-    if (ctx.template === 'mobile-expo' && ctx.viewport === 'iphone-15-pro' && ctx.firstScreen && frame.tabs < FRAME_LIMITS.tabs) {
+    if (ctx.template === 'mobile-expo' && ctx.viewport === 'iphone-15-pro' && ctx.firstScreen && !ctx.door && frame.tabs < FRAME_LIMITS.tabs) {
       add(
         'layout/no-tab-bar',
         'hierarchy',
