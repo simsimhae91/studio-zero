@@ -214,7 +214,8 @@ const COUNTER_PLAN = ScreenSpec.parse({
   scenarios: [
     { id: 'drinks', role: 'visitor', steps: [
       { id: 'drink', screen: 'H-01', does: '물 한 잔을 적는다', saves: null, outcome: '오늘 칸에 한 잔이 보인다' },
-      { id: 'result', screen: 'R-01', does: '결과를 연다', saves: null, outcome: '오늘 마신 양이 보인다' },
+      // Pressed on the first screen, and it ends on the second: the screen's own mark says which was measured.
+      { id: 'result', screen: 'H-01', does: '결과를 연다', saves: null, outcome: '오늘 마신 양이 보인다' },
       { id: 'share', screen: 'R-01', does: '결과를 자랑한다', saves: null, outcome: '자랑했다는 표시가 보인다' },
       { id: 'photo', screen: 'R-01', does: '컵 사진을 고른다', saves: null, outcome: '고른 사진의 크기가 보인다' },
     ] },
@@ -229,9 +230,9 @@ const counter = (faint: boolean): string => `<!doctype html><html lang="ko"><hea
 const s=JSON.parse(localStorage.getItem('s')||'{"cups":0,"at":"home","shared":false,"photo":""}');
 const keep=()=>{localStorage.setItem('s',JSON.stringify(s));render();};
 function render(){const app=document.getElementById('app');
- if(s.at==='home'){app.innerHTML='<h1>오늘</h1><button id="drink" data-step="drink:1">물 한 잔</button>'+(s.cups>0?'<p data-done="drink">'+s.cups+'잔 마셨어요</p><button id="open" data-step="result:1">결과 보기</button>':'<p>아직 적은 물이 없어요</p>');
+ if(s.at==='home'){app.innerHTML='<main data-screen="H-01"><h1>오늘</h1><button id="drink" data-step="drink:1">물 한 잔</button>'+(s.cups>0?'<p data-done="drink">'+s.cups+'잔 마셨어요</p><button id="open" data-step="result:1">결과 보기</button>':'<p>아직 적은 물이 없어요</p>')+'</main>';
   document.getElementById('drink').onclick=()=>{s.cups+=1;keep();};const open=document.getElementById('open');if(open)open.onclick=()=>{s.at='result';keep();};return;}
- app.innerHTML='<h1 data-done="result">오늘 '+(s.cups*200)+'mL</h1><p class="note">하루 권장량은 1.5리터에서 2리터 사이입니다</p><button id="share" data-step="share:1">자랑하기</button>'+(s.shared?'<p data-done="share">자랑했어요</p>':'')+'<button id="pick" data-step="photo:1">사진 고르기</button>'+(s.photo?'<p data-done="photo">'+s.photo+'</p>':'');
+ app.innerHTML='<main data-screen="R-01"><h1 data-done="result">오늘 '+(s.cups*200)+'mL</h1><p class="note">하루 권장량은 1.5리터에서 2리터 사이입니다</p><button id="share" data-step="share:1">자랑하기</button>'+(s.shared?'<p data-done="share">자랑했어요</p>':'')+'<button id="pick" data-step="photo:1">사진 고르기</button>'+(s.photo?'<p data-done="photo">'+s.photo+'</p>':'')+'</main>';
  document.getElementById('share').onclick=()=>{s.shared=true;keep();};
  // The way a picker library does it: an input made for the moment and clicked.
  document.getElementById('pick').onclick=()=>{const input=document.createElement('input');input.type='file';input.accept='image/*';input.onchange=async()=>{const file=input.files[0];const bitmap=await createImageBitmap(file);s.photo=file.name+' '+file.type+' '+bitmap.width+'x'+bitmap.height;keep();};input.click();};}

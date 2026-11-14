@@ -12,6 +12,7 @@ import { MAX_STEP_PRESSES, SIGN_IN, SIGN_UP } from '../scratch/ScreenSpec.ts';
 import { excerpt } from '../util/core.ts';
 import { runDomChecks } from './checks.ts';
 import { PageDigest, collectDigest } from './collector.ts';
+import { colourShares } from './pixels.ts';
 import { DONE_ATTR, STEP_ATTR, walkFlow } from './FlowWalker.ts';
 import { LOGIN_ATTR, walkLogins } from './LoginWalk.ts';
 import type { QaBrowser } from './QaBrowser.ts';
@@ -218,12 +219,37 @@ export interface ScenarioWalk {
 /** How long a screen is left to come to rest before it is measured: what a step leaves may still be arriving. */
 const REST_MS = 700;
 
-/** Measures the page as it stands, against the design contract, at the size it is being walked at. */
-async function lookAt(page: Page, at: { screen: string; scenario: string; viewport: ViewportId; width: number; touch: boolean; template: Template }): Promise<ScreenLook> {
-  await page.waitForTimeout(REST_MS).catch(() => undefined);
+/** The mark a screen's root carries with its id in the plan, so that what is measured is said of the right screen. */
+export const SCREEN_ATTR = 'data-screen';
+
+/**
+ * Which screen the page is showing, by its own word: the marked root that holds the middle of the window (a
+ * stack keeps the screens under the top one mounted), or failing that the last marked root that can be seen.
+ * Null when nothing is marked. Runs in the page.
+ */
+const shownScreen = (attr: string): string | null => {
+  const seen = (el: Element): boolean => {
+    const box = el.getBoundingClientRect();
+    const style = getComputedStyle(el);
+    return box.width > 0 && box.height > 0 && style.visibility !== 'hidden' && style.display !== 'none';
+  };
+  const middle = document.elementFromPoint(window.innerWidth / 2, window.innerHeight / 2)?.closest(`[${attr}]`);
+  const root = middle ?? [...document.querySelectorAll(`[${attr}]`)].filter(seen).at(-1) ?? null;
+  return root?.getAttribute(attr)?.trim() || null;
+};
+
+/**
+ * Measures the page as it stands, against the design contract, at the size it is being walked at. `first` is
+ * the screen the product exists for (the core flow's): what a screen is made of, its tab bar and its colour
+ * are asked of that one, as the audit asks them of the first screen a visitor meets.
+ */
+async function lookAt(browser: Browser, page: Page, at: { screen: string; scenario: string; viewport: ViewportId; width: number; scale: number; touch: boolean; template: Template; first: boolean }): Promise<ScreenLook> {
   const digest = PageDigest.safeParse(await page.evaluate(collectDigest, 600).catch(() => null));
-  const findings = digest.success ? runDomChecks(digest.data, { viewport: at.viewport, viewportWidth: at.width, route: at.screen, touch: at.touch, scope: 'full', template: at.template }, contract) : [];
   const png = await page.screenshot({ type: 'png' }).catch(() => null);
+  const shares = at.first && png && digest.success && digest.data.composition ? await colourShares(browser, png, { mask: digest.data.composition.mediaBoxes, scale: at.scale }).catch(() => null) : null;
+  const findings = digest.success
+    ? runDomChecks(digest.data, { viewport: at.viewport, viewportWidth: at.width, route: at.screen, touch: at.touch, scope: 'full', template: at.template, ...(at.first ? { firstScreen: true } : {}), ...(shares ? { shares } : {}) }, contract)
+    : [];
   return { screen: at.screen, scenario: at.scenario, findings, png };
 }
 
@@ -244,7 +270,9 @@ export async function walkScenarios(deps: { browser: Browser; base: string; phon
   let walked = 0;
   const looks: ScreenLook[] = [];
   const looked = new Set<string>();
-  const size = { viewport: (touch ? 'iphone-15-pro' : 'desktop-1440') as ViewportId, width: deps.phone?.viewport?.width ?? 1440 };
+  const size = { viewport: (touch ? 'iphone-15-pro' : 'desktop-1440') as ViewportId, width: deps.phone?.viewport?.width ?? 1440, scale: deps.phone?.deviceScaleFactor ?? 1 };
+  const planned = new Set(spec.screens.map((screen) => screen.id));
+  const core = spec.tasks[0]?.screen ?? null;
 
   const stranger = person('stranger', run);
   const strangerToken = backend ? await backend.stranger(stranger.email, stranger.password) : null;
@@ -292,9 +320,22 @@ export async function walkScenarios(deps: { browser: Browser; base: string; phon
           through = false;
           break;
         }
-        if (deps.look && step.screen.trim() !== '' && !looked.has(step.screen)) {
-          looked.add(step.screen);
-          looks.push(await lookAt(page, { screen: step.screen, scenario: scenario.id, ...size, touch, template: deps.look.template }));
+        if (deps.look) {
+          // A step often ends on another screen than the one it starts on. The screen says which it is, where
+          // its root is marked; where it is not, the plan's word for where the step happens is the best there is.
+          const which = async (): Promise<string> => {
+            const shown = await page.evaluate(shownScreen, SCREEN_ATTR).catch(() => null);
+            return shown !== null && planned.has(shown) ? shown : step.screen.trim();
+          };
+          if (!looked.has(await which())) {
+            // What a step leaves may still be arriving (a figure counting up, a sheet sliding in): measured once it is still.
+            await page.waitForTimeout(REST_MS).catch(() => undefined);
+            const screen = await which();
+            if (screen !== '' && !looked.has(screen)) {
+              looked.add(screen);
+              looks.push(await lookAt(browser, page, { screen, scenario: scenario.id, ...size, touch, template: deps.look.template, first: screen === core }));
+            }
+          }
         }
       }
       if (!through) continue;
