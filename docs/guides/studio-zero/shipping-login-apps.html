@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>출하할 때: 제품의 로그인 앱을 따로 만들기 · Studio Zero 가이드</title>
+<meta name="description" content="프로토타입을 제품으로 내보낼 때 카카오와 Google에 제품의 앱을 따로 만들고 호스팅된 Supabase 프로젝트에 연결하는 절차입니다.">
+<link rel="canonical" href="https://simsimhae91.github.io/legendary-octo-fishstick/guides/studio-zero/shipping-login-apps.html">
+<meta property="og:type" content="article">
+<meta property="og:title" content="출하할 때: 제품의 로그인 앱을 따로 만들기">
+<meta property="og:description" content="프로토타입을 제품으로 내보낼 때 카카오와 Google에 제품의 앱을 따로 만들고 호스팅된 Supabase 프로젝트에 연결하는 절차입니다.">
+<meta property="og:url" content="https://simsimhae91.github.io/legendary-octo-fishstick/guides/studio-zero/shipping-login-apps.html">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css">
+<style>
+:root{--ink:#1c1f24;--sub:#5d6570;--line:#e4e7eb;--src:#f4f6f8;--mine:#fff6e5;--mine-line:#f0b34a;--link:#1f5f93}
+*{box-sizing:border-box}
+html{font-size:100%}
+body{margin:0;font-family:Pretendard,-apple-system,BlinkMacSystemFont,system-ui,sans-serif;color:var(--ink);background:#fff;font-size:1.0625rem;line-height:1.75;word-break:keep-all;overflow-wrap:anywhere}
+header.site{border-bottom:1px solid var(--line);padding:.75rem 1.25rem;font-size:.9rem}
+header.site a{color:var(--ink);text-decoration:none;font-weight:700}
+main{max-width:40em;margin:0 auto;padding:1.5rem 1.25rem 4rem}
+.kicker{font-size:.85rem;color:var(--sub)}
+h1{font-size:1.75rem;line-height:1.35;margin:.4rem 0 .8rem;letter-spacing:-.01em}
+.tldr{background:var(--src);border-radius:12px;padding:1rem 1.1rem;font-size:1.05rem;font-weight:600;margin:0 0 2rem}
+.tldr small{display:block;font-size:.8rem;color:var(--sub);font-weight:600;margin-bottom:.25rem}
+.tldr p{margin:0}
+h2{font-size:1.25rem;margin:2.4rem 0 .6rem}
+h3{font-size:1.05rem;margin:1.6rem 0 .4rem}
+p{margin:0 0 1rem}
+a{color:var(--link)}
+code{font-size:.9em;background:var(--src);padding:.05rem .3rem;border-radius:4px}
+pre{overflow-x:auto;background:var(--src);border-radius:10px;padding:.9rem 1rem;margin:0 0 1rem;font-size:.9rem;line-height:1.6}
+pre code{background:none;padding:0;font-size:1em}
+.tbl{overflow-x:auto;border:1px solid var(--line);border-radius:10px;margin:0 0 1rem}
+table{border-collapse:collapse;width:100%;font-size:.95rem}
+th,td{text-align:left;padding:.6rem .75rem;border-bottom:1px solid var(--line);vertical-align:top;overflow-wrap:break-word}
+tr:last-child td{border-bottom:0}
+th{background:var(--src);font-size:.82rem;color:var(--sub)}
+ul,ol{padding-left:1.3rem;margin:0 0 1rem}li{margin:.35rem 0}
+.note{background:var(--mine);border-left:4px solid var(--mine-line);border-radius:0 12px 12px 0;padding:.9rem 1.1rem;margin:0 0 1rem}
+.note p:last-child{margin:0}
+.path{font-weight:700}
+.src{font-size:.9rem;color:var(--sub)}
+.src li{margin:.2rem 0}
+.posts{list-style:none;padding:0}
+.posts li{border-bottom:1px solid var(--line);padding:1rem 0;margin:0}
+.posts a{font-weight:700;font-size:1.1rem;text-decoration:none}
+.posts small{display:block;color:var(--sub);font-size:.85rem}
+</style></head>
+<body>
+<header class="site"><a href="../../index.html">호수의 기술 리뷰</a></header>
+<main>
+<div class="kicker"><a href="./">Studio Zero 가이드</a> · 제품을 내보낼 때 · 2026년 11월 14일 확인</div>
+<h1>출하할 때: 제품의 로그인 앱을 따로 만들기</h1>
+
+<div class="tldr"><small>한 줄 요약</small><p>프로토타입은 스튜디오의 공용 앱으로 로그인합니다. 제품을 내보낼 때는 그 제품 이름의 앱을 카카오와 Google에 새로 만들어 호스팅된 Supabase 프로젝트에 연결합니다. 코드는 그대로이고, 바뀌는 것은 설정입니다.</p></div>
+
+<div class="note"><p><strong>이 글이 확인한 범위.</strong> <a href="shared-login-apps.html">공용 앱 등록</a>은 실제로 밟아 본 절차입니다. 이 글은 다릅니다. 공식 문서를 따라 정리한 것이고, 제품 하나를 끝까지 내보내며 밟아 본 것은 아닙니다. 확인하지 못한 곳은 그렇다고 적었습니다. 밟아 보는 대로 고칩니다.</p></div>
+
+<h2>왜 따로 만드나</h2>
+<ul>
+<li><strong>동의 화면에 뜨는 이름과 아이콘이 제품의 것이어야 합니다.</strong> 공용 앱으로 내보내면 사용자는 "Studio Zero에 로그인"하게 됩니다.</li>
+<li><strong>공용 앱에는 이 Mac의 주소만 등록돼 있습니다.</strong> 제공자는 등록된 주소와 완전히 같은 곳으로만 사람을 돌려보냅니다. 제품의 백엔드 주소는 제품의 앱에 등록합니다.</li>
+<li><strong>검수와 정책의 단위가 앱입니다.</strong> 한 제품의 문제로 다른 프로토타입의 로그인이 막히면 안 됩니다.</li>
+</ul>
+<p>프로토타입에서 만든 계정과 데이터는 이 Mac의 로컬 백엔드에 있습니다. 호스팅된 프로젝트는 빈 채로 시작합니다.</p>
+
+<h2>1. 호스팅된 Supabase 프로젝트</h2>
+<ol>
+<li><a href="https://supabase.com/dashboard">supabase.com</a>에서 프로젝트를 만듭니다.</li>
+<li>제품의 작업 폴더에서 스키마를 올립니다. 스튜디오가 로컬에 적용해 온 바로 그 마이그레이션입니다.
+<pre><code>supabase link --project-ref &lt;프로젝트 ref&gt;
+supabase db push</code></pre></li>
+<li>대시보드의 <span class="path">Authentication &gt; Sign In / Providers</span>에서 Kakao와 Google을 열면 콜백 주소가 나옵니다. 이것을 두 콘솔에 등록합니다.
+<pre><code>https://&lt;프로젝트 ref&gt;.supabase.co/auth/v1/callback</code></pre></li>
+</ol>
+
+<h2>2. 카카오: 제품의 앱</h2>
+<p>순서는 <a href="shared-login-apps.html">공용 앱</a>과 같고, 다른 것은 셋입니다.</p>
+<ul>
+<li><strong>앱 이름과 아이콘은 제품의 것</strong>으로 넣습니다. 동의 화면에 그대로 뜹니다.</li>
+<li><strong>비즈 앱.</strong> 이메일을 받으려면 필요합니다. 사업자가 있으면 <span class="path">[앱] &gt; [일반] &gt; [비즈니스 정보] &gt; [사업자 정보 등록]</span>, 없으면 <span class="path">[개인 개발자 비즈 앱]</span>. 개인 개발자 비즈 앱은 비즈니스 채널을 연결할 수 없습니다.</li>
+<li><strong>리다이렉트 URI</strong>(<span class="path">[앱] &gt; [플랫폼 키] &gt; [REST API 키]</span>)에는 위의 Supabase 콜백 주소를 넣습니다.</li>
+</ul>
+<p>그다음 Supabase 대시보드의 Kakao 화면에 REST API 키(client id)와 클라이언트 시크릿 코드를 넣고 켭니다.</p>
+<p>검수에 대해: 카카오싱크, 친구 목록, 메시지 같은 추가 기능은 검수 대상이고 영업일로 3일에서 5일이 걸린다고 문서에 있습니다. 닉네임, 프로필 사진, 이메일만 받는 로그인에 따로 검수가 필요한지는 공식 문서에서 확인하지 못했습니다. 출시 일정을 잡기 전에 콘솔에서 동의항목의 상태를 직접 확인하십시오.</p>
+
+<h2>3. Google: 제품의 클라이언트</h2>
+<ol>
+<li>제품용 Google Cloud 프로젝트를 만들고 Google Auth Platform을 시작합니다.</li>
+<li><strong>Branding.</strong> 앱 이름, 로고, 지원 이메일, 홈페이지, 개인정보처리방침 링크를 넣습니다. 여기와 클라이언트에 쓰는 도메인은 모두 승인된 도메인(Authorized domains)에 먼저 등록돼 있어야 합니다.</li>
+<li><strong>Clients.</strong> Web application 클라이언트를 만들고 Authorized redirect URIs에 Supabase 콜백 주소를 넣습니다. 시크릿은 만들 때 한 번만 보입니다.</li>
+<li><strong>Audience.</strong> 게시 상태를 Testing에서 In production으로 바꿉니다. 그래야 아무 Google 계정이나 로그인할 수 있습니다.</li>
+<li>Supabase 대시보드의 Google 화면에 Client ID와 Client secret을 넣고 켭니다.</li>
+</ol>
+<p>준비해 둘 것이 있습니다. 소유한 도메인의 공개 홈페이지(Search Console에서 소유를 확인한 것)와 개인정보처리방침입니다. 브랜드가 인증되기 전에는 동의 화면에 앱 이름과 로고 대신 도메인만 나옵니다. <code>openid</code>, <code>email</code>, <code>profile</code>만 쓰면 민감한 범위에 요구되는 앱 검증은 받지 않아도 됩니다.</p>
+
+<h2>4. 로그인한 사람이 돌아올 주소</h2>
+<p>대시보드의 <span class="path">Authentication &gt; URL Configuration</span>에서:</p>
+<ul>
+<li><strong>Site URL</strong>: 제품의 주소. 제품이 돌아올 주소를 말하지 않았을 때 사람이 떨어지는 곳입니다.</li>
+<li><strong>Redirect URLs</strong>: 제품이 돌아올 주소로 말할 수 있는 곳들. <code>https://example.com/**</code>처럼 씁니다(<code>**</code>는 무엇이든, <code>*</code>는 <code>.</code>과 <code>/</code>를 넘지 않는 글자들).</li>
+</ul>
+<p>제품의 코드는 지금 떠 있는 주소(<code>window.location.origin</code>)를 돌아올 주소로 보냅니다. 그 주소가 Redirect URLs에 없으면 사람은 Site URL에 떨어집니다. 로컬 백엔드에서 본 동작이 그랬습니다. 미리보기 배포 주소에서도 로그인하려면 그 주소의 패턴도 넣습니다.</p>
+
+<h2>5. 제품의 환경변수</h2>
+<p>제품을 배포하는 곳에 세 값을 넣습니다. 이름의 앞머리는 프레임워크를 따릅니다(Vite는 <code>VITE_</code>, Next는 <code>NEXT_PUBLIC_</code>, Expo는 <code>EXPO_PUBLIC_</code>).</p>
+<div class="tbl"><table>
+<tr><th>이름</th><th>값</th></tr>
+<tr><td><code>…SUPABASE_URL</code></td><td><code>https://&lt;프로젝트 ref&gt;.supabase.co</code></td></tr>
+<tr><td><code>…SUPABASE_PUBLISHABLE_KEY</code></td><td>대시보드의 publishable 키. 브라우저에 실려도 되는 키입니다.</td></tr>
+<tr><td><code>…SUPABASE_LOGINS</code></td><td>켠 제공자. <code>kakao,google</code>. 비우면 제품은 이메일 로그인만 보입니다.</td></tr>
+</table></div>
+<p>secret 키와 service_role 키는 어디에도 넣지 않습니다. 제품의 코드는 그것 없이 돌도록 지어져 있습니다.</p>
+
+<h2>6. 기기에서 도는 앱(Expo)</h2>
+<p>스튜디오가 확인한 것은 웹에서의 로그인입니다. 기기에 설치된 앱에서의 소셜 로그인은 아직 확인하지 않았습니다. 공식 문서가 말하는 길은 둘입니다.</p>
+<ul>
+<li><strong>딥 링크로 돌아오기.</strong> 앱에 scheme을 등록하고, Redirect URLs에 <code>myapp://**</code>를 넣습니다. 브라우저에서 로그인을 마친 사람이 그 주소로 앱에 돌아옵니다.</li>
+<li><strong>네이티브 SDK로 ID 토큰 받기.</strong> Google은 <code>@react-native-google-signin/google-signin</code>으로 받은 토큰을 <code>signInWithIdToken</code>에 넘깁니다. 카카오는 OpenID Connect를 켜고 <code>openid</code> 범위로 받은 ID 토큰을 같은 함수에 넘깁니다.</li>
+</ul>
+
+<h2>내보내기 전에 볼 것</h2>
+<ol>
+<li>제품의 주소에서 카카오와 Google로 각각 처음 로그인해 봅니다. 동의 화면에 제품의 이름이 뜨는지 봅니다.</li>
+<li>로그인을 마친 뒤 제품의 주소로 돌아오는지 봅니다(Site URL이 아닌 다른 곳에 떨어지면 4번).</li>
+<li>테스트 사용자로 넣지 않은 Google 계정으로 로그인해 봅니다(In production인지).</li>
+<li>새 계정으로 가입해 다른 계정의 데이터가 보이지 않는지 봅니다. 정책은 마이그레이션에 들어 있지만, 내보내는 곳에서 한 번 더 봅니다.</li>
+</ol>
+
+<h2>출처</h2>
+<ul class="src">
+<li>카카오: <a href="https://developers.kakao.com/docs/ko/app-setting/app">앱 설정</a>, <a href="https://developers.kakao.com/docs/ko/kakaologin/prerequisite">카카오 로그인 설정하기</a></li>
+<li>Google: <a href="https://support.google.com/cloud/answer/15549945">Audience와 게시 상태</a>, <a href="https://support.google.com/cloud/answer/10311615">브랜드 인증</a>, <a href="https://support.google.com/cloud/answer/13463073">검증이 필요한 범위</a>, <a href="https://support.google.com/cloud/answer/15549049">승인된 도메인</a>, <a href="https://developers.google.com/identity/protocols/oauth2/production-readiness/policy-compliance">출시 전 정책 준수</a></li>
+<li>Supabase: <a href="https://supabase.com/docs/guides/auth/social-login/auth-kakao">Login with Kakao</a>, <a href="https://supabase.com/docs/guides/auth/social-login/auth-google">Login with Google</a>, <a href="https://supabase.com/docs/guides/auth/redirect-urls">Redirect URLs</a>, <a href="https://supabase.com/docs/guides/auth/native-mobile-deep-linking">Native mobile deep linking</a></li>
+</ul>
+</main></body></html>
