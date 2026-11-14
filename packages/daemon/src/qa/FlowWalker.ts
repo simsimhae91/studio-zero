@@ -150,7 +150,7 @@ function moving(): number[] {
  * sample that has to be unique (a code a person picks, a handle) carries `{run}`, which is filled with it, so
  * that the same walk can be made again tomorrow and two people in one walk can type the same code.
  */
-export async function walkFlow(page: Page, tasks: readonly FlowTask[], opts: { touch: boolean; patienceMs?: number; identity?: { email: string; password: string }; run?: string; maxPresses?: number; afterPress?: () => Promise<void> }): Promise<Walk> {
+export async function walkFlow(page: Page, tasks: readonly FlowTask[], opts: { touch: boolean; patienceMs?: number; identity?: { email: string; password: string }; run?: string; maxPresses?: number; afterPress?: () => Promise<void>; lean?: boolean }): Promise<Walk> {
   const patience = opts.patienceMs ?? 0;
   // A mock-up's core flow is a few presses a task. A step of a running product (a profile form) is longer, and its walker says how long.
   const most = opts.maxPresses ?? MAX_STEPS;
@@ -184,7 +184,12 @@ export async function walkFlow(page: Page, tasks: readonly FlowTask[], opts: { t
     return last;
   };
   const frames: WalkFrame[] = [];
-  const shoot = async (task: number | null, step: number | null): Promise<void> => void frames.push({ task, step, jpeg: await page.screenshot({ type: 'jpeg', quality: 72 }) });
+  // A walk that only has to know whether each outcome was reached (a product's scenarios, many times over) takes
+  // no film and does not compare pictures of each control before and during a press: three screenshots a press.
+  const lean = opts.lean === true;
+  const shoot = async (task: number | null, step: number | null): Promise<void> => {
+    if (!lean) frames.push({ task, step, jpeg: await page.screenshot({ type: 'jpeg', quality: 72 }) });
+  };
   /** Waits for what is moving to finish, up to the cap. Returns how long the answer to a press ran, if there was one. */
   const settle = async (): Promise<number> => {
     await page.waitForTimeout(40);
@@ -195,6 +200,7 @@ export async function walkFlow(page: Page, tasks: readonly FlowTask[], opts: { t
   const view = page.viewportSize() ?? { width: 1280, height: 800 };
   /** The screen around a control, as bytes that are equal when, and only when, it looks the same. */
   const around = (target: { x: number; y: number; w: number; h: number }): Promise<Buffer | null> => {
+    if (lean) return Promise.resolve(null);
     const left = Math.max(0, Math.floor(target.x - target.w / 2 - AROUND_PX));
     const top = Math.max(0, Math.floor(target.y - target.h / 2 - AROUND_PX));
     const clip = { x: left, y: top, width: Math.max(1, Math.min(view.width - left, Math.ceil(target.w + AROUND_PX * 2))), height: Math.max(1, Math.min(view.height - top, Math.ceil(target.h + AROUND_PX * 2))) };

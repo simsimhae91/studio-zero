@@ -330,7 +330,7 @@ export async function walkScenarios(deps: { browser: Browser; base: string; phon
       await see(null, backend !== null);
       let through = true;
       for (const [i, step] of scenario.steps.entries()) {
-        const walk = (await walkFlow(page, [{ id: step.id, goal: step.does, outcome: step.outcome }], { touch, patienceMs: PATIENCE_MS, identity: who, run, maxPresses: MAX_STEP_PRESSES, afterPress: () => see(null) })).tasks[0];
+        const walk = (await walkFlow(page, [{ id: step.id, goal: step.does, outcome: step.outcome }], { touch, patienceMs: PATIENCE_MS, identity: who, run, maxPresses: MAX_STEP_PRESSES, afterPress: () => see(null), lean: true })).tasks[0];
         // A step may be something the person only sees. Signing up is never that.
         const reached = walk?.reached === true || (i > 0 && walk?.stopped === 'already-done');
         if (!reached) {
@@ -392,7 +392,7 @@ export async function walkScenarios(deps: { browser: Browser; base: string; phon
   const [firstId, first] = [...people.entries()][0]!;
   const again = await open();
   try {
-    const walk = (await walkFlow(again.page, [{ id: SIGN_IN, goal: 'sign in again', outcome: 'signed in' }], { touch, patienceMs: PATIENCE_MS, identity: first, run, maxPresses: MAX_STEP_PRESSES })).tasks[0];
+    const walk = (await walkFlow(again.page, [{ id: SIGN_IN, goal: 'sign in again', outcome: 'signed in' }], { touch, patienceMs: PATIENCE_MS, identity: first, run, maxPresses: MAX_STEP_PRESSES, lean: true })).tasks[0];
     if (walk?.reached !== true) {
       problems.push(`Signing in again: the person who signed up in scenario "${firstId}" opened the product on a fresh browser, and ${stoppedBecause(SIGN_IN, walk?.stopped ?? 'step-missing', walk?.stoppedAtStep ?? null, walk?.presses ?? 0)}. From the signed-out screen the sign-in controls are marked ${STEP_ATTR}="${SIGN_IN}:1", ":2", ... (a link to the sign-in screen may be the first), and ${DONE_ATTR}="${SIGN_IN}" is on something only a signed-in person sees.${said(await onScreen(again.page), again.refused)}`);
     }
