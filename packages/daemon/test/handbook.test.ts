@@ -19,7 +19,7 @@ test('each kind of product gets its own rules, each once, under the cap an engin
   for (const template of ['mobile-expo', 'web-vite-react'] as const) {
     const text = handbookFor(template);
     // 1,500 until the rules for what a screen is made of (E) and the measurements they are held to were added; the lab's drawing agents kept the longer text as they kept the shorter.
-    assert.ok(text.split(/\s+/).length <= 2450, `${template}: ${text.split(/\s+/).length} words`);
+    assert.ok(text.split(/\s+/).length <= 2480, `${template}: ${text.split(/\s+/).length} words`);
     for (const rule of rulesFor(template)) assert.equal(text.split(`\n${rule.id}. `).length - 1, 1, `${template}: ${rule.id} is printed once, at the start of a line`);
     assert.match(text, /^<design_handbook>[\s\S]*<\/design_handbook>$/);
     assert.match(text, /depart from one only for a reason that comes from this product's subject/);
@@ -48,11 +48,12 @@ test('the rules carry their numbers: one hero of strong colour, a budget for sma
   // Floors, with their numbers, as the owner chose them on the page.
   // A picture is chosen by what it shows; nothing is drawn to fill a space. (The first version of E1 asked for a
   // quarter of the screen drawn, and the first real build filled its hero with a landscape.)
-  assert.match(says('mobile-expo', 'E1'), /its data drawn \(a chart, a meter, the instrument\)[\s\S]*A drawing never pushes the work down[\s\S]*No scene, no backdrop, nothing drawn to fill a space/);
-  assert.match(says('mobile-expo', 'I1'), /What a picture shows decides what it is made of[\s\S]*one small drawing in code, 96px at most[\s\S]*a real image from generate_image or the owner's own file, never an SVG[\s\S]*A mood, a scene, a backdrop: nothing/);
-  assert.match(says('mobile-expo', 'I2'), /a scene to fill a space[\s\S]*if the screen does the same job without the picture, the picture goes/);
+  // Twice corrected by the owner's eye: a scene went back, and so did screens with their faces and objects taken out.
+  assert.match(says('mobile-expo', 'E1'), /Its data is drawn \(a chart, a meter, the instrument\)[\s\S]*avatars with a drawn face or a character, not a name or an initial alone[\s\S]*illustrated objects[\s\S]*the hero carries the one the product is about beside its figure[\s\S]*Objects and faces, never a scene: no landscape, no people doing something, no backdrop/);
+  assert.match(says('mobile-expo', 'I1'), /What a picture shows decides what it is made of[\s\S]*drawn in code as an object or a face \(E1\)[\s\S]*a real image from generate_image or the owner's own file, never an SVG[\s\S]*A mood, a scene, a backdrop: nothing/);
+  assert.match(says('mobile-expo', 'I2'), /a scene \(a landscape, people doing something, abstract shapes, a backdrop\)[\s\S]*a scene only sets a mood, and goes/);
   assert.match(says('mobile-expo', 'E2'), /Every row, tab, chip and stat has an icon[\s\S]*The first screen shows the bottom tab bar of three to five icon and label tabs[\s\S]*the audit looks for it/);
-  assert.match(says('mobile-expo', 'E5'), /Strong colour is welcome: a fifth to a third of the first screen\. Open with a band or hero card in bg-brand[\s\S]*holds the state as a figure, its sentence and its instrument[\s\S]*not as an illustration/);
+  assert.match(says('mobile-expo', 'E5'), /Strong colour is welcome: a fifth to a third of the first screen\. Open with a band or hero card in bg-brand[\s\S]*holds the state: the figure, its sentence, its instrument \(a meter, a small chart\) and the product's object drawn beside them/);
   assert.match(says('mobile-expo', 'C4'), /the second colour is the other[\s\S]*each side may fill its half[\s\S]*as marks[\s\S]*Never alone/);
   assert.match(says('mobile-expo', 'M3'), /one comparison block: one surface, the same size, the difference said once/);
   assert.match(says('mobile-expo', 'M5'), /No card in a card[\s\S]*as tall as its content, never stretched/);
@@ -61,7 +62,7 @@ test('the rules carry their numbers: one hero of strong colour, a budget for sma
   assert.match(says('web-vite-react', 'I1'), /What a picture shows decides what it is made of/);
   // What a screen is made of, for a phone app and a web product alike.
   for (const template of ['mobile-expo', 'web-vite-react'] as const) {
-    assert.match(says(template, 'E1'), /made of the product's own things and not of text and rules alone[\s\S]*No scene, no backdrop, nothing drawn to fill a space/);
+    assert.match(says(template, 'E1'), /made of the product's own things and not of text and rules alone[\s\S]*Objects and faces, never a scene/);
     assert.match(says(template, 'E4'), /The canvas is bg-sunken; content sits on bg-surface cards with rounded-xl \(16px or more\) and no border/);
     // The section is the last thing in the handbook, under the measurements it is held to, and can be had on its own.
     const [handbook, section] = [handbookFor(template), materialFor(template)];

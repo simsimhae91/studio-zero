@@ -2803,5 +2803,158 @@
   "bodyBg": "oklch(0.962 0.004 250)",
   "colourPct": 39,
   "greyPct": 58.3
+ },
+ "pic2-dues-a": {
+  "where": "/Users/hosoo/project/conclave/.design-lab/runs/pic2/dues/a/ws/docs/mockups/a.html",
+  "title": "모임 통장 한 권",
+  "picturePct": 1.8,
+  "iconPct": 3.8,
+  "tintPct": 0,
+  "textPct": 41,
+  "pictures": 1,
+  "icons": 16,
+  "chars": 216,
+  "boxes": 5,
+  "roundedBoxes": 3,
+  "shadowedBoxes": 4,
+  "borderedBoxes": 1,
+  "radii": [
+   [
+    9999,
+    2
+   ],
+   [
+    0,
+    2
+   ],
+   [
+    10,
+    1
+   ]
+  ],
+  "hueFamilies": 0,
+  "topSizes": [
+   [
+    16,
+    115
+   ],
+   [
+    14,
+    70
+   ],
+   [
+    11,
+    11
+   ],
+   [
+    48,
+    7
+   ]
+  ],
+  "bodyBg": "oklch(0.962 0.005 250)",
+  "colourPct": 22.1,
+  "greyPct": 75.5
+ },
+ "pic2-dues-b": {
+  "where": "/Users/hosoo/project/conclave/.design-lab/runs/pic2/dues/b/ws/docs/mockups/b.html",
+  "title": "영수증 꽂이 장부",
+  "picturePct": 6.3,
+  "iconPct": 3.4,
+  "tintPct": 0,
+  "textPct": 33.3,
+  "pictures": 2,
+  "icons": 15,
+  "chars": 247,
+  "boxes": 7,
+  "roundedBoxes": 6,
+  "shadowedBoxes": 6,
+  "borderedBoxes": 1,
+  "radii": [
+   [
+    22,
+    5
+   ],
+   [
+    9999,
+    1
+   ],
+   [
+    0,
+    1
+   ]
+  ],
+  "hueFamilies": 0,
+  "topSizes": [
+   [
+    14,
+    102
+   ],
+   [
+    16,
+    79
+   ],
+   [
+    12,
+    30
+   ],
+   [
+    18,
+    16
+   ]
+  ],
+  "bodyBg": "oklch(0.962 0.005 265)",
+  "colourPct": 23.5,
+  "greyPct": 75.4
+ },
+ "pic2-duel-b": {
+  "where": "/Users/hosoo/project/conclave/.design-lab/runs/pic2/duel/b/ws/docs/mockups/b.html",
+  "title": "라인전 · 14라운드 중계 전광판",
+  "picturePct": 0,
+  "iconPct": 8.4,
+  "tintPct": 0,
+  "textPct": 36.2,
+  "pictures": 0,
+  "icons": 28,
+  "chars": 251,
+  "boxes": 6,
+  "roundedBoxes": 1,
+  "shadowedBoxes": 5,
+  "borderedBoxes": 1,
+  "radii": [
+   [
+    6,
+    3
+   ],
+   [
+    0,
+    2
+   ],
+   [
+    9999,
+    1
+   ]
+  ],
+  "hueFamilies": 0,
+  "topSizes": [
+   [
+    14,
+    73
+   ],
+   [
+    16,
+    59
+   ],
+   [
+    11,
+    50
+   ],
+   [
+    12,
+    28
+   ]
+  ],
+  "bodyBg": "oklch(0.962 0.004 250)",
+  "colourPct": 32.6,
+  "greyPct": 64.8
  }
 }

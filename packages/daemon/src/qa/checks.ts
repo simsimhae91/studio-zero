@@ -602,7 +602,7 @@ export function compositionFindings(digest: PageDigest, ctx: CheckContext): Find
         'originality',
         'major',
         `Next to nothing is drawn on the first screen besides text: ${Math.round(made.drawnShare * 100)}% of it is picture or drawing, and it has ${made.icons} icon${made.icons === 1 ? '' : 's'}. A screen of text and rules reads as a form.`,
-        'E1: Give the screen its material. Draw its data (a chart, a meter, the instrument), lead each row, tab and stat with its icon on a tinted tile (E2), show people as small avatars, and use a real picture where the subject has a look (I1). Not a scene and not a drawing to fill a space: what is drawn large is data.',
+        'E1: Give the screen its material. Draw its data (a chart, a meter, the instrument), lead each row, tab and stat with its icon on a tinted tile (E2), show people as avatars with drawn faces and the things the product names as illustrated objects, and use a real picture where the subject has a look (I1). Objects and faces, never a scene.',
       );
     }
     if (made.ruledBoxes >= MATERIAL_LIMITS.ruledBoxes) {
