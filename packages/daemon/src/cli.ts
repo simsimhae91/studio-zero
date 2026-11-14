@@ -12,7 +12,7 @@ const USAGE = `sz — Studio Zero command line
   sz events [project-slug]                                                   follow the event stream
   sz approvals                                                               list pending approvals
   sz approve <approval-id> | sz deny <approval-id>
-  sz merge <project-slug> <branch>
+  sz merge <project-slug> <branch>                                           on studio-zero-core: a task's exported feature/ branch, into this checkout (fast-forward only)
   sz kirby <project-slug> <https://github.com/owner/repo>                     read a repository for what it does and propose what this project lacks
   sz kirby list <project-slug>                                               the proposals, newest first
   sz kirby build <proposal-id> | sz kirby reject <proposal-id>               build a proposal on its own branch (a draft build), or put it aside
@@ -197,6 +197,16 @@ async function main(argv: string[]): Promise<number> {
       }
       case 'merge': {
         const project = await projectBySlug(client, args[0]);
+        if (project.template === 'studio-core') {
+          // The studio's own repository: what is merged is the branch a task's work was copied out as, into this
+          // Mac's checkout. The daemon refuses anything but a fast-forward onto a clean checkout of the base branch.
+          const { pending } = await client.call('selfhost.status', {});
+          const exported = pending.find((p) => p.branch === args[1]);
+          if (!exported) throw new Error(`no branch "${args[1] ?? ''}" is waiting to be merged. Waiting: ${pending.map((p) => p.branch).join(', ') || '(none)'}`);
+          const moved = await client.call('selfhost.merge', { taskId: exported.taskId });
+          process.stdout.write(`merged ${moved.branch} into ${moved.into} at ${moved.commit.slice(0, 12)}. The running daemon is unchanged until \`pnpm build && pnpm daemon:restart\`.\n`);
+          return 0;
+        }
         const merged = await client.call('git.merge', { projectId: project.id, branch: args[1] ?? '' });
         process.stdout.write(`merged into ${merged.into} at ${merged.commit.slice(0, 12)}\n`);
         return 0;
