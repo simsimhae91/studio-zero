@@ -9,8 +9,9 @@ const USAGE = `sz — Studio Zero command line
   sz project create <slug> <name> [${Template.options.join('|')}]
   sz project rm <slug> [--delete-workspace]
   sz task <project-slug> <build|refactor|inline_edit|ideate> [--draft] [--from <branch>] <prompt...>   submit and follow a task (--draft: the fast track; --from: start from that branch, e.g. a failed task's)
-  sz schedule add <project-slug> <build|refactor|inline_edit|ideate> <prompt...> --every <n>h|<n>m | --at 2026-11-15T07:00
-                                                                             submit the prompt as a task every n hours or minutes (at least 1h), or once at that local time
+  sz schedule add <project-slug> <build|refactor|inline_edit|ideate> <prompt...> [--every <n>h|<n>m] [--at 2026-11-15T07:00]
+                                                                             submit the prompt as a task every n hours or minutes (at least 1h), once at that local time,
+                                                                             or with both from that time on: --every 24h --at 2026-11-15T07:00 is every day at seven
   sz schedule list [project-slug] | sz schedule pause|resume|rm <schedule-id>
   sz events [project-slug]                                                   follow the event stream
   sz approvals                                                               list pending approvals

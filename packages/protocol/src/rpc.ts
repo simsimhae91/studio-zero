@@ -199,7 +199,10 @@ export const methods = {
    * task from the one before is still queued, running or parked. Times are epoch milliseconds.
    */
   'schedules.list': { params: z.object({ projectId: z.string().optional() }), result: z.object({ schedules: z.array(Schedule) }) },
-  /** Exactly one of `at` (in the future) and `everyMinutes` (an hour or more). The first run of an interval is one interval from now. */
+  /**
+   * `at` (in the future), `everyMinutes` (an hour or more), or both. Alone, `at` is one run and `everyMinutes`
+   * starts one interval from now; together the first run is `at` and the rest follow at that interval.
+   */
   'schedules.create': {
     params: z.object({
       projectId: z.string(),

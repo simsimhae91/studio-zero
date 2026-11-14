@@ -103,6 +103,13 @@ export function stamp(at: number, now = Date.now()): string {
   return when.toDateString() === new Date(now).toDateString() ? when.toLocaleTimeString('ko', { hour: '2-digit', minute: '2-digit', hour12: false }) : when.toLocaleDateString('ko', { month: 'long', day: 'numeric' });
 }
 
+/** A time still to come: the hour for today, the date with the hour for a later day. */
+export function upcoming(at: number, now = Date.now()): string {
+  const when = new Date(at);
+  const time = when.toLocaleTimeString('ko', { hour: '2-digit', minute: '2-digit', hour12: false });
+  return when.toDateString() === new Date(now).toDateString() ? time : `${when.toLocaleDateString('ko', { month: 'long', day: 'numeric' })} ${time}`;
+}
+
 export const clock = (at: number): string => new Date(at).toLocaleTimeString('ko', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
 
 export function tokens(n: number): string {

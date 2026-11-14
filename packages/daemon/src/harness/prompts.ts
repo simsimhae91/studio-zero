@@ -242,6 +242,12 @@ Order of work. Scaffold only if the workspace is empty. Write the screen plan, t
 Close with two or three sentences: what is on screen now, and the assumptions you made that the owner may want to change.`;
 
 /**
+ * What a task is told when it is started again after waiting out a usage limit, and the work it had committed
+ * when it stopped is still on its branch. A constant; it goes after the request.
+ */
+export const CONTINUED_BRIEF = `This task was stopped part-way: the subscription it runs on reached its usage limit. The limit has reset and the task has been started again. What was done before it stopped is committed on this branch and is in the workspace now. Read what is there first, then carry on from it. Do not start over and do not redo what is already done; finish what is missing.`;
+
+/**
  * System prompt for work on the studio's own repository (the pinned Core project). A constant, like the other.
  * The design mandate of a product is not what applies here: this is a codebase with conventions to keep.
  */

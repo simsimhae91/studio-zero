@@ -28,7 +28,7 @@ import type { EngineResult, EngineSession } from './engines/Engine.ts';
 import { countCompilerErrors, emptyRun, renderEvidence, type Ledger, type RunRecord } from './Ledger.ts';
 import type { LessonBook } from './LessonBook.ts';
 import { materialFor } from './handbook.ts';
-import { ANCHOR_BRIEF, DEEP_DIVE_BRIEF, DRAFT_BRIEF, DRAW_ALL_BRIEF, IDEATION_BRIEF, IDEATION_REQUIRED_FILES, IDEATION_REVISION_BRIEF, PLANNER_SYSTEM_PROMPT, SCREEN_SPEC_RULES, codingSystemPrompt, directionBrief } from './prompts.ts';
+import { ANCHOR_BRIEF, CONTINUED_BRIEF, DEEP_DIVE_BRIEF, DRAFT_BRIEF, DRAW_ALL_BRIEF, IDEATION_BRIEF, IDEATION_REQUIRED_FILES, IDEATION_REVISION_BRIEF, PLANNER_SYSTEM_PROMPT, SCREEN_SPEC_RULES, codingSystemPrompt, directionBrief } from './prompts.ts';
 import { chosenTheme, writeProjectTheme } from './themeSeed.ts';
 import type { ReflectionAgent } from './ReflectionAgent.ts';
 import { renderCritique, renderPatch, type Acceptance, type PlanCritique, type SandwichReviewer } from './SandwichReviewer.ts';
@@ -131,7 +131,8 @@ export class ShutdownSignal extends Error {
  * A task can also stop short for a while. When its engine (or the session brain) is refused by a subscription
  * for a usage limit, and the refusal names when the limit resets, within `quotaPark.maxWaitHours`, the
  * unfinished work is committed on its branch and the task is `parked` until then. The queue wakes it at that
- * time and it runs again the way an interrupted task does after a restart: from its base, on its branch. After
+ * time, queued as an interrupted task is after a restart, and it goes on from that commit on its branch, told
+ * that the work is there (a design task starts its documents again). After
  * `quotaPark.maxParks` waits the next such refusal fails the task, with `parkCapHit` on the failure. A refusal
  * that names no reset time fails the task as any other error does.
  *
@@ -236,6 +237,8 @@ export class Harness {
       await Promise.all([engine.session, ...lanes.values()].map((session) => session?.close().catch(() => undefined)));
     };
     let onBranch = false;
+    /** Whether this run goes on from work the task committed before a usage limit stopped it. */
+    let continued = false;
     let appliedLessons: string[] = [];
     const resume = this.#resumeState(initial.id);
     // A build whose design gates are on is a design task: it owes an anchor table before code.
@@ -333,7 +336,10 @@ export class Harness {
         this.#events.emit(scope, { type: 'route.decided', taskKind: task.kind, engine: decided.candidate.engine, model: decided.candidate.model, effort: decided.candidate.effort, considered: decided.considered });
         const base = await this.#sandboxes.checkpoint(project, `before ${task.kind} ${task.id}`, task.id);
         this.#events.emit(scope, { type: 'checkpoint.created', checkpointId: base.id, label: base.label });
-        await this.#sandboxes.startBranch(project, branch, task.baseBranch ?? INTEGRATION_BRANCH);
+        // Woken from a usage limit, a task goes on from the work it committed when it stopped: the limit has
+        // only just reset, and doing the same work twice is the surest way back to it. A design task starts its
+        // documents again, as any other run does: a half-written set would be read as a design to revise.
+        continued = await this.#sandboxes.startBranch(project, branch, task.baseBranch ?? INTEGRATION_BRANCH, { keep: task.parkCount > 0 && !ideation });
         onBranch = true;
         // The branch the engine works on may predate a kit the prompt is about to promise it.
         await this.#provisioner.ensure(project);
@@ -374,7 +380,7 @@ export class Harness {
         await open();
         // A design task that starts where a finished design already is (the owner sent it back with notes) revises it.
         const revising = ideation && (await this.#ideationDocuments(project)).length === 0;
-        result = await send(executeMessage(task, plan, lessons.text, { anchor, critique, references, revising, specOwed, template: project.template }));
+        result = await send(executeMessage(task, plan, lessons.text, { anchor, critique, references, revising, specOwed, template: project.template, continued }));
         checkCancel();
         // A new design: its directions are drawn from the table the lead just wrote, each by an engine of its own.
         if (ideation && !revising) {
@@ -1043,12 +1049,13 @@ function referenceBlock(ref: ReferenceCapture): string {
   return `Reference page ${ref.url} as measured in a browser. Read principles out of it; its numbers and assets are its own and are not to be carried across:\n${untrusted('browser-page', `${ref.title}\n${ref.summary}`, { url: ref.url })}`;
 }
 
-function executeMessage(task: Task, plan: Plan | null, lessonText: string, handed: { anchor: AnchorTable | null; critique: PlanCritique | null; references: readonly ReferenceCapture[]; revising?: boolean; specOwed?: string[] | null; template?: Project['template'] } = { anchor: null, critique: null, references: [] }): string {
+function executeMessage(task: Task, plan: Plan | null, lessonText: string, handed: { anchor: AnchorTable | null; critique: PlanCritique | null; references: readonly ReferenceCapture[]; revising?: boolean; specOwed?: string[] | null; template?: Project['template']; continued?: boolean } = { anchor: null, critique: null, references: [] }): string {
   // A draft's brief says how to start a product (a screen plan, sign-up, a backend). The studio's own repository
   // is a codebase with conventions: a quick change there is still held to its type check, tests and build, and
   // is not told to build any of that.
   const drafted = task.track === 'fast' && task.kind !== 'ideate' && handed.template !== 'studio-core';
   const parts = [task.kind === 'ideate' ? (handed.revising ? IDEATION_REVISION_BRIEF : IDEATION_BRIEF) : '', drafted ? DRAFT_BRIEF : '', `The owner's request:\n${task.prompt}`];
+  if (handed.continued) parts.push(CONTINUED_BRIEF);
   if (plan) parts.push(`Plan drafted for this request (follow it unless the code shows it is wrong; say so if you deviate):\n${planText(plan)}`);
   // The table's cells were written by a model that had read reference pages, so they travel as data; the instruction to build to it is the harness's.
   if (handed.anchor) parts.push(`The anchor table for this work is committed at ${ANCHOR_FILE}. Build to it: the idea, the first screen as it describes it, and our own values, not the references'.\n${untrusted('engine-output', renderAnchorTable(handed.anchor))}`);

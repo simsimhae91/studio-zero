@@ -16,8 +16,8 @@ export type TaskKind = z.infer<typeof TaskKind>;
  * again by itself when a reviewer answers, and it then resumes at verification.
  *
  * `parked`: the engine's subscription refused the work for a usage limit and said when the limit resets. The
- * task holds no slot; at `parkedUntil` the daemon queues it again, and it runs from its base checkpoint as an
- * interrupted task does after a restart. A task is parked a bounded number of times (`parkCount`), then fails.
+ * task holds no slot; at `parkedUntil` the daemon queues it again, and it goes on from the work it had committed
+ * on its branch when it stopped. A task is parked a bounded number of times (`parkCount`), then fails.
  */
 export const TaskState = z.enum(['queued', 'running', 'awaiting_approval', 'suspended', 'parked', 'succeeded', 'failed', 'cancelled']);
 export type TaskState = z.infer<typeof TaskState>;
@@ -139,8 +139,8 @@ export type Task = z.infer<typeof Task>;
 
 /**
  * A prompt the owner saved to be submitted as a task later: once at a time (`at`), or every `intervalMinutes`
- * (`every`, at least an hour). Each run is an ordinary `tasks.submit`, with its policy and budget checks.
- * `nextDueAt` is null once an `at` schedule has fired.
+ * (`every`, at least an hour; `runAt` is then the time of its first run when the owner named one). Each run is
+ * an ordinary `tasks.submit`, with its policy and budget checks. `nextDueAt` is null once an `at` schedule has fired.
  */
 export const ScheduleMode = z.enum(['at', 'every']);
 export type ScheduleMode = z.infer<typeof ScheduleMode>;

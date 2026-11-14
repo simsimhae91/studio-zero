@@ -14,8 +14,8 @@ const MAX_ATTEMPTS = 2;
  * A suspended task is not in flight: it holds no slot and does not block its project. `resume` queues it again.
  *
  * Nor is a parked one (see `Harness`): it waits for the reset time its subscription named. One timer is kept for
- * the soonest of them; when it is due the task is queued again, behind whatever its project is running, and runs
- * as an interrupted task does after a restart. A wake is not a crash, so it does not spend the restart retry.
+ * the soonest of them; when it is due the task is queued again, behind whatever its project is running, the way
+ * an interrupted task is after a restart. A wake is not a crash, so it does not spend the restart retry.
  * Parked tasks stay parked across a restart, and those whose time passed while the daemon was down wake on boot.
  */
 export class TaskQueue {

@@ -89,13 +89,22 @@ ${p.headSha === 'none' ? ':' : 'git reset -q'}`;
 }
 
 /** Starts a task branch from the integration branch, carrying any uncommitted work along. */
-export function startBranchScript(p: { workspace: string; branch: string; from: string }): string {
+export function startBranchScript(p: { workspace: string; branch: string; from: string; keep?: boolean }): string {
   assertBranchName(p.branch);
   assertBranchName(p.from);
+  // With `keep`, a branch of that name that holds work `from` does not is gone back to as it is: what a task
+  // committed before it was stopped. Otherwise the branch starts from `from`, replacing whatever it held. The
+  // last line printed says which.
   return `set -eu
 cd ${shq(p.workspace)}
-git checkout -q ${shq(p.from)}
-git checkout -q -B ${shq(p.branch)}`;
+if [ ${p.keep ? 1 : 0} = 1 ] && git rev-parse -q --verify ${shq(`refs/heads/${p.branch}`)} >/dev/null && [ -n "$(git rev-list -n 1 ${shq(`${p.from}..${p.branch}`)})" ]; then
+  git checkout -q ${shq(p.branch)}
+  echo kept
+else
+  git checkout -q ${shq(p.from)}
+  git checkout -q -B ${shq(p.branch)}
+  echo started
+fi`;
 }
 
 /** Commits everything on the current branch. Prints the resulting HEAD; a clean tree is not an error. */

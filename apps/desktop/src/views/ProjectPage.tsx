@@ -3,7 +3,7 @@ import { Check, ChevronDown, FileText, Film, FolderTree, GitFork, GitMerge, Glob
 import { Suspense, lazy, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { ReviewerPref, type AdvisorId, type Approval, type Project, type Session, type Task, type TaskKind, type TaskState, type TaskTrack } from '@studio-zero/protocol';
 import { Markdown } from '@studio-zero/ax/react';
-import { duration, effortLabel, elapsed, engineLabel, kindLabel, phaseLabel, stamp, subscriptionLabel, taskStateLabel, templateLabel, tokens } from '../lib/format.ts';
+import { duration, effortLabel, elapsed, engineLabel, kindLabel, phaseLabel, stamp, subscriptionLabel, taskStateLabel, templateLabel, tokens, upcoming } from '../lib/format.ts';
 import { redrawRequest, revisionRequest, type MockupNote } from '../lib/mockups.ts';
 import { RIGOR_CHECKS } from '../lib/rigor.ts';
 import { advisorCommand, buildRequest, flowLine, measuresLine, mockupName, narrate, type Item, type Mockup } from '../lib/steps.ts';
@@ -891,6 +891,21 @@ function Passage({ task, items, pending, onShow, onCheckpoint, onFile, onBuild, 
                 <Button onClick={() => onShow('audit')} icon={<ScanEye className="size-4" aria-hidden />}>
                   감사 결과 보기
                 </Button>
+                <Button variant="danger" busy={drop.busy} onClick={() => void drop.run()}>
+                  작업 취소
+                </Button>
+              </div>
+            </div>
+          ) : task.state === 'parked' ? (
+            <div className="flex flex-col gap-3 border-l-4 border-warning pl-4">
+              <div className="flex flex-col gap-1">
+                <p className="text-base font-semibold">사용 한도가 풀리기를 기다리는 중입니다</p>
+                <p className="text-base text-fg-muted">
+                  이 작업을 돌리던 구독이 사용 한도에 걸려 세워 뒀습니다. {task.parkedUntil === null ? '한도가 풀리면' : `${upcoming(task.parkedUntil)}에`} 자동으로 다시 시작합니다.{' '}
+                  {task.kind === 'ideate' ? '기획 문서는 처음부터 다시 씁니다.' : '멈추기 전까지 한 것은 브랜치에 저장했고, 하던 데서 이어 갑니다.'} 그동안 이 프로젝트에서 다른 작업을 시작할 수 있습니다.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
                 <Button variant="danger" busy={drop.busy} onClick={() => void drop.run()}>
                   작업 취소
                 </Button>

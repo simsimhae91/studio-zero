@@ -37,9 +37,11 @@ interface Rig {
   d: TestDaemon;
   queue: TaskQueue;
   clock: { now: number };
-  /** Each turn the engine is sent takes the next of these: an answer, or an error it throws. */
-  turns: (EngineResult | Error)[];
+  /** Each turn the engine is sent takes the next of these: an answer, an error it throws, or what it does first. */
+  turns: (EngineResult | Error | (() => Promise<EngineResult>))[];
   sent: () => number;
+  /** What the engine was sent, turn by turn. */
+  messages: () => string[];
   bodies: (taskId: string) => { type: string; [key: string]: unknown }[];
   /** Waits until the task is out of `queued` and `running`. */
   settled: (taskId: string) => Promise<Task>;
@@ -50,18 +52,20 @@ async function rig(config: z.input<typeof ConfigSchema> = {}): Promise<Rig> {
   const { store, events, policy, sandboxes, provisioner, claude, lessons, refkit, reviewer, ledger } = d.daemon;
   store.insertProject(project);
   const clock = { now: Date.parse('2026-11-14T09:00:00') };
-  const turns: (EngineResult | Error)[] = [];
+  const turns: Rig['turns'] = [];
+  const messages: string[] = [];
   let sent = 0;
   const engine = {
     id: 'codex',
     efforts: ['high'],
     open: async () => ({
-      send: async () => {
+      send: async (content: string) => {
         sent += 1;
+        messages.push(content);
         const next = turns.shift();
         if (!next) throw new Error('the engine was sent another turn: the script ran out');
         if (next instanceof Error) throw next;
-        return next;
+        return typeof next === 'function' ? next() : next;
       },
       close: async () => undefined,
     }),
@@ -86,7 +90,7 @@ async function rig(config: z.input<typeof ConfigSchema> = {}): Promise<Rig> {
     }
     throw new Error(`task ${taskId} did not settle`);
   };
-  return { d, queue, clock, turns, sent: () => sent, bodies: (taskId) => events.history({ taskId }, 0, 500).map((e) => e.body), settled };
+  return { d, queue, clock, turns, sent: () => sent, messages: () => messages, bodies: (taskId) => events.history({ taskId }, 0, 500).map((e) => e.body), settled };
 }
 
 const submit = (r: Rig, id: string): Task => r.d.daemon.store.insertTask({ id, projectId: project.id, kind: 'inline_edit', prompt: '목록 정렬을 날짜순으로 바꿔줘', origin: 'desktop', budgetTokens: 1_000_000, branch: null, createdAt: r.clock.now });
@@ -137,6 +141,42 @@ describe('quota park', () => {
       assert.deepEqual([finished.parkCount, finished.parkedUntil], [1, null]);
       assert.equal(r.sent(), 2);
       assert.equal(store.listLedgerEntries(project.id, 10).length, 1, 'the run that finished leaves its receipt like any other');
+    } finally {
+      await r.queue.stop();
+      await r.d.cleanup();
+    }
+  });
+
+  test('a woken task goes on from the work it committed when it stopped, and is told that it is there', async () => {
+    const r = await rig();
+    try {
+      const { sandboxes, store } = r.d.daemon;
+      await r.d.daemon.provisioner.ensure(project);
+      // The first run writes half the work, then the subscription refuses it.
+      r.turns.push(async () => {
+        await sandboxes.writeFile(project, 'src/sort.ts', 'export const byDate = true;\n');
+        throw codexLimit('1h');
+      });
+      // The second run finds that file where the first left it.
+      r.turns.push(async () => {
+        assert.equal((await sandboxes.readFile(project, 'src/sort.ts')).content, 'export const byDate = true;\n', 'the work from before the limit is in the workspace');
+        await sandboxes.writeFile(project, 'src/list.ts', 'export const sorted = true;\n');
+        return done;
+      });
+      submit(r, 'tsk_goon');
+      r.queue.start();
+      assert.equal((await r.settled('tsk_goon')).state, 'parked');
+      assert.equal((await sandboxes.exec(project, 'git rev-parse --abbrev-ref HEAD && git log --format=%s -n 1 sz/tsk_goon')).stdout, 'main\nwip: tsk_goon (waiting for a usage limit to reset)\n', 'parked: the project is back on its own branch, the work committed on the task\'s');
+
+      r.clock.now += HOUR + MIN;
+      r.queue.wakeDue();
+      const finished = await r.settled('tsk_goon');
+      assert.equal(finished.state, 'succeeded', finished.error ?? '');
+      const [first, second] = r.messages();
+      assert.ok(!first!.includes('stopped part-way'), 'a first run is told nothing of the kind');
+      assert.match(second!, /The owner's request:\n목록 정렬을 날짜순으로 바꿔줘\n\nThis task was stopped part-way: the subscription it runs on reached its usage limit\.[^\n]*Read what is there first, then carry on from it\./);
+      assert.deepEqual((await sandboxes.exec(project, 'git ls-tree -r --name-only sz/tsk_goon -- src')).stdout.trim().split('\n'), ['src/list.ts', 'src/sort.ts'], 'both halves are on the branch');
+      assert.equal(store.getTask('tsk_goon')!.parkCount, 1);
     } finally {
       await r.queue.stop();
       await r.d.cleanup();
@@ -267,7 +307,7 @@ describe('quota park', () => {
       r.queue.start();
       await r.settled('tsk_told');
       const resumeAt = new Date(r.clock.now + 2 * HOUR);
-      assert.equal(renderPlain(out[0]!.lines), `Ledger · tsk_told\nCodex 구독이 사용 한도에 걸려 작업을 멈췄습니다.\n한도가 풀리는 ${resumeAt.getMonth() + 1}월 ${resumeAt.getDate()}일 11:00에 처음부터 다시 시작합니다 (1번째 대기).`);
+      assert.equal(renderPlain(out[0]!.lines), `Ledger · tsk_told\nCodex 구독이 사용 한도에 걸려 작업을 멈췄습니다.\n한도가 풀리는 ${resumeAt.getMonth() + 1}월 ${resumeAt.getDate()}일 11:00에 하던 데서 이어 갑니다 (1번째 대기).`);
       r.clock.now += 2 * HOUR;
       r.queue.wakeDue();
       await r.settled('tsk_told');
@@ -325,12 +365,32 @@ describe('schedules', () => {
         assert.rejects(studio.createSchedule(OWNER, { projectId: project.id, kind: 'build', prompt: '확인해 줘', ...p }), (err: Error) => err instanceof ConflictError && message.test(err.message));
       await refused({ everyMinutes: 30 }, /60분 이상/);
       await refused({ at: r.clock.now - MIN }, /이미 지났습니다/);
-      await refused({ at, everyMinutes: 60 }, /하나만/);
-      await refused({}, /하나만/);
+      await refused({}, /언제 돌릴지 정해 주세요/);
       await refused({ everyMinutes: 60, prompt: 'a'.repeat(20_001) }, /20,000자까지/);
       await refused({ everyMinutes: 60, prompt: '   ' }, /비어 있습니다/);
       await assert.rejects(studio.createSchedule(OWNER, { projectId: 'prj_nope', kind: 'build', prompt: '확인', everyMinutes: 60 }), NotFoundError);
       assert.equal(studio.listSchedules(project.id).length, 2);
+    } finally {
+      await r.d.cleanup();
+    }
+  });
+
+  test('every day at seven: an interval with a first time runs at that time, and keeps to it', async () => {
+    const r = await scheduleRig();
+    try {
+      const { store, studio } = r.d.daemon;
+      // Made at half past two in the afternoon, for seven every morning.
+      r.clock.now = Date.parse('2026-11-14T14:30:00');
+      const seven = Date.parse('2026-11-15T07:00:00');
+      const mornings = await studio.createSchedule(OWNER, { projectId: project.id, kind: 'build', prompt: '아침 브리핑을 새로 만들어 줘', at: seven, everyMinutes: 24 * 60 });
+      assert.deepEqual([mornings.mode, mornings.runAt, mornings.intervalMinutes, mornings.nextDueAt], ['every', seven, 1440, seven]);
+      const scheduler = r.scheduler();
+      r.clock.now = seven - MIN;
+      assert.deepEqual(await scheduler.tick(), [], 'not a day from when it was made');
+      r.clock.now = seven + 3 * MIN;
+      assert.equal((await scheduler.tick()).length, 1, 'at its first time');
+      assert.equal(store.getSchedule(mornings.id)!.nextDueAt, seven + 24 * HOUR, 'and next at seven again, not a day from when it happened to be looked at');
+      await assert.rejects(studio.createSchedule(OWNER, { projectId: project.id, kind: 'build', prompt: '확인', at: r.clock.now - MIN, everyMinutes: 60 }), /이미 지났습니다/);
     } finally {
       await r.d.cleanup();
     }

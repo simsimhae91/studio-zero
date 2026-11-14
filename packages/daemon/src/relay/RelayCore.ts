@@ -258,7 +258,7 @@ export class RelayCore {
           lines: [
             [bold(project?.name ?? task.projectId), ' · ', code(task.id)],
             [`${subscriptionName[body.subscription]} 구독이 사용 한도에 걸려 작업을 멈췄습니다.`],
-            [`한도가 풀리는 ${localTime(body.resumeAt)}에 처음부터 다시 시작합니다 (${body.parkCount}번째 대기).`],
+            [`한도가 풀리는 ${localTime(body.resumeAt)}에 ${task.kind === 'ideate' ? '처음부터 다시 시작합니다' : '하던 데서 이어 갑니다'} (${body.parkCount}번째 대기).`],
           ],
         });
       }

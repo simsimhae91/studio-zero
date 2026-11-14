@@ -529,15 +529,17 @@ export class Studio implements PromotionHost {
   }
 
   /**
-   * Saves a prompt to be submitted as a task later: once `at` a time, or every `everyMinutes`. Only the owner
-   * can (`schedule.configure`); each run is then an ordinary `submitTask`, held to the same rules and budgets.
+   * Saves a prompt to be submitted as a task later: once `at` a time, or every `everyMinutes`. With both, the
+   * first run is `at` and the rest follow every `everyMinutes` after it ("every day at seven"); with the interval
+   * alone the first run is one interval from now. Only the owner can (`schedule.configure`); each run is then an
+   * ordinary `submitTask`, held to the same rules and budgets.
    */
   async createSchedule(actor: Actor, p: { projectId: string; kind: Exclude<TaskKind, 'kirby_materialize'>; prompt: string; engine?: EngineId; model?: string; at?: number; everyMinutes?: number }): Promise<Schedule> {
     this.getProject(p.projectId);
     assertPick(p, this.#d.router);
     if (p.prompt.trim() === '') throw new ConflictError('예약할 작업 내용이 비어 있습니다.');
     if (p.prompt.length > SCHEDULE_PROMPT_MAX) throw new ConflictError(`작업 내용은 ${SCHEDULE_PROMPT_MAX.toLocaleString('en-US')}자까지 예약할 수 있습니다.`);
-    if ((p.at === undefined) === (p.everyMinutes === undefined)) throw new ConflictError('정한 시각(at)과 반복 간격(every) 중 하나만 정해 주세요.');
+    if (p.at === undefined && p.everyMinutes === undefined) throw new ConflictError('언제 돌릴지 정해 주세요: 정한 시각(at), 반복 간격(every), 또는 둘 다(그 시각부터 반복).');
     const now = this.#d.clock();
     if (p.everyMinutes !== undefined && (!Number.isInteger(p.everyMinutes) || p.everyMinutes < SCHEDULE_MIN_INTERVAL)) throw new ConflictError(`반복 간격은 ${SCHEDULE_MIN_INTERVAL}분 이상이어야 합니다.`);
     if (p.at !== undefined && p.at <= now) throw new ConflictError('예약 시각이 이미 지났습니다.');
@@ -554,7 +556,7 @@ export class Studio implements PromotionHost {
       runAt: p.at ?? null,
       intervalMinutes: every,
       enabled: true,
-      nextDueAt: every === null ? p.at! : now + every * 60 * 1000,
+      nextDueAt: p.at ?? now + every! * 60 * 1000,
       lastFiredAt: null,
       lastTaskId: null,
       createdAt: now,

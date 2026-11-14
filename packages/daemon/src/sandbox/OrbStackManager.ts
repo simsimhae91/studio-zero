@@ -415,9 +415,14 @@ export class OrbStackManager {
     return branch;
   }
 
-  async startBranch(project: Project, branch: string, from: string): Promise<void> {
-    const res = await this.exec(project, startBranchScript({ workspace: WORKSPACE_DIR, branch, from }), { timeoutSec: 60 });
+  /**
+   * Puts the workspace on a task's branch, started from `from`. With `keep`, a branch of that name that already
+   * holds work of its own is kept as it is. Returns whether it was: true means the task goes on from earlier work.
+   */
+  async startBranch(project: Project, branch: string, from: string, opts: { keep?: boolean } = {}): Promise<boolean> {
+    const res = await this.exec(project, startBranchScript({ workspace: WORKSPACE_DIR, branch, from, keep: opts.keep }), { timeoutSec: 60 });
     if (res.exitCode !== 0) throw new SandboxError(`cannot start branch ${branch}`, lastLine(res.stderr));
+    return lastLine(res.stdout) === 'kept';
   }
 
   async checkout(project: Project, branch: string): Promise<void> {
