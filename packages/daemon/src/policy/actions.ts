@@ -16,6 +16,9 @@ export const Action = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('scratch.promote'), scratchId: z.string(), target: z.enum(['build', 'document']) }),
   z.object({ kind: z.literal('knowledge.run'), jobKind: z.enum(['research', 'document']) }),
   z.object({ kind: z.literal('task.submit'), projectId: z.string(), taskKind: TaskKind, budgetTokens: z.number().int() }),
+  // The owner's verdict on a plan a task is waiting with, before any code: approving it starts the build on that
+  // plan, asking for changes has it drafted again. Bound to the version and the hash of the text that was shown.
+  z.object({ kind: z.literal('plan.review.resolve'), projectId: z.string(), taskId: z.string(), version: z.number().int(), planHash: z.string() }),
   // Saving, pausing, resuming or removing a prompt the daemon submits as a task by itself later. Each run it
   // starts is still a `task.submit` and spends through `llm.request`; this decides who may set one up at all.
   z.object({ kind: z.literal('schedule.configure'), projectId: z.string(), op: z.enum(['create', 'pause', 'resume', 'delete']), scheduleId: z.string().nullable(), taskKind: TaskKind, every: z.number().int().nullable() }),
@@ -110,6 +113,8 @@ export function describeAction(action: Action): string {
       return action.jobKind === 'research' ? '자료 조사 시작' : '문서 작성 시작';
     case 'task.submit':
       return `${action.taskKind} 작업 시작 (예산 ${n(action.budgetTokens)} 토큰)`;
+    case 'plan.review.resolve':
+      return `작업 ${action.taskId}의 계획 ${action.version}번째 안에 답하기`;
     case 'schedule.configure': {
       const when = action.every === null ? '정한 시각에 한 번' : `${n(action.every)}분마다`;
       const op = { create: '추가', pause: '일시 정지', resume: '다시 켜기', delete: '삭제' }[action.op];

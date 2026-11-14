@@ -33,6 +33,8 @@ import {
   TaskTrack,
   Template,
   OwnerSettings,
+  PlanFeedback,
+  PlanVersion,
 } from './domain.ts';
 import { AxResponse, Calibration, DocumentKind, KnowledgeJob, PromotionResult, Readiness, ResearchReport, ScratchEntry, ScratchMode, ScratchMove, Scratchpad, TextFinding } from './ax.ts';
 import { EventEnvelope, EventFilter } from './events.ts';
@@ -182,6 +184,12 @@ export const methods = {
       reviewer: ReviewerPref.optional(),
       /** Up to three pages to take design principles from. Each is opened only inside the QA browser container. */
       references: z.array(ReferenceUrl).max(3).optional(),
+      /**
+       * Stop after planning (and the plan's cross-review) until the owner approves the plan or asks for changes
+       * (`plans.resolve`). Left out: the daemon's `planReview.defaultOn`, which is off. Only a task that plans
+       * (a full-track build, refactor or materialisation) has a plan to show.
+       */
+      reviewPlan: z.boolean().optional(),
     }),
     result: Task,
   },
@@ -218,6 +226,18 @@ export const methods = {
   /** Pauses or resumes. A resumed interval picks up at its next time from now: what was missed while paused does not run. */
   'schedules.setEnabled': { params: z.object({ scheduleId: z.string(), enabled: z.boolean() }), result: Schedule },
   'schedules.delete': { params: z.object({ scheduleId: z.string() }), result: z.object({ deleted: z.literal(true) }) },
+
+  /** A task's plan versions, oldest first (empty for a task that was never stopped for plan review), and how many more times it may be sent back. */
+  'plans.list': { params: z.object({ taskId: z.string() }), result: z.object({ versions: z.array(PlanVersion), revisionsLeft: z.number().int() }) },
+  /**
+   * The owner's verdict on the plan a task is waiting with. `version` and `planHash` must be those of the version
+   * waiting now, or the call is refused (`conflict`): a verdict is bound to the plan it was given on. `changes`
+   * needs at least one feedback item, and is refused once `planReview.maxRevisions` revisions have been asked for.
+   */
+  'plans.resolve': {
+    params: z.object({ taskId: z.string(), version: z.number().int().min(1), planHash: z.string().regex(/^[0-9a-f]{64}$/), verdict: z.enum(['approve', 'changes']), feedback: z.array(PlanFeedback).max(20).optional() }),
+    result: PlanVersion,
+  },
 
   'approvals.list': { params: z.object({ state: ApprovalState.optional() }), result: z.object({ approvals: z.array(Approval) }) },
   'approvals.resolve': { params: z.object({ approvalId: z.string(), decision: z.enum(['approve', 'deny']) }), result: Approval },

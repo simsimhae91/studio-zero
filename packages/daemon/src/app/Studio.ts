@@ -32,6 +32,8 @@ import type {
   SelfHostStatus,
   SubscriptionQuota,
   Origin,
+  PlanFeedback,
+  PlanVersion,
   Project,
   ProposalCard,
   ResultOf,
@@ -55,6 +57,7 @@ import type { EvalRunner } from '../harness/EvalRunner.ts';
 import { INTEGRATION_BRANCH } from '../harness/Harness.ts';
 import type { Ledger } from '../harness/Ledger.ts';
 import type { LessonBook } from '../harness/LessonBook.ts';
+import type { PlanGate } from '../harness/PlanGate.ts';
 import type { SelfHosting } from '../harness/SelfHosting.ts';
 import { readProjectFile } from '../harness/projectFile.ts';
 import type { KirbyEngine } from '../kirby/KirbyEngine.ts';
@@ -104,6 +107,7 @@ export interface StudioDeps {
   sandboxes: OrbStackManager;
   provisioner: WorkspaceProvisioner;
   queue: TaskQueue;
+  planGate: PlanGate;
   vault: KeychainVault;
   claude: ClaudeClient;
   router: ModelRouter;
@@ -463,7 +467,7 @@ export class Studio implements PromotionHost {
 
   // ----------------------------------------------------------------- tasks
 
-  async submitTask(actor: Actor, p: { projectId: string; kind: TaskKind; prompt: string; budgetTokens?: number; branch?: string; baseBranch?: string; engine?: EngineId; model?: string; effort?: Effort; sessionId?: string; track?: TaskTrack; reviewer?: ReviewerPref; references?: string[] }, origin: Origin): Promise<Task> {
+  async submitTask(actor: Actor, p: { projectId: string; kind: TaskKind; prompt: string; budgetTokens?: number; branch?: string; baseBranch?: string; engine?: EngineId; model?: string; effort?: Effort; sessionId?: string; track?: TaskTrack; reviewer?: ReviewerPref; references?: string[]; reviewPlan?: boolean }, origin: Origin): Promise<Task> {
     this.getProject(p.projectId);
     assertPick(p, this.#d.router);
     // A reference is refused here, before the task exists, so a mistyped address is not found out mid-build.
@@ -481,8 +485,12 @@ export class Studio implements PromotionHost {
       }
     }
     const budgetTokens = p.budgetTokens ?? this.#d.config.budgets.taskTokens;
+    // Decided once, here, and kept with the task: a restart or a changed default does not change what was asked.
+    // Only a task that plans has a plan to show; a draft or a design task goes on as it always has.
+    const track = p.track ?? 'full';
+    const reviewPlan = (p.reviewPlan ?? this.#d.config.planReview.defaultOn) && track === 'full' && (p.kind === 'build' || p.kind === 'refactor' || p.kind === 'kirby_materialize');
     await this.#d.policy.authorize(actor, { kind: 'task.submit', projectId: p.projectId, taskKind: p.kind, budgetTokens });
-    const task = this.#d.store.insertTask({ id: newId('tsk'), projectId: p.projectId, kind: p.kind, prompt: p.prompt, origin, budgetTokens, branch: p.branch ?? null, baseBranch: p.baseBranch ?? null, enginePref: p.engine ?? null, modelPref: p.model ?? null, effortPref: p.effort ?? null, sessionId: p.sessionId ?? null, track: p.track ?? 'full', reviewerPref: p.reviewer ?? null, references, createdAt: this.#d.clock() });
+    const task = this.#d.store.insertTask({ id: newId('tsk'), projectId: p.projectId, kind: p.kind, prompt: p.prompt, origin, budgetTokens, branch: p.branch ?? null, baseBranch: p.baseBranch ?? null, enginePref: p.engine ?? null, modelPref: p.model ?? null, effortPref: p.effort ?? null, sessionId: p.sessionId ?? null, track, reviewerPref: p.reviewer ?? null, references, reviewPlan, createdAt: this.#d.clock() });
     this.#d.events.emit({ projectId: task.projectId, taskId: task.id }, { type: 'task.state', state: 'queued', error: null });
     this.#d.queue.pump();
     return task;
@@ -519,6 +527,24 @@ export class Studio implements PromotionHost {
     this.getTask(taskId);
     this.#d.queue.cancel(taskId);
     return this.getTask(taskId);
+  }
+
+  // ----------------------------------------------------------- plan review
+
+  /** A task's plan versions as the owner was shown them, oldest first. */
+  listPlanVersions(taskId: string): { versions: PlanVersion[]; revisionsLeft: number } {
+    this.getTask(taskId);
+    return { versions: this.#d.planGate.list(taskId), revisionsLeft: this.#d.planGate.revisionsLeft(taskId) };
+  }
+
+  /**
+   * The owner's verdict on the plan a task is waiting with. Policy first (only an owner answers for a plan), then
+   * the gate, which refuses a version or hash that is not the one waiting.
+   */
+  async resolvePlanReview(actor: Actor, p: { taskId: string; version: number; planHash: string; verdict: 'approve' | 'changes'; feedback?: PlanFeedback[] }): Promise<PlanVersion> {
+    const task = this.getTask(p.taskId);
+    await this.#d.policy.authorize(actor, { kind: 'plan.review.resolve', projectId: task.projectId, taskId: task.id, version: p.version, planHash: p.planHash });
+    return this.#d.planGate.resolve(task.id, p.version, p.planHash, p.verdict, p.feedback ?? []);
   }
 
   // ------------------------------------------------------------- schedules
@@ -1036,7 +1062,7 @@ export class Studio implements PromotionHost {
   }
 
   #assertIdle(projectId: string, what: string): void {
-    const busy = this.#d.store.listTasks(projectId, 20).find((t) => t.state === 'running' || t.state === 'awaiting_approval');
+    const busy = this.#d.store.listTasks(projectId, 20).find((t) => t.state === 'running' || t.state === 'awaiting_approval' || t.state === 'awaiting_plan_review');
     if (busy) throw new ConflictError(`cannot ${what} while task ${busy.id} is using the workspace`);
   }
 }

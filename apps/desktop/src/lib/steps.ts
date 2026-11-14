@@ -429,6 +429,13 @@ export function narrate(events: readonly EventEnvelope[]): Item[] {
       case 'reflection.completed':
         if (b.lessonsAccepted + b.evalsAdded > 0) items.push({ kind: 'note', at: e.at, text: `이번 작업에서 교훈 ${b.lessonsAccepted}건, 회귀 검사 ${b.evalsAdded}건을 남겼습니다.` });
         break;
+      case 'plan.review_requested':
+        closeWork();
+        items.push({ kind: 'note', at: e.at, text: `계획 ${b.version}번째 안이 답을 기다립니다.` });
+        break;
+      case 'plan.review_resolved':
+        items.push({ kind: 'note', at: e.at, text: b.outcome === 'approve' ? `계획 ${b.version}번째 안을 승인했습니다.` : b.outcome === 'changes' ? `계획 ${b.version}번째 안에 수정을 요청했습니다.` : `계획 ${b.version}번째 안에 답이 없어 작업을 멈췄습니다.` });
+        break;
       case 'advisor.answered':
         closeWork();
         items.push({ kind: 'advisor', at: e.at, advisor: b.advisor, question: b.question, answer: b.answer, ok: b.ok, durationMs: b.durationMs });

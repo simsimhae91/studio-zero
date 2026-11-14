@@ -29,6 +29,7 @@ import {
   type LessonState,
   type Origin,
   type Phase,
+  type PlanFeedback,
   type Project,
   type ProposalState,
   type Schedule,
@@ -51,6 +52,21 @@ export interface SandboxRow {
   network: string;
   image: string;
   gatewayTokenHash: string;
+}
+
+/** One stored version of a task's plan (see `PlanGate`). `planJson` is the planner's structured plan, as JSON text. */
+export interface PlanVersionRow {
+  taskId: string;
+  version: number;
+  planJson: string;
+  planMarkdown: string;
+  sha256: string;
+  /** The cross-reviewer's critique of this version, as JSON text. */
+  reviewerNotes: string | null;
+  verdict: 'approve' | 'changes' | null;
+  feedback: PlanFeedback[];
+  createdAt: number;
+  resolvedAt: number | null;
 }
 
 export interface CheckpointRow extends Checkpoint {
@@ -254,7 +270,7 @@ export class Store {
 
   /** Projects with a task that holds their workspace right now. */
   busyProjectIds(): Set<string> {
-    return new Set(this.#all(`SELECT DISTINCT project_id FROM tasks WHERE state IN ('running', 'awaiting_approval')`).map((r) => str(r.project_id)));
+    return new Set(this.#all(`SELECT DISTINCT project_id FROM tasks WHERE state IN ('running', 'awaiting_approval', 'awaiting_plan_review')`).map((r) => str(r.project_id)));
   }
 
   /** Projects the owner made. The studio's own budget scope (see `STUDIO_PROJECT_ID`) is not one of them. */
@@ -297,12 +313,12 @@ export class Store {
 
   // ---------------------------------------------------------------- tasks
 
-  insertTask(t: { id: string; projectId: string; kind: TaskKind; prompt: string; origin: Origin; budgetTokens: number; branch: string | null; baseBranch?: string | null; enginePref?: string | null; modelPref?: string | null; effortPref?: string | null; sessionId?: string | null; track?: TaskTrack; reviewerPref?: string | null; references?: readonly string[]; createdAt: number }): Task {
+  insertTask(t: { id: string; projectId: string; kind: TaskKind; prompt: string; origin: Origin; budgetTokens: number; branch: string | null; baseBranch?: string | null; enginePref?: string | null; modelPref?: string | null; effortPref?: string | null; sessionId?: string | null; track?: TaskTrack; reviewerPref?: string | null; references?: readonly string[]; reviewPlan?: boolean; createdAt: number }): Task {
     const { references, ...row } = t;
     this.#run(
-      `INSERT INTO tasks (id, project_id, kind, prompt, origin, state, branch, base_branch, engine_pref, model_pref, effort_pref, session_id, track, reviewer_pref, references_json, budget_tokens, created_at)
-       VALUES (:id, :projectId, :kind, :prompt, :origin, 'queued', :branch, :baseBranch, :enginePref, :modelPref, :effortPref, :sessionId, :track, :reviewerPref, :referencesJson, :budgetTokens, :createdAt)`,
-      { ...row, baseBranch: t.baseBranch ?? null, enginePref: t.enginePref ?? null, modelPref: t.modelPref ?? null, effortPref: t.effortPref ?? null, sessionId: t.sessionId ?? null, track: t.track ?? 'full', reviewerPref: t.reviewerPref ?? null, referencesJson: JSON.stringify(references ?? []) },
+      `INSERT INTO tasks (id, project_id, kind, prompt, origin, state, branch, base_branch, engine_pref, model_pref, effort_pref, session_id, track, reviewer_pref, references_json, review_plan, budget_tokens, created_at)
+       VALUES (:id, :projectId, :kind, :prompt, :origin, 'queued', :branch, :baseBranch, :enginePref, :modelPref, :effortPref, :sessionId, :track, :reviewerPref, :referencesJson, :reviewPlan, :budgetTokens, :createdAt)`,
+      { ...row, baseBranch: t.baseBranch ?? null, enginePref: t.enginePref ?? null, modelPref: t.modelPref ?? null, effortPref: t.effortPref ?? null, sessionId: t.sessionId ?? null, track: t.track ?? 'full', reviewerPref: t.reviewerPref ?? null, referencesJson: JSON.stringify(references ?? []), reviewPlan: t.reviewPlan ? 1 : 0 },
     );
     return this.getTask(t.id)!;
   }
@@ -320,7 +336,7 @@ export class Store {
 
   countTasks(): { queued: number; running: number } {
     const r = this.#get(
-      `SELECT COALESCE(SUM(state = 'queued'), 0) AS queued, COALESCE(SUM(state IN ('running', 'awaiting_approval')), 0) AS running FROM tasks`,
+      `SELECT COALESCE(SUM(state = 'queued'), 0) AS queued, COALESCE(SUM(state IN ('running', 'awaiting_approval', 'awaiting_plan_review')), 0) AS running FROM tasks`,
     )!;
     return { queued: num(r.queued), running: num(r.running) };
   }
@@ -333,7 +349,7 @@ export class Store {
     return this.tx(() => {
       const r = this.#get(
         `SELECT id FROM tasks t WHERE state = 'queued'
-           AND NOT EXISTS (SELECT 1 FROM tasks r WHERE r.project_id = t.project_id AND r.state IN ('running', 'awaiting_approval'))
+           AND NOT EXISTS (SELECT 1 FROM tasks r WHERE r.project_id = t.project_id AND r.state IN ('running', 'awaiting_approval', 'awaiting_plan_review'))
          ORDER BY created_at LIMIT 1`,
       );
       if (!r) return null;
@@ -342,11 +358,16 @@ export class Store {
     });
   }
 
-  /** After a crash nothing is really running. Re-queue interrupted tasks once; fail the ones that already used their retry. */
+  /**
+   * After a crash nothing is really running. Re-queue interrupted tasks once; fail the ones that already used their retry.
+   * A task that was waiting for the owner's verdict on its plan was not interrupted in its work: it is queued
+   * again without spending its retry, and its run goes back to the waiting plan (see `PlanGate`).
+   */
   recoverInterruptedTasks(now: number, maxAttempts: number): { requeued: string[]; failed: string[] } {
     return this.tx(() => {
+      const requeued = this.#all(`SELECT id FROM tasks WHERE state = 'awaiting_plan_review'`).map((r) => str(r.id));
+      this.#run(`UPDATE tasks SET state = 'queued', phase = NULL, attempt = MAX(attempt - 1, 0) WHERE state = 'awaiting_plan_review'`);
       const rows = this.#all(`SELECT id, attempt FROM tasks WHERE state IN ('running', 'awaiting_approval')`);
-      const requeued: string[] = [];
       const failed: string[] = [];
       for (const r of rows) {
         if (num(r.attempt) < maxAttempts) {
@@ -437,6 +458,32 @@ export class Store {
    */
   wakeTask(id: string): Task | null {
     return this.#run(`UPDATE tasks SET state = 'queued', phase = NULL, parked_until = NULL, attempt = 0 WHERE id = :id AND state = 'parked'`, { id }) > 0 ? this.getTask(id) : null;
+  }
+
+  // ---------------------------------------------------------- plan review
+
+  insertPlanVersion(v: Omit<PlanVersionRow, 'verdict' | 'feedback' | 'resolvedAt'>): PlanVersionRow {
+    this.#run(
+      `INSERT INTO plan_versions (task_id, version, plan_json, plan_markdown, sha256, reviewer_notes, created_at)
+       VALUES (:taskId, :version, :planJson, :planMarkdown, :sha256, :reviewerNotes, :createdAt)`,
+      { ...v },
+    );
+    return this.listPlanVersions(v.taskId).find((row) => row.version === v.version)!;
+  }
+
+  /** A task's plan versions, oldest first. */
+  listPlanVersions(taskId: string): PlanVersionRow[] {
+    return this.#all('SELECT * FROM plan_versions WHERE task_id = :taskId ORDER BY version', { taskId }).map(toPlanVersion);
+  }
+
+  latestPlanVersion(taskId: string): PlanVersionRow | null {
+    const r = this.#get('SELECT * FROM plan_versions WHERE task_id = :taskId ORDER BY version DESC LIMIT 1', { taskId });
+    return r ? toPlanVersion(r) : null;
+  }
+
+  /** Records the verdict on a version that is still waiting. Returns false when it was already resolved (a second verdict lost the race). */
+  resolvePlanVersion(taskId: string, version: number, verdict: 'approve' | 'changes', feedback: readonly PlanFeedback[], at: number): boolean {
+    return this.#run(`UPDATE plan_versions SET verdict = :verdict, feedback_json = :feedback, resolved_at = :at WHERE task_id = :taskId AND version = :version AND verdict IS NULL`, { taskId, version, verdict, feedback: JSON.stringify(feedback), at }) > 0;
   }
 
   requestCancel(id: string): void {
@@ -1274,9 +1321,25 @@ function toTask(r: Row): Task {
     error: nstr(r.error),
     parkedUntil: nnum(r.parked_until),
     parkCount: num(r.park_count),
+    reviewPlan: num(r.review_plan) === 1,
     createdAt: num(r.created_at),
     startedAt: nnum(r.started_at),
     finishedAt: nnum(r.finished_at),
+  };
+}
+
+function toPlanVersion(r: Row): PlanVersionRow {
+  return {
+    taskId: str(r.task_id),
+    version: num(r.version),
+    planJson: str(r.plan_json),
+    planMarkdown: str(r.plan_markdown),
+    sha256: str(r.sha256),
+    reviewerNotes: nstr(r.reviewer_notes),
+    verdict: nstr(r.verdict) as PlanVersionRow['verdict'],
+    feedback: JSON.parse(str(r.feedback_json)) as PlanFeedback[],
+    createdAt: num(r.created_at),
+    resolvedAt: nnum(r.resolved_at),
   };
 }
 

@@ -419,6 +419,25 @@ const migrations: string[] = [
   ) STRICT;
   CREATE INDEX schedules_due ON schedules(enabled, next_due_at);
   `,
+  // 14: a task's plan as the owner was shown it, one row per version, when they asked to see it before code.
+  // plan_json is the planner's structured plan, plan_markdown is what daemon code rendered from it and sha256 is
+  // that text's hash; reviewer_notes is the cross-reviewer's critique as JSON. verdict is null while it waits.
+  `
+  ALTER TABLE tasks ADD COLUMN review_plan INTEGER NOT NULL DEFAULT 0;
+  CREATE TABLE plan_versions (
+    task_id         TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+    version         INTEGER NOT NULL,
+    plan_json       TEXT NOT NULL,
+    plan_markdown   TEXT NOT NULL,
+    sha256          TEXT NOT NULL,
+    reviewer_notes  TEXT,
+    verdict         TEXT CHECK (verdict IN ('approve', 'changes')),
+    feedback_json   TEXT NOT NULL DEFAULT '[]',
+    created_at      INTEGER NOT NULL,
+    resolved_at     INTEGER,
+    PRIMARY KEY (task_id, version)
+  ) STRICT;
+  `,
 ];
 
 export function migrate(db: DatabaseSync): void {

@@ -382,3 +382,15 @@ body {
     opacity: 0.78;
   }
 }
+
+/* A plan set beside the version before it: what was added is underlined on a green wash, what was taken out is
+   struck through on a red one. The marks carry the meaning; the colour only helps the eye find them. */
+.plan-diff ins {
+  background: color-mix(in oklch, var(--color-success) 18%, transparent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.plan-diff del {
+  background: color-mix(in oklch, var(--color-danger) 14%, transparent);
+  text-decoration: line-through;
+}

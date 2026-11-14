@@ -1,9 +1,9 @@
 import { readFile } from 'node:fs/promises';
 import { z } from 'zod';
-import { AcceptanceVerdict, Effort, ReviewerId, ReviewerPref, ScreenSpec as ScreenSpecShape, type AuditReport, type Phase, type Project, type Task, type TaskState } from '@studio-zero/protocol';
+import { AcceptanceVerdict, Effort, ReviewerId, ReviewerPref, ScreenSpec as ScreenSpecShape, type AuditReport, type Phase, type PlanFeedback, type Project, type Task, type TaskState } from '@studio-zero/protocol';
 import { EngineId, type Config } from '../config.ts';
 import { classifyQuotaFailure } from '../app/QuotaTracker.ts';
-import type { Store } from '../db/Store.ts';
+import type { PlanVersionRow, Store } from '../db/Store.ts';
 import type { EventLog } from '../events/EventLog.ts';
 import { pngBlock, textBlock, type ClaudeClient } from '../llm/ClaudeClient.ts';
 import type { EnginePick, ModelRouter } from '../llm/ModelRouter.ts';
@@ -28,10 +28,11 @@ import type { EngineResult, EngineSession } from './engines/Engine.ts';
 import { countCompilerErrors, emptyRun, renderEvidence, type Ledger, type RunRecord } from './Ledger.ts';
 import type { LessonBook } from './LessonBook.ts';
 import { materialFor } from './handbook.ts';
-import { ANCHOR_BRIEF, CONTINUED_BRIEF, DEEP_DIVE_BRIEF, DRAFT_BRIEF, DRAW_ALL_BRIEF, IDEATION_BRIEF, IDEATION_REQUIRED_FILES, IDEATION_REVISION_BRIEF, PLANNER_SYSTEM_PROMPT, SCREEN_SPEC_RULES, codingSystemPrompt, directionBrief } from './prompts.ts';
+import { ANCHOR_BRIEF, CONTINUED_BRIEF, DEEP_DIVE_BRIEF, DRAFT_BRIEF, DRAW_ALL_BRIEF, IDEATION_BRIEF, IDEATION_REQUIRED_FILES, IDEATION_REVISION_BRIEF, PLAN_REVISION_BRIEF, PLANNER_SYSTEM_PROMPT, SCREEN_SPEC_RULES, codingSystemPrompt, directionBrief } from './prompts.ts';
+import { hashPlan, renderPlanMarkdown, type PlanGate } from './PlanGate.ts';
 import { chosenTheme, writeProjectTheme } from './themeSeed.ts';
 import type { ReflectionAgent } from './ReflectionAgent.ts';
-import { renderCritique, renderPatch, type Acceptance, type PlanCritique, type SandwichReviewer } from './SandwichReviewer.ts';
+import { PlanCritique, renderCritique, renderPatch, type Acceptance, type SandwichReviewer } from './SandwichReviewer.ts';
 import { foldListing } from './fileListing.ts';
 import type { SelfHosting } from './SelfHosting.ts';
 import { copyBlock } from './TextSlopAuditor.ts';
@@ -68,6 +69,8 @@ interface Failure {
 }
 
 class Cancelled extends Error {}
+/** The owner asked to see the plan and the task cannot go on without their word: it stops, with this as its reason. */
+class PlanReviewStopped extends Error {}
 
 /**
  * Where a suspended task left off: what the engine last said, the parts of its plan the checks still read,
@@ -97,7 +100,8 @@ export class ShutdownSignal extends Error {
  *   Plan     route to an engine (table lookup), checkpoint the workspace, branch, load lessons, measure any
  *            reference pages, draft a plan. A design task (a build whose design gates are on) then gets its
  *            anchor table: written, checked and committed before a line of code, or the task is refused.
- *            Another vendor's model red-teams the plan and the table, once.
+ *            Another vendor's model red-teams the plan and the table, once. A task the owner submitted with
+ *            `reviewPlan` then waits for their word on the plan (see `PlanGate` and `#reviewPlan`); others do not.
  *   Execute  the engine works in the sandbox through the Toolbox, alone.
  *   Verify   the daemon checks the work itself, cheapest and least arguable first:
  *              1. the compiler gate: the type check (or tests) in the sandbox; a failure goes back verbatim;
@@ -167,6 +171,7 @@ export class Harness {
   readonly #build: BuildMeter;
   readonly #mockups: Pick<MockupRenderer, 'measure'> | null;
   readonly #core: SelfHosting | null;
+  readonly #gate: PlanGate | null;
   readonly #clock: Clock;
   readonly #log: Logger;
 
@@ -192,6 +197,8 @@ export class Harness {
     build: BuildMeter;
     mockups?: Pick<MockupRenderer, 'measure'> | null;
     selfHosting?: SelfHosting | null;
+    /** Where a task submitted with `reviewPlan` waits for the owner's word on its plan. Without one, no task waits. */
+    planGate?: PlanGate | null;
     clock: Clock;
     log: Logger;
   }) {
@@ -215,6 +222,7 @@ export class Harness {
     this.#build = deps.build;
     this.#mockups = deps.mockups ?? null;
     this.#core = deps.selfHosting ?? null;
+    this.#gate = deps.planGate ?? null;
     this.#clock = deps.clock;
     this.#log = deps.log;
   }
@@ -242,6 +250,9 @@ export class Harness {
     let continued = false;
     let appliedLessons: string[] = [];
     const resume = this.#resumeState(initial.id);
+    // A task that stopped (a restart, a usage limit) with its plan already in front of the owner goes back to that
+    // stored version, waiting or decided, and is not planned again.
+    const held = initial.reviewPlan && this.#gate ? this.#gate.latest(initial.id) : null;
     // A build whose design gates are on is a design task: it owes an anchor table before code.
     const design = initial.kind === 'build' && !draft && this.#evals.usesBrowser(project.id);
     // A build of a product is held to its screen plan as a product that works: who uses it, how they get in,
@@ -340,7 +351,8 @@ export class Harness {
         // Woken from a usage limit, a task goes on from the work it committed when it stopped: the limit has
         // only just reset, and doing the same work twice is the surest way back to it. A design task starts its
         // documents again, as any other run does: a half-written set would be read as a design to revise.
-        continued = await this.#sandboxes.startBranch(project, branch, task.baseBranch ?? INTEGRATION_BRANCH, { keep: task.parkCount > 0 && !ideation });
+        // A held plan's anchor table and screen spec are committed on the branch: it is gone back to as well.
+        continued = (await this.#sandboxes.startBranch(project, branch, task.baseBranch ?? INTEGRATION_BRANCH, { keep: (task.parkCount > 0 && !ideation) || held !== null })) && task.parkCount > 0 && !ideation;
         onBranch = true;
         // The branch the engine works on may predate a kit the prompt is about to promise it.
         await this.#provisioner.ensure(project);
@@ -355,8 +367,8 @@ export class Harness {
         const existing = design ? await this.#readAnchor(project) : null;
         const specAtStart = specFor ? await this.#readSpec(project, specFor) : null;
         // A draft goes straight to the engine: the planning call is a model round trip the owner would wait through.
-        plan = !draft && (task.kind === 'build' || task.kind === 'refactor' || task.kind === 'kirby_materialize') ? await this.#plan(project, task, lessons.text, signal, { anchor: design && existing?.ok !== true, screens: design && specAtStart?.ok !== true, references }) : null;
-        if (plan) this.#events.emit(scope, { type: 'plan.created', summary: plan.summary, steps: plan.steps, auditRoutes: plan.auditRoutes, appliedLessonIds: lessons.ids });
+        plan = held ? storedPlan(held) : !draft && (task.kind === 'build' || task.kind === 'refactor' || task.kind === 'kirby_materialize') ? await this.#plan(project, task, lessons.text, signal, { anchor: design && existing?.ok !== true, screens: design && specAtStart?.ok !== true, references }) : null;
+        if (plan && !held) this.#events.emit(scope, { type: 'plan.created', summary: plan.summary, steps: plan.steps, auditRoutes: plan.auditRoutes, appliedLessonIds: lessons.ids });
         checkCancel();
 
         if (design) {
@@ -366,14 +378,44 @@ export class Harness {
         // The other half of what is fixed before code: what each screen does. Kept if the project has one that
         // holds; otherwise the planner's draft is checked and committed, and failing that the engine is told to
         // write it first. Either way the work is not accepted without one (see `#verify`).
-        const specOwed = specFor ? await this.#screenSpec(project, task, specAtStart, plan?.screens ?? null, specFor) : null;
-        let critique: PlanCritique | null = null;
-        if (crossChecked && (plan !== null || anchor !== null)) {
+        let specOwed = specFor ? await this.#screenSpec(project, task, specAtStart, plan?.screens ?? null, specFor) : null;
+        // A held plan was cross-reviewed when it was stored; that critique is the one it is built with.
+        let critique: PlanCritique | null = held ? storedCritique(held) : null;
+        if (crossChecked && (plan !== null || anchor !== null) && held === null) {
           // The plan was drafted by Claude when there is one; otherwise what is reviewed is the engine's own work.
           const checked = await this.#reviewer.redTeam({ scope, author: plan !== null ? 'native-claude' : decided.candidate.engine, pref: reviewerPref, request: task.prompt, plan: plan ? planText(plan) : null, anchor: anchor ? renderAnchorTable(anchor) : null, signal });
           record.planReviewer = checked.reviewer;
           critique = checked.result;
           checkCancel();
+        }
+
+        // ---------------------------------------------------------- Plan review
+        // Only when the owner asked to see the plan first. Without that, nothing here runs and nothing waits.
+        if (task.reviewPlan && this.#gate) {
+          if (plan === null) {
+            this.#events.emit(scope, { type: 'notice', level: 'warn', message: 'The owner asked to see the plan before code, but this task drafts no plan of its own (the daemon has no model to plan with), so there is nothing to show: the engine plans for itself.' });
+          } else {
+            ({ plan, critique, anchor, specOwed } = await this.#reviewPlan(project, task, this.#gate, {
+              plan,
+              critique,
+              anchor,
+              specOwed,
+              held,
+              existing,
+              specAtStart,
+              specFor,
+              design,
+              crossChecked,
+              reviewerPref,
+              lessonText: lessons.text,
+              references,
+              record,
+              send,
+              checkCancel,
+              signal,
+            }));
+            task = this.#store.getTask(task.id) ?? task;
+          }
         }
 
         // ------------------------------------------------------------- Execute
@@ -529,9 +571,11 @@ export class Harness {
         return;
       }
       const cancelled = err instanceof Cancelled || signal.aborted;
+      // Stopped at the plan review: not a failure of the work, which has not started, and not a verdict to learn from.
+      const stopped = err instanceof PlanReviewStopped;
       // A subscription that refused for a usage limit and said when it resets: the task waits for that, a few
       // times at most, instead of failing on something time alone fixes.
-      const limit = cancelled ? null : classifyQuotaFailure({ engine: task.engine, error: err }, this.#clock());
+      const limit = cancelled || stopped ? null : classifyQuotaFailure({ engine: task.engine, error: err }, this.#clock());
       const soonEnough = limit !== null && limit.resetAt - this.#clock() <= this.#config.quotaPark.maxWaitHours * HOUR_MS;
       const parks = this.#store.getTask(task.id)?.parkCount ?? task.parkCount;
       const { maxParks } = this.#config.quotaPark;
@@ -546,9 +590,9 @@ export class Harness {
           return;
         }
       }
-      if (!cancelled) this.#log.error({ taskId: task.id, err: errorMessage(err) }, 'task failed');
-      if (onBranch) await this.#parkBranch(project, task, cancelled ? 'cancelled' : 'failed');
-      task = this.#finish(task, cancelled ? 'cancelled' : 'failed', { error: cancelled ? 'cancelled by the owner' : errorMessage(err) }, limit !== null && soonEnough && maxParks > 0 && parks >= maxParks);
+      if (!cancelled && !stopped) this.#log.error({ taskId: task.id, err: errorMessage(err) }, 'task failed');
+      if (onBranch) await this.#parkBranch(project, task, cancelled || stopped ? 'cancelled' : 'failed');
+      task = this.#finish(task, cancelled || stopped ? 'cancelled' : 'failed', { error: cancelled ? 'cancelled by the owner' : errorMessage(err) }, limit !== null && soonEnough && maxParks > 0 && parks >= maxParks);
     } finally {
       await closeAll();
     }
@@ -573,7 +617,8 @@ export class Harness {
     }
   }
 
-  async #plan(project: Project, task: Task, lessonText: string, signal: AbortSignal, want: { anchor: boolean; screens: boolean; references: readonly ReferenceCapture[] }): Promise<Plan | null> {
+  /** `revise`: the plan the owner sent back, as they read it, and their notes on it. It goes in the user turn; the system prompt is the same. */
+  async #plan(project: Project, task: Task, lessonText: string, signal: AbortSignal, want: { anchor: boolean; screens: boolean; references: readonly ReferenceCapture[] }, revise?: { previous: string; feedback: readonly PlanFeedback[] }): Promise<Plan | null> {
     if (!this.#claude.isConfigured()) return null; // bridge-only installs: the engine plans for itself
     const captured = want.references.filter((r) => r.ok);
     // Every file while they fit; beyond that the layout, deepest folders folded first (see `foldListing`).
@@ -601,10 +646,81 @@ export class Harness {
           // The same page watched: read left to right, top to bottom. The captions are the studio's.
           ...(r.film ? [textBlock('The same page as frames over time, then down the scroll. Read it as a sequence: what enters, what keeps moving, what the scroll reveals.'), pngBlock(r.film)] : []),
         ]),
+        ...(revise ? [textBlock(PLAN_REVISION_BRIEF), textBlock(`The plan you drafted before:\n${untrusted('engine-output', revise.previous)}`), textBlock(`The owner's notes on it:\n${ownerNotes(revise.feedback)}`)] : []),
       ],
     });
     // The routes end up in URLs the QA browser visits; only plain app paths are kept.
     return { ...plan, screens: want.screens ? (plan.screens ?? null) : null, steps: plan.steps.slice(0, 20), auditRoutes: plan.auditRoutes.filter((r) => /^\/[\w\-./~%]*$/.test(r) && r.length <= 200).slice(0, 6), openQuestions: plan.openQuestions.slice(0, 6), anchor: want.anchor ? (plan.anchor ?? null) : null };
+  }
+
+  /**
+   * The owner's look at the plan before code (see `PlanGate`). The plan, as cross-reviewed, is stored and the task
+   * waits. Sent back, it is planned again with the owner's notes in the planner's user turn, its anchor table and
+   * screen spec are checked and committed again, it is cross-reviewed again, and it waits again; the gate caps
+   * how often. Approved, the build follows the version the owner approved, read back from where it is stored and
+   * held to the hash they approved. No answer by the deadline stops the task, with its versions kept.
+   */
+  async #reviewPlan(
+    project: Project,
+    task: Task,
+    gate: PlanGate,
+    s: {
+      plan: Plan;
+      critique: PlanCritique | null;
+      anchor: AnchorTable | null;
+      specOwed: string[] | null;
+      held: PlanVersionRow | null;
+      existing: AnchorRead | null;
+      specAtStart: ScreenSpecRead | null;
+      specFor: SpecDemand | null;
+      design: boolean;
+      crossChecked: boolean;
+      reviewerPref: ReviewerPref | null;
+      lessonText: string;
+      references: readonly ReferenceCapture[];
+      record: RunRecord;
+      send: (content: string) => Promise<EngineResult>;
+      checkCancel: () => void;
+      signal: AbortSignal;
+    },
+  ): Promise<{ plan: Plan; critique: PlanCritique | null; anchor: AnchorTable | null; specOwed: string[] | null }> {
+    const scope = { projectId: project.id, taskId: task.id };
+    let { critique, anchor, specOwed } = s;
+    let outcome = await (s.held ? gate.wait(scope, s.held, s.signal) : gate.open(scope, s.plan, critique, s.signal));
+    for (;;) {
+      s.checkCancel();
+      if (outcome.outcome === 'timeout') {
+        throw new PlanReviewStopped(`계획 ${outcome.row.version}번째 안을 ${this.#config.planReview.timeoutHours}시간 기다렸지만 답이 없어 작업을 멈췄습니다. 계획은 남아 있습니다. 진행하려면 같은 요청을 다시 보내 주세요.`);
+      }
+      const stored = storedPlan(outcome.row);
+      if (outcome.outcome === 'approved') {
+        // What runs is what was approved: the stored plan, rendered again and held to the hash the owner saw.
+        if (hashPlan(renderPlanMarkdown(stored)) !== outcome.row.sha256) throw new PlanReviewStopped(`저장된 계획 ${outcome.row.version}번째 안이 승인한 내용과 다릅니다. 코드를 쓰기 전에 멈췄습니다.`);
+        this.#events.emit(scope, { type: 'notice', level: 'info', message: `The owner approved version ${outcome.row.version} of the plan. The build follows it.` });
+        return { plan: stored, critique, anchor, specOwed };
+      }
+
+      // Sent back with notes: the same planning again, told what the owner said about the version they read.
+      const want = { anchor: stored.anchor !== null, screens: stored.screens !== null, references: s.references };
+      const revised = await this.#plan(project, task, s.lessonText, s.signal, want, { previous: outcome.row.planMarkdown, feedback: outcome.row.feedback });
+      if (!revised) throw new Error('the plan could not be drafted again: the daemon has no model to plan with');
+      this.#events.emit(scope, { type: 'plan.created', summary: revised.summary, steps: revised.steps, auditRoutes: revised.auditRoutes, appliedLessonIds: [] });
+      s.checkCancel();
+      // A table or spec the planner drafted is the planner's to redraw; one the project already had stays.
+      if (s.design) {
+        anchor = await this.#anchor(project, task, { existing: want.anchor ? null : s.existing, drafted: revised.anchor, references: s.references, send: s.send, checkCancel: s.checkCancel });
+        s.checkCancel();
+      }
+      if (s.specFor) specOwed = await this.#screenSpec(project, task, want.screens ? null : s.specAtStart, revised.screens, s.specFor);
+      critique = null;
+      if (s.crossChecked) {
+        const checked = await this.#reviewer.redTeam({ scope, author: 'native-claude', pref: s.reviewerPref, request: task.prompt, plan: planText(revised), anchor: anchor ? renderAnchorTable(anchor) : null, signal: s.signal });
+        s.record.planReviewer = checked.reviewer;
+        critique = checked.result;
+        s.checkCancel();
+      }
+      outcome = await gate.open(scope, revised, critique, s.signal);
+    }
   }
 
   /**
@@ -1040,6 +1156,23 @@ export class Harness {
 function pickOf(task: Task): EnginePick | null {
   const engine = EngineId.nullable().catch(null).parse(task.enginePref);
   return engine === null ? null : { engine, model: task.modelPref, effort: Effort.nullable().catch(null).parse(task.effortPref) };
+}
+
+/** A plan as it was stored for the owner to read. Stored by daemon code from a plan that held; read back as that. */
+function storedPlan(row: PlanVersionRow): Plan {
+  return Plan.parse(JSON.parse(row.planJson));
+}
+
+/** The cross-reviewer's critique stored with a plan version, if it had one and it still reads as one. */
+function storedCritique(row: PlanVersionRow): PlanCritique | null {
+  if (row.reviewerNotes === null) return null;
+  const read = PlanCritique.safeParse(JSON.parse(row.reviewerNotes));
+  return read.success ? read.data : null;
+}
+
+/** The owner's notes on a plan, for the planner. A quoted passage is the plan's own text, a model's: it travels as data. */
+function ownerNotes(feedback: readonly PlanFeedback[]): string {
+  return feedback.map((note, i) => `${i + 1}. ${note.quote ? `About this passage of the plan:\n${untrusted('engine-output', note.quote)}\n` : 'About the plan as a whole:\n'}${note.comment}`).join('\n\n');
 }
 
 /** A plan as text, for a prompt. A model wrote it from the request and a file listing: callers fence it as data where it is quoted to another model. */

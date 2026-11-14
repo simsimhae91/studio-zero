@@ -117,6 +117,9 @@ export function createHandlers(studio: Studio, deps: HandlerDeps): Handlers {
       return { deleted: true as const };
     },
 
+    'plans.list': (p) => studio.listPlanVersions(p.taskId),
+    'plans.resolve': (p) => studio.resolvePlanReview(OWNER, p),
+
     'approvals.list': (p) => ({ approvals: studio.listApprovals(p.state) }),
     'approvals.resolve': (p) => studio.resolveApproval(p.approvalId, p.decision, 'desktop'),
 

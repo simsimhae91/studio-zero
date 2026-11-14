@@ -122,6 +122,12 @@ const screens: { name: string; url: string; go: (page: Page, narrow: boolean) =>
   { name: 'audit', url: '/?demo', go: workspaceTab('Ledger', '감사') },
   { name: 'audit-unreviewed', url: '/?demo', go: workspaceTab('Atlas 모바일', '감사') },
   { name: 'task-suspended', url: '/?demo', go: openFromIndex('Atlas 모바일') },
+  { name: 'plan-review', url: '/?demo', go: workspaceTab('Harbor 예약', '계획') },
+  { name: 'plan-review-diff', url: '/?demo', go: async (page, narrow) => {
+    await workspaceTab('Harbor 예약', '계획')(page, narrow);
+    await page.getByRole('button', { name: '앞 안과 비교' }).click();
+    await page.getByRole('region', { name: /1번째 안과 2번째 안의 차이/ }).waitFor();
+  } },
   { name: 'ledger', url: '/?demo', go: workspaceTab('Ledger', '장부') },
   { name: 'quota', url: '/?demo', go: async (page) => {
     await page.getByRole('button', { name: '구독 사용 현황' }).click();

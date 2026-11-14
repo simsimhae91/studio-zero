@@ -1,6 +1,7 @@
+import { z } from 'zod';
 import type { EventEnvelope, ReviewerPref, Task } from '@studio-zero/protocol';
 import type { Studio } from '../app/Studio.ts';
-import type { Store } from '../db/Store.ts';
+import type { PlanVersionRow, Store } from '../db/Store.ts';
 import type { EventLog } from '../events/EventLog.ts';
 import type { Actor } from '../policy/actions.ts';
 import { errorMessage } from '../util/core.ts';
@@ -80,6 +81,18 @@ export class RelayCore {
     const say = (...lines: Line[]): void => this.#d.send(chat, { lines });
     const [command = '', ...rest] = text.split(/\s+/);
 
+    // After [수정 요청] on a plan, the next message that is not a command is what to change in it.
+    const change = command.startsWith('/') ? null : this.#planChange(chat);
+    if (change) {
+      store.kvDelete(planChangeKey(channel, chat));
+      try {
+        await studio.resolvePlanReview(this.#actor, { taskId: change.taskId, version: change.version, planHash: change.hash, verdict: 'changes', feedback: [{ comment: text.slice(0, 2000) }] });
+        return say(['계획 수정 요청을 보냈습니다. 새 계획이 나오면 다시 알려 드립니다.']);
+      } catch (err) {
+        return say([`수정 요청을 보내지 못했습니다: ${errorMessage(err)}`]);
+      }
+    }
+
     switch (command.toLowerCase().replace(/@.*$/, '')) {
       case '/start':
       case '/help':
@@ -104,7 +117,7 @@ export class RelayCore {
       case '/status': {
         const { activeProjectId } = store.getChat(channel, chat);
         const project = activeProjectId ? store.getProject(activeProjectId) : null;
-        const tasks = studio.listTasks(project?.id, 50).filter((t) => t.state === 'running' || t.state === 'awaiting_approval' || t.state === 'queued' || t.state === 'suspended' || t.state === 'parked');
+        const tasks = studio.listTasks(project?.id, 50).filter((t) => t.state === 'running' || t.state === 'awaiting_approval' || t.state === 'awaiting_plan_review' || t.state === 'queued' || t.state === 'suspended' || t.state === 'parked');
         return say(
           ['프로젝트: ', bold(project ? project.name : '선택 안 됨')],
           [`대기 중인 승인: ${studio.listApprovals('pending').length}건`],
@@ -134,7 +147,7 @@ export class RelayCore {
       case '/cancel': {
         const projectId = this.#activeProject(chat);
         if (!projectId) return;
-        const running = studio.listTasks(projectId, 20).find((t) => t.state === 'running' || t.state === 'awaiting_approval' || t.state === 'queued' || t.state === 'suspended' || t.state === 'parked');
+        const running = studio.listTasks(projectId, 20).find((t) => t.state === 'running' || t.state === 'awaiting_approval' || t.state === 'awaiting_plan_review' || t.state === 'queued' || t.state === 'suspended' || t.state === 'parked');
         if (!running) return say(['취소할 작업이 없습니다.']);
         studio.cancelTask(running.id);
         return say(['작업 ', code(running.id), ' 취소를 요청했습니다.']);
@@ -209,6 +222,21 @@ export class RelayCore {
           await studio.rollback(this.#actor, task.projectId, task.baseCheckpointId);
           return { reply: '작업 시작 전 상태로 되돌렸습니다.', spent: true };
         }
+        case 'k':
+        case 'e': {
+          // A plan's buttons name the version and the head of its hash: a tap on a plan that has since changed is refused.
+          const [, , version = '', head = ''] = action.split(':');
+          const row = store.listPlanVersions(id).find((v) => String(v.version) === version);
+          if (!row || !row.sha256.startsWith(head) || head.length < PLAN_HASH_HEAD) throw new Error('이 계획은 더 이상 기다리고 있지 않습니다. 최신 계획 메시지에서 답해 주세요.');
+          if (kind === 'k') {
+            await studio.resolvePlanReview(this.#actor, { taskId: id, version: row.version, planHash: row.sha256, verdict: 'approve' });
+            return { reply: '계획을 승인했습니다. 구현을 시작합니다.', spent: true };
+          }
+          const latest = store.latestPlanVersion(id);
+          if (!latest || latest.version !== row.version || latest.verdict !== null) throw new Error('이 계획은 더 이상 기다리고 있지 않습니다. 최신 계획 메시지에서 답해 주세요.');
+          store.kvSet(planChangeKey(channel, chat), JSON.stringify({ taskId: id, version: row.version, hash: row.sha256 }));
+          return { reply: '고칠 내용을 메시지 하나로 보내 주세요.', spent: false };
+        }
         case 'r': {
           const projectId = store.getCheckpoint(id)?.projectId;
           if (!projectId) throw new Error('체크포인트를 찾을 수 없습니다.');
@@ -221,6 +249,14 @@ export class RelayCore {
     } catch (err) {
       return { reply: `실패: ${errorMessage(err)}`, spent: false };
     }
+  }
+
+  /** The plan this chat was asked to describe changes to, if it still waits for them. */
+  #planChange(chat: string): z.infer<typeof PlanChange> | null {
+    const raw = this.#d.store.kvGet(planChangeKey(this.#d.channel, chat));
+    if (raw === null) return null;
+    const read = PlanChange.safeParse(JSON.parse(raw));
+    return read.success ? read.data : null;
   }
 
   #activeProject(chat: string): string | null {
@@ -243,6 +279,19 @@ export class RelayCore {
     switch (body.type) {
       case 'approval.requested':
         return this.#broadcast({ ...approvalMessage(body.approvalId, body.summary, body.expiresAt), priority: 'high' });
+      case 'plan.review_requested': {
+        const task = e.taskId === null ? null : this.#d.store.getTask(e.taskId);
+        if (!task) return;
+        const versions = this.#d.store.listPlanVersions(task.id);
+        const row = versions.find((v) => v.version === body.version);
+        if (row) this.#broadcast({ ...planMessage(task, this.#d.store.getProject(task.projectId)?.name ?? task.projectId, row, versions.find((v) => v.version === body.version - 1) ?? null), priority: 'high' });
+        return;
+      }
+      case 'plan.review_resolved': {
+        // Answered here, on the desktop or by the clock: a change request this chat was about to write is moot.
+        for (const chat of this.#d.owners()) if (e.taskId !== null && this.#planChange(chat)?.taskId === e.taskId) this.#d.store.kvDelete(planChangeKey(this.#d.channel, chat));
+        return;
+      }
       case 'task.state': {
         if (e.taskId === null || (body.state !== 'succeeded' && body.state !== 'failed')) return;
         const task = this.#d.store.getTask(e.taskId);
@@ -322,6 +371,44 @@ const subscriptionName: Record<ReviewerPref, string> = { 'claude-code': 'Claude'
 export function localTime(at: number): string {
   const d = new Date(at);
   return `${d.getMonth() + 1}월 ${d.getDate()}일 ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
+/** How much of a plan's hash a button carries (a button's action is at most 64 bytes). Enough to tell versions apart. */
+const PLAN_HASH_HEAD = 16;
+const PlanChange = z.object({ taskId: z.string(), version: z.number().int(), hash: z.string() });
+const planChangeKey = (channel: string, chat: string): string => `relay.planChange:${channel}:${chat}`;
+const PlanSteps = z.object({ summary: z.string(), steps: z.array(z.string()) });
+
+/**
+ * A plan waiting for the owner, for a phone: its summary, how many steps, and from the second version on which
+ * step lines are new and which are gone. The whole plan, its notes and passage comments are on the desktop.
+ */
+export function planMessage(task: Task, projectName: string, row: PlanVersionRow, previous: PlanVersionRow | null): OutMessage {
+  const read = (r: PlanVersionRow): z.infer<typeof PlanSteps> | null => {
+    const parsed = PlanSteps.safeParse(JSON.parse(r.planJson));
+    return parsed.success ? parsed.data : null;
+  };
+  const plan = read(row);
+  const before = previous ? read(previous) : null;
+  const clip = (line: string): string => (line.length > 160 ? `${line.slice(0, 159)}…` : line);
+  const lines: Line[] = [[bold(projectName), ' · ', code(task.id)], [bold(`계획 ${row.version}번째 안`), '을 봐 주세요. 승인하면 구현을 시작합니다.'], [], [clip(plan?.summary.trim() ?? '')], [`단계 ${plan?.steps.length ?? 0}개`]];
+  if (plan && before) {
+    const added = plan.steps.filter((step) => !before.steps.includes(step));
+    const removed = before.steps.filter((step) => !plan.steps.includes(step));
+    if (added.length + removed.length === 0) lines.push(['앞 안과 단계는 같습니다.']);
+    for (const step of added.slice(0, 5)) lines.push([`+ ${clip(step)}`]);
+    for (const step of removed.slice(0, 5)) lines.push([`− ${clip(step)}`]);
+  }
+  const ref = `${task.id}:${row.version}:${row.sha256.slice(0, PLAN_HASH_HEAD)}`;
+  return {
+    lines,
+    buttons: [
+      [
+        { label: '승인', action: `k:${ref}` },
+        { label: '수정 요청', action: `e:${ref}` },
+      ],
+    ],
+  };
 }
 
 export function approvalMessage(approvalId: string, summary: string, expiresAt: number): OutMessage {

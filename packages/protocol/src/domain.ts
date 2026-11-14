@@ -18,8 +18,11 @@ export type TaskKind = z.infer<typeof TaskKind>;
  * `parked`: the engine's subscription refused the work for a usage limit and said when the limit resets. The
  * task holds no slot; at `parkedUntil` the daemon queues it again, and it goes on from the work it had committed
  * on its branch when it stopped. A task is parked a bounded number of times (`parkCount`), then fails.
+ *
+ * `awaiting_plan_review`: the owner asked to see the plan before code (`reviewPlan`). The plan is stored as a
+ * version and the task waits for the owner's verdict on it, holding its project's slot as `awaiting_approval` does.
  */
-export const TaskState = z.enum(['queued', 'running', 'awaiting_approval', 'suspended', 'parked', 'succeeded', 'failed', 'cancelled']);
+export const TaskState = z.enum(['queued', 'running', 'awaiting_approval', 'awaiting_plan_review', 'suspended', 'parked', 'succeeded', 'failed', 'cancelled']);
 export type TaskState = z.infer<typeof TaskState>;
 
 export const Phase = z.enum(['plan', 'execute', 'verify', 'reflect', 'evolve']);
@@ -131,6 +134,8 @@ export const Task = z.object({
   parkedUntil: z.number().int().nullable(),
   /** How many times this task has been parked for a usage limit. */
   parkCount: z.number().int(),
+  /** Whether the task stops after planning for the owner to approve the plan (see `plans.resolve`). Absent from daemons before this existed. */
+  reviewPlan: z.boolean().optional(),
   createdAt: z.number().int(),
   startedAt: z.number().int().nullable(),
   finishedAt: z.number().int().nullable(),
@@ -181,6 +186,29 @@ export const Approval = z.object({
   resolvedVia: Origin.nullable(),
 });
 export type Approval = z.infer<typeof Approval>;
+
+/** One passage of a plan the owner marked, and what they said about it. Without `quote`, a note on the plan as a whole. */
+export const PlanFeedback = z.object({ quote: z.string().max(1000).optional(), comment: z.string().trim().min(1).max(2000) });
+export type PlanFeedback = z.infer<typeof PlanFeedback>;
+
+/**
+ * One version of a task's plan as the owner was shown it. `planMarkdown` is rendered from the planner's
+ * structured plan by daemon code, and `sha256` is its hash: a verdict names the hash it was given on, so it
+ * cannot land on a plan that changed since. `reviewerNotes` is the cross-reviewer's critique of this version
+ * (another vendor's model), absent when there was none. `verdict` is null while the version waits.
+ */
+export const PlanVersion = z.object({
+  taskId: z.string(),
+  version: z.number().int().min(1),
+  planMarkdown: z.string(),
+  sha256: z.string(),
+  reviewerNotes: z.string().nullable(),
+  verdict: z.enum(['approve', 'changes']).nullable(),
+  feedback: z.array(PlanFeedback),
+  createdAt: z.number().int(),
+  resolvedAt: z.number().int().nullable(),
+});
+export type PlanVersion = z.infer<typeof PlanVersion>;
 
 export const Checkpoint = z.object({
   id: z.string(),

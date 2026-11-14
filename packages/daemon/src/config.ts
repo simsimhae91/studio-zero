@@ -172,6 +172,19 @@ export const ConfigSchema = z.object({
       maxWaitHours: z.number().min(0).max(24 * 7).default(6),
     })
     .prefault({}),
+  planReview: z
+    .object({
+      /**
+       * Whether a task the owner submitted without saying stops after planning for them to approve the plan.
+       * Off: the studio drafts first and asks nothing ("질문 없이 초안부터"); the owner turns it on per task.
+       */
+      defaultOn: z.boolean().default(false),
+      /** How long a plan waits for the owner. Past it the task stops, with its plan versions kept. */
+      timeoutHours: z.number().positive().max(24 * 7).default(24),
+      /** How many times the owner may send a plan back for changes. Approving stays open after the last. */
+      maxRevisions: z.number().int().min(0).max(10).default(3),
+    })
+    .prefault({}),
   scheduler: z
     .object({
       /** Whether the owner's schedules fire. Off, they are kept and can still be listed and changed. */

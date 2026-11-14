@@ -215,6 +215,15 @@ const rules: Rule[] = [
     },
   },
   {
+    // Whether a plan is good enough to build is the owner's call, from any of their channels. An agent cannot
+    // approve the plan it is about to be held to, and the harness does not answer for the owner.
+    id: 'plan.review-owner-only',
+    evaluate: (actor, action) => {
+      if (action.kind !== 'plan.review.resolve') return undefined;
+      return actor.type === 'owner' ? allow('owner-reviewed') : deny('only the owner can approve a plan or send it back');
+    },
+  },
+  {
     // A schedule starts paid work later with nobody watching. Only the owner sets one up; nothing an agent reads
     // or writes can, so injected text cannot book work for itself. Each run is still a `task.submit`.
     id: 'schedule.configure-owner-only',

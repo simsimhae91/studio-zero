@@ -167,7 +167,7 @@ export class NtfyRelay {
   async #publish(message: OutMessage): Promise<void> {
     const [first, ...rest] = message.lines;
     // Buttons that need a follow-up message (choosing a project, describing a change) have no meaning here.
-    const buttons = (message.buttons ?? []).flat().filter((b) => !b.action.startsWith('f:') && !b.action.startsWith('p:')).slice(0, MAX_ACTIONS);
+    const buttons = (message.buttons ?? []).flat().filter((b) => !b.action.startsWith('f:') && !b.action.startsWith('p:') && !b.action.startsWith('e:')).slice(0, MAX_ACTIONS);
     const body = {
       topic: this.#topic,
       title: renderPlain(first ? [first] : []).slice(0, 200) || 'Studio Zero',

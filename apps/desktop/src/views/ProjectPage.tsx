@@ -1,5 +1,5 @@
 import * as Tabs from '@radix-ui/react-tabs';
-import { Check, ChevronDown, FileText, Film, FolderTree, GitFork, GitMerge, Globe, History as HistoryIcon, KeyRound, Lightbulb, Maximize2, MessageCircleQuestion, Monitor, MoreHorizontal, Pencil, Plus, ReceiptText, RotateCw, ScanEye, Smartphone, Sparkles, Square, SquareTerminal, Star, Trash2, X, Power } from 'lucide-react';
+import { Check, ChevronDown, ClipboardList, FileText, Film, FolderTree, GitFork, GitMerge, Globe, History as HistoryIcon, KeyRound, Lightbulb, Maximize2, MessageCircleQuestion, Monitor, MoreHorizontal, Pencil, Plus, ReceiptText, RotateCw, ScanEye, Smartphone, Sparkles, Square, SquareTerminal, Star, Trash2, X, Power } from 'lucide-react';
 import { Suspense, lazy, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { ReviewerPref, type AdvisorId, type Approval, type Project, type Session, type Task, type TaskKind, type TaskState, type TaskTrack } from '@studio-zero/protocol';
 import { Markdown } from '@studio-zero/ax/react';
@@ -19,6 +19,7 @@ import { Audit } from './panels/Audit.tsx';
 import { FileTree } from './panels/FileTree.tsx';
 import { History } from './panels/History.tsx';
 import { Learning } from './panels/Learning.tsx';
+import { PlanReview } from './panels/PlanReview.tsx';
 import { Ledger } from './panels/Ledger.tsx';
 import { SCREEN_SPEC_FILE, ScreenSpecView, useScreenSpec } from './panels/ScreenSpecView.tsx';
 import { Preview } from './panels/Preview.tsx';
@@ -29,7 +30,7 @@ import type { Route } from './Shell.tsx';
 // The terminal emulator is the largest thing in the client: fetched when the terminal tab is first opened.
 const InteractiveTerminal = lazy(() => import('./panels/InteractiveTerminal.tsx').then((m) => ({ default: m.InteractiveTerminal })));
 
-type TabId = 'preview' | 'files' | 'terminal' | 'history' | 'audit' | 'ledger' | 'proposals' | 'learning';
+type TabId = 'preview' | 'plan' | 'files' | 'terminal' | 'history' | 'audit' | 'ledger' | 'proposals' | 'learning';
 /** Addresses typed into the reference field: up to three, separated by spaces, commas or new lines. */
 const referencesOf = (text: string): string[] => text.split(/[\s,]+/).filter((part) => part !== '').slice(0, 3);
 type Pane = 'chat' | 'work';
@@ -50,8 +51,8 @@ const PANES: readonly { id: Pane; label: string }[] = [
 ];
 const DEFAULT_SESSION = 'default';
 const advisorName: Record<AdvisorId, string> = { codex: 'Codex', gemini: 'Gemini' };
-const live = (state: TaskState): boolean => state === 'queued' || state === 'running' || state === 'awaiting_approval';
-const stateTone = { queued: 'neutral', running: 'active', awaiting_approval: 'warn', suspended: 'warn', parked: 'warn', succeeded: 'good', failed: 'bad', cancelled: 'neutral' } as const;
+const live = (state: TaskState): boolean => state === 'queued' || state === 'running' || state === 'awaiting_approval' || state === 'awaiting_plan_review';
+const stateTone = { queued: 'neutral', running: 'active', awaiting_approval: 'warn', awaiting_plan_review: 'warn', suspended: 'warn', parked: 'warn', succeeded: 'good', failed: 'bad', cancelled: 'neutral' } as const;
 const sandboxLabel = { running: '샌드박스 실행 중', stopped: '샌드박스 꺼짐', absent: '샌드박스 없음' } as const;
 
 /** The documents a deep-track task leaves behind, and what each is. */
@@ -120,6 +121,8 @@ function Workbench({ project, onOpen, onChanged }: { project: Project; onOpen: (
   // 'auto' pairs the reviewer with the engine (never its own vendor); anything else is the owner's pick.
   const [reviewer, setReviewer] = useState<ReviewerPref | 'auto'>('auto');
   const [references, setReferences] = useState('');
+  // Off unless the owner turns it on for the next task: the studio drafts first and asks nothing.
+  const [reviewPlan, setReviewPlan] = useState(false);
   const core = project.template === 'studio-core';
   const [renaming, setRenaming] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -137,8 +140,11 @@ function Workbench({ project, onOpen, onChanged }: { project: Project; onOpen: (
   const inSession = bySession(session);
   const active = inSession.findLast((t) => live(t.state)) ?? null;
   const selected = inSession.find((t) => t.id === picked[key]) ?? active ?? inSession.at(-1) ?? null;
-  const steering = active !== null && active.state !== 'queued';
-  const busy = list.some((t) => t.state === 'running' || t.state === 'awaiting_approval');
+  // A task waiting on its plan is not at work: there is nothing to steer, the plan is answered in its own panel.
+  const steering = active !== null && active.state !== 'queued' && active.state !== 'awaiting_plan_review';
+  const busy = list.some((t) => t.state === 'running' || t.state === 'awaiting_approval' || t.state === 'awaiting_plan_review');
+  // The plan a task is waiting with, or the plan of the task in view if it was one the owner asked to see.
+  const planTask = list.findLast((t) => t.state === 'awaiting_plan_review') ?? (selected?.reviewPlan ? selected : null);
   const ready = list.some((t) => t.state === 'succeeded' && t.kind !== 'ideate');
   // A project that started as a draft keeps iterating as one, until the owner asks for the full checks.
   const track = trackChoice ?? list.findLast((t) => t.kind !== 'ideate')?.track ?? 'fast';
@@ -149,6 +155,17 @@ function Workbench({ project, onOpen, onChanged }: { project: Project; onOpen: (
     setVisited((prev) => new Set(prev).add(next));
     setPane('work');
   };
+  // A plan that starts waiting for the owner opens in the right-hand pane; the pane goes back to the preview when no plan is left to show.
+  const waitingPlan = list.findLast((t) => t.state === 'awaiting_plan_review')?.id ?? null;
+  useEffect(() => {
+    if (waitingPlan === null) return;
+    setTab('plan');
+    setVisited((prev) => new Set(prev).add('plan'));
+  }, [waitingPlan]);
+  const hasPlan = planTask !== null;
+  useEffect(() => {
+    if (tab === 'plan' && !hasPlan) setTab('preview');
+  }, [tab, hasPlan]);
   const pickSession = (id: string | null): void => {
     setSessionId(id);
     setSeen((prev) => new Set(prev).add(id ?? DEFAULT_SESSION));
@@ -159,7 +176,8 @@ function Workbench({ project, onOpen, onChanged }: { project: Project; onOpen: (
     // The cross-checks and the reference kit belong to a full build: a draft has neither a plan nor a review.
     const designed = as.kind === 'build' && as.track === 'full';
     const refs = designed && !core ? referencesOf(references) : [];
-    const task = await backend.call('tasks.submit', { projectId: project.id, kind: as.kind, prompt, track: as.track, ...(session ? { sessionId: session } : {}), ...((as.baseBranch ?? fork) ? { baseBranch: (as.baseBranch ?? fork)! } : {}), ...choice.fields, ...(designed && reviewer !== 'auto' ? { reviewer } : {}), ...(refs.length > 0 ? { references: refs } : {}) });
+    const planned = (as.kind === 'build' || as.kind === 'refactor') && as.track === 'full';
+    const task = await backend.call('tasks.submit', { projectId: project.id, kind: as.kind, prompt, track: as.track, ...(session ? { sessionId: session } : {}), ...((as.baseBranch ?? fork) ? { baseBranch: (as.baseBranch ?? fork)! } : {}), ...choice.fields, ...(designed && reviewer !== 'auto' ? { reviewer } : {}), ...(refs.length > 0 ? { references: refs } : {}), ...(planned && reviewPlan ? { reviewPlan: true } : {}) });
     setFork(null);
     setReferences('');
     setPicked((prev) => ({ ...prev, [key]: task.id }));
@@ -275,8 +293,11 @@ function Workbench({ project, onOpen, onChanged }: { project: Project; onOpen: (
   // Claude can review through its API key or its subscription; the others through their own CLI.
   const reviewers = [{ id: 'auto' as const, label: '자동 짝꿍' }, ...ReviewerPref.options.filter((id) => available.has(id) || (id === 'claude-code' && available.has('native-claude'))).map((id) => ({ id, label: subscriptionLabel[id] }))];
   const designed = kind === 'build' && track === 'full';
+  // Only a full-track build or refactor plans before it codes, so only there is a plan to see first.
+  const plans = (kind === 'build' || kind === 'refactor') && track === 'full';
   const tabs: readonly { id: TabId; label: string; icon: typeof Monitor }[] = [
     { id: 'preview', label: '프리뷰', icon: project.template === 'mobile-expo' ? Smartphone : Monitor },
+    ...(planTask ? [{ id: 'plan' as const, label: '계획', icon: ClipboardList }] : []),
     { id: 'files', label: '파일', icon: FolderTree },
     { id: 'terminal', label: '터미널', icon: SquareTerminal },
     { id: 'history', label: '시점', icon: HistoryIcon },
@@ -289,6 +310,8 @@ function Workbench({ project, onOpen, onChanged }: { project: Project; onOpen: (
     switch (id) {
       case 'preview':
         return <Preview project={project} busy={busy} ready={ready} />;
+      case 'plan':
+        return planTask ? <PlanReview key={planTask.id} task={planTask} /> : null;
       case 'files':
         return <FileTree project={project} openPath={openFile} />;
       case 'terminal':
@@ -453,6 +476,12 @@ function Workbench({ project, onOpen, onChanged }: { project: Project; onOpen: (
                   <Segmented compact label="작업 종류" value={kind} options={KINDS} onChange={setKind} />
                   <Segmented compact label="검증 범위" value={track} options={TRACKS} onChange={setTrackChoice} />
                   <EnginePicker choice={choice} />
+                  {plans ? (
+                    <label title="계획과 교차 검토 의견을 먼저 보여 드리고, 승인해야 코드를 씁니다" className={`${pickerClass} cursor-pointer`}>
+                      <input type="checkbox" checked={reviewPlan} onChange={(e) => setReviewPlan(e.target.checked)} className="size-4 accent-accent" />
+                      계획 먼저 보기
+                    </label>
+                  ) : null}
                   {designed && reviewers.length > 2 ? (
                     <Menu
                       align="start"
@@ -848,6 +877,21 @@ function Passage({ task, items, pending, onShow, onCheckpoint, onFile, onBuild, 
           {task.state === 'queued' ? '차례를 기다리는 중' : `${task.phase ? phaseLabel[task.phase] : '준비'} 중`}
           {task.state === 'running' && task.startedAt !== null ? <Elapsed since={task.startedAt} /> : null}, 토큰 {tokens(task.spentTokens)} / {tokens(task.budgetTokens)}
         </Working>
+      ) : null}
+      {task.state === 'awaiting_plan_review' ? (
+        <div className="flex flex-col gap-3 rounded-lg border border-warning bg-surface px-4 py-3">
+          <span className="text-sm font-medium text-warning">계획 검토 대기</span>
+          <p className="text-base">계획이 나왔습니다. 승인 전에는 코드를 쓰지 않습니다.</p>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="primary" onClick={() => onShow('plan')} icon={<ClipboardList className="size-4" aria-hidden />}>
+              계획 보기
+            </Button>
+            <Button busy={drop.busy} onClick={() => void drop.run()} icon={<Square className="size-4" aria-hidden />}>
+              작업 중단
+            </Button>
+          </div>
+          {drop.error ? <Problem>{drop.error}</Problem> : null}
+        </div>
       ) : null}
       {/* Stopped from the task itself, where it says it is running or waiting: not only from the field below. */}
       {task.state === 'running' || task.state === 'queued' ? (

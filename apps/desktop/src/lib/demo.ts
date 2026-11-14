@@ -1,4 +1,4 @@
-import type { Approval, AuditReport, AxBlock, Checkpoint, Eval, EventBody, EventEnvelope, FileEntry, FlowTaskWalk, KnowledgeJob, LedgerEntry, Lesson, MethodName, ParamsOf, Project, ProposalCard, ResultOf, SandboxInfo, ScratchEntry, Scratchpad, ScreenSpec, Session, SubscriptionQuota, Task, OwnerSettings } from '@studio-zero/protocol';
+import type { Approval, PlanVersion, AuditReport, AxBlock, Checkpoint, Eval, EventBody, EventEnvelope, FileEntry, FlowTaskWalk, KnowledgeJob, LedgerEntry, Lesson, MethodName, ParamsOf, Project, ProposalCard, ResultOf, SandboxInfo, ScratchEntry, Scratchpad, ScreenSpec, Session, SubscriptionQuota, Task, OwnerSettings } from '@studio-zero/protocol';
 import { matchesFilter } from '@studio-zero/protocol';
 import type { Backend } from './backend.ts';
 
@@ -17,11 +17,17 @@ const projects: Project[] = [
   { id: 'prj_atlas', slug: 'atlas', name: 'Atlas 모바일', template: 'mobile-expo', createdAt: min(-300) },
   { id: 'prj_tide', slug: 'tide', name: 'Tide 정산', template: 'web-vite-react', createdAt: min(-70) },
   { id: 'prj_pace', slug: 'pace', name: 'Pace 2주 식단', template: 'mobile-expo', createdAt: min(-12) },
+  { id: 'prj_harbor', slug: 'harbor', name: 'Harbor 예약', template: 'web-vite-react', createdAt: min(-40) },
 ];
 
 const baseTask = { projectId: 'prj_ledger', origin: 'desktop', engine: 'native-claude', model: 'claude-opus-5-5', budgetTokens: 2_000_000, error: null, baseBranch: null, enginePref: null, modelPref: null, effort: 'high', effortPref: null, sessionId: null, reviewerPref: null, references: [] as string[], track: 'full', parkedUntil: null, parkCount: 0 } as const;
 const sessions: Session[] = [{ id: 'ses_refactor', projectId: 'prj_ledger', name: 'refactor/dates', createdAt: min(-241) }];
 const tasks: Task[] = [
+  {
+    // A build the owner asked to see the plan of first: sent back once with a note, now waiting on the second version.
+    ...baseTask, id: 'tsk_harbor_plan', projectId: 'prj_harbor', kind: 'build', prompt: '정박지 예약 현황판을 만들어줘. 오늘 들어오는 배가 먼저 보여야 한다.', state: 'awaiting_plan_review', phase: 'plan', branch: 'sz/tsk_harbor_plan', reviewPlan: true,
+    spentTokens: 96_400, spentUsdMicros: 410_000, baseCheckpointId: null, summary: null, createdAt: min(-9), startedAt: min(-9), finishedAt: null,
+  },
   {
     // A design task still at work: the documents are written and two directions are being drawn side by side.
     ...baseTask, id: 'tsk_pace_design', projectId: 'prj_pace', engine: 'claude-code', model: 'opus', kind: 'ideate', prompt: '둘씩 짝지어 2주 동안 같이 하는 식단 기록 앱. 상대가 오늘 기록했는지가 먼저 보여야 한다.', state: 'running', phase: 'execute', branch: 'sz/tsk_pace_design',
@@ -54,6 +60,71 @@ const tasks: Task[] = [
     ...baseTask, id: 'tsk_refactor', kind: 'refactor', prompt: '날짜 포맷 함수를 한 곳으로 모아줘', engine: 'claude-code', model: 'opus', state: 'failed', phase: null, branch: 'sz/tsk_refactor', sessionId: 'ses_refactor',
     spentTokens: 96_200, spentUsdMicros: 0, baseCheckpointId: 'ckp_0', summary: null, error: 'verification still failing after 3 corrections: compiler', createdAt: min(-240), startedAt: min(-240), finishedAt: min(-231),
   },
+];
+
+/** The Harbor build's plan: the first version as the owner sent it back, and the second, waiting. */
+const harborPlanV1 = `## 요약
+
+정박지 예약을 표 한 장으로 보여 줍니다. 행은 정박지, 열은 날짜이고 예약된 칸을 칠합니다.
+
+## 단계
+
+1. src/data/berths.ts에 정박지 12곳과 2주치 예약 예시 데이터를 정의
+2. 정박지 × 날짜 표를 src/routes/Board.tsx에 구성
+3. 칸을 누르면 예약 상세를 옆 패널에 표시
+4. 빈 상태와 불러오기 실패 문구 작성
+
+## 끝나고 볼 화면
+
+- \`/\`
+
+## 가정한 것
+
+- 정박지 수는 20곳을 넘지 않는다고 가정했습니다.
+`;
+const harborPlanV2 = `## 요약
+
+오늘 들어오는 배를 맨 위에 도착 시각 순으로 세우고, 그 아래에 정박지별 2주 예약 표를 둡니다.
+
+## 단계
+
+1. src/data/berths.ts에 정박지 12곳과 2주치 예약 예시 데이터를 정의
+2. 오늘 입항 목록을 src/routes/Board.tsx 맨 위에 도착 시각 순으로 구성
+3. 그 아래에 정박지 × 날짜 표를 두고 오늘 열을 강조
+4. 칸을 누르면 예약 상세를 옆 패널에 표시
+5. 빈 상태와 불러오기 실패 문구 작성
+
+## 끝나고 볼 화면
+
+- \`/\`
+
+## 가정한 것
+
+- 정박지 수는 20곳을 넘지 않는다고 가정했습니다.
+- 도착 시각은 예약에 적힌 예정 시각을 씁니다.
+`;
+const planVersions: PlanVersion[] = [
+  {
+    taskId: 'tsk_harbor_plan', version: 1, planMarkdown: harborPlanV1, sha256: 'a'.repeat(64), verdict: 'changes', createdAt: min(-7), resolvedAt: min(-5),
+    reviewerNotes: '표가 화면의 주인이라 요청의 "오늘 들어오는 배"가 칸 하나로 묻힙니다.\n\nGaps:\n- 입항 시각이 바뀐 예약을 어떻게 보여 줄지 계획에 없습니다.',
+    feedback: [{ quote: '행은 정박지, 열은 날짜이고 예약된 칸을 칠합니다.', comment: '표보다 오늘 들어오는 배 목록이 먼저입니다. 표는 그 아래로 내려 주세요.' }],
+  },
+  {
+    taskId: 'tsk_harbor_plan', version: 2, planMarkdown: harborPlanV2, sha256: 'b'.repeat(64), verdict: null, createdAt: min(-3), resolvedAt: null, feedback: [],
+    reviewerNotes: '오늘 입항 목록이 먼저 나와 요청과 맞습니다.\n\nGaps:\n- 늦게 도착한 배를 목록에서 어떻게 구분할지 정해 두면 좋습니다.',
+  },
+];
+const harborBodies: EventBody[] = [
+  { type: 'task.state', state: 'running', error: null },
+  { type: 'task.phase', phase: 'plan', round: 0 },
+  { type: 'plan.created', summary: '정박지 예약을 표 한 장으로 보여 줍니다.', steps: ['정박지와 예약 예시 데이터 정의', '정박지 × 날짜 표 구성', '예약 상세 패널', '빈 상태와 실패 문구'], auditRoutes: ['/'], appliedLessonIds: [] },
+  { type: 'review.completed', stage: 'plan', reviewer: 'codex', verdict: 'noted', points: ['표가 화면의 주인이라 오늘 들어오는 배가 칸 하나로 묻힙니다.'], reason: null, durationMs: 38_000 },
+  { type: 'plan.review_requested', version: 1, planHash: 'a'.repeat(64) },
+  { type: 'plan.review_resolved', version: 1, outcome: 'changes' },
+  { type: 'plan.created', summary: '오늘 들어오는 배를 맨 위에 세우고, 그 아래에 정박지별 예약 표를 둡니다.', steps: ['정박지와 예약 예시 데이터 정의', '오늘 입항 목록', '정박지 × 날짜 표', '예약 상세 패널', '빈 상태와 실패 문구'], auditRoutes: ['/'], appliedLessonIds: [] },
+  { type: 'review.completed', stage: 'plan', reviewer: 'codex', verdict: 'noted', points: ['늦게 도착한 배를 목록에서 어떻게 구분할지 정해 두면 좋습니다.'], reason: null, durationMs: 31_000 },
+  { type: 'plan.review_requested', version: 2, planHash: 'b'.repeat(64) },
+  { type: 'task.state', state: 'awaiting_plan_review', error: null },
 ];
 
 const approvals: Approval[] = [
@@ -150,6 +221,7 @@ const events: EventEnvelope[] = [
   ...bodies.map((body, i): EventEnvelope => ({ seq: 100 + i, at: min(-18) + i * 35_000, projectId: 'prj_ledger', taskId: 'tsk_detail', body })),
   ...designBodies.map((body, i): EventEnvelope => ({ seq: 40 + i, at: min(-66) + i * 50_000, projectId: 'prj_tide', taskId: 'tsk_tide_design', body })),
   ...draftingBodies.map((body, i): EventEnvelope => ({ seq: 70 + i, at: min(-12) + i * 38_000, projectId: 'prj_pace', taskId: 'tsk_pace_design', body })),
+  ...harborBodies.map((body, i): EventEnvelope => ({ seq: 900 + i, at: min(-9) + i * 40_000, projectId: 'prj_harbor', taskId: 'tsk_harbor_plan', body })),
 ];
 
 /** The Tide design task's three first screens: small real pages, each arranged its own way, in the project's tokens. */
@@ -448,7 +520,7 @@ const handlers: Handlers = {
   }),
   // Cursor's level is part of its model names; the others take it as a setting of their own.
   'engines.models': (p) => ({ models: demoModels[p.engine] ?? [], efforts: p.engine === 'cursor' || p.engine === 'antigravity' ? [] : ['low', 'medium', 'high', 'xhigh', 'max'] }),
-  'projects.list': () => ({ projects, live: [{ projectId: 'prj_core', sandbox: 'running', busy: false }, { projectId: 'prj_ledger', sandbox: 'running', busy: true }, { projectId: 'prj_atlas', sandbox: 'stopped', busy: false }, { projectId: 'prj_tide', sandbox: 'stopped', busy: false }, { projectId: 'prj_pace', sandbox: 'running', busy: true }] }),
+  'projects.list': () => ({ projects, live: [{ projectId: 'prj_core', sandbox: 'running', busy: false }, { projectId: 'prj_ledger', sandbox: 'running', busy: true }, { projectId: 'prj_atlas', sandbox: 'stopped', busy: false }, { projectId: 'prj_tide', sandbox: 'stopped', busy: false }, { projectId: 'prj_pace', sandbox: 'running', busy: true }, { projectId: 'prj_harbor', sandbox: 'running', busy: true }] }),
   'ledger.list': (p) => ({ entries: ledger.filter((e) => e.projectId === p.projectId) }),
   'external.list': (p) => ({ apis: p.projectId === 'prj_ledger' ? [{ projectId: 'prj_ledger', name: 'tosspay', origin: 'https://api.tosspayments.com', variables: ['SECRET_KEY'], createdAt: min(-200) }] : [] }),
   'power.get': () => ({ mode: 'system', supported: true }),
@@ -469,6 +541,7 @@ const handlers: Handlers = {
   'tasks.list': (p) => ({ tasks: tasks.filter((t) => p.projectId === undefined || t.projectId === p.projectId) }),
   'tasks.get': (p) => tasks.find((t) => t.id === p.taskId)!,
   'approvals.list': (p) => ({ approvals: approvals.filter((a) => p.state === undefined || a.state === p.state) }),
+  'plans.list': (p) => ({ versions: planVersions.filter((v) => v.taskId === p.taskId), revisionsLeft: 2 }),
   'checkpoints.list': (p) => ({ checkpoints: checkpoints.filter((c) => c.projectId === p.projectId) }),
   'audits.list': (p) => ({ audits: [audit, unreviewedAudit].filter((a) => a.projectId === p.projectId).map((a) => ({ id: a.id, taskId: a.taskId, createdAt: a.createdAt, score: a.score, passed: a.passed })) }),
   'audits.get': (p) => (p.auditId === unreviewedAudit.id ? unreviewedAudit : audit),

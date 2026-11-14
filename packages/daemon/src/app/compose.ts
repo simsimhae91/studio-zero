@@ -21,6 +21,7 @@ import { Ledger } from '../harness/Ledger.ts';
 import { LessonBook } from '../harness/LessonBook.ts';
 import { ReflectionAgent } from '../harness/ReflectionAgent.ts';
 import { ReviewResumer } from '../harness/ReviewResumer.ts';
+import { PlanGate } from '../harness/PlanGate.ts';
 import { SandwichReviewer } from '../harness/SandwichReviewer.ts';
 import { SelfHosting } from '../harness/SelfHosting.ts';
 import { Toolbox } from '../harness/Toolbox.ts';
@@ -134,6 +135,7 @@ export interface Daemon {
   router: ModelRouter;
   vision: QaVisionBridge;
   resumer: ReviewResumer;
+  planGate: PlanGate;
   scheduler: Scheduler;
   pty: PtyManager;
   files: SandboxFileService;
@@ -226,7 +228,10 @@ export async function createDaemon(config: Config, log: PinoLogger, overrides: D
   const mockups = new MockupRenderer({ config, store, sandboxes, browser: qaBrowser, auditor, clock, log: log.child({ mod: 'mockups' }) });
   toolbox.useMockups(mockups);
   const scenarios = overrides.scenarios !== undefined ? overrides.scenarios : new ScenarioRunner({ config, sandboxes, browser: qaBrowser, arms });
-  const harness = new Harness({ config, store, events, policy, sandboxes, provisioner, router, claude, evals, compiler, smoke, scenarios, lessons, reflection, refkit, reviewer, ledger, build: new BuildMeter({ sandboxes }), mockups, selfHosting, clock, log: log.child({ mod: 'harness' }) });
+  // A task submitted with `reviewPlan` waits here for the owner's word on its plan. One that was waiting when the
+  // daemon stopped is queued again on boot (see `Store.recoverInterruptedTasks`) and comes back to its stored plan.
+  const planGate = new PlanGate({ store, events, config: config.planReview, clock });
+  const harness = new Harness({ config, store, events, policy, sandboxes, provisioner, router, claude, evals, compiler, smoke, scenarios, lessons, reflection, refkit, reviewer, ledger, build: new BuildMeter({ sandboxes }), mockups, selfHosting, planGate, clock, log: log.child({ mod: 'harness' }) });
   const queue = new TaskQueue({ store, events, execute: (task, signal) => harness.run(task, signal), clock, log: log.child({ mod: 'queue' }) });
   // Tasks suspended for want of a design reviewer are queued again when one answers.
   const resumer = new ReviewResumer({ store, vision, queue, log: log.child({ mod: 'resumer' }) });
@@ -275,7 +280,7 @@ export async function createDaemon(config: Config, log: PinoLogger, overrides: D
   const power: CaffeinateManager = new CaffeinateManager({ log: log.child({ mod: 'power' }), spawn: overrides.powerSpawn, platform: overrides.platform, onChange: (mode) => studio.announcePower(mode) });
   // "Gemini" is reached through Antigravity's CLI, the Google agent this daemon already knows how to confine.
   const advisors = { codex, gemini: antigravity };
-  const studio: Studio = new Studio({ config, store, events, policy, sandboxes, provisioner, arms, queue, vault, claude, router, auditor, evals, lessons, kirby, scratch, knowledge, calibration, steering, mcp, files, mockups, pty, namer, ledger, power, quota, selfHosting, external, advisors, relayStates, clock, log: log.child({ mod: 'studio' }), version: VERSION });
+  const studio: Studio = new Studio({ config, store, events, policy, sandboxes, provisioner, arms, queue, planGate, vault, claude, router, auditor, evals, lessons, kirby, scratch, knowledge, calibration, steering, mcp, files, mockups, pty, namer, ledger, power, quota, selfHosting, external, advisors, relayStates, clock, log: log.child({ mod: 'studio' }), version: VERSION });
 
   // The owner's schedules: each run goes in through the same `submitTask` as a task typed at the desk.
   const scheduler = new Scheduler({ store, events, studio, clock, log: log.child({ mod: 'scheduler' }) });
@@ -358,6 +363,7 @@ export async function createDaemon(config: Config, log: PinoLogger, overrides: D
     router,
     vision,
     resumer,
+    planGate,
     scheduler,
     pty,
     files,

@@ -125,6 +125,13 @@ sequenceDiagram
   H->>E: Plan (Fable 5.2, 구조화 출력) + 고정표 초안
   H->>X: 고정표 검사 → 커밋 (통과 못 하면 여기서 태스크 중단)
   H->>E: 계획 교차 검토 1회 (다른 회사의 모델)
+  opt 소유자가 "계획 먼저 보기"를 켠 태스크 (reviewPlan, 기본 꺼짐)
+    H->>S: 계획을 버전으로 저장 (렌더한 글 + sha256 + 교차 검토 의견) → awaiting_plan_review, 큐 자리를 쥔 채 대기
+    S-->>O: plan.review_requested (데스크톱 계획 탭, Telegram [승인] [수정 요청])
+    O->>S: plans.resolve (버전, 해시, 승인 또는 메모)
+    S->>S: plan.review.resolve 규칙 (소유자만) → 기다리는 버전·해시와 같을 때만
+    H->>E: (수정 요청이면) 메모를 사용자 턴에 넣어 다시 Plan → 고정표 검사·커밋 → 교차 검토 → 다시 대기
+  end
   loop 엔진 턴
     E->>H: tool_use (bash / read / write / edit / find_tools / use_tool)
     H->>S: 정책 평가 (actor = agent)
@@ -203,7 +210,7 @@ sequenceDiagram
 | 가둠, ACP | `bridge/jail.ts`, `bridge/acp.ts`, `bridge/cli.ts` | 자기 도구를 끌 수 없는 CLI를 가두는 macOS 샌드박스 프로필, Agent Client Protocol 클라이언트, CLI 공통 환경. §4.1. |
 | `Toolbox` | `harness/Toolbox.ts` | 도구 6개: 샌드박스용 `bash`, `read_file`, `write_file`, `edit_file`과 외부 도구용 `find_tools`, `use_tool`. 스키마 검증 → 정책 → 샌드박스 또는 MCP 클라이언트 → 결과를 데이터 블록으로. 파일을 바꾼 턴마다 체크포인트를 남긴다. |
 | `WorkspaceProvisioner` | `harness/bootstrap.ts`, `harness/axKit.ts`, `harness/mobileKit.ts` | 샌드박스를 띄우고 프로젝트 고유 테마, 런타임 설명 파일, AX 키트(§12)를 첫 커밋으로 넣는다. 모바일(Expo) 프로젝트에는 모바일 키트(`packages/design/src/mobile`: `MobileShell`, `InteractiveDropzone`, `BottomSheet`, `TactileButton`, 토큰)도 `.studio-zero/mobile-kit`에 넣는다. 이미 있으면 덮어쓰지 않고, 태스크 브랜치를 만든 뒤 한 번 더 확인해서 키트보다 먼저 생긴 프로젝트도 작업 브랜치에서 키트를 받는다. |
-| `Harness`, `TaskQueue` | `harness/Harness.ts`, `queue/TaskQueue.ts` | §8. 큐는 SQLite 위에 있고 재시작 후 중단된 태스크를 한 번 다시 넣는다. 프로젝트당 동시 1건. 사용 한도로 멈춘(`parked`) 태스크를 풀리는 시각에 다시 넣는 타이머 하나도 큐에 있다(§20). |
+| `Harness`, `TaskQueue` | `harness/Harness.ts`, `queue/TaskQueue.ts` | §8. 큐는 SQLite 위에 있고 재시작 후 중단된 태스크를 한 번 다시 넣는다(계획 검토를 기다리던 태스크는 재시도 횟수를 쓰지 않고 다시 넣는다, §8.8). 프로젝트당 동시 1건. 사용 한도로 멈춘(`parked`) 태스크를 풀리는 시각에 다시 넣는 타이머 하나도 큐에 있다(§20). |
 | `Scheduler` | `app/Scheduler.ts` | §20. 소유자가 저장한 예약을 1분마다 보고, 때가 된 프롬프트를 `Studio.submitTask`로 넣는다. |
 | `CompilerGate`, `SmokeTester` | `harness/CompilerGate.ts`, `qa/SmokeTester.ts` | §8. 검증의 앞 두 단계. 모델을 쓰지 않는다. |
 | `QaBrowser` | `qa/QaBrowser.ts` | 스모크 게이트와 시각 감사가 함께 쓰는 브라우저 컨테이너 한 개. 쓸 때만 프로젝트 네트워크에 붙고 10분 쉬면 내려간다. 이미지(`qaBrowserDockerfile`)는 Playwright 이미지에 `playwright` 패키지와 Pretendard를 더하고, fontconfig에 그 서체를 한국어와 `sans-serif` · `system-ui`의 기본으로 알린 것이다(파일만 깔면 `fc-match :lang=ko`는 여전히 WenQuanYi를 답한다): Playwright 이미지의 한글 폴백은 중국어 서체 WenQuanYi Zen Hei라, 서체를 아직 싣지 않은 한국어 화면은 전부 그 서체로 찍혀 리뷰어에게 갔다. 레시피의 해시가 태그라 레시피가 바뀌면 다음 사용 때 다시 만든다. |
@@ -282,7 +289,7 @@ API 키는 선택 사항이다. 금고에 Anthropic 키가 없으면 데몬은 �
 
 ## 5. 프로토콜
 
-`packages/protocol/src/rpc.ts`의 테이블 하나가 서버 검증, 클라이언트 타입, 이 문서의 근거다. 메서드 93개, 이벤트 48종.
+`packages/protocol/src/rpc.ts`의 테이블 하나가 서버 검증, 클라이언트 타입, 이 문서의 근거다. 메서드 95개, 이벤트 50종.
 
 - 연결: `ws://127.0.0.1:49200/v1/ws`. 첫 프레임은 `{t:"hello", protocol, token, client}`. 5초 안에 오지 않거나 토큰이 틀리면 닫는다.
 - 프레임: 클라이언트 `hello | req | sub | unsub | terminal.data`, 서버 `ready | res | err | evt | sub_closed | terminal.output | terminal.exit`.
@@ -297,12 +304,12 @@ API 키는 선택 사항이다. 금고에 Anthropic 키가 없으면 데몬은 �
 
 ## 6. 데이터베이스
 
-`~/.studio-zero/studio-zero.db`, WAL, `STRICT` 테이블 31개(`db/schema.ts`). 마이그레이션은 전진 전용이다(현재 13단계).
+`~/.studio-zero/studio-zero.db`, WAL, `STRICT` 테이블 32개(`db/schema.ts`). 마이그레이션은 전진 전용이다(현재 14단계).
 
 | 영역 | 테이블 |
 |---|---|
 | 프로젝트 | `projects`, `sandboxes`(게이트웨이 토큰은 해시만) |
-| 실행 | `tasks`(세션과 트랙, 한도 대기 시각과 횟수 포함), `sessions`(프로젝트 안의 이름 붙은 작업 흐름), `schedules`(소유자의 예약), `events`(추가 전용 트레이스), `usage_ledger` |
+| 실행 | `tasks`(세션과 트랙, 한도 대기 시각과 횟수, 계획 먼저 보기 여부 포함), `plan_versions`(소유자에게 보인 계획의 버전, 해시, 교차 검토 의견, 답), `sessions`(프로젝트 안의 이름 붙은 작업 흐름), `schedules`(소유자의 예약), `events`(추가 전용 트레이스), `usage_ledger` |
 | 정책 | `approvals`, `policy_decisions`(허용 포함 전부) |
 | 복구 | `checkpoints` |
 | 품질 | `audits`, `artifacts`, `evals`, `eval_runs`, `ledger_entries`(태스크당 영수증 한 줄) |
@@ -752,6 +759,18 @@ ideate 태스크
 
 **놓이는 자리가 효과의 절반이었다.** 같은 규칙을 핸드북의 마흔 개 남짓 가운데 다섯으로 적었을 때 랩의 화면은 절반쯤만 왔다(강한 색 6%에서 17%; 엔진은 검사가 묻는 아이콘 수에서 멈췄다). 표 아래에 하한으로 적고 지시의 맨 끝에 한 번 더 놓자 소유자가 고른 수준이 됐다(27%, 아이콘 17개, 헤어라인 상자 0). 그래서 이 절은 핸드북의 마지막에 있고, 방향 하나를 그리는 엔진의 지시(`directionBrief`)와 초안 빌드의 첫 지시(`executeMessage`) 끝에 다시 놓인다(`materialFor`). 각진 테마의 가장 큰 모서리도 12px에서 16px로 올렸다: 고른 화면에 그보다 각진 카드가 없다.
 
+### 8.8 계획 먼저 보기 (선택, 기본 꺼짐)
+
+`harness/PlanGate.ts`. 제품의 약속은 "질문 없이 초안부터"라서 기본은 꺼져 있다(`planReview.defaultOn: false`). 소유자가 입력창 위의 **계획 먼저 보기**를 켜고 보낸 태스크(`tasks.submit`의 `reviewPlan`)만, 계획 교차 검토가 끝난 자리에서 첫 엔진 턴 전에 멈춘다. 방향이 틀렸을 때(다른 화면, 다른 데이터 모델, 요청을 다르게 읽음) 빌드 한 번과 그 검증과 토큰을 치르기 전에 고칠 수 있는 가장 싼 자리다. 계획을 쓰는 태스크(검증까지 가는 만들기·리팩터링·제안 구현)에만 해당하고, 초안과 설계 태스크에는 보일 계획이 없다. 켰는지는 제출할 때 한 번 정해 `tasks.review_plan`에 남는다. 플래그가 꺼진 태스크의 흐름은 이전과 같다: 하네스에서 이 단계 전체가 `if` 하나 안에 있다.
+
+- **버전과 해시.** 계획은 플래너의 구조화 출력을 데몬 코드가 정해진 순서로 마크다운으로 렌더한 글(`renderPlanMarkdown`, 모델 호출 없음)로 보이고, 그 글의 sha256과 함께 버전으로 저장한다(`plan_versions`). 교차 검토 의견도 같은 행에 남는다. 답(`plans.resolve`)은 버전과 해시를 함께 보내야 하고, 지금 기다리는 버전·해시와 다르면 `conflict`로 거절한다: 승인이 액션 해시에 묶이듯, 예전 메시지의 버튼이 그 뒤에 바뀐 계획을 승인하지 못한다. 승인되면 하네스는 저장된 계획을 다시 읽어 렌더한 해시가 승인한 해시와 같은지 확인하고, 그 계획으로 엔진을 연다.
+- **정책.** `plan.review.resolve` 액션, 규칙 `plan.review-owner-only`: 소유자(데스크톱, 메신저)만 허용하고 에이전트와 하네스는 거부한다.
+- **수정 요청.** 메모(고른 구절과 한 줄, 또는 계획 전체에 대한 한 줄)가 하나 이상 있어야 한다. 플래너는 같은 시스템 프롬프트(`PLANNER_SYSTEM_PROMPT`)로 다시 불리고, 사용자 턴에 고정 지시(`PLAN_REVISION_BRIEF`), 앞 계획(데이터 블록), 소유자의 메모가 들어간다. 메모가 인용한 구절은 모델이 쓴 계획의 글이라 데이터 블록으로 간다. 플래너가 쓴 고정표와 화면 명세는 다시 검사·커밋되고(프로젝트가 원래 갖고 있던 것은 그대로), 교차 검토를 다시 받은 뒤 다음 버전으로 다시 기다린다. 수정 요청은 `planReview.maxRevisions`(3)번까지이고, 그 뒤에도 승인은 열려 있다.
+- **기한.** 버전을 저장한 시각부터 `planReview.timeoutHours`(24)시간 안에 답이 없으면 태스크는 이유를 남기고 `cancelled`로 끝난다. 버전은 남는다. 조용히 진행하지 않는다: 소유자가 보겠다고 한 계획이다. 끝난 태스크에는 영수증도 회고도 없다.
+- **재시작.** 기다림은 프로세스 안의 약속이지만 답은 DB에 있다. 기다리던 태스크는 다음 기동 때 재시도 횟수를 쓰지 않고 다시 큐에 들어가고, 하네스는 플래너를 부르지 않고 저장된 마지막 버전으로 돌아가 기다린다(브랜치에 커밋된 고정표와 화면 명세도 그대로 간다). 돌아오는 사이에 받은 답은 그 버전에 남아 있다가 도착하자마자 쓰인다. 기한은 저장 시각에서 세므로 재시작으로 늘어나지 않는다. 승인된 뒤 한도 대기 등으로 다시 도는 태스크도 다시 계획하지 않고 승인한 버전으로 간다.
+- **자리.** 기다리는 동안 태스크는 `awaiting_plan_review`로 프로젝트의 자리 하나(와 큐의 동시 실행 자리 하나)를 쥐고 있다. 승인 대기(`awaiting_approval`)와 같다. 그 사이 같은 프로젝트의 다음 태스크는 차례를 기다린다.
+- **어디서 답하나.** 데스크톱은 작업공간의 **계획** 탭(`views/panels/PlanReview.tsx`): 버전 선택, 앞 안과의 낱말 단위 비교(`lib/planDiff.ts`, 공백으로 나눈 낱말 위의 LCS, 의존성 없음), 교차 검토 의견, 구절을 골라 메모 달기. Telegram·Slack은 요약과 단계 수, 두 번째 안부터 더해지고 빠진 단계 줄을 [승인] [수정 요청] 버튼과 함께 보낸다. [수정 요청] 뒤의 다음 메시지 하나가 메모 하나가 된다(새 작업으로 접수되지 않는다). 버튼은 버전과 해시 앞 16자를 실어 다시 해시로 확인한다. ntfy는 답장 메시지를 받지 않으므로 [승인]만 있다. 구절에 다는 메모는 데스크톱에서만 된다.
+
 ## 9. Kirby 파이프라인
 
 남의 저장소가 **잘하는 것**을 이 프로젝트로 가져온다. 소유자가 넣는 것은 제품이나 도구의 저장소다(앱을 짓는 도구는 스튜디오 자신에게, 돈이 되는 제품은 새 프로젝트의 씨앗으로).
@@ -1088,6 +1107,7 @@ pnpm sz task ledger build "미결제 청구서 화면을 만들어줘"
 | 카피 린트: 다섯 습관을 각각 문구와 함께 잡고, 구체적인 문구는 건드리지 않는 것. 화면에서 읽는 순서로 글을 뽑고 요소 위치를 붙이는 것, 카피 습관만으로 감사가 떨어지는 것 | 단위 테스트 |
 | 글과 선뿐인 첫 화면이 첫 화면에서만 블로커가 되는 것 | 단위 테스트 |
 | 고정표 게이트: 유효한 표 없이는 실행 단계에 들어가지 못하는 것, 계획 모델의 표가 코드보다 먼저 커밋되는 것, 다음 태스크가 표를 다시 쓰는 것 | 스크립트된 모델 + 실제 git (`anchor-sandwich-ledger.test.ts`) |
+| 계획 먼저 보기: 플래그가 꺼지면 멈추지 않음, 승인 전에는 엔진 턴 0회, 틀린 버전·해시와 에이전트·하네스의 답 거절, 수정 요청이 같은 시스템 프롬프트와 사용자 턴의 메모로 두 번째 안을 만들고 다시 교차 검토, 수정 횟수 상한 뒤에도 승인 가능, 기한이 지나면 코드 없이 멈추고 버전이 남음, 재시작 세 번에도 다시 계획하지 않고 재시도를 쓰지 않음, 돌아오는 사이에 받은 답, Telegram 버튼과 답장 메시지와 낡은 버튼 거절 | 스크립트된 모델 + 실제 하네스·게이트·정책·저장소·git (`plan-review.test.ts`), 낱말 비교는 단위 테스트 (`planDiff.test.ts`). 데스크톱의 계획 탭은 이 샌드박스에 브라우저가 없어 감사(`audit.ts`의 `plan-review` 두 화면)를 돌리지 못했다 |
 | 샌드위치: 교차 검토가 정확히 두 번, 보정 패치가 한 번 더 구현되고 다시 검증되는 것, 지적과 패치가 데이터 블록으로 가는 것, 검토를 받지 못해도 태스크가 서는 것, 짝꿍이 같은 회사를 고르지 않는 것 | 스크립트된 모델, 가짜 리뷰어 |
 | 장부: 컴파일러 에러 수·검증 회차·빌드·등급·비용이 영수증에 들어가고 직전 대비가 계산되는 것, `ledger.jsonl`이 워크스페이스 밖에 쓰이는 것 | 스크립트된 모델 + 단위 테스트 |
 | 잠자기 방지: `system`에서 `caffeinate -i -s -w <pid>`, `display`에서 `caffeinate -d -i -s -w <pid>`가 실제로 뜨고 `off`에서 사라지는 것, macOS가 보고하는 어서션(`pmset -g assertions`)에서 `display`가 `system`의 것을 전부 포함하는 것 | **실제 `caffeinate`와 `ps`** (샌드박스 밖에서 실행) |

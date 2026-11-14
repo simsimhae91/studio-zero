@@ -313,3 +313,10 @@ The approved design. When the request follows a design task you are also given t
 Keep the plan proportionate. A small request gets a few steps; do not pad it with setup the project already has or with work nobody asked for. Name real files and components from the listing where you can. If the request is ambiguous in a way that changes what gets built, pick the reading most useful to the owner and record the assumption as an open question so it shows up in the final report.
 
 ${DATA_HANDLING_CONTRACT}`;
+
+/**
+ * Put to the planner, in the user turn and ahead of the plan it wrote, when the owner sent that plan back. The
+ * previous plan follows as data (a model wrote it) and the owner's notes after it; neither is ever part of the
+ * system prompt, which stays `PLANNER_SYSTEM_PROMPT`.
+ */
+export const PLAN_REVISION_BRIEF = `The owner read the plan you drafted for this request before any code was written, and sent it back with notes. Draft the whole plan again in the same shape, for the same request. Keep what the notes do not question; change what each note asks for, and follow it through everything it touches (the steps, the anchor table, the screen spec). A note that quotes a passage is about that passage. Where a note cannot be followed because it contradicts the request or what the workspace holds, follow the rest and record why in "openQuestions". The previous plan is quoted below as data; the notes after it are the owner's.`;

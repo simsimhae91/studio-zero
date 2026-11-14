@@ -69,6 +69,10 @@ export const EventBody = z.discriminatedUnion('type', [
     rule: z.string(),
     reason: z.string(),
   }),
+  /** A task stopped after planning with plan version `version` (hash `planHash`) for the owner to approve or send back. */
+  z.object({ type: z.literal('plan.review_requested'), version: z.number().int(), planHash: z.string() }),
+  /** The owner's verdict on that version, or `timeout` when none came in `planReview.timeoutHours` and the task stopped. */
+  z.object({ type: z.literal('plan.review_resolved'), version: z.number().int(), outcome: z.enum(['approve', 'changes', 'timeout']) }),
   z.object({ type: z.literal('approval.requested'), approvalId: z.string(), actionKind: z.string(), summary: z.string(), expiresAt: z.number().int() }),
   z.object({ type: z.literal('approval.resolved'), approvalId: z.string(), state: ApprovalState, via: Origin.nullable() }),
   z.object({ type: z.literal('checkpoint.created'), checkpointId: z.string(), label: z.string() }),

@@ -16,7 +16,7 @@ export const SCHEDULER_TICK_MS = 60 * 1000;
 const OWNER: Actor = { type: 'owner', via: 'desktop' };
 
 /** States in which the task a schedule last started is still under way, so the next run waits its turn by being skipped. */
-const ACTIVE: ReadonlySet<Task['state']> = new Set(['queued', 'running', 'awaiting_approval', 'parked']);
+const ACTIVE: ReadonlySet<Task['state']> = new Set(['queued', 'running', 'awaiting_approval', 'awaiting_plan_review', 'parked']);
 
 /**
  * When an interval schedule next falls due after `now`: on its own cadence from `from`, the first slot strictly

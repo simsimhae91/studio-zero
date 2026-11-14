@@ -5,6 +5,7 @@ export const taskStateLabel: Record<TaskState, string> = {
   queued: '대기 중',
   running: '진행 중',
   awaiting_approval: '승인 대기',
+  awaiting_plan_review: '계획 검토 대기',
   suspended: '한도 복구 대기',
   parked: '한도 풀릴 때까지 대기',
   succeeded: '완료',
