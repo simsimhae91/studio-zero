@@ -1,4 +1,4 @@
-import type { Approval, DiffFile, DiffLine, PlanVersion, ReviewDiff, AuditReport, AxBlock, Checkpoint, Eval, EventBody, EventEnvelope, FileEntry, FlowTaskWalk, KnowledgeJob, LedgerEntry, Lesson, MethodName, ParamsOf, Project, ProposalCard, ResultOf, SandboxInfo, ScratchEntry, Scratchpad, ScreenSpec, Session, SubscriptionQuota, Task, OwnerSettings } from '@studio-zero/protocol';
+import type { Approval, DiffFile, DiffLine, PlanVersion, ReviewDiff, AuditReport, AxBlock, Checkpoint, Eval, EventBody, EventEnvelope, FileEntry, FlowTaskWalk, KnowledgeJob, LedgerEntry, Lesson, MethodName, ParamsOf, ProductMap, Project, ProposalCard, ResultOf, Roadmap, SandboxInfo, ScratchEntry, Scratchpad, ScreenSpec, Session, SubscriptionQuota, Task, OwnerSettings } from '@studio-zero/protocol';
 import { RpcCallError, matchesFilter } from '@studio-zero/protocol';
 import { hashMarkdown } from './annotate.ts';
 import type { Backend } from './backend.ts';
@@ -590,6 +590,74 @@ const demoDiffFiles: DiffFile[] = [
 ];
 const demoDiff = (branch: string): ReviewDiff => ({ base: 'main', branch, files: demoDiffFiles, truncated: false });
 
+type DemoFeature = ProductMap['features'][number];
+const feature = (id: string, name: string, tier: DemoFeature['tier'], does: string[], over: Partial<DemoFeature> = {}): DemoFeature => ({
+  id, name, tier, does, why: '', screens: [name], needs: { data: [], device: [], ai: false, external: [] }, inPreview: 'real', simulation: null, ...over,
+});
+const untouched = { state: 'planned' as const, taskIds: [], error: null, debt: [], shots: [] };
+/** A product being built to its map: the first milestone merged with one thing left on a screen, the second on its second attempt. */
+const tideMap: ProductMap = {
+  pitch: '프리랜서 셋이 같이 쓰는 정산 도구. 누가 누구에게 얼마를 보내면 끝나는지 한눈에 보인다.',
+  category: '공동 정산. 토스 더치페이, 스플릿와이즈 옆에 놓인다.',
+  pillars: ['넣는 데 10초', '보낼 금액이 틀리지 않음', '끝난 정산은 다시 묻지 않음'],
+  features: [
+    feature('sign-in', '가입과 로그인', 'core', ['이메일과 비밀번호로 가입한다', '다시 로그인하면 정산이 그대로 있다']),
+    feature('group', '정산 모임', 'core', ['모임을 만들고 초대 코드를 정한다', '코드를 받은 사람이 들어오면 구성원 목록에 보인다']),
+    feature('expense', '지출 넣기', 'core', ['금액과 낸 사람, 나눌 사람을 골라 지출을 넣는다', '넣은 지출이 모두의 목록에 새로고침 없이 뜬다']),
+    feature('receipt', '영수증 사진', 'expected', ['영수증을 찍어 지출에 붙인다', '사진에서 읽은 금액이 금액 칸에 채워진다'], { needs: { data: ['receipts'], device: ['camera'], ai: true, external: [] }, inPreview: 'simulated', simulation: '사진은 실제로 저장된다. 금액 읽기는 예시 값이 대신하고 화면에 "예시"라고 적는다. 사진을 읽는 모델을 연결하면 실제 금액이 들어온다.' }),
+    feature('balance', '누가 누구에게', 'core', ['보낼 사람과 받을 사람, 금액이 가장 적은 송금 횟수로 정리된다', '지출을 고치면 금액이 바로 다시 계산된다']),
+    feature('settle', '정산 끝내기', 'expected', ['보냈다고 표시하면 받는 사람 화면에 확인 요청이 뜬다', '받는 사람이 확인하면 그 줄이 끝난 정산으로 넘어간다']),
+    feature('history', '끝난 정산', 'expected', ['달마다 끝난 정산을 다시 본다', '한 건을 누르면 그때의 지출 목록이 열린다']),
+    feature('remind', '보내라고 알리기', 'expected', ['사흘이 지나도 보내지 않은 사람에게 알림을 보낸다', '알림을 끄고 켠다'], { needs: { data: [], device: ['push'], ai: false, external: [] }, inPreview: 'device-only', simulation: '프리뷰에서는 앱 안 알림함에만 온다. 기기 빌드에서 알림 권한을 켜면 잠금 화면으로 간다.' }),
+    feature('done', '다 끝난 순간', 'delight', ['마지막 송금이 확인되면 모임 화면이 0원으로 정리되는 연출이 나온다', '결과를 그림 한 장으로 저장한다']),
+  ],
+  milestones: [
+    { id: 'm1', name: '모여서 지출을 넣는다', goal: '가입하고 모임을 만들어 첫 지출을 넣는다.', features: ['sign-in', 'group', 'expense'], acceptance: ['새 사람이 가입해 모임을 만들고 지출 하나를 넣으면 목록에 그 줄이 보인다.', '코드로 들어온 두 번째 사람의 화면에 같은 줄이 보인다.'] },
+    { id: 'm2', name: '얼마를 보낼지 본다', goal: '지출이 쌓이면 누가 누구에게 얼마를 보내는지 나온다.', features: ['balance', 'receipt'], acceptance: ['지출 두 건을 넣으면 보낼 금액이 한 줄로 정리되어 보인다.'] },
+    { id: 'm3', name: '정산을 끝낸다', goal: '보내고, 확인받고, 끝난 정산으로 넘긴다.', features: ['settle', 'history'], acceptance: ['보냈다고 표시한 줄이 상대의 확인 뒤에 끝난 정산 목록에 있다.'] },
+    { id: 'm4', name: '알리고 마무리한다', goal: '미루는 사람에게 알리고, 다 끝난 순간을 보여 준다.', features: ['remind', 'done'], acceptance: ['마지막 송금이 확인되면 0원으로 정리되는 연출이 나온다.'] },
+  ],
+};
+/** A smaller product whose second milestone ran out of corrections twice. */
+const atlasMap: ProductMap = {
+  pitch: '동네 가게를 지도에 모으고, 다녀온 곳에 한 줄을 남기는 앱.',
+  category: '동네 지도와 기록. 네이버 지도의 저장 목록, 카카오맵 즐겨찾기 옆에 놓인다.',
+  pillars: ['지도가 먼저 보임', '한 줄 남기는 데 5초'],
+  features: [
+    feature('sign-in', '가입과 로그인', 'core', ['이메일로 가입한다', '다시 로그인하면 저장한 가게가 그대로 있다']),
+    feature('map', '동네 지도', 'core', ['저장한 가게가 지도에 점으로 보인다', '점을 누르면 가게 이름과 내가 남긴 한 줄이 뜬다']),
+    feature('save', '가게 저장', 'core', ['이름과 위치를 넣어 가게를 저장한다', '저장한 가게가 지도와 목록에 바로 생긴다']),
+    feature('note', '다녀온 한 줄', 'expected', ['다녀온 날과 한 줄을 남긴다', '가게마다 남긴 줄이 날짜순으로 쌓인다']),
+    feature('share', '목록 나누기', 'expected', ['저장 목록을 링크로 나눈다', '받은 사람은 가입하지 않고 목록을 본다']),
+    feature('profile', '내 정보와 설정', 'expected', ['닉네임을 바꾼다', '계정을 지우면 저장한 가게도 함께 지워진다']),
+  ],
+  milestones: [
+    { id: 'm1', name: '지도에 가게를 올린다', goal: '가입해서 첫 가게를 저장하고 지도에서 본다.', features: ['sign-in', 'map', 'save'], acceptance: ['새 사람이 가게 하나를 저장하면 지도에 점이 생긴다.'] },
+    { id: 'm2', name: '다녀온 기록을 남긴다', goal: '가게마다 한 줄을 남기고 다시 본다.', features: ['note'], acceptance: ['한 줄을 남기면 가게 화면에 그 줄이 날짜와 함께 보인다.'] },
+    { id: 'm3', name: '나누고 정리한다', goal: '목록을 나누고 계정을 관리한다.', features: ['share', 'profile'], acceptance: ['링크를 받은 사람이 로그인 없이 목록을 본다.'] },
+  ],
+};
+const roadmaps = new Map<string, Roadmap>([
+  ['prj_tide', {
+    projectId: 'prj_tide', request: '프리랜서 셋이 같이 쓰는 정산 도구\n- 영수증 사진\n- 누가 누구에게 얼마', state: 'running', map: tideMap, autoMerge: true, error: null, createdAt: min(-58), updatedAt: min(-3),
+    milestones: [
+      { state: 'built', taskIds: ['tsk_tide_m1'], error: null, debt: ['H-02 화면 (시나리오 expense) · 큰 결함 · target/size: "나눌 사람" touch target is 36×32px; 44×44px is required.'], shots: [{ screen: 'A-01', artifactId: 'art_shot_a01' }, { screen: 'H-01', artifactId: 'art_shot_h01' }, { screen: 'H-02', artifactId: 'art_shot_h02' }] },
+      { state: 'building', taskIds: ['tsk_tide_m2a', 'tsk_tide_m2b'], error: null, debt: [], shots: [] },
+      untouched,
+      untouched,
+    ],
+  }],
+  ['prj_atlas', {
+    projectId: 'prj_atlas', request: '동네 가게 지도 앱', state: 'stopped', map: atlasMap, autoMerge: true, createdAt: min(-280), updatedAt: min(-41),
+    error: '마일스톤 2 "다녀온 기록을 남긴다"이 실패했습니다: verification still failing after 3 corrections: scenarios',
+    milestones: [
+      { state: 'built', taskIds: ['tsk_atlas_m1'], error: null, debt: [], shots: [{ screen: 'A-01', artifactId: 'art_shot_b01' }, { screen: 'M-01', artifactId: 'art_shot_b02' }] },
+      { state: 'failed', taskIds: ['tsk_atlas_m2a', 'tsk_atlas_m2b'], error: 'verification still failing after 3 corrections: scenarios', debt: [], shots: [] },
+      untouched,
+    ],
+  }],
+]);
+
 const handlers: Handlers = {
   'system.status': () => ({
     version: '0.1.0', protocol: 1, uptimeSec: 86_400, runtime: { context: 'orbstack', reachable: true, detail: '29.8.2 linux/arm64' }, relays: [{ id: 'telegram', state: 'connected' }, { id: 'slack', state: 'disabled' }, { id: 'ntfy', state: 'disabled' }], queue: { queued: 0, running: 1 },
@@ -629,6 +697,23 @@ const handlers: Handlers = {
   // Nothing is merged or started in the demo: the answer is what the daemon would say.
   'reviews.submit': (p) => ({ reviewId: 'rev_demo', decision: p.result.decision, blockingCount: p.result.comments.filter((c) => c.blocking).length, mergedInto: p.result.decision === 'approved' ? 'main' : null, rerunTaskId: null }),
   'plans.list': (p) => ({ versions: planVersions.filter((v) => v.taskId === p.taskId), revisionsLeft: 2 }),
+  'roadmap.get': (p) => ({ roadmap: roadmaps.get(p.projectId) ?? null }),
+  // Nothing is planned or built in the demo: each answer is what the daemon would say first.
+  'roadmap.plan': (p) => {
+    const planning: Roadmap = { projectId: p.projectId, request: p.request, state: 'planning', map: null, milestones: [], autoMerge: true, error: null, createdAt: T0, updatedAt: T0 };
+    roadmaps.set(p.projectId, planning);
+    return planning;
+  },
+  'roadmap.run': (p) => {
+    const running: Roadmap = { ...roadmaps.get(p.projectId)!, state: 'running', error: null };
+    roadmaps.set(p.projectId, running);
+    return running;
+  },
+  'roadmap.stop': (p) => {
+    const stopped: Roadmap = { ...roadmaps.get(p.projectId)!, state: 'stopped', error: '소유자가 멈췄습니다.' };
+    roadmaps.set(p.projectId, stopped);
+    return stopped;
+  },
   'checkpoints.list': (p) => ({ checkpoints: checkpoints.filter((c) => c.projectId === p.projectId) }),
   'audits.list': (p) => ({ audits: [audit, unreviewedAudit].filter((a) => a.projectId === p.projectId).map((a) => ({ id: a.id, taskId: a.taskId, createdAt: a.createdAt, score: a.score, passed: a.passed })) }),
   'audits.get': (p) => (p.auditId === unreviewedAudit.id ? unreviewedAudit : audit),

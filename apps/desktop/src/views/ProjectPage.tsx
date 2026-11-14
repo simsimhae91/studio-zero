@@ -1,5 +1,5 @@
 import * as Tabs from '@radix-ui/react-tabs';
-import { Check, ChevronDown, ClipboardList, FileDiff, FileText, Film, FolderTree, GitFork, GitMerge, Globe, History as HistoryIcon, KeyRound, Lightbulb, Maximize2, MessageCircleQuestion, Monitor, MoreHorizontal, Pencil, Plus, ReceiptText, RotateCw, ScanEye, Smartphone, Sparkles, Square, SquareTerminal, Star, Trash2, X, Power } from 'lucide-react';
+import { Check, ChevronDown, ClipboardList, FileDiff, FileText, Film, FolderTree, GitFork, GitMerge, Globe, History as HistoryIcon, KeyRound, Lightbulb, Map as MapIcon, Maximize2, MessageCircleQuestion, Monitor, MoreHorizontal, Pencil, Plus, ReceiptText, RotateCw, ScanEye, Smartphone, Sparkles, Square, SquareTerminal, Star, Trash2, X, Power } from 'lucide-react';
 import { Suspense, lazy, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { ReviewerPref, type AdvisorId, type Approval, type Project, type ReviewComment, type Session, type Task, type TaskKind, type TaskState, type TaskTrack } from '@studio-zero/protocol';
 import { Markdown } from '@studio-zero/ax/react';
@@ -21,6 +21,7 @@ import { FileTree } from './panels/FileTree.tsx';
 import { History } from './panels/History.tsx';
 import { Learning } from './panels/Learning.tsx';
 import { PlanReview } from './panels/PlanReview.tsx';
+import { Roadmap } from './panels/Roadmap.tsx';
 import { Ledger } from './panels/Ledger.tsx';
 import { SCREEN_SPEC_FILE, ScreenSpecView, useScreenSpec } from './panels/ScreenSpecView.tsx';
 import { Preview } from './panels/Preview.tsx';
@@ -31,7 +32,7 @@ import type { Route } from './Shell.tsx';
 // The terminal emulator is the largest thing in the client: fetched when the terminal tab is first opened.
 const InteractiveTerminal = lazy(() => import('./panels/InteractiveTerminal.tsx').then((m) => ({ default: m.InteractiveTerminal })));
 
-type TabId = 'preview' | 'plan' | 'changes' | 'files' | 'terminal' | 'history' | 'audit' | 'ledger' | 'proposals' | 'learning';
+type TabId = 'preview' | 'roadmap' | 'plan' | 'changes' | 'files' | 'terminal' | 'history' | 'audit' | 'ledger' | 'proposals' | 'learning';
 /** Addresses typed into the reference field: up to three, separated by spaces, commas or new lines. */
 const referencesOf = (text: string): string[] => text.split(/[\s,]+/).filter((part) => part !== '').slice(0, 3);
 type Pane = 'chat' | 'work';
@@ -306,6 +307,8 @@ function Workbench({ project, onOpen, onChanged }: { project: Project; onOpen: (
   const plans = (kind === 'build' || kind === 'refactor') && track === 'full';
   const tabs: readonly { id: TabId; label: string; icon: typeof Monitor }[] = [
     { id: 'preview', label: '프리뷰', icon: project.template === 'mobile-expo' ? Smartphone : Monitor },
+    // A product is planned whole and built to its map's end here. The studio's own repository is changed a task at a time.
+    ...(core ? [] : [{ id: 'roadmap' as const, label: '로드맵', icon: MapIcon }]),
     ...(planTask ? [{ id: 'plan' as const, label: '계획', icon: ClipboardList }] : []),
     ...(reviewTask ? [{ id: 'changes' as const, label: '변경', icon: FileDiff }] : []),
     { id: 'files', label: '파일', icon: FolderTree },
@@ -320,6 +323,18 @@ function Workbench({ project, onOpen, onChanged }: { project: Project; onOpen: (
     switch (id) {
       case 'preview':
         return <Preview project={project} busy={busy} ready={ready} />;
+      case 'roadmap':
+        return (
+          <Roadmap
+            project={project}
+            onTask={(taskId) => {
+              // A milestone's task is the daemon's own submission: it is in the project's first conversation.
+              pickSession(null);
+              setPicked((prev) => ({ ...prev, [DEFAULT_SESSION]: taskId }));
+              setPane('chat');
+            }}
+          />
+        );
       case 'plan':
         return planTask ? <PlanReview key={planTask.id} task={planTask} /> : null;
       case 'changes':
@@ -848,17 +863,21 @@ function Passage({ task, items, pending, onShow, onCheckpoint, onFile, onBuild, 
   const drop = useAction(() => backend.call('tasks.cancel', { taskId: task.id }));
   const again = useAction(() => onRerun(task));
   useEffect(() => setMerged(mergedInto(task.id)), [task.id]);
-  const requestMeta = [kindLabel[task.kind], task.kind !== 'ideate' && task.track === 'fast' ? '초안' : null, task.origin === 'desktop' ? null : `${task.origin}에서`, stamp(task.createdAt)].filter(Boolean).join(' · ');
+  // A milestone of the project's roadmap: the daemon wrote its request from the product map, and its first line names it.
+  const milestone = task.milestone !== null && task.milestone !== undefined;
+  const requestMeta = [kindLabel[task.kind], milestone ? '로드맵의 마일스톤' : task.kind !== 'ideate' && task.track === 'fast' ? '초안' : null, milestone || task.origin === 'desktop' ? null : `${task.origin}에서`, stamp(task.createdAt)].filter(Boolean).join(' · ');
 
   return (
     <article className="flex flex-col gap-3" aria-label={`작업: ${task.prompt.split('\n')[0]}`}>
       <Said meta={requestMeta} clamp>
-        {task.prompt}
+        {milestone ? (task.prompt.split('\n')[0] ?? task.prompt) : task.prompt}
       </Said>
-      {/* A request is worth having back: to send again after a failure, or changed. */}
-      <button type="button" onClick={() => onReuse(task.prompt)} className="-mt-1 min-h-9 pointer-coarse:min-h-11 self-start px-1 text-sm font-medium text-fg-muted underline underline-offset-4 hover:text-fg">
-        이 요청을 입력창으로 가져오기
-      </button>
+      {/* A request is worth having back: to send again after a failure, or changed. A milestone's is the roadmap's to send. */}
+      {milestone ? null : (
+        <button type="button" onClick={() => onReuse(task.prompt)} className="-mt-1 min-h-9 pointer-coarse:min-h-11 self-start px-1 text-sm font-medium text-fg-muted underline underline-offset-4 hover:text-fg">
+          이 요청을 입력창으로 가져오기
+        </button>
+      )}
 
       {items.map((item, i) => {
         switch (item.kind) {
@@ -1011,12 +1030,18 @@ function Passage({ task, items, pending, onShow, onCheckpoint, onFile, onBuild, 
                 </Button>
               ) : null}
               {/* A failed task's work is committed on its branch. The next task can start from there instead of from scratch. */}
-              {task.state === 'failed' && task.branch ? (
+              {/* A milestone goes on from the roadmap, which knows which one it is and starts from this branch itself. */}
+              {milestone && (task.state === 'failed' || task.state === 'cancelled') ? (
+                <Button variant="primary" onClick={() => onShow('roadmap')} icon={<MapIcon className="size-4" aria-hidden />}>
+                  로드맵에서 이어서 짓기
+                </Button>
+              ) : null}
+              {task.state === 'failed' && task.branch && !milestone ? (
                 <Button variant="primary" onClick={() => onContinue(task.branch!)} icon={<GitFork className="size-4" aria-hidden />}>
                   이 작업물에서 이어가기
                 </Button>
               ) : null}
-              {(task.state === 'failed' || task.state === 'cancelled') && task.kind !== 'kirby_materialize' ? (
+              {(task.state === 'failed' || task.state === 'cancelled') && task.kind !== 'kirby_materialize' && !milestone ? (
                 <Button busy={again.busy} onClick={() => void again.run()} icon={<RotateCw className="size-4" aria-hidden />}>
                   같은 요청 다시 실행
                 </Button>

@@ -798,9 +798,17 @@ export class Harness {
       this.#store.insertArtifact({ id: artifactId, projectId: project.id, mime: 'image/png', file, createdAt: this.#clock() });
       shots.push({ screen: look.screen, artifactId });
     }
+    // The same findings as the owner reads them on the roadmap: which screen, how heavy, and the measurement.
+    const owed = [
+      ...new Set(
+        looks.flatMap((look) =>
+          look.findings.filter((finding) => finding.severity !== 'minor').map((finding) => `${look.screen} 화면 (시나리오 ${look.scenario}) · ${finding.severity === 'blocker' ? '막는 결함' : '큰 결함'} · ${finding.rule}: ${finding.message}`),
+        ),
+      ),
+    ];
     const sendBack = lines.length > 0 && !building.sentBack;
     this.#events.emit(scope, { type: 'gate.result', gate: 'looks', name: `${looks.length} screens`, passed: lines.length === 0, exitCode: null, durationMs: 0, detail: lines.length === 0 ? `${looks.length} screens measured as the walk stood on them: nothing above minor` : excerpt(lines.join('\n'), 3000) });
-    this.#store.noteMilestone(project.id, building.index, { shots, debt: sendBack ? [] : lines.slice(0, 60) }, this.#clock());
+    this.#store.noteMilestone(project.id, building.index, { shots, debt: sendBack ? [] : owed.slice(0, 60) }, this.#clock());
     if (!sendBack) {
       if (lines.length > 0) this.#events.emit(scope, { type: 'notice', level: 'warn', message: `마일스톤 ${building.index + 1}: 걸은 화면에서 잰 결함 ${lines.length}건이 한 번 고친 뒤에도 남았습니다. 로드맵에 남은 일로 적었습니다.` });
       return null;

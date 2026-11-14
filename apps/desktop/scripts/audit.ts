@@ -164,6 +164,23 @@ const screens: { name: string; url: string; go: (page: Page, narrow: boolean) =>
   { name: 'audit', url: '/?demo', go: workspaceTab('Ledger', '감사') },
   { name: 'audit-unreviewed', url: '/?demo', go: workspaceTab('Atlas 모바일', '감사') },
   { name: 'task-suspended', url: '/?demo', go: openFromIndex('Atlas 모바일') },
+  // A product's roadmap: one being built (a milestone done, the next at work), the done milestone opened to what
+  // its walk left, one that stopped, a project with none, and a map being written.
+  { name: 'roadmap-running', url: '/?demo', go: workspaceTab('Tide 정산', '로드맵') },
+  { name: 'roadmap-built', url: '/?demo', go: async (page, narrow) => {
+    await workspaceTab('Tide 정산', '로드맵')(page, narrow);
+    await page.getByRole('button', { name: /^1\. 모여서 지출을 넣는다/ }).click();
+    await page.getByRole('heading', { name: /걸으면서 찍은 화면/ }).waitFor();
+    await page.getByRole('img', { name: 'H-02 화면' }).waitFor();
+  } },
+  { name: 'roadmap-stopped', url: '/?demo', go: workspaceTab('Atlas 모바일', '로드맵') },
+  { name: 'roadmap-empty', url: '/?demo', go: workspaceTab('Ledger', '로드맵') },
+  { name: 'roadmap-planning', url: '/?demo', go: async (page, narrow) => {
+    await workspaceTab('Ledger', '로드맵')(page, narrow);
+    await page.getByRole('textbox', { name: '어떤 제품인가요' }).fill('미수금을 한눈에 보는 청구서 관리 도구\n- 미결제 알림\n- 월말 정산');
+    await page.getByRole('button', { name: '제품 지도 만들기' }).click();
+    await page.getByText('제품 지도를 쓰는 중').waitFor();
+  } },
   { name: 'plan-review', url: '/?demo', go: workspaceTab('Harbor 예약', '계획') },
   { name: 'plan-review-diff', url: '/?demo', go: async (page, narrow) => {
     await workspaceTab('Harbor 예약', '계획')(page, narrow);

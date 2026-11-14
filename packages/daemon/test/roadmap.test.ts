@@ -286,7 +286,7 @@ test('a product is planned whole and built to the end of its map: a milestone a 
     assert.match(sentBack[0]!, /source="browser-page" check="looks">\nEvery scenario reached its end\.[\s\S]*- Screen H-01 \(scenario "result"\), major, contrast\/text: 본문 글자의 대비가 2\.1:1입니다\. At p\.muted\. 글자색을 --sz-fg-muted로 바꿉니다\./);
     // What one round did not clear is the milestone's debt, with the picture of the screen; the milestone is built.
     assert.deepEqual(done.milestones.map((m) => m.debt.length), [0, 0, 1]);
-    assert.match(done.milestones[2]!.debt[0]!, /^Screen H-01 \(scenario "result"\), major, contrast\/text/);
+    assert.equal(done.milestones[2]!.debt[0], 'H-01 화면 (시나리오 result) · 큰 결함 · contrast/text: 본문 글자의 대비가 2.1:1입니다.');
     assert.deepEqual(done.milestones[2]!.shots.map((shot) => shot.screen), ['H-01']);
     const shot = store.getArtifact(done.milestones[2]!.shots[0]!.artifactId)!;
     assert.equal(shot.mime, 'image/png');
