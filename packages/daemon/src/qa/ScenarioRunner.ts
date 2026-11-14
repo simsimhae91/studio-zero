@@ -10,6 +10,7 @@ import type { OrbStackManager } from '../sandbox/OrbStackManager.ts';
 import { SIGN_IN, SIGN_UP } from '../scratch/ScreenSpec.ts';
 import { excerpt } from '../util/core.ts';
 import { DONE_ATTR, STEP_ATTR, walkFlow } from './FlowWalker.ts';
+import { LOGIN_ATTR, walkLogins } from './LoginWalk.ts';
 import type { QaBrowser } from './QaBrowser.ts';
 
 /**
@@ -30,6 +31,9 @@ import type { QaBrowser } from './QaBrowser.ts';
  *    screen;
  * 5. every scenario is walked to its last step.
  *
+ * And where the product offers signing in with Kakao or Google, each button is pressed as far as the provider's
+ * door (`LoginWalk.ts`): the rest of that sign-in is the provider's and a person's.
+ *
  * Nothing here is a judgement. Every finding is something that was done, what was looked for, and what was there.
  */
 
@@ -40,6 +44,8 @@ export interface ScenarioOutcome {
   walked: number;
   /** What was found, each as a sentence the builder can act on. Empty when the product works. */
   problems: string[];
+  /** The providers whose sign-in button was pressed. */
+  logins: string[];
   /** One line for the receipt. */
   detail: string;
   durationMs: number;
@@ -158,6 +164,11 @@ export class Backend {
   get apiOrigin(): string {
     return new URL(this.#info.apiUrl).origin;
   }
+
+  /** The providers this backend signs people in with besides email. */
+  get logins(): readonly string[] {
+    return this.#info.logins;
+  }
 }
 
 /** Why a step stopped, in the words the flow walk uses, addressed to whoever marked the page. */
@@ -177,6 +188,8 @@ export interface ScenarioWalk {
   /** How many scenarios were walked to their end, reload included. */
   walked: number;
   problems: string[];
+  /** The providers the product offers a sign-in with, each pressed as far as the provider. */
+  logins: string[];
 }
 
 /**
@@ -197,7 +210,7 @@ export async function walkScenarios(deps: { browser: Browser; base: string; phon
 
   const stranger = person('stranger', run);
   const strangerToken = backend ? await backend.stranger(stranger.email, stranger.password) : null;
-  if (backend && strangerToken === null) return { walked: 0, problems: ['The studio could not make an account through the backend\'s own sign-up (email and password). The scenarios are walked as people who sign up that way: leave it switched on.'] };
+  if (backend && strangerToken === null) return { walked: 0, logins: [], problems: ['The studio could not make an account through the backend\'s own sign-up (email and password). The scenarios are walked as people who sign up that way: leave it switched on.'] };
 
   const open = async (): Promise<{ page: Page; refused: string[]; close: () => Promise<void> }> => {
     const context = await browser.newContext({ ...(deps.phone ?? { viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 }), serviceWorkers: 'block' });
@@ -270,7 +283,10 @@ export async function walkScenarios(deps: { browser: Browser; base: string; phon
       await close();
     }
   }
-  if (!backend || problems.length > 0 || walked === 0) return { walked, problems };
+  if (!backend) return { walked, problems, logins: [] };
+  // Whatever became of the scenarios, the provider buttons are pressed: a builder is told everything in one go.
+  const pressed = await walkLogins({ browser, base, phone: deps.phone, apiOrigin: backend.apiOrigin, on: backend.logins });
+  if (problems.length > 0 || walked === 0) return { walked, problems: [...problems, ...pressed.problems], logins: pressed.offered };
 
   // The backend goes down and comes back: every row is still there, and a person can sign in again on a browser that has never seen them.
   const kept = await backend.tables();
@@ -310,7 +326,7 @@ export async function walkScenarios(deps: { browser: Browser; base: string; phon
       if (n > 0) problems.push(`Table ${table} (${policy}): a visitor who was not signed in read ${plural(n, 'row')} that the scenarios' people made. Take the grant or the policy for "anon" off it.`);
     }
   }
-  return { walked, problems };
+  return { walked, problems: [...problems, ...pressed.problems], logins: pressed.offered };
 }
 
 export class ScenarioRunner implements ScenarioRunnerLike {
@@ -329,12 +345,16 @@ export class ScenarioRunner implements ScenarioRunnerLike {
   async run(project: Project, spec: ScreenSpec, opts: { signal?: AbortSignal } = {}): Promise<ScenarioOutcome> {
     const started = Date.now();
     const total = spec.scenarios.length;
-    const finish = (walked: number, problems: string[]): ScenarioOutcome => ({
+    const finish = (walked: number, problems: string[], logins: string[] = []): ScenarioOutcome => ({
       passed: problems.length === 0,
       scenarios: total,
       walked,
       problems,
-      detail: problems.length === 0 ? `${plural(total, 'scenario')} walked to the end as new people${spec.entry !== null ? '; their data outlived a reload and a restart and was closed to a stranger' : ''}` : `${walked} of ${plural(total, 'scenario')} walked to the end; ${plural(problems.length, 'finding')}`,
+      logins,
+      detail:
+        problems.length === 0
+          ? `${plural(total, 'scenario')} walked to the end as new people${spec.entry !== null ? '; their data outlived a reload and a restart and was closed to a stranger' : ''}${logins.length > 0 ? `; signing in with ${logins.join(' and ')} leaves for the provider from its button` : ''}`
+          : `${walked} of ${plural(total, 'scenario')} walked to the end; ${plural(problems.length, 'finding')}`,
       durationMs: Date.now() - started,
     });
     if (spec.entry !== null && !this.#arms.has(project)) {
@@ -361,8 +381,14 @@ export class ScenarioRunner implements ScenarioRunnerLike {
         const found = await this.#sandboxes.exec(project, `grep -rIlF ${backend.adminKeys.map((key) => `-e '${key.replaceAll("'", '')}'`).join(' ')} --exclude-dir=node_modules --exclude-dir=.git . 2>/dev/null | head -5; true`, { timeoutSec: 60 });
         const files = found.stdout.split('\n').map((line) => line.trim()).filter(Boolean);
         if (files.length > 0) problems.push(`A key that passes every policy is in the workspace (${files.join(', ')}). Remove it: nothing the product ships may hold it, and the product never needs it.`);
+        if (result.logins.length === 0) {
+          // A provider sign-in that carries no mark was not pressed, and would pass unlooked at.
+          const calls = await this.#sandboxes.exec(project, "grep -rIl --include='*.ts' --include='*.tsx' --include='*.js' --include='*.jsx' -e 'signInWithOAuth' --exclude-dir=node_modules --exclude-dir=.git --exclude-dir=.studio-zero --exclude-dir=dist --exclude-dir=.next --exclude-dir=.expo . 2>/dev/null | head -3; true", { timeoutSec: 60 });
+          const where = calls.stdout.split('\n').map((line) => line.trim()).filter(Boolean);
+          if (where.length > 0) problems.push(`The product signs people in with a provider (signInWithOAuth in ${where.join(', ')}), and no button marked ${LOGIN_ATTR} was found on the signed-out screen or one press of the sign-in or sign-up marks from it. Mark each provider's button with the provider's name (${LOGIN_ATTR}="kakao"; React Native: dataSet={{ login: 'kakao' }}) so that the studio can press it.`);
+        }
       }
-      return finish(result.walked, problems);
+      return finish(result.walked, problems, result.logins);
     } finally {
       // The project's database is the owner's to look at, and is not left filling with one walk's people after another.
       await backend?.forget(run);

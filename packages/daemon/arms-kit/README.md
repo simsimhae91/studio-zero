@@ -71,4 +71,11 @@ means email only): `supabase.auth.signInWithOAuth({ provider: 'kakao', options: 
 The person leaves for the provider and comes back signed in; `onAuthStateChange` tells the product. When the
 product ships it registers developer apps of its own; the code does not change.
 
+Each provider's button says which provider it is: `data-login="kakao"` (React Native: `dataSet={{ login: 'kakao' }}`).
+The studio presses it and reads the request the product makes of its backend: the provider has to be the
+button's, and `redirectTo` has to be where the product is running, taken from `window.location.origin` and
+never written out (the product runs at one address in the owner's browser, another when the studio checks it,
+and a third in production). A person who signs in this way has no password and may have no name the product
+chose: the profile trigger reads `raw_user_meta_data` (`name`, `avatar_url`) and the product copes without them.
+
 Never put a password, a token or the address of the backend in the code or in a fixture.

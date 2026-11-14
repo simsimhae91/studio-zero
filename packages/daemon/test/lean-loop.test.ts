@@ -164,7 +164,7 @@ test('a build is held to its scenarios: what the walk found goes back as it was 
     run: async (_project, spec): Promise<ScenarioOutcome> => {
       walks.push(spec.scenarios.map((scenario) => `${scenario.id}:${scenario.steps.map((step) => step.id).join('>')}`));
       const problems = walks.length === 1 ? [finding] : [];
-      return { passed: problems.length === 0, scenarios: 2, walked: problems.length === 0 ? 2 : 1, problems, detail: problems.length === 0 ? '2 scenarios walked to the end as new people' : '1 of 2 scenarios walked to the end; 1 finding', durationMs: 9 };
+      return { passed: problems.length === 0, scenarios: 2, walked: problems.length === 0 ? 2 : 1, problems, logins: [], detail: problems.length === 0 ? '2 scenarios walked to the end as new people' : '1 of 2 scenarios walked to the end; 1 finding', durationMs: 9 };
     },
   };
   const model = scripted([
