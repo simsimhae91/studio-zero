@@ -243,7 +243,7 @@ function render(){const app=document.getElementById('app');
 render();
 </script></body></html>`;
 
-test('what a walk stands on is measured where it stands: once a screen, at the size walked, and a line nobody can read is found on the screen it is on', async (t) => {
+test('what a walk stands on is measured where it stands: a screen as it is first seen, at the size walked, and a line nobody can read is found on the screen it is on', async (t) => {
   const browser = await chromium.launch({ channel: 'chrome', headless: true, timeout: 15_000 }).catch(() => null);
   if (!browser) return t.skip('headless Chrome cannot be launched here');
   assert.deepEqual([...checkScreenSpec(COUNTER_PLAN, { draft: true }), ...checkWorks(COUNTER_PLAN)], []);
@@ -272,6 +272,72 @@ test('what a walk stands on is measured where it stands: once a screen, at the s
     assert.deepEqual(clean.looks.flatMap((look) => look.findings.filter((f) => f.severity !== 'minor' && f.category === 'contrast')), []);
     // And a walk nobody asked to measure measures nothing.
     assert.deepEqual((await walk(false)).looks, []);
+  } finally {
+    await browser.close().catch(() => undefined);
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+test('the people a walk made are taken out again: a backend that will not let one go is said, and is cleared all the same', async () => {
+  // Found on 2026-11-15 in the first long run's project: 353 made-up people from 51 walks were still in its
+  // database. A trigger of the product's own recomputed a score for the person being deleted, the delete failed,
+  // and the studio had asked for it without looking at the answer.
+  const REFUSED = 'ERROR:  insert or update on table "daily_scores" violates foreign key constraint "daily_scores_user_id_fkey"\nCONTEXT:  PL/pgSQL function meals_rescore() line 3 at PERFORM';
+  const info = { id: 'x', apiUrl: 'http://127.0.0.1:1', apiUrlFromSandbox: 'http://host:1', publishableKey: 'pk', adminKeys: [], dbUrl: '', mailUrl: null, logins: [] } as unknown as ConstructorParameters<typeof Backend>[0];
+  const scripts: string[] = [];
+  const holding = new Backend(info, async (script) => (scripts.push(script) === 1 ? { exitCode: 3, stdout: '', stderr: REFUSED } : { exitCode: 0, stdout: '', stderr: '' }));
+  const said = await holding.forget('abcd1234');
+  assert.match(said ?? '', /violates foreign key constraint "daily_scores_user_id_fkey".*meals_rescore\(\)/s);
+  assert.equal(scripts.length, 2, 'asked plainly, and then with the product\'s own triggers held off');
+  assert.match(scripts[0]!, /^delete from auth\.users where email like 'sz-%-abcd1234@example\.com';\n$/);
+  assert.match(scripts[1]!, /disable trigger user[\s\S]*delete from auth\.users where email like 'sz-%-abcd1234@example\.com';[\s\S]*enable trigger user/);
+  // A backend that lets them go is asked once and has nothing to say.
+  const asked: string[] = [];
+  assert.equal(await new Backend(info, async (script) => (asked.push(script), { exitCode: 0, stdout: '', stderr: '' })).forget('abcd1234'), null);
+  assert.equal(asked.length, 1);
+});
+
+test('a screen is measured again in the state a press puts it in: a second button that comes with saving, and breaks its label, is found', async (t) => {
+  const browser = await chromium.launch({ channel: 'chrome', headless: true, timeout: 15_000 }).catch(() => null);
+  if (!browser) return t.skip('headless Chrome cannot be launched here');
+  // The owner's find of 2026-11-15, on a product every gate had passed: a tip's dock holds one button until the tip
+  // is saved, and two after, the new one too narrow for its words. The screen had been measured once, as first seen.
+  let narrow = true;
+  const tip = (): string => `<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>팁</title>
+<style>body{margin:0;padding:24px;font:16px/1.6 system-ui;background:#fff;color:#111}h1{font-size:24px;margin:0}p{margin:8px 0}.dock{display:flex;gap:12px}button{font:inherit;font-weight:700;min-height:52px;padding:0 20px;border:0;border-radius:8px;background:#124;color:#fff;flex:1}button:active{background:#000}.dock .saved{flex:none;width:${narrow ? '116px' : 'auto'}}</style></head>
+<body><div id="app"></div><script>
+const s=JSON.parse(localStorage.getItem('s')||'{"saved":false,"at":"tip"}');
+const keep=()=>{localStorage.setItem('s',JSON.stringify(s));render();};
+function render(){const app=document.getElementById('app');
+ if(s.at==='tip'){app.innerHTML='<main data-screen="H-01"><h1>물 먼저 한 컵</h1><p>식사 전에 물을 마시면 덜 먹게 돼요</p>'+(s.saved?'<p data-done="save">저장했어요</p>':'')+'<div class="dock">'+(s.saved?'<button id="open" class="saved" data-step="open:1">저장한 팁 보기</button>':'')+'<button id="save" data-step="save:1">'+(s.saved?'저장함':'이 팁 저장하기')+'</button></div></main>';
+  document.getElementById('save').onclick=()=>{s.saved=true;keep();};const open=document.getElementById('open');if(open)open.onclick=()=>{s.at='saved';keep();};return;}
+ app.innerHTML='<main data-screen="R-01"><h1 data-done="open">저장한 팁</h1><p>물 먼저 한 컵</p></main>';}
+render();
+</script></body></html>`;
+  const plan = ScreenSpec.parse({
+    ...COUNTER_PLAN,
+    scenarios: [{ id: 'keeps', role: 'visitor', steps: [
+      { id: 'save', screen: 'H-01', does: '팁을 저장한다', saves: null, outcome: '저장했다는 표시가 보인다' },
+      { id: 'open', screen: 'H-01', does: '저장한 팁을 연다', saves: null, outcome: '저장한 팁 목록이 보인다' },
+    ] }],
+  });
+  const server = createServer((_req, res) => res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' }).end(tip()));
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  const walk = () => walkScenarios({ browser, base, phone: devices['iPhone 15 Pro']!, spec: plan, backend: null, run: 'cdcd8888', restart: async () => undefined, look: { template: 'mobile-expo' } });
+  const heavy = (look: { findings: readonly { rule: string; severity: string }[] }): string[] => look.findings.filter((f) => f.severity !== 'minor').map((f) => f.rule);
+  try {
+    const seen = await walk();
+    assert.deepEqual([seen.walked, seen.problems], [1, []]);
+    // The tip as first seen, the tip once saved, and the list: the saved tip is the same screen in another state.
+    assert.deepEqual(seen.looks.map((look) => look.screen), ['H-01', 'H-01', 'R-01']);
+    assert.ok(!heavy(seen.looks[0]!).includes('type/broken-label'), 'as first seen it has one button, with room for its words');
+    // Of the later state only what the screen had not already shown is kept, with a picture of that state.
+    assert.deepEqual(seen.looks[1]!.findings.map((f) => `${f.severity} ${f.rule}: ${f.message}`), ['major type/broken-label: "저장한 팁 보기" is broken onto 2 lines inside its control.']);
+    assert.deepEqual([...seen.looks[1]!.png!.subarray(0, 4)], [0x89, 0x50, 0x4e, 0x47]);
+    // Given the width of its words the later state has nothing to add, and adds no look.
+    narrow = false;
+    assert.deepEqual((await walk()).looks.map((look) => look.screen), ['H-01', 'R-01']);
   } finally {
     await browser.close().catch(() => undefined);
     await new Promise((resolve) => server.close(resolve));

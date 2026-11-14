@@ -72,6 +72,11 @@ export interface ScenarioRunnerLike {
  * audit opens a product's routes as a visitor, so in a product people sign in to it measures the door and
  * nothing behind it; this is the same measurement taken where the walk already is.
  */
+/**
+ * A screen as a walk measured it. One for each screen as it was first seen, and one more for each later state
+ * of it (something new to press, after a press) that showed what the earlier ones had not: that one holds only
+ * what was new, and the picture of that state.
+ */
 export interface ScreenLook {
   /** The screen's id in the plan, as the step that stood on it names it. */
   screen: string;
@@ -177,9 +182,23 @@ export class Backend {
     return Array.isArray(rows) ? (rows as Row[]) : [];
   }
 
-  /** Takes the people made for one walk out again, with whatever hangs on them. Best effort: a row that holds one of them back keeps them. */
-  async forget(run: string): Promise<void> {
-    await this.#sql(`delete from auth.users where email like 'sz-%-${run}@example.com';\n`).catch(() => undefined);
+  /**
+   * Takes the people made for one walk out again, with whatever hangs on them, and returns what the backend said
+   * if it would not let them go (null when it did). A product's own trigger can refuse (one that recomputes a
+   * score for the person being deleted did, all through the first long run, and 353 made-up people stayed in
+   * that project's database): that is a defect of the product, since deleting an account fails the same way,
+   * and it is not left as the owner's clutter either. They are then taken out with the product's triggers held
+   * off for the length of the delete.
+   */
+  async forget(run: string): Promise<string | null> {
+    const mine = `delete from auth.users where email like 'sz-%-${run}@example.com';\n`;
+    const plain = await this.#sql(mine).catch((err: unknown) => ({ exitCode: 1, stdout: '', stderr: String(err) }));
+    if (plain.exitCode === 0) return null;
+    const tables = `select c.oid::regclass as rel from pg_class c join pg_namespace n on n.oid = c.relnamespace where n.nspname = 'public' and c.relkind = 'r' and exists (select 1 from pg_trigger g where g.tgrelid = c.oid and not g.tgisinternal)`;
+    await this.#sql(
+      `do $forget$ declare t record; begin\n  for t in ${tables} loop execute format('alter table %s disable trigger user', t.rel); end loop;\n  ${mine}  for t in ${tables} loop execute format('alter table %s enable trigger user', t.rel); end loop;\nend $forget$;\n`,
+    ).catch(() => undefined);
+    return excerpt(plain.stderr.replace(/\s+/g, ' ').trim(), 600);
   }
 
   get adminKeys(): readonly string[] {
@@ -226,6 +245,25 @@ const REST_MS = 700;
 
 /** The mark a screen's root carries with its id in the plan, so that what is measured is said of the right screen. */
 export const SCREEN_ATTR = 'data-screen';
+/** How many states of one screen a walk measures: the one it is first seen in, and the next few a press puts it in. */
+const MAX_STATES = 4;
+
+/**
+ * What can be pressed on the page, as a word for the state its screen is in. A screen that has grown a button,
+ * opened a sheet or swapped its action is in another state; one whose figures moved is not, so digits are
+ * levelled. Runs in the page.
+ */
+const pressableNow = (): string =>
+  [...document.querySelectorAll<HTMLElement>('button, a[href], summary, [role=button], [role=link], [role=tab], [role=menuitem], [tabindex]:not([tabindex="-1"])')]
+    .filter((el) => {
+      const box = el.getBoundingClientRect();
+      const style = getComputedStyle(el);
+      return box.width > 0 && box.height > 0 && style.visibility !== 'hidden' && style.display !== 'none';
+    })
+    .map((el) => (el.innerText || el.getAttribute('aria-label') || '').replace(/\d+/g, '0').replace(/\s+/g, ' ').trim())
+    .filter((label) => label !== '')
+    .sort()
+    .join('|');
 
 /**
  * Which screen the page is showing, by its own word: the marked root that holds the middle of the window (a
@@ -276,6 +314,9 @@ export async function walkScenarios(deps: { browser: Browser; base: string; phon
   let walked = 0;
   const looks: ScreenLook[] = [];
   const looked = new Set<string>();
+  /** The states each screen has been measured in (`pressableNow`), and the rules it has been found breaking. */
+  const states = new Map<string, Set<string>>();
+  const broken = new Map<string, Set<string>>();
   const size = { viewport: (touch ? 'iphone-15-pro' : 'desktop-1440') as ViewportId, width: deps.phone?.viewport?.width ?? 1440, scale: deps.phone?.deviceScaleFactor ?? 1 };
   const planned = new Set(spec.screens.map((screen) => screen.id));
   const core = spec.tasks[0]?.screen ?? null;
@@ -322,10 +363,16 @@ export async function walkScenarios(deps: { browser: Browser; base: string; phon
     const at = `Scenario "${scenario.id}" (${role})`;
     const { page, refused, close } = await open();
     /**
-     * Measures the screen the page is on, if no walk has measured it yet. A screen says which it is where its
-     * root is marked; where it is not, `planSays` (the plan's word for where a step happens) is the best there
-     * is, and with neither nothing is measured. Asked after every press, so a screen passed through on the way
-     * to an outcome (a form, a sheet) is measured too, and at the start, for the door.
+     * Measures the screen the page is on, if no walk has measured it as it now stands. A screen says which it is
+     * where its root is marked; where it is not, `planSays` (the plan's word for where a step happens) is the
+     * best there is, and with neither nothing is measured. Asked after every press, so a screen passed through
+     * on the way to an outcome (a form, a sheet) is measured too, and at the start, for the door.
+     *
+     * A screen is not one picture. A press can leave a person on the same screen with something new to press
+     * (a second button that comes with saving, a sheet), and what is wrong may only be there then: the first
+     * long run passed a dock whose second button, shown once a tip was saved, broke its label in two. So a
+     * screen already measured is measured again in each new state a press puts it in, up to `MAX_STATES`, and
+     * of a later state only what is above minor and new to the screen is kept, with a picture of that state.
      */
     const see = async (planSays: string | null, door = false): Promise<void> => {
       if (!deps.look) return;
@@ -333,14 +380,26 @@ export async function walkScenarios(deps: { browser: Browser; base: string; phon
         const shown = await page.evaluate(shownScreen, SCREEN_ATTR).catch(() => null);
         return shown !== null && planned.has(shown) ? shown : (planSays ?? '');
       };
+      const stateOf = (): Promise<string | null> => page.evaluate(pressableNow).catch(() => null);
+      /** Whether the screen, already measured, stands in a state that was not, and may still be measured in one more. */
+      const another = (screen: string, state: string | null): boolean => state !== null && !states.get(screen)!.has(state) && states.get(screen)!.size < MAX_STATES;
       const now = await which();
-      if (now === '' || looked.has(now)) return;
+      if (now === '' || (looked.has(now) && !another(now, await stateOf()))) return;
       // What a press leaves may still be arriving (a figure counting up, a sheet sliding in): measured once it is still.
       await page.waitForTimeout(REST_MS).catch(() => undefined);
       const screen = await which();
-      if (screen === '' || looked.has(screen)) return;
+      if (screen === '') return;
+      const state = await stateOf();
+      const again = looked.has(screen);
+      if (again && !another(screen, state)) return;
       looked.add(screen);
-      looks.push(await lookAt(browser, page, { screen, scenario: scenario.id, ...size, touch, template: deps.look.template, first: screen === core ? 'core' : door ? 'door' : null }));
+      states.set(screen, (states.get(screen) ?? new Set<string>()).add(state ?? ''));
+      const look = await lookAt(browser, page, { screen, scenario: scenario.id, ...size, touch, template: deps.look.template, first: again ? null : screen === core ? 'core' : door ? 'door' : null });
+      const had = broken.get(screen) ?? new Set<string>();
+      broken.set(screen, had);
+      const fresh = again ? look.findings.filter((finding) => finding.severity !== 'minor' && !had.has(finding.rule)) : look.findings;
+      for (const finding of look.findings) had.add(finding.rule);
+      if (!again || fresh.length > 0) looks.push({ ...look, findings: fresh });
     };
     try {
       await see(null, backend !== null);
@@ -477,6 +536,7 @@ export class ScenarioRunner implements ScenarioRunnerLike {
     if (!server.ready) return finish(0, [`The dev server (\`${file.dev.command}\`) did not answer on port ${file.dev.port}. Its log:\n${excerpt(server.log, 2000)}`]);
 
     const run = randomBytes(4).toString('hex');
+    let forgotten = false;
     const restart = async (): Promise<void> => {
       await this.#arms.rest(project);
       await this.#arms.ensure(project);
@@ -498,10 +558,13 @@ export class ScenarioRunner implements ScenarioRunnerLike {
           if (where.length > 0) problems.push(`The product signs people in with a provider (signInWithOAuth in ${where.join(', ')}), and no button marked ${LOGIN_ATTR} was found on the signed-out screen or one press of the sign-in or sign-up marks from it. Mark each provider's button with the provider's name (${LOGIN_ATTR}="kakao"; React Native: dataSet={{ login: 'kakao' }}) so that the studio can press it.`);
         }
       }
+      // The project's database is the owner's to look at, and is not left filling with one walk's people after another.
+      forgotten = true;
+      const held = backend ? await backend.forget(run) : null;
+      if (held !== null && !opts.brief) problems.push(`The people the studio signed up for this walk could not be deleted from the backend (delete from auth.users). The backend said: ${held} Deleting an account has to work, and it fails the same way for a real person: find what refuses (a trigger or a function that writes for the person while their rows are going) and make it let them go. The studio has taken its own people out with the product's triggers held off.`);
       return finish(result.walked, problems, result.logins, result.looks);
     } finally {
-      // The project's database is the owner's to look at, and is not left filling with one walk's people after another.
-      await backend?.forget(run);
+      if (!forgotten) await backend?.forget(run);
     }
   }
 }
