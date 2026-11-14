@@ -60,7 +60,10 @@ export function localDocker(workspace: string): { run: CommandRunner; calls: Cal
   const env = { ...process.env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' };
   // /workspace is the temp workspace; the sandbox's own /tmp/sz* scratch paths go to a sibling directory, so an
   // emulated script can never touch a real /tmp/sz on this machine.
-  const map = (text: string): string => text.replaceAll('/workspace', workspace).replaceAll('/tmp/sz', `${workspace}-scratch/sz`);
+  // One pass over the script as it was written: on Linux the temp workspace is itself /tmp/sz-ws-…, and a second
+  // pass over the first one's output rewrote that path too, so every emulated command ran in a folder that does
+  // not exist (the suite failed inside the studio's own sandbox, where its tasks are held to it).
+  const map = (text: string): string => text.replace(/\/workspace|\/tmp\/sz/g, (found) => (found === '/workspace' ? workspace : `${workspace}-scratch/sz`));
 
   const run: CommandRunner = async (file, allArgs, opts: RunOptions = {}) => {
     const stdin = typeof opts.stdin === 'string' ? opts.stdin : '';

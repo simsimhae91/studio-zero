@@ -8,7 +8,8 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import type Anthropic from '@anthropic-ai/sdk';
-import { CORE_PROJECT_ID, RpcCallError, RpcClient } from '@studio-zero/protocol';
+import { lintSources } from '@studio-zero/design';
+import { CORE_PROJECT_ID, RpcCallError, RpcClient, type ProposalCard } from '@studio-zero/protocol';
 import { ConflictError } from '../src/app/errors.ts';
 import { SelfHosting, featureBranch, findRepoRoot } from '../src/harness/SelfHosting.ts';
 import { CORE_SYSTEM_PROMPT, codingSystemPrompt } from '../src/harness/prompts.ts';
@@ -152,6 +153,7 @@ test('in as a bundle, out as a feature branch: a Core task never touches the che
 
     // --- in: the sandbox held the repository as committed, and its own system prompt
     assert.match(JSON.stringify(sent[0]!.system), /You are an engineer working on Studio Zero itself/);
+    assert.ok(!JSON.stringify(sent[0]!.messages).includes('Draft 0 task'), 'a quick change to the studio is not briefed as the first draft of a product');
     const looked = trace.find((b) => b.type === 'tool.result');
     assert.ok(looked?.type === 'tool.result' && /export const version = 1;[\s\S]*docs: readme/.test(looked.preview), 'the task started from the latest commit on main');
     assert.ok(existsSync(join(d.workspace, 'README.md')) && !existsSync(join(d.workspace, 'notes.local')) && existsSync(join(d.workspace, 'node_modules', '.sz-lock')), 'committed files only, dependencies installed once');
@@ -230,4 +232,33 @@ test('a base branch that moved on is not overwritten: the merge is refused and t
     await d.cleanup();
     repo.cleanup();
   }
+});
+
+test('what is taken from another repository is built into the studio as a planned change, not as a product draft', async () => {
+  const repo = checkout();
+  const d = await core(repo.dir);
+  const { studio, store } = d.daemon;
+  try {
+    store.insertIngest({ id: 'kig_core0001', projectId: CORE_PROJECT_ID, repoUrl: 'https://github.com/acme/widgets', createdAt: 1 });
+    const card: ProposalCard = { id: 'prp_core0001', projectId: CORE_PROJECT_ID, ingestId: 'kig_core0001', sourceRepo: 'https://github.com/acme/widgets', sourceCommit: 'a'.repeat(40), practiceId: 'schedules', title: 'Add owner-set schedules', rationale: 'It runs work on a timer.', evidence: [], plannedChanges: [], risk: 'medium', estimatedImpact: '', state: 'proposed', branch: null, taskId: null, diff: null, diffStat: null, measured: null, createdAt: 1 };
+    store.insertProposal(card, 'Add the table, then the scheduler.');
+    const task = await studio.kirbyMaterialize(OWNER, card.id, 'desktop');
+    assert.deepEqual([task.kind, task.track], ['kirby_materialize', 'full'], 'a product takes a card as a draft; the studio\'s own code is planned first and held to all of its gates');
+    assert.match(task.prompt, /^Add owner-set schedules\n\nBuild this into the project\. /, 'the card\'s title leads the request');
+    assert.equal(featureBranch(task), `feature/add-owner-set-schedules-${task.id.slice(-6).toLowerCase()}`, 'so the branch that reaches the checkout is named by what was built');
+    studio.cancelTask(task.id);
+    for (let i = 0; i < 500 && !['succeeded', 'failed', 'cancelled'].includes(studio.getTask(task.id).state); i++) await sleep(20);
+  } finally {
+    await d.cleanup();
+    repo.cleanup();
+  }
+});
+
+test('the repository passes the slop lint its own tasks are held to', () => {
+  // A Core task is failed by any serious finding in the files it starts from, whoever wrote them. Guide pages
+  // committed with their own colours once did that to every task before it began.
+  const root = findRepoRoot()!;
+  const tracked = execFileSync('git', ['-C', root, 'ls-files', '-z'], { encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 }).split('\0').filter((path) => path !== '' && existsSync(join(root, path)));
+  const serious = lintSources(tracked.filter((path) => /\.(tsx|jsx|html|vue|svelte|astro|mdx|css|scss|pcss)$/.test(path)).map((path) => ({ path, content: readFileSync(join(root, path), 'utf8') }))).filter((f) => f.severity !== 'minor');
+  assert.deepEqual(serious.map((f) => `${f.file}:${f.line} ${f.rule} ${f.message}`), []);
 });

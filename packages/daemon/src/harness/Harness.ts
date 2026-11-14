@@ -799,9 +799,10 @@ export class Harness {
       }
     }
 
-    // What is taken from another repository runs as a draft (`Studio.kirbyMaterialize`), so it is not held to
-    // the visual audit: held to it on the full track, a twenty-line module spent three rounds redrawing the
-    // first screen of a product that had been built as a draft and had never cleared that bar.
+    // In a product, what is taken from another repository runs as a draft (`Studio.kirbyMaterialize`), so it is
+    // not held to the visual audit: held to it on the full track, a twenty-line module spent three rounds
+    // redrawing the first screen of a product that had been built as a draft and had never cleared that bar.
+    // In the studio's own repository it runs on the full track, where there is no visual audit to be held to.
     const outcomes = await this.#evals.runAll(project, task.id, { extraRoutes: plan?.auditRoutes, commandsOnly: task.track === 'fast', devServerRunning: served, signal });
     const commands = outcomes.filter((o) => o.eval.spec.kind === 'command');
     record.checksPassed = commands.filter((o) => o.passed).length;
@@ -1016,7 +1017,11 @@ function referenceBlock(ref: ReferenceCapture): string {
 }
 
 function executeMessage(task: Task, plan: Plan | null, lessonText: string, handed: { anchor: AnchorTable | null; critique: PlanCritique | null; references: readonly ReferenceCapture[]; revising?: boolean; specOwed?: string[] | null; template?: Project['template'] } = { anchor: null, critique: null, references: [] }): string {
-  const parts = [task.kind === 'ideate' ? (handed.revising ? IDEATION_REVISION_BRIEF : IDEATION_BRIEF) : '', task.track === 'fast' && task.kind !== 'ideate' ? DRAFT_BRIEF : '', `The owner's request:\n${task.prompt}`];
+  // A draft's brief says how to start a product (a screen plan, sign-up, a backend). The studio's own repository
+  // is a codebase with conventions: a quick change there is still held to its type check, tests and build, and
+  // is not told to build any of that.
+  const drafted = task.track === 'fast' && task.kind !== 'ideate' && handed.template !== 'studio-core';
+  const parts = [task.kind === 'ideate' ? (handed.revising ? IDEATION_REVISION_BRIEF : IDEATION_BRIEF) : '', drafted ? DRAFT_BRIEF : '', `The owner's request:\n${task.prompt}`];
   if (plan) parts.push(`Plan drafted for this request (follow it unless the code shows it is wrong; say so if you deviate):\n${planText(plan)}`);
   // The table's cells were written by a model that had read reference pages, so they travel as data; the instruction to build to it is the harness's.
   if (handed.anchor) parts.push(`The anchor table for this work is committed at ${ANCHOR_FILE}. Build to it: the idea, the first screen as it describes it, and our own values, not the references'.\n${untrusted('engine-output', renderAnchorTable(handed.anchor))}`);
@@ -1037,7 +1042,7 @@ function executeMessage(task: Task, plan: Plan | null, lessonText: string, hande
   }
   if (lessonText) parts.push(lessonText);
   // A draft is built from no approved page, so what a screen is made of reaches it here: last, where the design lab found it acted on.
-  if (task.track === 'fast' && task.kind !== 'ideate' && handed.template && handed.template !== 'studio-core') {
+  if (drafted && handed.template && handed.template !== 'studio-core') {
     parts.push(`One more thing is not left to defaults in a draft: what its first screen is made of. This is the handbook's last section, said again here because it is the first thing the owner sees.\n\n${materialFor(handed.template)}`);
   }
   return parts.filter(Boolean).join('\n\n');
@@ -1070,6 +1075,6 @@ export function repairMessage(failures: readonly Failure[]): string {
 }
 
 function commitSubject(task: Task): string {
-  const prefix = { build: 'feat', refactor: 'refactor', inline_edit: 'fix', ideate: 'docs', kirby_materialize: 'refactor' }[task.kind];
+  const prefix = { build: 'feat', refactor: 'refactor', inline_edit: 'fix', ideate: 'docs', kirby_materialize: 'feat' }[task.kind];
   return `${prefix}: ${task.prompt.split('\n')[0]!.replace(/\s+/g, ' ').slice(0, 68)}\n\nStudio Zero task ${task.id}`;
 }

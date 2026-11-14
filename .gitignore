@@ -7,3 +7,6 @@ coverage/
 dist/
 .pnpm-store/
 packages/daemon/dist/
+# Written by apps/desktop/scripts/theme.mjs before every dev and build of the desktop client. Tracked, it went
+# stale against the generator and left the checkout modified, which the studio's own merge refuses.
+apps/desktop/src/styles/theme.css

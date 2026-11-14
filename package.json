@@ -10,7 +10,7 @@
   "packageManager": "pnpm@11.0.9",
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "node --test --test-reporter=spec \"packages/*/test/**/*.test.ts\" \"apps/*/test/**/*.test.ts\"",
+    "test": "node --test --test-reporter=spec --test-force-exit \"packages/*/test/**/*.test.ts\" \"apps/*/test/**/*.test.ts\"",
     "daemon": "node packages/daemon/src/main.ts",
     "sz": "node packages/daemon/src/cli.ts",
     "design:build": "node packages/design/src/build.ts",

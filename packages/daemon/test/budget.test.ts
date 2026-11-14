@@ -38,23 +38,27 @@ function fakeModel(): Anthropic {
 async function run(decision: 'approve' | 'deny') {
   const d = await testDaemon({}, { anthropic: fakeModel() });
   await d.daemon.start();
-  const { studio, events, store } = d.daemon;
-  const project = studio.createProject(OWNER, { name: 'Ledger', slug: 'ledger', template: 'web-vite-react' });
-  await studio.setEvalEnabled(OWNER, studio.listEvals(project.id).find((e) => e.name === 'visual-audit')!.id, false);
-  // 4,000 tokens: enough for the plan and one engine turn (3,000), not for the second.
-  const task = await studio.submitTask(OWNER, { projectId: project.id, kind: 'build', prompt: 'Write two notes', budgetTokens: 4000 }, 'desktop');
+  // Whatever is asserted below, the daemon is stopped: one left listening keeps the whole test run from ending.
+  try {
+    const { studio, events, store } = d.daemon;
+    const project = studio.createProject(OWNER, { name: 'Ledger', slug: 'ledger', template: 'web-vite-react' });
+    await studio.setEvalEnabled(OWNER, studio.listEvals(project.id).find((e) => e.name === 'visual-audit')!.id, false);
+    // 4,000 tokens: enough for the plan and one engine turn (3,000), not for the second.
+    const task = await studio.submitTask(OWNER, { projectId: project.id, kind: 'build', prompt: 'Write two notes', budgetTokens: 4000 }, 'desktop');
 
-  let pending;
-  for (let i = 0; i < 400 && !(pending = studio.listApprovals('pending')[0]); i++) await sleep(10);
-  assert.ok(pending, `no approval was requested: ${events.history({ taskId: task.id }, 0, 100).map((e) => JSON.stringify(e.body)).join('\n')}`);
-  const waiting = studio.getTask(task.id);
-  studio.resolveApproval(pending.id, decision, 'telegram');
-  for (let i = 0; i < 600 && !['succeeded', 'failed'].includes(studio.getTask(task.id).state); i++) await sleep(10);
-  const trace = events.history({ taskId: task.id }, 0, 300).map((e) => e.body);
-  const finished = studio.getTask(task.id);
-  const decisions = store.listApprovals(undefined);
-  await d.cleanup();
-  return { pending, waiting, finished, trace, decisions };
+    let pending;
+    for (let i = 0; i < 400 && !(pending = studio.listApprovals('pending')[0]); i++) await sleep(10);
+    assert.ok(pending, `no approval was requested: ${events.history({ taskId: task.id }, 0, 100).map((e) => JSON.stringify(e.body)).join('\n')}`);
+    const waiting = studio.getTask(task.id);
+    studio.resolveApproval(pending.id, decision, 'telegram');
+    for (let i = 0; i < 600 && !['succeeded', 'failed'].includes(studio.getTask(task.id).state); i++) await sleep(10);
+    const trace = events.history({ taskId: task.id }, 0, 300).map((e) => e.body);
+    const finished = studio.getTask(task.id);
+    const decisions = store.listApprovals(undefined);
+    return { pending, waiting, finished, trace, decisions };
+  } finally {
+    await d.cleanup();
+  }
 }
 
 test('a task that runs out of budget asks the owner, and continues when the extension is approved', async () => {
