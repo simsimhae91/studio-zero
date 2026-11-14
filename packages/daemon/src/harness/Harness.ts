@@ -233,7 +233,8 @@ export class Harness {
     const design = initial.kind === 'build' && !draft && this.#evals.usesBrowser(project.id);
     // A build of a product is held to its screen plan as a product that works: who uses it, how they get in,
     // what each does and what is kept. A draft writes the short plan; it does not get to skip it.
-    const working = initial.kind === 'build' && this.#evals.usesBrowser(project.id) && variantOf(project.template) !== null;
+    // What is taken from another repository is built as a build is: it is something the product now does.
+    const working = (initial.kind === 'build' || initial.kind === 'kirby_materialize') && this.#evals.usesBrowser(project.id) && variantOf(project.template) !== null;
     const specFor: SpecDemand | null = design || working ? { works: working, draft } : null;
     // The two cross-checks by another vendor's model go with a full build, unless the owner switched them off.
     const crossChecked = initial.kind === 'build' && !draft && this.#config.review.sandwich;
@@ -798,11 +799,10 @@ export class Harness {
       }
     }
 
-    // A practice taken from another repository changes how the code is kept, not what the product is. It is
-    // held to what the project already passed: its commands and, above, its scenarios. The visual audit is a
-    // bar a build sets out to clear; held to it, that twenty-line module spent three rounds redrawing the first
-    // screen of a product that had been built as a draft and never cleared it.
-    const outcomes = await this.#evals.runAll(project, task.id, { extraRoutes: plan?.auditRoutes, commandsOnly: task.track === 'fast' || task.kind === 'kirby_materialize', devServerRunning: served, signal });
+    // What is taken from another repository runs as a draft (`Studio.kirbyMaterialize`), so it is not held to
+    // the visual audit: held to it on the full track, a twenty-line module spent three rounds redrawing the
+    // first screen of a product that had been built as a draft and had never cleared that bar.
+    const outcomes = await this.#evals.runAll(project, task.id, { extraRoutes: plan?.auditRoutes, commandsOnly: task.track === 'fast', devServerRunning: served, signal });
     const commands = outcomes.filter((o) => o.eval.spec.kind === 'command');
     record.checksPassed = commands.filter((o) => o.passed).length;
     record.checksFailed = commands.filter((o) => !o.passed).map((o) => o.eval.name);

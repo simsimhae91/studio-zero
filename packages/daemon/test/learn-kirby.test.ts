@@ -8,7 +8,8 @@ import { EventLog } from '../src/events/EventLog.ts';
 import { LessonBook, lintLesson, type LessonDraft } from '../src/harness/LessonBook.ts';
 import { buildTrace } from '../src/harness/ReflectionAgent.ts';
 import { analyzeRepo } from '../src/kirby/analyze.ts';
-import { fitGap, measure } from '../src/kirby/fitgap.ts';
+import { measure } from '../src/kirby/fitgap.ts';
+import { describeTarget, locate, opened, tree } from '../src/kirby/reader.ts';
 import { PolicyEngine } from '../src/policy/PolicyEngine.ts';
 import type { ExtractedFile } from '../src/sandbox/extract.ts';
 import { sampleProject, tempDir } from './helpers.ts';
@@ -165,29 +166,43 @@ test('repository analysis: practices are found from the syntax tree, with file-a
   assert.ok(!JSON.stringify(source).includes('Ignore previous instructions'), 'prose files are not part of the profile');
 });
 
-test('fit-gap is deterministic and ordered; measurement compares like with like', () => {
-  const source = analyzeRepo(SOURCE);
+test('measurement compares like with like', () => {
   const target = analyzeRepo(TARGET);
-
   assert.equal(target.metrics.importCycles, 1);
   assert.equal(target.metrics.anyCount, 4);
   assert.equal(target.metrics.suppressions, 1);
   assert.equal(target.sourceFiles, 4, 'a file that does not parse is still analysed, not fatal');
 
-  const gaps = fitGap(source, target);
-  assert.deepEqual(gaps.map((g) => g.practiceId), [
-    'strict-typescript', 'schema-validated-boundaries', 'automated-tests', 'typed-env', 'error-boundaries', 'exhaustive-switch', 'accessible-primitives', 'design-tokens', 'lint-and-format', 'ci-verification',
-  ]);
-  assert.match(gaps[1]!.basis, /present in source \(3 parse call sites in 2 files\); absent in target \(0 parse call sites in 0 files\)/);
-  assert.deepEqual(fitGap(source, target), gaps, 'same inputs, same answer');
-  assert.deepEqual(fitGap(target, source), [], 'nothing to learn in the other direction');
-
-  // A project with no interface is not told to add error boundaries or design tokens.
-  const headless = analyzeRepo(TARGET.filter((x) => x.path !== 'src/App.tsx'));
-  assert.ok(!fitGap(source, headless).some((g) => ['error-boundaries', 'accessible-primitives', 'design-tokens'].includes(g.practiceId)));
-
   const before = measure(target, 3);
   const after = measure(analyzeRepo([...TARGET.filter((x) => x.path !== 'tsconfig.json' && x.path !== 'src/a.ts'), f('tsconfig.json', '{ "compilerOptions": { "strict": true } }'), f('src/a.ts', `export const a = (x: string): string => x;\n`)]), 1);
   const delta = Object.keys(after).filter((k) => before[k] !== after[k]).map((k) => `${k}: ${before[k]} → ${after[k]}`);
   assert.deepEqual(delta, ['lines of code: 9 → 8', '`any` annotations: 4 → 2', 'import cycles: 1 → 0', 'slop-lint major findings: 3 → 1', 'practice: strict-typescript: 0 → 1']);
+});
+
+test('reading a repository: what a person opens first, the shape of the tree, and a quotation only where the file says it', () => {
+  const repo: ExtractedFile[] = [
+    f('README.md', '# Daily stock notes\nEvery morning it reads the market and writes a note.\n'),
+    f('pyproject.toml', '[project]\nname = "notes"\n'),
+    f('LICENSE', 'GNU AFFERO GENERAL PUBLIC LICENSE\nVersion 3\n'),
+    f('src/analyzer/pipeline.py', 'def run(market):\n    quotes = fetch_quotes(market)\n    return write_note(quotes, model="x")\n'),
+    f('src/notify/push.py', 'def push(note):\n    send_to_channel(note)\n'),
+    f('docs/guide/setup.md', 'How to set up.\n'),
+    f('tests/test_pipeline.py', 'def test_run(): pass\n'),
+    { path: 'data/prices.parquet', content: null },
+  ];
+  // The readme first, then what else the repository says of itself; nothing three folders down, nothing unread.
+  assert.deepEqual(opened(repo).map((file) => file.path), ['README.md', 'LICENSE', 'pyproject.toml']);
+  assert.equal(tree(repo), ['README.md', 'pyproject.toml', 'LICENSE', 'data/  (1 files)', 'docs/  (1 files)', 'docs/guide/  (1 files)', 'src/  (2 files)', 'src/analyzer/  (1 files)', 'src/notify/  (1 files)', 'tests/  (1 files)'].join('\n'));
+
+  // A line the file has is located; one it does not have, one too short to mean anything, and a file that was not read, are nothing.
+  assert.deepEqual(locate(repo, 'src/analyzer/pipeline.py', '  quotes = fetch_quotes(market)  '), { file: 'src/analyzer/pipeline.py', line: 2, excerpt: 'quotes = fetch_quotes(market)' });
+  assert.equal(locate(repo, 'src/analyzer/pipeline.py', 'quotes = scrape_everything(market)'), null);
+  assert.equal(locate(repo, 'src/analyzer/pipeline.py', 'run'), null);
+  assert.equal(locate(repo, 'data/prices.parquet', 'anything at all in here'), null);
+  assert.equal(locate(repo, 'src/missing.py', 'quotes = fetch_quotes(market)'), null);
+
+  // The owner's project as the study is shown it: an empty one is said to be empty, and the studio's own files say nothing of it.
+  assert.match(describeTarget([f('.studio-zero/theme.css', ':root {}'), { path: 'public/fonts/a.woff2', content: null }], 'Money'), /^The project "Money" is empty: nothing has been built in it yet\./);
+  const described = describeTarget([f('README.md', 'A ledger for a running club.'), f('docs/screens.md', '# 화면설계서'), f('.studio-zero/ax/index.ts', 'export {}'), f('app/index.tsx', 'export default 1')], 'Ledger', 'Measured in its code: 1 source files');
+  assert.match(described, /^The project "Ledger"\.\n\nIts tree:\nREADME\.md\napp\/  \(1 files\)\ndocs\/  \(1 files\)\n\n--- README\.md\nA ledger for a running club\.\n\n--- docs\/screens\.md\n# 화면설계서\n\nMeasured in its code: 1 source files$/);
 });

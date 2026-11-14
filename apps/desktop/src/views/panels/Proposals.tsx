@@ -8,7 +8,7 @@ import { Button, Empty, Field, Problem, Status, inputClass } from '../../ui.tsx'
 const stateTone = { proposed: 'neutral', materializing: 'active', ready: 'warn', merged: 'good', rejected: 'neutral', failed: 'bad' } as const;
 const riskLabel = { low: '낮음', medium: '보통', high: '높음' } as const;
 
-/** Kirby: practices found in another repository, proposed for this one. */
+/** Kirby: what another repository does well, proposed for this one. */
 export function Proposals({ project }: { project: Project }) {
   const { backend } = useStudio();
   const proposals = useQuery('kirby.proposals', { projectId: project.id }, ['kirby.proposal']);
@@ -28,7 +28,7 @@ export function Proposals({ project }: { project: Project }) {
   return (
     <div className="flex flex-col gap-8 p-4">
       <form onSubmit={submit} className="flex flex-col gap-4">
-        <Field label="참고할 저장소" hint="격리된 일회용 컨테이너에서 읽기만 합니다. 그 저장소의 코드는 실행되지도, 이 프로젝트로 복사되지도 않습니다.">
+        <Field label="빨아들일 저장소" hint="격리된 일회용 컨테이너에서 읽기만 합니다. 그 저장소의 코드는 실행되지도, 이 프로젝트로 복사되지도 않습니다. 어떤 언어로 쓰였든 읽습니다.">
           <input className={inputClass} type="url" value={repo} onChange={(e) => setRepo(e.target.value)} placeholder="https://github.com/owner/repo" autoCapitalize="none" spellCheck={false} required />
         </Field>
         {ingest.error ? <Problem>{ingest.error}</Problem> : null}
@@ -41,7 +41,7 @@ export function Proposals({ project }: { project: Project }) {
       {proposals.error ? <Problem>{proposals.error}</Problem> : null}
       {proposals.data && list.length === 0 ? (
         <Empty title="아직 제안이 없습니다">
-          <p>잘 만들어진 저장소를 분석하면, 그 저장소에는 있고 이 프로젝트에는 없는 엔지니어링 관행을 근거와 함께 제안합니다.</p>
+          <p>잘 만든 제품이나 도구의 저장소를 넣으면, 그것이 무엇을 하고 어떻게 하는지를 읽어서 이 프로젝트에 없는 것을 그 저장소의 파일을 근거로 제안합니다. 빈 프로젝트라면 그것을 중심으로 지을 제품을 제안합니다.</p>
         </Empty>
       ) : null}
       <ul className="flex flex-col gap-8">

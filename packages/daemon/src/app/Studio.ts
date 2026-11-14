@@ -739,7 +739,8 @@ export class Studio implements PromotionHost {
   async kirbyMaterialize(actor: Actor, proposalId: string, origin: Origin): Promise<Task> {
     const { project, prompt, branch } = this.#d.kirby.materializePrompt(proposalId);
     await this.#d.policy.authorize(actor, { kind: 'kirby.materialize', projectId: project.id, proposalId });
-    const task = await this.submitTask(actor, { projectId: project.id, kind: 'kirby_materialize', prompt, branch }, origin);
+    // A draft: held to compiling, loading and the plan's scenarios, which the thing built is added to.
+    const task = await this.submitTask(actor, { projectId: project.id, kind: 'kirby_materialize', prompt, branch, track: 'fast' }, origin);
     this.#d.kirby.attachTask(proposalId, task);
     return task;
   }

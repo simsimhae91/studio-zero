@@ -194,6 +194,28 @@ test('the extractor lists a repository through git and its output is re-validate
   assert.equal(byPath.get('src/logo.png'), null, 'binary files are listed without content');
   assert.equal(byPath.get('pnpm-lock.yaml'), null, 'lockfiles are listed without content');
   assert.equal(byPath.get('big.ts'), null, 'oversized files are listed without content');
+
+  // Any language is read, and a file that says what the repository is carries no extension.
+  mkdirSync(file('app/models'), { recursive: true });
+  mkdirSync(file('examples/demo'), { recursive: true });
+  mkdirSync(file('vendor/lib'), { recursive: true });
+  writeFileSync(file('README.md'), '# what it is\n');
+  writeFileSync(file('Gemfile'), "gem 'rails'\n");
+  writeFileSync(file('Gemfile.lock'), 'GEM\n');
+  writeFileSync(file('app/models/account.rb'), 'class Account; end\n');
+  writeFileSync(file('main.py'), 'print(1)\n');
+  writeFileSync(file('examples/demo/run.py'), 'print(2)\n');
+  writeFileSync(file('vendor/lib/x.rb'), 'x = 1\n');
+  const wide = parseExtraction((await sandboxes.exec(project, 'node -', { stdin: extractorScript(limits) })).stdout, limits);
+  const read = (path: string): string | null | undefined => wide.files.find((f) => f.path === path)?.content;
+  assert.deepEqual([read('Gemfile'), read('app/models/account.rb'), read('main.py'), read('Gemfile.lock'), read('vendor/lib/x.rb')], ["gem 'rails'\n", 'class Account; end\n', 'print(1)\n', null, null], 'Ruby and Python are read; a lockfile and what was vendored in are listed and not read');
+  // When there is room for three files only, they are the ones a person opens first and the shallowest
+  // source: not whatever sorts first by name, and what demonstrates the repository after what it is.
+  const tight = { maxFiles: 3, maxFileBytes: 1000, maxTotalBytes: 100_000 };
+  const few = parseExtraction((await sandboxes.exec(project, 'node -', { stdin: extractorScript(tight) })).stdout, tight);
+  assert.deepEqual(few.files.filter((f) => f.content !== null).map((f) => f.path).sort(), ['Gemfile', 'README.md', 'main.py']);
+  assert.equal(few.partial, true);
+  assert.equal(few.files.length, wide.files.length, 'every file is still listed');
   assert.ok(!byPath.has('node_modules/x/index.js') && !byPath.has('secret.env'), 'ignored files are not listed at all');
 
   // The producer is not trusted: traversal paths, oversize content and junk lines are dropped on the host.
