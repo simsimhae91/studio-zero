@@ -144,20 +144,23 @@ export class OrbStackManager {
   }
 
   /** Creates (or starts) the project's sandbox and makes sure /workspace is a git repository. Idempotent and safe to call concurrently. */
-  ensure(project: Project): Promise<SandboxInfo> {
-    return this.#lifecycle.run(project.id, () => this.#ensure(project));
+  ensure(project: Place): Promise<SandboxInfo> {
+    return this.#lifecycle.run(lifeKey(project), () => this.#ensure(project));
   }
 
-  async #ensure(project: Project): Promise<SandboxInfo> {
-    const names = sandboxNames(project.slug);
+  async #ensure(project: Place): Promise<SandboxInfo> {
+    const slot = slotOf(project);
+    const names = sandboxNames(project.slug, slot);
     const state = await this.#containerState(names.container);
-    if (state === 'running' && this.#store.getSandbox(project.id)) return this.info(project);
-    if (state === 'stopped' && this.#store.getSandbox(project.id)) {
+    if (state === 'running' && this.#store.getSandbox(project.id, slot)) return this.info(project);
+    if (state === 'stopped' && this.#store.getSandbox(project.id, slot)) {
       await this.#must(['start', names.container], 'could not start sandbox');
       return this.info(project);
     }
     if (state !== 'absent') await this.#must(['rm', '-f', names.container], 'could not remove stale sandbox container');
 
+    // A slot is a clone of the project: it reads the project's own volume, so that has to be there first.
+    if (slot > 0 && !this.#store.getSandbox(project.id)) throw new SandboxError(`slot ${slot} of ${project.slug} has no project sandbox to be a clone of`);
     const image = await this.#sandboxImage();
     await this.#ensureNetwork(names.network, project.id);
     await this.#ensureVolume(names.volume, project.id, await this.#baseImage());
@@ -180,13 +183,18 @@ export class OrbStackManager {
     const args = [
       'run', '--detach',
       '--name', names.container,
-      '--hostname', project.slug,
+      '--hostname', slot > 0 ? `${project.slug}-s${slot}` : project.slug,
       '--label', `studio-zero.project=${project.id}`,
-      '--label', 'studio-zero.role=sandbox',
+      // A slot is not listed with the projects' sandboxes (`states`): it is the project's, not one more project.
+      '--label', slot > 0 ? 'studio-zero.role=slot' : 'studio-zero.role=sandbox',
+      ...(slot > 0 ? ['--label', `studio-zero.slot=${slot}`] : []),
       '--network', names.network,
       // volume-nocopy: without it, the first mount of an empty volume copies the ownership of the container's
       // own /workspace (created root-owned for --workdir) onto the volume and undoes the chown below.
       '--mount', `type=volume,source=${names.volume},target=${WORKSPACE_DIR},volume-nocopy`,
+      // The project's own workspace, to read: a slot clones from it, follows its branches and copies its
+      // installed dependencies. It can write nothing there; what it makes leaves as a bundle (`Slots`).
+      ...(slot > 0 ? ['--mount', `type=volume,source=${sandboxNames(project.slug).volume},target=${SLOT_MAIN_DIR},readonly`] : []),
       '--workdir', WORKSPACE_DIR,
       '--user', SANDBOX_USER,
       '--cpus', String(rt.cpus),
@@ -205,34 +213,44 @@ export class OrbStackManager {
       'sleep', 'infinity',
     ];
     await this.#must(args, 'could not create sandbox', { env: { ...process.env, ...tokenEnv } });
-    this.#store.upsertSandbox({ projectId: project.id, ...names, image, gatewayTokenHash: sha256Hex(gatewayToken) }, this.#clock());
+    this.#store.upsertSandbox({ projectId: project.id, slot, ...names, image, gatewayTokenHash: sha256Hex(gatewayToken) }, this.#clock());
 
+    // A slot's workspace is not begun here: it is cloned from the project's when the slot is first taken.
+    if (slot > 0) return this.info(project);
     const init = await this.exec(project, initWorkspaceScript(WORKSPACE_DIR), { timeoutSec: 60 });
     if (init.exitCode !== 0) throw new SandboxError('could not initialise workspace', init.stderr);
     return this.info(project);
   }
 
-  stop(project: Project): Promise<SandboxInfo> {
-    return this.#lifecycle.run(project.id, async () => {
-      const { container } = sandboxNames(project.slug);
+  stop(project: Place): Promise<SandboxInfo> {
+    return this.#lifecycle.run(lifeKey(project), async () => {
+      const { container } = sandboxNames(project.slug, slotOf(project));
       if ((await this.#containerState(container)) === 'running') await this.#must(['stop', '--time', '10', container], 'could not stop sandbox');
       return this.info(project);
     });
   }
 
   /** Environment reset: a fresh container from the image, same workspace volume, new gateway token. */
-  recreate(project: Project): Promise<SandboxInfo> {
-    return this.#lifecycle.run(project.id, async () => {
-      const { container } = sandboxNames(project.slug);
+  recreate(project: Place): Promise<SandboxInfo> {
+    return this.#lifecycle.run(lifeKey(project), async () => {
+      const { container } = sandboxNames(project.slug, slotOf(project));
       if ((await this.#containerState(container)) !== 'absent') await this.#must(['rm', '-f', container], 'could not remove sandbox');
       return this.#ensure(project);
     });
   }
 
-  /** Removes container and network. The workspace volume is only removed when `deleteWorkspace` is set. */
+  /**
+   * Removes container and network. The workspace volume is only removed when `deleteWorkspace` is set. The
+   * project's slots go with it, volumes and all: a slot holds nothing the project's repository does not.
+   */
   destroy(project: Project, opts: { deleteWorkspace: boolean }): Promise<void> {
     return this.#lifecycle.run(project.id, async () => {
       const names = sandboxNames(project.slug);
+      for (const row of this.#store.listSandboxes(project.id).filter((s) => s.slot > 0)) {
+        await this.#docker(['rm', '-f', row.container]);
+        await this.#docker(['volume', 'rm', row.volume]);
+        this.#store.deleteSandbox(project.id, row.slot);
+      }
       await this.#docker(['rm', '-f', names.container]);
       await this.#docker(['network', 'rm', names.network]);
       if (opts.deleteWorkspace) await this.#docker(['volume', 'rm', names.volume]);
@@ -264,14 +282,14 @@ export class OrbStackManager {
     return flags[flags.indexOf('--host') + 1]!;
   }
 
-  async info(project: Project): Promise<SandboxInfo> {
-    const names = sandboxNames(project.slug);
+  async info(project: Place): Promise<SandboxInfo> {
+    const names = sandboxNames(project.slug, slotOf(project));
     const state = await this.#containerState(names.container);
     return {
       projectId: project.id,
       state,
       container: names.container,
-      image: this.#store.getSandbox(project.id)?.image ?? this.#config.runtime.image ?? this.#config.runtime.baseImage,
+      image: this.#store.getSandbox(project.id, slotOf(project))?.image ?? this.#config.runtime.image ?? this.#config.runtime.baseImage,
       previewUrls: state === 'running' ? await this.#previewUrls(names.container) : [],
     };
   }
@@ -282,8 +300,8 @@ export class OrbStackManager {
    * Runs a bash script inside the sandbox. A non-zero exit is a normal result, not an exception: callers decide
    * what failure means. Throws only when the container itself cannot be reached.
    */
-  async exec(project: Project, script: string, opts: ExecOptions = {}): Promise<ExecResult> {
-    const { container } = sandboxNames(project.slug);
+  async exec(project: Place, script: string, opts: ExecOptions = {}): Promise<ExecResult> {
+    const { container } = sandboxNames(project.slug, slotOf(project));
     const cwd = resolveInWorkspace(opts.cwd ?? '.');
     const timeoutSec = Math.min(opts.timeoutSec ?? this.#config.runtime.execTimeoutSec, 3600);
     const res = await this.#docker(
@@ -310,7 +328,7 @@ export class OrbStackManager {
     };
   }
 
-  async readFile(project: Project, path: string, maxBytes = 512 * 1024): Promise<{ content: string; truncated: boolean }> {
+  async readFile(project: Place, path: string, maxBytes = 512 * 1024): Promise<{ content: string; truncated: boolean }> {
     const target = resolveInWorkspace(path);
     const res = await this.exec(project, `head -c ${maxBytes + 1} -- ${shq(target)}`, { timeoutSec: 30, maxOutputBytes: maxBytes + 1024 });
     if (res.exitCode !== 0) throw new SandboxError(`cannot read ${path}`, lastLine(res.stderr));
@@ -318,29 +336,29 @@ export class OrbStackManager {
     return { content: truncated ? res.stdout.slice(0, maxBytes) : res.stdout, truncated };
   }
 
-  async writeFile(project: Project, path: string, content: string | Uint8Array): Promise<void> {
+  async writeFile(project: Place, path: string, content: string | Uint8Array): Promise<void> {
     const target = resolveInWorkspace(path);
     const res = await this.exec(project, `mkdir -p -- ${shq(posix.dirname(target))} && cat > ${shq(target)}`, { stdin: content, timeoutSec: 30 });
     if (res.exitCode !== 0) throw new SandboxError(`cannot write ${path}`, lastLine(res.stderr));
   }
 
   /** Starts a named long-running process (the dev server) detached from the exec session. Replaces a running one. */
-  async startProcess(project: Project, name: string, command: string): Promise<void> {
+  async startProcess(project: Place, name: string, command: string): Promise<void> {
     await this.stopProcess(project, name);
-    const { container } = sandboxNames(project.slug);
+    const { container } = sandboxNames(project.slug, slotOf(project));
     await this.#must(['exec', '--detach', container, 'setsid', 'bash', '-c', startProcessScript({ name, command, workspace: WORKSPACE_DIR })], `could not start ${name}`);
   }
 
-  async stopProcess(project: Project, name: string): Promise<void> {
+  async stopProcess(project: Place, name: string): Promise<void> {
     await this.exec(project, stopProcessScript(name), { timeoutSec: 20 });
   }
 
-  async waitForHttp(project: Project, port: number, path: string, timeoutSec: number): Promise<boolean> {
+  async waitForHttp(project: Place, port: number, path: string, timeoutSec: number): Promise<boolean> {
     const res = await this.exec(project, waitHttpScript({ url: `http://127.0.0.1:${port}${path}`, timeoutSec }), { timeoutSec: timeoutSec + 10 });
     return res.exitCode === 0;
   }
 
-  async processLog(project: Project, name: string, tailLines = 80): Promise<string> {
+  async processLog(project: Place, name: string, tailLines = 80): Promise<string> {
     if (!/^[a-z][a-z0-9-]{0,30}$/.test(name)) throw new SandboxError('invalid process name');
     return (await this.exec(project, `tail -n ${tailLines} /tmp/sz/${name}.log 2>/dev/null || true`, { timeoutSec: 10 })).stdout;
   }
@@ -374,7 +392,7 @@ export class OrbStackManager {
   // ------------------------------------------------- checkpoints & git
 
   /** Sub-second snapshot of the whole working tree (see `checkpointScript`). */
-  async checkpoint(project: Project, label: string, taskId: string | null = null): Promise<Checkpoint> {
+  async checkpoint(project: Place, label: string, taskId: string | null = null): Promise<Checkpoint> {
     const id = newId('ckp');
     const res = await this.exec(project, checkpointScript({ workspace: WORKSPACE_DIR, id, label }), { timeoutSec: 120 });
     const match = /^([0-9a-f]{40,64}) ([0-9a-f]{40,64}|none) (\S+)\s*$/.exec(res.stdout.trim());
@@ -385,7 +403,7 @@ export class OrbStackManager {
   }
 
   /** What the workspace holds right now, as a tree id (see `treeScript`): equal ids mean no file differs. */
-  async workspaceTree(project: Project): Promise<string> {
+  async workspaceTree(project: Place): Promise<string> {
     const res = await this.exec(project, treeScript({ workspace: WORKSPACE_DIR }), { timeoutSec: 120 });
     const tree = res.stdout.trim();
     if (res.exitCode !== 0 || !/^[0-9a-f]{40,64}$/.test(tree)) throw new SandboxError('could not read the workspace tree', lastLine(res.stderr) || res.stdout);
@@ -393,7 +411,7 @@ export class OrbStackManager {
   }
 
   /** Restores a checkpoint after first checkpointing the present, so the rollback can itself be rolled back. */
-  async rollback(project: Project, checkpointId: string): Promise<{ restored: Checkpoint; safety: Checkpoint }> {
+  async rollback(project: Place, checkpointId: string): Promise<{ restored: Checkpoint; safety: Checkpoint }> {
     const row = this.#store.getCheckpoint(checkpointId);
     if (!row || row.projectId !== project.id) throw new SandboxError(`checkpoint ${checkpointId} does not belong to this project`);
     const safety = await this.checkpoint(project, `before rollback to ${row.label}`.slice(0, 120));
@@ -406,7 +424,7 @@ export class OrbStackManager {
    * A branch that starts at a checkpoint: the workspace exactly as it was then, as a line of history of its own.
    * Nothing on the current branch changes. Forking the same checkpoint twice gives the same branch.
    */
-  async fork(project: Project, checkpointId: string): Promise<string> {
+  async fork(project: Place, checkpointId: string): Promise<string> {
     const row = this.#store.getCheckpoint(checkpointId);
     if (!row || row.projectId !== project.id) throw new SandboxError(`checkpoint ${checkpointId} does not belong to this project`);
     const branch = `fork/${checkpointId.slice(-10)}`;
@@ -419,13 +437,13 @@ export class OrbStackManager {
    * Puts the workspace on a task's branch, started from `from`. With `keep`, a branch of that name that already
    * holds work of its own is kept as it is. Returns whether it was: true means the task goes on from earlier work.
    */
-  async startBranch(project: Project, branch: string, from: string, opts: { keep?: boolean } = {}): Promise<boolean> {
+  async startBranch(project: Place, branch: string, from: string, opts: { keep?: boolean } = {}): Promise<boolean> {
     const res = await this.exec(project, startBranchScript({ workspace: WORKSPACE_DIR, branch, from, keep: opts.keep }), { timeoutSec: 60 });
     if (res.exitCode !== 0) throw new SandboxError(`cannot start branch ${branch}`, lastLine(res.stderr));
     return lastLine(res.stdout) === 'kept';
   }
 
-  async checkout(project: Project, branch: string): Promise<void> {
+  async checkout(project: Place, branch: string): Promise<void> {
     assertBranchName(branch);
     const res = await this.exec(project, `git checkout -q ${shq(branch)}`, { timeoutSec: 60 });
     if (res.exitCode !== 0) throw new SandboxError(`cannot check out ${branch}`, lastLine(res.stderr));
@@ -435,19 +453,19 @@ export class OrbStackManager {
    * Commits what is in the working tree. With `only`, commits what is under those paths and leaves the rest
    * as it lies: for a caller that wrote a few files on a branch whose other contents are not its to judge.
    */
-  async commitAll(project: Project, message: string, only?: readonly string[]): Promise<string> {
+  async commitAll(project: Place, message: string, only?: readonly string[]): Promise<string> {
     const res = await this.exec(project, commitAllScript({ workspace: WORKSPACE_DIR, message, ...(only ? { only } : {}) }), { timeoutSec: 120 });
     if (res.exitCode !== 0) throw new SandboxError('commit failed', lastLine(res.stderr));
     return res.stdout.trim().split('\n').at(-1) ?? '';
   }
 
-  async merge(project: Project, branch: string, into: string): Promise<string> {
+  async merge(project: Place, branch: string, into: string): Promise<string> {
     const res = await this.exec(project, mergeScript({ workspace: WORKSPACE_DIR, branch, into }), { timeoutSec: 120 });
     if (res.exitCode !== 0) throw new SandboxError(res.exitCode === 3 ? `merging ${branch} into ${into} conflicts` : 'merge failed', lastLine(res.stderr));
     return res.stdout.trim().split('\n').at(-1) ?? '';
   }
 
-  async diff(project: Project, base: string, branch: string, maxBytes = 400_000): Promise<{ diff: string; stat: { files: number; insertions: number; deletions: number }; truncated: boolean }> {
+  async diff(project: Place, base: string, branch: string, maxBytes = 400_000): Promise<{ diff: string; stat: { files: number; insertions: number; deletions: number }; truncated: boolean }> {
     const res = await this.exec(project, diffScript({ workspace: WORKSPACE_DIR, base, branch }), { timeoutSec: 60, maxOutputBytes: maxBytes });
     if (res.exitCode !== 0) throw new SandboxError('diff failed', lastLine(res.stderr));
     const [statLine = '', diff = ''] = res.stdout.split('---sz-diff---\n');
@@ -509,8 +527,8 @@ export class OrbStackManager {
    * with that refusal, and the audit photographed and reviewed the refusal as if it were the product. The
    * name stays as the fallback for an engine that will not say the address.
    */
-  async attachQaBrowser(project: Project): Promise<string> {
-    const names = sandboxNames(project.slug);
+  async attachQaBrowser(project: Place): Promise<string> {
+    const names = sandboxNames(project.slug, slotOf(project));
     const res = await this.#docker(['network', 'connect', names.network, QA_BROWSER]);
     if (res.exitCode !== 0 && !/already exists/i.test(res.stderr)) throw new SandboxError('could not attach QA browser to project network', lastLine(res.stderr));
     const found = await this.#docker(['container', 'inspect', '--format', `{{with index .NetworkSettings.Networks "${names.network}"}}{{.IPAddress}}{{end}}`, names.container], { timeoutMs: 15_000 });
@@ -533,7 +551,7 @@ export class OrbStackManager {
     if (res.exitCode !== 0) throw new SandboxError('could not open a way from the QA browser to the project\'s backend', lastLine(res.stderr));
   }
 
-  async detachQaBrowser(project: Project): Promise<void> {
+  async detachQaBrowser(project: Place): Promise<void> {
     await this.#docker(['network', 'disconnect', sandboxNames(project.slug).network, QA_BROWSER]);
   }
 
@@ -670,9 +688,32 @@ export class OrbStackManager {
   }
 }
 
-export function sandboxNames(slug: string): Pick<SandboxRow, 'container' | 'volume' | 'network'> {
+/**
+ * A project, or one of its slots. A slot is a clone of the project in a container of its own (see `Slots`):
+ * `slot` counts them from 1, and nothing but this layer reads it. Whatever is handed a project and passes it
+ * on down to here reaches the slot instead, with no word of its own changed, which is how a task that runs in
+ * a slot uses the same harness, tools, dev server and walk as one that runs in the project's workspace.
+ */
+export type Place = Project & { slot?: number };
+
+/** 0 for the project's own sandbox. */
+export const slotOf = (place: Place): number => place.slot ?? 0;
+
+/** Where a slot sees the project's own workspace, read-only. */
+export const SLOT_MAIN_DIR = '/main';
+
+const lifeKey = (place: Place): string => (slotOf(place) > 0 ? `${place.id}#${slotOf(place)}` : place.id);
+
+/**
+ * The names of a project's sandbox, or with `slot` of one of its slots. A slot shares the project's network (the
+ * QA browser reaches it there) and has a container and a volume of its own. A slot's container name could be
+ * another project's (`sz-a-s1` is slot 1 of `a` and the sandbox of a project called `a-s1`): the store keeps
+ * container names unique, so the second of the two to be made is refused rather than shared.
+ */
+export function sandboxNames(slug: string, slot = 0): Pick<SandboxRow, 'container' | 'volume' | 'network'> {
   if (!/^[a-z][a-z0-9-]{1,38}[a-z0-9]$/.test(slug)) throw new SandboxError(`invalid project slug: ${JSON.stringify(slug)}`);
-  return { container: `sz-${slug}`, volume: `sz-${slug}-ws`, network: `sz-${slug}-net` };
+  if (!Number.isInteger(slot) || slot < 0 || slot > 9) throw new SandboxError(`invalid slot: ${JSON.stringify(slot)}`);
+  return slot > 0 ? { container: `sz-${slug}-s${slot}`, volume: `sz-${slug}-s${slot}-ws`, network: `sz-${slug}-net` } : { container: `sz-${slug}`, volume: `sz-${slug}-ws`, network: `sz-${slug}-net` };
 }
 
 /** Lexically confines a path to /workspace. This is hygiene for file tools; the container is the actual boundary. */

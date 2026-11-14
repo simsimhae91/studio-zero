@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { createServer, type IncomingHttpHeaders } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -53,7 +53,7 @@ export function fakeSecurity(): { run: CommandRunner; items: Map<string, string>
  * engine: `docker exec … bash -c <script>` runs the same script on the host with /workspace mapped to a temp
  * directory. Everything else (run, network, volume, port) is bookkeeping.
  */
-export function localDocker(workspace: string): { run: CommandRunner; calls: Call[]; containers: Set<string> } {
+export function localDocker(workspace: string): { run: CommandRunner; calls: Call[]; containers: Set<string>; slots: Map<string, string> } {
   const calls: Call[] = [];
   const containers = new Set<string>();
   const volumes = new Set<string>();
@@ -64,6 +64,12 @@ export function localDocker(workspace: string): { run: CommandRunner; calls: Cal
   // pass over the first one's output rewrote that path too, so every emulated command ran in a folder that does
   // not exist (the suite failed inside the studio's own sandbox, where its tasks are held to it).
   const map = (text: string): string => text.replace(/\/workspace|\/tmp\/sz/g, (found) => (found === '/workspace' ? workspace : `${workspace}-scratch/sz`));
+  // A slot (a container that mounts the project's volume at /main) has a directory of its own beside the
+  // project's: there /workspace is that directory and /main is the project's. `/main` is only a path where it
+  // stands as one: `refs/heads/main` is left alone.
+  const slots = new Map<string, string>();
+  const mapIn = (dir: string) => (text: string): string =>
+    text.replace(/\/workspace|\/tmp\/sz|(?<![\w./-])\/main(?=[/\s'"]|$)/g, (found) => (found === '/workspace' ? dir : found === '/main' ? workspace : `${dir}-scratch/sz`));
 
   const run: CommandRunner = async (file, allArgs, opts: RunOptions = {}) => {
     const stdin = typeof opts.stdin === 'string' ? opts.stdin : '';
@@ -91,18 +97,29 @@ export function localDocker(workspace: string): { run: CommandRunner; calls: Cal
     }
     if (command === 'stop' || command === 'start') return ok();
     if (command === 'run') {
-      if (args.includes('--detach')) containers.add(nameAfter('--name'));
+      if (args.includes('--detach')) {
+        const name = nameAfter('--name');
+        containers.add(name);
+        if (args.some((word) => word.includes('target=/main'))) {
+          const dir = `${workspace}-${name.slice(name.lastIndexOf('-') + 1)}`;
+          mkdirSync(dir, { recursive: true });
+          slots.set(name, dir);
+        }
+      }
       return ok('deadbeef\n');
     }
     if (command === 'exec') {
       if (args.includes('--detach')) return ok();
       const script = args.at(-1)!;
-      const cwd = args.includes('--workdir') ? map(nameAfter('--workdir')) : workspace;
-      return runCommand('bash', ['-c', map(script)], { cwd, stdin: opts.stdin, env, maxOutputBytes: opts.maxOutputBytes, signal: opts.signal, onStdout: opts.onStdout, timeoutMs: 60_000 });
+      // `exec --interactive --workdir <cwd> <container> …`: the container is the word after the working directory.
+      const slot = args.includes('--workdir') ? slots.get(args[args.indexOf('--workdir') + 2] ?? '') : undefined;
+      const here = slot ? mapIn(slot) : map;
+      const cwd = args.includes('--workdir') ? here(nameAfter('--workdir')) : workspace;
+      return runCommand('bash', ['-c', here(script)], { cwd, stdin: opts.stdin, env, maxOutputBytes: opts.maxOutputBytes, signal: opts.signal, onStdout: opts.onStdout, timeoutMs: 60_000 });
     }
     return fail(1, `unsupported docker command: ${args.join(' ')}`);
   };
-  return { run, calls, containers };
+  return { run, calls, containers, slots };
 }
 
 /** A docker command line without the client's global flags (`--config <dir> --host <endpoint>`). */

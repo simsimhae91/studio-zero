@@ -5,7 +5,9 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { CORE_PROJECT_ID, type ProjectWalks, type TaskKind } from '@studio-zero/protocol';
 import { Store } from '../src/db/Store.ts';
-import { sampleProject } from './helpers.ts';
+import { OrbStackManager, sandboxNames, type Place } from '../src/sandbox/OrbStackManager.ts';
+import { testConfig } from '../src/config.ts';
+import { dockerArgs, localDocker, sampleProject, tempDir } from './helpers.ts';
 
 function storeWith(...slugs: string[]): Store {
   const store = new Store(':memory:');
@@ -110,4 +112,53 @@ test('a project keeps where its last full walk went and what each screen was fou
   assert.deepEqual(store.getWalks('prj_duel')?.ledger, {});
   store.deleteProject('prj_duel');
   assert.equal(store.getWalks('prj_duel'), null);
+});
+
+// ------------------------------------------------------------------ slot containers
+
+test('a slot is a second container of the project: its own volume, the project\'s to read, and reached through the handle that names it', async () => {
+  const [home, ws] = [tempDir(), tempDir('sz-ws-')];
+  const docker = localDocker(ws.dir);
+  const store = new Store(':memory:');
+  const project = sampleProject('duel');
+  store.insertProject(project);
+  const sandboxes = new OrbStackManager({ config: testConfig(home.dir), store, clock: () => 1000, run: docker.run });
+  const slot: Place = { ...project, slot: 1 };
+  try {
+    assert.deepEqual(sandboxNames('duel', 1), { container: 'sz-duel-s1', volume: 'sz-duel-s1-ws', network: 'sz-duel-net' });
+    await assert.rejects(sandboxes.ensure(slot), /slot 1 of duel has no project sandbox to be a clone of/);
+    await sandboxes.ensure(project);
+    const before = docker.calls.length;
+    const info = await sandboxes.ensure(slot);
+    assert.deepEqual([info.container, info.state], ['sz-duel-s1', 'running']);
+
+    const create = docker.calls.slice(before).find((c) => c.args.includes('run') && c.args.includes('--detach'))!;
+    const line = dockerArgs(create.args).join(' ');
+    for (const flag of ['--name sz-duel-s1', '--hostname duel-s1', '--network sz-duel-net', 'type=volume,source=sz-duel-s1-ws,target=/workspace,volume-nocopy', 'type=volume,source=sz-duel-ws,target=/main,readonly', '--label studio-zero.project=prj_duel', '--label studio-zero.role=slot', '--label studio-zero.slot=1', '--user 1000:1000', '--cap-drop ALL', '--security-opt no-new-privileges']) {
+      assert.ok(line.includes(flag), `missing ${flag}`);
+    }
+    assert.ok(!/type=bind|docker\.sock|--privileged/.test(line), 'a slot is a sandbox like the project\'s: no host mounts, no socket');
+    // Its workspace is not begun: the slot is a clone, made when it is first taken.
+    assert.ok(!docker.calls.slice(before).some((c) => dockerArgs(c.args)[0] === 'exec' && String(c.args.at(-1)).includes('git init')), 'no repository is begun in a slot');
+    assert.deepEqual(store.listSandboxes('prj_duel').map((row) => [row.slot, row.container]), [[0, 'sz-duel'], [1, 'sz-duel-s1']]);
+    assert.notEqual(store.getSandbox('prj_duel', 1)!.gatewayTokenHash, store.getSandbox('prj_duel')!.gatewayTokenHash, 'a token of its own');
+
+    // The handle decides where a command runs: the same call, two workspaces.
+    await sandboxes.writeFile(slot, 'where.txt', 'slot');
+    await sandboxes.writeFile(project, 'where.txt', 'project');
+    assert.equal((await sandboxes.readFile(slot, 'where.txt')).content, 'slot');
+    assert.equal((await sandboxes.readFile(project, 'where.txt')).content, 'project');
+    // And the slot reads the project's workspace where it is mounted.
+    assert.equal((await sandboxes.exec(slot, 'cat /main/where.txt')).stdout, 'project');
+
+    // The project goes, and its slots with it, volume and all.
+    await sandboxes.destroy(project, { deleteWorkspace: false });
+    const removed = docker.calls.map((c) => dockerArgs(c.args).join(' '));
+    assert.ok(removed.includes('rm -f sz-duel-s1') && removed.includes('volume rm sz-duel-s1-ws') && removed.includes('rm -f sz-duel'));
+    assert.ok(!removed.includes('volume rm sz-duel-ws'), 'the project\'s own workspace is kept unless asked');
+    assert.deepEqual(store.listSandboxes('prj_duel').map((row) => row.slot), [0]);
+  } finally {
+    home.cleanup();
+    ws.cleanup();
+  }
 });
