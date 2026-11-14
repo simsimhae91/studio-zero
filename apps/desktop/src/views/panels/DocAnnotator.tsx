@@ -131,14 +131,14 @@ export function DocAnnotator({ job, onSent, onStale }: { job: KnowledgeJob; onSe
         ))}
       </div>
 
-      {notes.length > 0 ? (
-        <section className="flex flex-col gap-2" aria-label="보낼 메모">
-          <NoteList notes={notes} onRemove={send.busy ? undefined : (index) => setNotes((prev) => prev.filter((_, i) => i !== index))} />
-        </section>
-      ) : null}
-
-      {/* Below the text and kept in sight while it is read: the passage chosen last and the note on it. */}
+      {/* Below the text and kept in sight while it is read: the notes written so far, the passage chosen last and
+          the note on it. The list scrolls within a few lines' height, so a long one does not push the document away. */}
       <section className="sticky bottom-0 flex flex-col gap-3 border-t border-border bg-bg py-4" aria-label="문서에 메모 달기">
+        {notes.length > 0 ? (
+          <section className="pane-scroll flex max-h-40 flex-col gap-2 overflow-y-auto" aria-label="보낼 메모">
+            <NoteList notes={notes} onRemove={send.busy ? undefined : (index) => setNotes((prev) => prev.filter((_, i) => i !== index))} />
+          </section>
+        ) : null}
         <div className="flex flex-col gap-2">
           {picked ? (
             <div className="flex items-start gap-2 border-l-4 border-accent pl-3">

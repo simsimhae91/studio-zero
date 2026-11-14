@@ -21,6 +21,7 @@ import { coreStates, readScreenSpec } from '../src/scratch/ScreenSpec.ts';
 import { runCommand } from '../src/util/run.ts';
 import { SCREEN_SPEC } from './fixtures-mockup.ts';
 import { freePort, sampleProject, testDaemon } from './helpers.ts';
+import { hashMarkdown as clientHash, rangeToAnnotation, splitBlocks } from '../../../apps/desktop/src/lib/annotate.ts';
 
 const enabled = process.env.SZ_TEST_SESSION === '1';
 const OWNER = { type: 'owner', via: 'desktop' } as const;
@@ -347,6 +348,41 @@ test('the real planner fills in a plan, an anchor table and a screen spec that b
     t.diagnostic(`core flow: ${spec.spec.tasks.map((task) => `${task.id} (${task.goal} → ${task.outcome})`).join(' | ')}`);
     t.diagnostic(`states owed a route: ${coreStates(spec.spec).map((s) => `${s.screen} ${s.name}`).join(', ')}`);
     assert.ok(coreStates(spec.spec).length > 0, 'the screens of the core flow say what they show when the usual case does not hold');
+  } finally {
+    await d.cleanup();
+  }
+});
+
+test('a document revised from the owner\'s notes by the real writer: what was asked for changes, the rest stays, the reviewed text is kept', { skip: enabled ? false : 'set SZ_TEST_SESSION=1 (uses the Claude Code login on this machine)', timeout: 15 * 60 * 1000 }, async (t) => {
+  const port = await freePort();
+  const d = await testDaemon({ listen: { port }, engines: { claudeCode: { enabled: true } } }, {}, (docker) => (file, args, opts) => (file === 'claude' ? runCommand(file, args, opts) : docker(file, args, opts)));
+  await d.daemon.start();
+  const { studio, store, knowledge } = d.daemon;
+  try {
+    const doc = ['# 현장 기사용 청구서 앱', '', '## 결론', '', '첫 출시는 iOS만 한다. 출시일은 12월 1일이다.', '', '## 요구사항', '', '- R1 미결제 청구서를 고객별로 묶어 보여 준다.', '- R2 한 줄을 누르면 청구서를 다시 보낸다.', '- R3 결제되면 목록에서 사라진다.', '', '## 범위 밖', '', '환불 처리는 이번 출시에 넣지 않는다.', ''].join('\n');
+    store.insertKnowledgeJob({ id: 'job_doc', kind: 'document', title: '현장 기사용 청구서 앱', state: 'running', origin: 'desktop', scratchId: null, revisedFrom: null, error: null, spentTokens: 0, createdAt: 5, finishedAt: null }, { kind: 'document', title: '현장 기사용 청구서 앱', documentKind: 'brief', brief: '기획서', researchJobId: null });
+    store.finishKnowledgeJob('job_doc', { markdown: doc, report: null, lint: [] }, 6);
+
+    // The notes as the desk makes them: from what was selected in the rendered text.
+    const blocks = splitBlocks(doc);
+    const at = (text: string) => blocks.find((b) => b.source.includes(text))!;
+    const conclusion = at('첫 출시는');
+    const requirements = at('R2 한 줄');
+    const notes = [
+      { ...rangeToAnnotation(doc, conclusion.startLine, conclusion.endLine, '첫 출시는 iOS만 한다.'), comment: 'Android도 같이 냅니다. iOS와 Android에 함께 출시한다고 적어 주세요.' },
+      { ...rangeToAnnotation(doc, requirements.startLine, requirements.endLine, 'R2 한 줄을 누르면 청구서를 다시 보낸다.'), comment: 'R2는 이번에 뺍니다. 이 줄을 지워 주세요.' },
+    ];
+    const job = await studio.reviseDocument(OWNER, { jobId: 'job_doc', contentHash: await clientHash(doc), annotations: notes }, 'desktop');
+    await knowledge.idle();
+
+    const revised = studio.getKnowledge(job.id);
+    t.diagnostic(`revision (${revised.job.spentTokens} tokens):\n${revised.markdown}`);
+    assert.equal(revised.job.state, 'succeeded', revised.job.error ?? '');
+    assert.equal(revised.job.revisedFrom, 'job_doc');
+    assert.match(revised.markdown, /Android/, 'the first note was carried out');
+    assert.doesNotMatch(revised.markdown, /R2 한 줄을 누르면/, 'and the second');
+    for (const kept of ['12월 1일', 'R1 미결제 청구서를 고객별로 묶어 보여 준다.', 'R3 결제되면 목록에서 사라진다.', '환불 처리는 이번 출시에 넣지 않는다.']) assert.ok(revised.markdown.includes(kept), `left as it was: ${kept}`);
+    assert.equal(studio.getKnowledge('job_doc').markdown, doc, 'the reviewed document is untouched');
   } finally {
     await d.cleanup();
   }

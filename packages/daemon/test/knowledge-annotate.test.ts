@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { hashMarkdown as clientHash, rangeToAnnotation, splitBlocks } from '../../../apps/desktop/src/lib/annotate.ts';
 import type Anthropic from '@anthropic-ai/sdk';
 import { RpcCallError, RpcClient, type KnowledgeJob } from '@studio-zero/protocol';
 import { ConflictError, StaleError } from '../src/app/errors.ts';
-import { buildRevisionRequest, hashMarkdown } from '../src/knowledge/annotations.ts';
+import { buildRevisionRequest, hashMarkdown, lineLabel } from '../src/knowledge/annotations.ts';
 import { REVISER_SYSTEM_PROMPT } from '../src/knowledge/DocumentCompiler.ts';
 import { testDaemon } from './helpers.ts';
 
@@ -152,4 +153,39 @@ test('a revision is bound to the text the owner read, checked before any model c
   } finally {
     await d.cleanup();
   }
+});
+
+// The desk and the daemon each count a document's lines and each hash it. A note is only as good as their agreeing:
+// what the client makes of a selection has to be what the daemon finds in the stored text.
+test('what the desk makes of a selection is what the daemon accepts: the same lines, the same fingerprint', async () => {
+  const doc = ['# 예약 기능 안내', '', '## 결론', '', '매일 아침 **7시**에 [브리핑](https://example.com/brief)을 만든다.', '빌드는 평균 15분 걸린다.', '', '| 항목 | 값 |', '| --- | --- |', '| 간격 | 24시간 |', '', '- 한도에 걸리면 기다린다', '  풀리는 시각까지', '- 두 번까지 기다린다', '', '```sh', 'sz schedule add stock-lab build "브리핑"', '', '--every 24h', '```', '', '끝.\r', ''].join('\n');
+  const blocks = splitBlocks(doc);
+  assert.equal(await clientHash(doc), hashMarkdown(doc));
+
+  // Rendered, bold and a link lose their marks: the client then quotes the source lines, and the daemon finds them.
+  const para = blocks.find((b) => b.source.includes('7시'))!;
+  const rendered = rangeToAnnotation(doc, para.startLine, para.endLine, '매일 아침 7시에 브리핑을 만든다.');
+  // Plain words inside one line are quoted as selected.
+  const plain = rangeToAnnotation(doc, para.startLine, para.endLine, '평균 15분');
+  const table = blocks.find((b) => b.source.includes('24시간'))!;
+  // The renderer draws an indented line under a list item as a paragraph of its own; the split follows it.
+  const item = blocks.find((b) => b.source.includes('풀리는 시각까지'))!;
+  const fence = blocks.find((b) => b.source.includes('--every'))!;
+  const last = blocks.at(-1)!;
+  const notes = [
+    { ...rendered, comment: '8시로' },
+    { ...plain, comment: '중앙값도' },
+    { ...rangeToAnnotation(doc, table.startLine, table.endLine, '24시간'), comment: '시간 단위로' },
+    { ...rangeToAnnotation(doc, item.startLine, item.endLine, '풀리는 시각까지'), comment: '시각을 적어 주세요' },
+    { ...rangeToAnnotation(doc, fence.startLine, fence.endLine, '--every 24h'), comment: '--at도 같이' },
+    { ...rangeToAnnotation(doc, para.startLine, last.endLine, '끝.'), comment: '여러 문단에 걸친 메모' },
+  ];
+  assert.equal(plain.quote, '평균 15분');
+  assert.deepEqual([fence.startLine, fence.endLine], [16, 20], 'a blank line inside a code fence does not end it');
+  assert.deepEqual([item.startLine, item.endLine], [13, 13]);
+  assert.deepEqual([last.startLine, last.source], [22, '끝.'], 'a carriage return at a line\'s end is not part of the line, on either side');
+  const request = buildRevisionRequest(doc, notes);
+  // Not refused, and every note is in the request under the lines the client named.
+  for (const note of notes) assert.ok(request.includes(`, ${lineLabel(note)}:`), `the daemon found the note at ${lineLabel(note)}`);
+  assert.equal((request.match(/^Note \d+, /gm) ?? []).length, notes.length);
 });
