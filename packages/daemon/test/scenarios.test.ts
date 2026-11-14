@@ -11,6 +11,7 @@ import { chromium, devices } from 'playwright-core';
 import { ScreenSpec, type Project } from '@studio-zero/protocol';
 import { ProjectArms } from '../src/arms/ProjectArms.ts';
 import { SupabaseStack } from '../src/arms/SupabaseStack.ts';
+import { samplePhoto } from '../src/qa/samplePhoto.ts';
 import { Backend, renderScenarioFeedback, walkScenarios } from '../src/qa/ScenarioRunner.ts';
 import { resolveDockerBin } from '../src/sandbox/dockerBin.ts';
 import type { OrbStackManager } from '../src/sandbox/OrbStackManager.ts';
@@ -215,6 +216,7 @@ const COUNTER_PLAN = ScreenSpec.parse({
       { id: 'drink', screen: 'H-01', does: '물 한 잔을 적는다', saves: null, outcome: '오늘 칸에 한 잔이 보인다' },
       { id: 'result', screen: 'R-01', does: '결과를 연다', saves: null, outcome: '오늘 마신 양이 보인다' },
       { id: 'share', screen: 'R-01', does: '결과를 자랑한다', saves: null, outcome: '자랑했다는 표시가 보인다' },
+      { id: 'photo', screen: 'R-01', does: '컵 사진을 고른다', saves: null, outcome: '고른 사진의 크기가 보인다' },
     ] },
   ],
   data: [],
@@ -224,13 +226,15 @@ const COUNTER_PLAN = ScreenSpec.parse({
 const counter = (faint: boolean): string => `<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>물</title>
 <style>body{margin:0;padding:24px;font:16px/1.6 system-ui;background:#fff;color:#111}button{font:inherit;min-height:48px;padding:0 20px;border:0;border-radius:8px;background:#124;color:#fff;display:block;margin:12px 0}button:active{background:#000}h1{font-size:24px;margin:0}p{margin:8px 0}.note{color:${faint ? '#d8d8d8' : '#333'}}</style></head>
 <body><div id="app"></div><script>
-const s=JSON.parse(localStorage.getItem('s')||'{"cups":0,"at":"home","shared":false}');
+const s=JSON.parse(localStorage.getItem('s')||'{"cups":0,"at":"home","shared":false,"photo":""}');
 const keep=()=>{localStorage.setItem('s',JSON.stringify(s));render();};
 function render(){const app=document.getElementById('app');
  if(s.at==='home'){app.innerHTML='<h1>오늘</h1><button id="drink" data-step="drink:1">물 한 잔</button>'+(s.cups>0?'<p data-done="drink">'+s.cups+'잔 마셨어요</p><button id="open" data-step="result:1">결과 보기</button>':'<p>아직 적은 물이 없어요</p>');
   document.getElementById('drink').onclick=()=>{s.cups+=1;keep();};const open=document.getElementById('open');if(open)open.onclick=()=>{s.at='result';keep();};return;}
- app.innerHTML='<h1 data-done="result">오늘 '+(s.cups*200)+'mL</h1><p class="note">하루 권장량은 1.5리터에서 2리터 사이입니다</p><button id="share" data-step="share:1">자랑하기</button>'+(s.shared?'<p data-done="share">자랑했어요</p>':'');
- document.getElementById('share').onclick=()=>{s.shared=true;keep();};}
+ app.innerHTML='<h1 data-done="result">오늘 '+(s.cups*200)+'mL</h1><p class="note">하루 권장량은 1.5리터에서 2리터 사이입니다</p><button id="share" data-step="share:1">자랑하기</button>'+(s.shared?'<p data-done="share">자랑했어요</p>':'')+'<button id="pick" data-step="photo:1">사진 고르기</button>'+(s.photo?'<p data-done="photo">'+s.photo+'</p>':'');
+ document.getElementById('share').onclick=()=>{s.shared=true;keep();};
+ // The way a picker library does it: an input made for the moment and clicked.
+ document.getElementById('pick').onclick=()=>{const input=document.createElement('input');input.type='file';input.accept='image/*';input.onchange=async()=>{const file=input.files[0];const bitmap=await createImageBitmap(file);s.photo=file.name+' '+file.type+' '+bitmap.width+'x'+bitmap.height;keep();};input.click();};}
 render();
 </script></body></html>`;
 
@@ -246,12 +250,14 @@ test('what a walk stands on is measured where it stands: once a screen, at the s
   try {
     const seen = await walk(true);
     assert.deepEqual([seen.walked, seen.problems], [1, []]);
-    // Three steps stood on two screens: each is measured the first time a step stands on it.
+    // Four steps stood on two screens: each is measured the first time a step stands on it.
     assert.deepEqual(seen.looks.map((look) => [look.screen, look.scenario]), [['H-01', 'drinks'], ['R-01', 'drinks']]);
     const heavy = (screen: string): string[] => seen.looks.find((look) => look.screen === screen)!.findings.filter((f) => f.severity !== 'minor' && f.category === 'contrast').map((f) => `${f.rule} ${f.viewport} ${f.route}: ${f.message}`);
     assert.deepEqual(heavy('H-01'), [], 'the first screen is readable');
     assert.equal(heavy('R-01').length, 1);
     assert.match(heavy('R-01')[0]!, /^contrast\/text iphone-15-pro R-01: "하루 권장량은 1\.5리터에서 2리터 사이입니다" has contrast 1\.\d+:1; .*it fails AA/);
+    // The person was asked for a photo: the chooser was answered with the studio's sample, and it is a picture a browser can read.
+    assert.match(await (async () => { const context = await browser.newContext(); const page = await context.newPage(); await page.goto(base); await page.evaluate(() => { localStorage.setItem('s', JSON.stringify({ cups: 1, at: 'result', shared: true, photo: '' })); }); await page.reload(); page.on('filechooser', (chooser) => void chooser.setFiles({ name: 'sample-photo.png', mimeType: 'image/png', buffer: samplePhoto() })); await page.click('#pick'); const text = await page.locator('[data-done="photo"]').innerText(); await context.close(); return text; })(), /^sample-photo\.png image\/png 640x480$/);
     // The picture is of the screen as the person had it: a PNG, taken on the second screen with their figure on it.
     for (const look of seen.looks) assert.deepEqual([...look.png!.subarray(0, 4)], [0x89, 0x50, 0x4e, 0x47]);
 

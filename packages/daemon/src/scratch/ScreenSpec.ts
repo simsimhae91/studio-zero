@@ -15,6 +15,14 @@ const MAX_TASKS = 5;
 const MAX_SCENARIOS = 6;
 /** In a product built to a map there is a scenario for each feature, and a map has many. */
 const MAX_SCENARIOS_WIDE = 30;
+const MAX_SCREENS_WIDE = 90;
+
+/**
+ * Whether this is the plan of a product built to a product map: its scenarios say which feature each walks
+ * (see `product/coverage.ts`). Such a plan is as wide as the map, for whoever reads it: the task that builds a
+ * milestone, and every later task that changes the product and is held to what it already walks.
+ */
+const mapped = (spec: ScreenSpec): boolean => spec.scenarios.some((scenario) => (scenario.feature ?? '').trim() !== '');
 const MAX_SCENARIO_STEPS = 12;
 const TABLE_NAME = /^[a-z][a-z0-9_]{0,62}$/;
 /** Who may read a table, as the spec may say it. The first two are checked against a stranger: see `ScenarioRunner`. */
@@ -48,7 +56,10 @@ export function checkScreenSpec(spec: ScreenSpec, opts: { draft?: boolean; wide?
   else if (spec.coreMoment.trim().length > 240 || /\n/.test(spec.coreMoment.trim())) problems.push('coreMoment must be one sentence (240 characters at most, one line).');
 
   if (spec.screens.length === 0) problems.push('screens is empty: list every screen of the first version, each with an id such as "H-01".');
-  if (spec.screens.length > MAX_SCREENS) problems.push(`screens has ${spec.screens.length} entries; ${MAX_SCREENS} is the most a first version is planned at. Mark what comes after it with "later": true, or leave it out.`);
+  const wide = opts.wide === true || mapped(spec);
+  if (wide ? spec.screens.length > MAX_SCREENS_WIDE : spec.screens.length > MAX_SCREENS) {
+    problems.push(wide ? `screens has ${spec.screens.length} entries; ${MAX_SCREENS_WIDE} is the most. Fold screens that are states of one screen into it.` : `screens has ${spec.screens.length} entries; ${MAX_SCREENS} is the most a first version is planned at. Mark what comes after it with "later": true, or leave it out.`);
+  }
   const ids = new Set<string>();
   for (const screen of spec.screens) {
     const at = `screen ${screen.id || '(no id)'}`;
@@ -105,7 +116,7 @@ export function checkScreenSpec(spec: ScreenSpec, opts: { draft?: boolean; wide?
     eventNames.add(event.name);
     if (blank(event.when) || blank(event.measures)) problems.push(`${at}: say when it fires and which measure it feeds.`);
   }
-  if (saysHowItWorks(spec)) problems.push(...checkWorkingParts(spec, opts.wide === true));
+  if (saysHowItWorks(spec)) problems.push(...checkWorkingParts(spec, wide));
   return problems.slice(0, 24);
 }
 

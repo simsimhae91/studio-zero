@@ -19,6 +19,14 @@ import type { Studio } from './Studio.ts';
  */
 const OWNER: Actor = { type: 'owner', via: 'desktop' };
 
+/**
+ * How many times a milestone whose checks still failed is tried again by the runner itself, from what the attempt
+ * left, before the roadmap stops and waits for the owner. A roadmap runs for hours with nobody at the desk, and a
+ * milestone that ran out of corrections is most often one more round from done. Once, so a milestone that cannot
+ * be built does not spend the night trying.
+ */
+const AUTO_RETRIES = 1;
+
 const fresh = (): MilestoneProgress => ({ state: 'planned', taskIds: [], error: null, debt: [], shots: [] });
 
 /**
@@ -147,6 +155,12 @@ export class RoadmapRunner {
     const put = (change: Partial<MilestoneProgress>, whole: Partial<Roadmap> = {}): Roadmap =>
       this.#save({ ...this.#require(task.projectId), ...whole, milestones: this.#require(task.projectId).milestones.map((m, i) => (i === index ? { ...m, ...change } : m)) }, index);
 
+    if (task.state === 'failed' && roadmap.state === 'running' && /^verification still failing/.test(task.error ?? '') && progress.taskIds.length <= AUTO_RETRIES) {
+      this.#log.info({ projectId: task.projectId, milestone: index, taskId: task.id }, 'a milestone ran out of corrections: trying it once more from its branch');
+      put({ state: 'planned', error: task.error });
+      await this.#advance(task.projectId);
+      return;
+    }
     if (task.state !== 'succeeded') {
       const why = task.state === 'cancelled' ? '취소됐습니다' : `실패했습니다: ${task.error ?? '알 수 없는 오류'}`;
       put({ state: 'failed', error: task.error ?? task.state }, { state: 'stopped', error: `마일스톤 ${index + 1} "${name}"이 ${why}` });
@@ -184,7 +198,7 @@ export class RoadmapRunner {
     const last = (at: number): Task | null => this.#store.getTask(roadmap.milestones[at]?.taskIds.at(-1) ?? '');
     const earlier = last(index);
     const base = earlier?.branch ?? (roadmap.autoMerge || index === 0 ? null : (last(index - 1)?.branch ?? null));
-    const prompt = milestoneRequest(roadmap.map, index, earlier?.branch ? { branch: earlier.branch, error: progress.error } : undefined);
+    const prompt = milestoneRequest(roadmap.map, index, earlier?.branch ? { branch: earlier.branch, error: this.#whatStopped(earlier, progress.error) } : undefined);
     let task: Task;
     try {
       task = await this.#studio.submitTask(OWNER, { projectId, kind: 'build', prompt, track: 'fast', milestone: index, ...(base ? { baseBranch: base } : {}) }, 'system');
@@ -195,6 +209,20 @@ export class RoadmapRunner {
     // Read again: the submission was awaited, and the row is written whole.
     const now = this.#require(projectId);
     this.#save({ ...now, milestones: now.milestones.map((m, i) => (i === index ? { ...m, state: 'building', taskIds: [...m.taskIds, task.id], error: null } : m)) }, index);
+  }
+
+  /**
+   * Why an attempt stopped, for the attempt that follows it: its error, and what the last check that failed said.
+   * The next engine starts with no memory of the last one; without this it finds the same failure by building again.
+   */
+  #whatStopped(task: Task, recorded: string | null): string | null {
+    const failed = this.#events
+      .history({ taskId: task.id }, 0, 10_000)
+      .flatMap((e) => (e.body.type === 'gate.result' && !e.body.passed ? [e.body] : []))
+      .at(-1);
+    const error = recorded ?? task.error;
+    if (!failed) return error;
+    return `${error ?? 'stopped'}\nThe last check that failed (${failed.gate}) said:\n${failed.detail}`;
   }
 
   #require(projectId: string): Roadmap {

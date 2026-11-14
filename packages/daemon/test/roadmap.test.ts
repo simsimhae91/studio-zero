@@ -302,7 +302,7 @@ test('a product is planned whole and built to the end of its map: a milestone a 
   }
 });
 
-test('a milestone that fails stops the roadmap with its reason, and running it again goes on from that milestone\'s branch', async () => {
+test('a milestone whose checks still fail is tried once more by itself, then stops the roadmap with its reason; running it again goes on from its branch', async () => {
   const scenarios: ScenarioRunnerLike = { run: async (_project, spec): Promise<ScenarioOutcome> => ({ passed: true, scenarios: spec.scenarios.length, walked: spec.scenarios.length, problems: [], logins: [], detail: 'walked', durationMs: 1, looks: [] }) };
   const model = scripted([
     [writePlan('tu_0', M1), use('tu_1', 'write_file', { path: 'tsconfig.json', content: '{}\n' }), use('tu_2', 'bash', { command: INSTALL_TSC }), use('tu_3', 'write_file', { path: 'src/App.tsx', content: 'export const milestone = 1;\n' })],
@@ -311,7 +311,10 @@ test('a milestone that fails stops the roadmap with its reason, and running it a
     [writePlan('tu_4', M2), use('tu_5', 'write_file', { path: 'src/App.tsx', content: 'BROKEN\n' })],
     [say('2 완료 (아니다)')],
     [say('고쳤다 (아니다)')],
-    // Run again: the same milestone, from what the failed attempt left.
+    // The runner tries it once more by itself, from that branch. It fails the same way.
+    [say('읽어 봤다 (고치지 않았다)')],
+    [say('고쳤다 (아니다)')],
+    // The owner runs it again: the same milestone, from what the last attempt left.
     [use('tu_6', 'write_file', { path: 'src/App.tsx', content: 'export const milestone = 2;\n' })],
     [say('2 완료')],
     [writePlan('tu_7', M3)],
@@ -328,12 +331,16 @@ test('a milestone that fails stops the roadmap with its reason, and running it a
     await studio.runRoadmap(OWNER, project.id);
     const stopped = await roadmapIn(d, project.id, 'stopped', 'done');
     assert.equal(stopped.state, 'stopped');
-    assert.deepEqual(stopped.milestones.map((m) => m.state), ['built', 'failed', 'planned']);
+    assert.deepEqual(stopped.milestones.map((m) => [m.state, m.taskIds.length]), [['built', 1], ['failed', 2], ['planned', 0]]);
     assert.equal(stopped.error, '마일스톤 2 "상대와 겨루기"이 실패했습니다: verification still failing after 1 corrections: compiler');
     assert.equal(stopped.milestones[1]!.error, 'verification still failing after 1 corrections: compiler');
-    const failed = studio.getTask(stopped.milestones[1]!.taskIds[0]!);
-    assert.equal(failed.state, 'failed');
+    const [failed, retried] = stopped.milestones[1]!.taskIds.map((id) => studio.getTask(id)) as [Task, Task];
+    assert.deepEqual([failed.state, retried.state], ['failed', 'failed']);
     assert.ok(failed.branch, 'the failed attempt keeps its branch');
+    // The second attempt was the runner's own: from the first one's branch, told why that one stopped and what the check said.
+    assert.equal(retried.baseBranch, failed.branch);
+    assert.match(retried.prompt, /^마일스톤 2\/3: 상대와 겨루기\n/);
+    assert.match(retried.prompt, /An earlier attempt at this milestone stopped with: <untrusted-data id="[0-9a-f]{24}" source="sandbox-output">\nverification still failing after 1 corrections: compiler\nThe last check that failed \(compiler\) said:\nsrc\/App\.tsx\(24,12\): error TS2322: Type 'string' is not assignable to type 'number'\.\n<\/untrusted-data id="[0-9a-f]{24}">\nIts work is on this branch/);
     // Nothing of the failed milestone reached the product.
     assert.equal(readFileSync(join(d.workspace, 'src/App.tsx'), 'utf8'), 'export const milestone = 1;\n');
     await assert.rejects(studio.stopRoadmap(OWNER, project.id), ConflictError, 'there is nothing running to stop');
@@ -341,13 +348,11 @@ test('a milestone that fails stops the roadmap with its reason, and running it a
     await studio.runRoadmap(OWNER, project.id);
     const done = await roadmapIn(d, project.id, 'done', 'stopped');
     assert.equal(done.state, 'done', done.error ?? '');
-    assert.deepEqual(done.milestones.map((m) => [m.state, m.taskIds.length]), [['built', 1], ['built', 2], ['built', 1]]);
-    const again = studio.getTask(done.milestones[1]!.taskIds[1]!);
-    assert.deepEqual([again.state, again.milestone, again.baseBranch], ['succeeded', 1, failed.branch]);
-    assert.match(again.prompt, /^마일스톤 2\/3: 상대와 겨루기\n/);
-    assert.match(again.prompt, /An earlier attempt at this milestone stopped with: <untrusted-data[^>]*>\nverification still failing after 1 corrections: compiler\n/);
+    assert.deepEqual(done.milestones.map((m) => [m.state, m.taskIds.length]), [['built', 1], ['built', 3], ['built', 1]]);
+    const again = studio.getTask(done.milestones[1]!.taskIds[2]!);
+    assert.deepEqual([again.state, again.milestone, again.baseBranch], ['succeeded', 1, retried.branch]);
     assert.equal(readFileSync(join(d.workspace, 'src/App.tsx'), 'utf8'), 'export const milestone = 2;\n');
-    assert.equal(model.sent.length, 9);
+    assert.equal(model.sent.length, 11);
   } finally {
     await d.cleanup();
   }

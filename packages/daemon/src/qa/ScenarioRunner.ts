@@ -15,6 +15,7 @@ import { PageDigest, collectDigest } from './collector.ts';
 import { DONE_ATTR, STEP_ATTR, walkFlow } from './FlowWalker.ts';
 import { LOGIN_ATTR, walkLogins } from './LoginWalk.ts';
 import type { QaBrowser } from './QaBrowser.ts';
+import { samplePhoto } from './samplePhoto.ts';
 
 /**
  * The gate that tells a product that works from a picture of one.
@@ -250,6 +251,9 @@ export async function walkScenarios(deps: { browser: Browser; base: string; phon
   const open = async (): Promise<{ page: Page; refused: string[]; close: () => Promise<void> }> => {
     const context = await browser.newContext({ ...(deps.phone ?? { viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 }), serviceWorkers: 'block' });
     const page = await context.newPage();
+    // A step that has the person choose a photo: there is nobody to choose one, so the chooser is answered with
+    // the studio's sample (a product whose feature starts from a photo is walked like any other).
+    page.on('filechooser', (chooser) => void chooser.setFiles({ name: 'sample-photo.png', mimeType: 'image/png', buffer: samplePhoto() }).catch(() => undefined));
     // What the backend refused is the most useful thing a builder can be told about a step that did not finish.
     const refused: string[] = [];
     page.on('response', (res) => {
