@@ -7,11 +7,13 @@ import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import type { Project, ProjectTemplate } from '@studio-zero/protocol';
 import { ARMS_KIT_DIR, ENV_FILE, armsKitFiles, envBlock, envNames, variantOf, withEnvBlock } from '../src/arms/kit.ts';
+import { flowIdOf, loginEnv, usable, withLogins } from '../src/arms/logins.ts';
 import { ProjectArms } from '../src/arms/ProjectArms.ts';
 import { applyScript, plan, readApplied, readOutcome, sha256 } from '../src/arms/schema.ts';
 import { SupabaseStack } from '../src/arms/SupabaseStack.ts';
 import { resolveDockerBin } from '../src/sandbox/dockerBin.ts';
 import type { OrbStackManager } from '../src/sandbox/OrbStackManager.ts';
+import { Secret } from '../src/util/core.ts';
 import { runCommand, type CommandRunner, type RunResult } from '../src/util/run.ts';
 import { dockerArgs, sampleProject, testDaemon } from './helpers.ts';
 
@@ -91,12 +93,12 @@ test('the kit as a project receives it: the rules, the client for its framework,
   assert.deepEqual(await armsKitFiles('studio-core'), []);
   assert.equal(envNames('studio-core'), null);
 
-  const info = { apiUrl: 'http://127.0.0.1:21459', apiUrlFromSandbox: 'http://host.docker.internal:21459', publishableKey: 'sb_publishable_abc' };
+  const info = { apiUrl: 'http://127.0.0.1:21459', apiUrlFromSandbox: 'http://host.docker.internal:21459', publishableKey: 'sb_publishable_abc', logins: [] as ('kakao' | 'google')[] };
   const vite = envBlock('web-vite-react', info)!;
-  assert.deepEqual(vite.split('\n').filter((line) => !line.startsWith('#')), ['VITE_SUPABASE_URL=http://127.0.0.1:21459', 'VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_abc']);
-  assert.deepEqual(envBlock('mobile-expo', info)!.split('\n').filter((line) => !line.startsWith('#')), ['EXPO_PUBLIC_SUPABASE_URL=http://127.0.0.1:21459', 'EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_abc']);
+  assert.deepEqual(vite.split('\n').filter((line) => !line.startsWith('#')), ['VITE_SUPABASE_URL=http://127.0.0.1:21459', 'VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_abc', 'VITE_SUPABASE_LOGINS=']);
+  assert.deepEqual(envBlock('mobile-expo', { ...info, logins: ['kakao', 'google'] })!.split('\n').filter((line) => !line.startsWith('#')), ['EXPO_PUBLIC_SUPABASE_URL=http://127.0.0.1:21459', 'EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_abc', 'EXPO_PUBLIC_SUPABASE_LOGINS=kakao,google']);
   // Only a framework with a server of its own is given the way out of the sandbox.
-  assert.deepEqual(envBlock('web-next', info)!.split('\n').filter((line) => !line.startsWith('#')), ['NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:21459', 'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_abc', 'SUPABASE_INTERNAL_URL=http://host.docker.internal:21459']);
+  assert.deepEqual(envBlock('web-next', info)!.split('\n').filter((line) => !line.startsWith('#')), ['NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:21459', 'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_abc', 'NEXT_PUBLIC_SUPABASE_LOGINS=', 'SUPABASE_INTERNAL_URL=http://host.docker.internal:21459']);
 
   // The studio's block is the studio's; every other line of the file is the project's.
   assert.equal(withEnvBlock('', vite), `${vite}\n`);
@@ -108,15 +110,42 @@ test('the kit as a project receives it: the rules, the client for its framework,
   assert.equal(moved.includes('21459'), false);
 });
 
+test('signing in through a provider: the owner\'s one key each, one address to come back to, the secret in no file', () => {
+  const toml = '[auth]\nsite_url = "http://127.0.0.1:3000"\nadditional_redirect_urls = ["https://127.0.0.1:3000"]\n\n[auth.email]\nenable_signup = true\n';
+  const keys = { kakao: { clientId: 'a1b2c3d4e5f6', secret: 'kakao-secret-value' }, google: { clientId: '1234-abc.apps.googleusercontent.com', secret: 'GOCSPX-value' } };
+  const landings = ['http://127.0.0.1:33034/**', 'http://localhost:33034/**'];
+  const made = withLogins(toml, keys, 'http://localhost:49200/oauth/callback', landings);
+  assert.equal(
+    made,
+    `[auth]\nsite_url = "http://127.0.0.1:3000"\nadditional_redirect_urls = ["http://127.0.0.1:33034/**", "http://localhost:33034/**"]\n\n[auth.email]\nenable_signup = true\n\n# >>> Studio Zero logins. Rewritten by the studio: do not edit between these lines.\n\n[auth.external.kakao]\nenabled = true\nclient_id = "a1b2c3d4e5f6"\nsecret = "env(SZ_LOGIN_KAKAO_SECRET)"\nredirect_uri = "http://localhost:49200/oauth/callback"\n\n[auth.external.google]\nenabled = true\nclient_id = "1234-abc.apps.googleusercontent.com"\nsecret = "env(SZ_LOGIN_GOOGLE_SECRET)"\nredirect_uri = "http://localhost:49200/oauth/callback"\n\n# <<< Studio Zero logins\n`,
+  );
+  assert.equal(made.includes('kakao-secret-value') || made.includes('GOCSPX-value'), false, 'the secret half is named, never written');
+  assert.deepEqual(loginEnv(keys), { SZ_LOGIN_KAKAO_SECRET: 'kakao-secret-value', SZ_LOGIN_GOOGLE_SECRET: 'GOCSPX-value' });
+  assert.equal(withLogins(made, keys, 'http://localhost:49200/oauth/callback', landings), made, 'written again, nothing changes: a stack is not restarted for nothing');
+  // A key taken out of the vault takes its provider out; one that could not sit in a configuration file is not used.
+  const one = withLogins(made, { kakao: keys.kakao, google: { clientId: 'x"\nenabled = false', secret: 's' } }, 'http://localhost:49200/oauth/callback', landings);
+  assert.match(one, /\[auth\.external\.kakao\]/);
+  assert.doesNotMatch(one, /auth\.external\.google|enabled = false/);
+  assert.deepEqual(usable({ kakao: keys.kakao, google: { clientId: '1234-abc.apps.googleusercontent.com', secret: '' } }), ['kakao']);
+  assert.doesNotMatch(withLogins(made, {}, 'http://localhost:49200/oauth/callback', landings), /auth\.external/);
+
+  // Which sign-in a returning person belongs to: its id, bare or inside the auth service's own token. Nothing else is read from it.
+  const flow = '0b9f6a52-3c1e-4d1a-9f0e-6f2d1c3b4a59';
+  const token = `${Buffer.from('{"alg":"HS256"}').toString('base64url')}.${Buffer.from(JSON.stringify({ provider: 'kakao', flow_state_id: flow, referrer: 'http://evil.example' })).toString('base64url')}.sig`;
+  assert.deepEqual([flowIdOf(flow), flowIdOf(token), flowIdOf('x'), flowIdOf(`a.${Buffer.from('{"flow_state_id":"1; drop table x"}').toString('base64url')}.c`), flowIdOf("' or 1=1 --")], [flow, flow, null, null, null]);
+});
+
 /** Supabase's command line and the database it runs, as far as the studio speaks to them. */
-function fakeBackend(): { wrap: (base: CommandRunner) => CommandRunner; cli: string[]; scripts: string[]; answers: RunResult[] } {
+function fakeBackend(): { wrap: (base: CommandRunner) => CommandRunner; cli: string[]; envs: NodeJS.ProcessEnv[]; scripts: string[]; answers: RunResult[] } {
   const cli: string[] = [];
+  const envs: NodeJS.ProcessEnv[] = [];
   const scripts: string[] = [];
   const answers: RunResult[] = [];
   const started = JSON.stringify({ id: '5544e7ce750573f1', env: { API_URL: 'http://127.0.0.1:21459', DB_URL: 'postgresql://postgres:postgres@127.0.0.1:20253/postgres', PUBLISHABLE_KEY: 'sb_publishable_abc', SECRET_KEY: 'sb_secret_xyz' } });
   const wrap = (base: CommandRunner): CommandRunner => async (file, args, opts = {}) => {
     if (file === 'supabase') {
       cli.push(args.join(' '));
+      envs.push(opts.env ?? {});
       if (args[0] === 'init') {
         mkdirSync(join(opts.cwd!, 'supabase'), { recursive: true });
         writeFileSync(join(opts.cwd!, 'supabase', 'config.toml'), '[experimental]\nstack = true\n');
@@ -131,7 +160,7 @@ function fakeBackend(): { wrap: (base: CommandRunner) => CommandRunner; cli: str
     }
     return base(file, args, opts);
   };
-  return { wrap, cli, scripts, answers };
+  return { wrap, cli, envs, scripts, answers };
 }
 
 test('a project gets its backend with its first schema: started, its address and client in the workspace, and kept in step with the sandbox', async () => {
@@ -139,7 +168,9 @@ test('a project gets its backend with its first schema: started, its address and
   const d = await testDaemon({}, {}, backend.wrap);
   await d.daemon.start();
   try {
-    const { studio, provisioner, toolbox, arms, config } = d.daemon;
+    const { studio, provisioner, toolbox, arms, config, vault } = d.daemon;
+    await vault.set('login/kakao/client-id', new Secret('a1b2c3d4e5f6'));
+    await vault.set('login/kakao/client-secret', new Secret('kakao-secret-value'));
     const project = studio.createProject(OWNER, { name: '회비 장부', slug: 'dues', template: 'web-vite-react' });
     await provisioner.ensure(project);
     const ctx = { project, taskId: 'tsk_none' };
@@ -182,7 +213,12 @@ test('a project gets its backend with its first schema: started, its address and
 
     // In the workspace: the project's own line kept, the studio's block added, the file kept out of every commit, the kit.
     const env = readFileSync(at(ENV_FILE), 'utf8');
-    assert.match(env, /^VITE_APP_NAME=Ledger\n\n# >>> Studio Zero backend[\s\S]*\nVITE_SUPABASE_URL=http:\/\/127\.0\.0\.1:21459\nVITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_abc\n# <<< Studio Zero backend\n$/);
+    assert.match(env, /^VITE_APP_NAME=Ledger\n\n# >>> Studio Zero backend[\s\S]*\nVITE_SUPABASE_URL=http:\/\/127\.0\.0\.1:21459\nVITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_abc\n# The providers[^\n]*\nVITE_SUPABASE_LOGINS=kakao\n# <<< Studio Zero backend\n$/);
+    // The owner's Kakao key is in the vault and Google's is not: one provider is switched on, at the daemon's own address, and its secret is in no file.
+    const stackConfig = readFileSync(join(config.home, 'arms', project.id, 'supabase', 'config.toml'), 'utf8');
+    assert.match(stackConfig, /\[auth\.external\.kakao\]\nenabled = true\nclient_id = "a1b2c3d4e5f6"\nsecret = "env\(SZ_LOGIN_KAKAO_SECRET\)"\nredirect_uri = "http:\/\/localhost:\d+\/oauth\/callback"/);
+    assert.doesNotMatch(stackConfig, /auth\.external\.google|kakao-secret-value/);
+    assert.equal(backend.envs.at(-1)!.SZ_LOGIN_KAKAO_SECRET, 'kakao-secret-value');
     assert.match(readFileSync(at('.git/info/exclude'), 'utf8'), /^\.env\.local$/m);
     assert.match(readFileSync(at(`${ARMS_KIT_DIR}/index.ts`), 'utf8'), /import\.meta\.env\.VITE_SUPABASE_URL/);
     assert.ok(existsSync(at(`${ARMS_KIT_DIR}/README.md`)));
@@ -217,6 +253,21 @@ test('a project gets its backend with its first schema: started, its address and
     assert.equal(readFileSync(at(ENV_FILE), 'utf8'), env);
     assert.deepEqual(await arms.hostPorts(project), [21459]);
     assert.equal(starts(), before + 1, 'asking where it is does not start it again');
+
+    // A person coming back from a login provider is passed on to the backend that sent them out, and only to that.
+    const flow = '0b9f6a52-3c1e-4d1a-9f0e-6f2d1c3b4a59';
+    const comeBack = async (state: string): Promise<{ status: number; location: string | null }> => {
+      const res = await fetch(`http://127.0.0.1:${d.port()}/oauth/callback?code=abc&state=${state}`, { redirect: 'manual' });
+      return { status: res.status, location: res.headers.get('location') };
+    };
+    backend.answers.push(ok('1\n'));
+    assert.deepEqual(await comeBack(flow), { status: 302, location: `http://127.0.0.1:21459/auth/v1/callback?code=abc&state=${flow}` });
+    assert.match(backend.scripts.at(-1)!, new RegExp(`^select count\\(\\*\\) from auth\\.flow_state where id = '${flow}';`));
+    backend.answers.push(ok('0\n'));
+    assert.equal((await comeBack(flow)).status, 404, 'a sign-in no backend here started goes nowhere');
+    const asked = backend.scripts.length;
+    assert.equal((await comeBack("x'%20or%201=1")).status, 404);
+    assert.equal(backend.scripts.length, asked, 'and what is not a sign-in\'s id is never put to a database');
 
     // Stopped with the sandbox, deleted with the project.
     await studio.sandboxLifecycle(OWNER, project.id, 'stop');

@@ -47,6 +47,7 @@ test('a project\'s stack: set up once, started with the studio\'s own engine con
       adminKeys: ['sb_secret_xyz', 'service.jwt'],
       dbUrl: 'postgresql://postgres:postgres@127.0.0.1:20253/postgres',
       mailUrl: 'http://127.0.0.1:32392',
+      logins: [],
     });
     assert.deepEqual(calls.map((c) => c.args.join(' ')), ['--version', 'init --yes', 'start --runtime docker --exclude studio,analytics --output-format json']);
     for (const call of calls) {

@@ -18,6 +18,7 @@ import type { PtyManager } from '../sandbox/PtyManager.ts';
 import { errorMessage, newId, safeEqual, type Secret } from '../util/core.ts';
 import { trackSockets } from '../util/sockets.ts';
 import { VaultError } from '../vault/KeychainVault.ts';
+import { OAUTH_CALLBACK_PATH } from '../arms/logins.ts';
 import type { ClientConnection, Handlers } from './handlers.ts';
 
 const HELLO_TIMEOUT_MS = 5_000;
@@ -42,6 +43,8 @@ export interface DaemonServerDeps {
   clientToken: Secret;
   version: string;
   log: PinoLogger;
+  /** Where a person coming back from a login provider is passed on to (see `arms/logins.ts`), or null when no project sent them. */
+  oauthRelay?: (query: string, state: string) => Promise<string | null>;
 }
 
 /**
@@ -96,6 +99,18 @@ export class DaemonServer {
     });
 
     this.app.get('/healthz', async () => ({ ok: true }));
+
+    // A person coming back from a login provider, on the one address registered with it. No token is asked
+    // for: the browser arriving here is that person's own, sent by the provider, and all that happens is that
+    // it is sent on, with what it carried, to the backend on this machine that started the sign-in.
+    this.app.get(OAUTH_CALLBACK_PATH, async (req, reply) => {
+      const raw = req.raw.url ?? '';
+      const query = raw.includes('?') ? raw.slice(raw.indexOf('?') + 1) : '';
+      const state = new URLSearchParams(query).get('state') ?? '';
+      const target = state === '' || !this.#d.oauthRelay ? null : await this.#d.oauthRelay(query, state).catch(() => null);
+      if (target === null) return reply.code(404).type('text/plain; charset=utf-8').send('This sign-in was not started by a project on this machine, or it has run out. Go back to the product and sign in again.\n');
+      return reply.code(302).header('location', target).header('cache-control', 'no-store').send();
+    });
 
     void this.app.register(websocket, { options: { maxPayload: 1024 * 1024 } });
     void this.app.register(async (scoped) => {

@@ -3,6 +3,7 @@ import type { OrbStackManager } from '../sandbox/OrbStackManager.ts';
 import { KeyedMutex } from '../util/core.ts';
 import { ARMS_KIT_DIR, ARMS_KIT_ENTRY, ENV_FILE, armsKitFiles, envBlock, envNames, variantOf, withEnvBlock } from './kit.ts';
 import { MAX_MIGRATIONS, MAX_SQL_BYTES, MIGRATIONS_DIR, MIGRATION_NAME, SEED_FILE, appliedScript, applyScript, plan, readApplied, readOutcome, type SqlFile } from './schema.ts';
+import { flowIdOf } from './logins.ts';
 import { StackError, type StackInfo, type SupabaseStack } from './SupabaseStack.ts';
 
 /**
@@ -27,7 +28,7 @@ export interface SchemaResult {
   text: string;
 }
 
-type Sandboxes = Pick<OrbStackManager, 'exec' | 'readFile' | 'writeFile'>;
+type Sandboxes = Pick<OrbStackManager, 'exec' | 'readFile' | 'writeFile'> & Partial<Pick<OrbStackManager, 'info'>>;
 type Stack = Pick<SupabaseStack, 'has' | 'start' | 'stop' | 'destroy' | 'sql'>;
 
 const NO_BACKEND = 'This kind of project has no backend of its own.';
@@ -39,9 +40,20 @@ export class ProjectArms {
   /** Stacks this daemon has started, so that asking where one is does not start it again. */
   readonly #up = new Map<string, StackInfo>();
 
-  constructor(deps: { stack: Stack; sandboxes: Sandboxes }) {
+  /** The one address the login providers send people back to: the daemon's own. Null where signing in through a provider is not set up. */
+  readonly #callback: string | null;
+
+  constructor(deps: { stack: Stack; sandboxes: Sandboxes; oauthCallback?: string | null }) {
     this.#stack = deps.stack;
     this.#sandboxes = deps.sandboxes;
+    this.#callback = deps.oauthCallback ?? null;
+  }
+
+  /** Where a person may land after signing in through a provider: the addresses the product's preview answers at on this machine. */
+  async #landings(project: Project): Promise<string[]> {
+    const info = await this.#sandboxes.info?.(project).catch(() => null);
+    const origins = (info?.previewUrls ?? []).flatMap((url) => [url.localhost, url.localhost.replace('//localhost:', '//127.0.0.1:'), url.orbLocal]);
+    return [...new Set(origins)].sort().map((origin) => `${origin}/**`);
   }
 
   has(project: Pick<Project, 'id'>): boolean {
@@ -59,7 +71,7 @@ export class ProjectArms {
 
   async #ensure(project: Project, create: boolean): Promise<ArmsReady | null> {
     if (!variantOf(project.template) || (!create && !this.#stack.has(project))) return null;
-    const info = await this.#stack.start(project);
+    const info = await this.#stack.start(project, this.#callback ? { callback: this.#callback, landings: await this.#landings(project) } : null);
     this.#up.set(project.id, info);
     const added: string[] = [];
 
@@ -148,6 +160,25 @@ export class ProjectArms {
       }
       return { ok: false, text: `Nothing was applied, and the database is as it was. ${outcome.file} failed:\n${outcome.error}` };
     });
+  }
+
+  /**
+   * Where a person who comes back from a login provider is passed on to: the callback of the backend that sent
+   * them out, with everything they carried. Null when no project's backend started the sign-in they return from.
+   *
+   * The target is always one of this machine's own backends; nothing in what the person carries is used as an address.
+   */
+  async relay(projects: readonly Project[], query: string, state: string): Promise<string | null> {
+    const flow = flowIdOf(state);
+    if (flow === null) return null;
+    for (const project of projects) {
+      if (!this.#stack.has(project)) continue;
+      const info = this.#up.get(project.id) ?? (await this.ensure(project).catch(() => null))?.info;
+      if (!info) continue;
+      const found = await this.#stack.sql(project, `select count(*) from auth.flow_state where id = '${flow}';\n`).catch(() => null);
+      if (found?.exitCode === 0 && found.stdout.trim() === '1') return `${info.apiUrl}/auth/v1/callback?${query}`;
+    }
+    return null;
   }
 
   /** Runs a script of the studio's own in the project's database (see `SupabaseStack.sql`). For checks that have to see past every policy. */

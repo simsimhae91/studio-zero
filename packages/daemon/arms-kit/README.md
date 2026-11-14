@@ -65,4 +65,10 @@ this Mac; mail the backend would send is caught and never leaves it). `signInWit
 send a signed-out visitor to the sign-in screen from there. Every screen that shows a user's data has a state
 for "not signed in" and one for "session ended".
 
+Signing in with Kakao or Google is offered beside email and password, never instead of it, and only for the
+providers the kit's `logins` lists (the studio's own developer apps, shared by its prototypes; none listed
+means email only): `supabase.auth.signInWithOAuth({ provider: 'kakao', options: { redirectTo: window.location.origin } })`.
+The person leaves for the provider and comes back signed in; `onAuthStateChange` tells the product. When the
+product ships it registers developer apps of its own; the code does not change.
+
 Never put a password, a token or the address of the backend in the code or in a fixture.

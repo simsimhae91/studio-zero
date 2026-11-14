@@ -39,18 +39,18 @@ const VARIANTS: Partial<Record<ProjectTemplate, Variant>> = {
 export const variantOf = (template: ProjectTemplate): Variant | null => VARIANTS[template] ?? null;
 
 /** The names the kit reads, for this kind of project. */
-export function envNames(template: ProjectTemplate): { url: string; key: string; internalUrl: string | null } | null {
+export function envNames(template: ProjectTemplate): { url: string; key: string; logins: string; internalUrl: string | null } | null {
   const variant = variantOf(template);
   if (!variant) return null;
   // Only a framework with server code of its own runs code in the sandbox that must reach the backend from there.
-  return { url: `${variant.prefix}SUPABASE_URL`, key: `${variant.prefix}SUPABASE_PUBLISHABLE_KEY`, internalUrl: variant.folder === 'next' ? 'SUPABASE_INTERNAL_URL' : null };
+  return { url: `${variant.prefix}SUPABASE_URL`, key: `${variant.prefix}SUPABASE_PUBLISHABLE_KEY`, logins: `${variant.prefix}SUPABASE_LOGINS`, internalUrl: variant.folder === 'next' ? 'SUPABASE_INTERNAL_URL' : null };
 }
 
 const OPEN = '# >>> Studio Zero backend. Rewritten by the studio: put your own lines outside this block.';
 const CLOSE = '# <<< Studio Zero backend';
 
 /** The studio's block of `.env.local`: the address a browser on this Mac reaches the backend at, and the key that is safe to ship. */
-export function envBlock(template: ProjectTemplate, info: Pick<StackInfo, 'apiUrl' | 'apiUrlFromSandbox' | 'publishableKey'>): string | null {
+export function envBlock(template: ProjectTemplate, info: Pick<StackInfo, 'apiUrl' | 'apiUrlFromSandbox' | 'publishableKey' | 'logins'>): string | null {
   const names = envNames(template);
   if (!names) return null;
   const lines = [
@@ -59,6 +59,8 @@ export function envBlock(template: ProjectTemplate, info: Pick<StackInfo, 'apiUr
     '# In production, set the same names to the hosted project\'s URL and publishable key.',
     `${names.url}=${info.apiUrl}`,
     `${names.key}=${info.publishableKey}`,
+    '# The providers a person can sign in with here besides email (the studio\'s shared developer apps). Empty: email only.',
+    `${names.logins}=${info.logins.join(',')}`,
   ];
   if (names.internalUrl) lines.push('# Server code in this sandbox reaches the same backend here. Not set in production.', `${names.internalUrl}=${info.apiUrlFromSandbox}`);
   return [...lines, CLOSE].join('\n');

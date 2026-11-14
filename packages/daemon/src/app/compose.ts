@@ -59,6 +59,7 @@ import { CaffeinateManager, type PowerSpawner } from '../util/CaffeinateManager.
 import { Secret, errorMessage, systemClock, type Clock } from '../util/core.ts';
 import { runCommand, type CommandRunner } from '../util/run.ts';
 import { CredentialIds, KeychainVault } from '../vault/KeychainVault.ts';
+import { OAUTH_CALLBACK_PATH, type LoginKey, type LoginKeys } from '../arms/logins.ts';
 import { ProjectArms } from '../arms/ProjectArms.ts';
 import { ScenarioRunner, type ScenarioRunnerLike } from '../qa/ScenarioRunner.ts';
 import { SupabaseStack } from '../arms/SupabaseStack.ts';
@@ -167,7 +168,22 @@ export async function createDaemon(config: Config, log: PinoLogger, overrides: D
   // project through an address and a publishable key only.
   // As in the sandbox manager: with a runner handed in (a test), the commands are called by their bare names.
   const armsBins = overrides.run ? { dockerBin: config.runtime.dockerBin, supabaseBin: 'supabase' } : { dockerBin: resolveDockerBin(config.runtime.dockerBin) };
-  const arms = new ProjectArms({ stack: new SupabaseStack({ home: config.home, run: overrides.run ?? runCommand, engineEndpoint: () => sandboxes.engineEndpoint(), ...armsBins }), sandboxes });
+  // Signing in with Kakao or Google goes through the owner's one developer app with each: its keys are in the
+  // vault, and the one address registered with the provider is this daemon's (see arms/logins.ts).
+  const loginKey = async (id: string, secret: string): Promise<LoginKey | undefined> => {
+    const [clientId, value] = await Promise.all([vault.get(id).catch(() => null), vault.get(secret).catch(() => null)]);
+    return clientId && value ? { clientId: clientId.expose().trim(), secret: value.expose().trim() } : undefined;
+  };
+  const loginKeys = async (): Promise<LoginKeys> => {
+    const [kakao, google] = await Promise.all([loginKey(CredentialIds.kakaoLoginClientId, CredentialIds.kakaoLoginClientSecret), loginKey(CredentialIds.googleLoginClientId, CredentialIds.googleLoginClientSecret)]);
+    return { ...(kakao ? { kakao } : {}), ...(google ? { google } : {}) };
+  };
+  const arms = new ProjectArms({
+    stack: new SupabaseStack({ home: config.home, run: overrides.run ?? runCommand, engineEndpoint: () => sandboxes.engineEndpoint(), ...armsBins, loginKeys }),
+    sandboxes,
+    // Providers send a person back to `localhost`, whatever the daemon is bound to: that is the address registered with them.
+    oauthCallback: `http://localhost:${config.listen.port}${OAUTH_CALLBACK_PATH}`,
+  });
   const provisioner = new WorkspaceProvisioner(sandboxes, selfHosting, external, arms);
   const bridgeSessions = new BridgeSessions(clock);
   // What each subscription was seen to do: every call through a vendor CLI reports its outcome here.
@@ -274,7 +290,7 @@ export async function createDaemon(config: Config, log: PinoLogger, overrides: D
   const restart = overrides.restart !== undefined ? overrides.restart : supervised ? () => void process.kill(process.pid, 'SIGTERM') : null;
   const ownerConfig = new OwnerConfig({ config, events });
   const logFile = supervised ? join(homedir(), 'Library', 'Logs', 'studio-zero', 'daemon.log') : null;
-  const server = new DaemonServer({ config, handlers: createHandlers(studio, { ownerConfig, restart, logFile }), events, store, toolbox, bridgeSessions, terminals: pty, clientToken, version: VERSION, log });
+  const server = new DaemonServer({ config, handlers: createHandlers(studio, { ownerConfig, restart, logFile }), events, store, toolbox, bridgeSessions, terminals: pty, clientToken, version: VERSION, log, oauthRelay: (query, state) => arms.relay(store.listProjects(), query, state) });
   const gateway = new LlmGateway({ config, store, events, policy, vault, clock, log: log.child({ mod: 'gateway' }), upstreams: overrides.gatewayUpstreams, external });
 
   if (config.telegram.enabled) {

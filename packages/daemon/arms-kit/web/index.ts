@@ -9,3 +9,10 @@ if (!url || !key) throw new Error('VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHAB
  * request made while signed in carries the user, and the database's policies decide what it may touch.
  */
 export const supabase = createClient(url, key);
+
+/**
+ * The providers a person can sign in with here besides email, as the studio set them up: 'kakao', 'google' or
+ * neither. Show a button for each of these and for no other. In production the same name lists the providers
+ * the product's own developer apps are registered with.
+ */
+export const logins = ((import.meta.env.VITE_SUPABASE_LOGINS as string | undefined) ?? '').split(',').filter(Boolean) as ('kakao' | 'google')[];

@@ -19,6 +19,13 @@ export const supabase = createClient(url, key, {
   auth: { storage, autoRefreshToken: true, persistSession: true, detectSessionInUrl: Platform.OS === 'web' },
 });
 
+/**
+ * The providers a person can sign in with here besides email, as the studio set them up: 'kakao', 'google' or
+ * neither. Show a button for each of these and for no other. In production the same name lists the providers
+ * the product's own developer apps are registered with.
+ */
+export const logins = (process.env.EXPO_PUBLIC_SUPABASE_LOGINS ?? '').split(',').filter(Boolean) as ('kakao' | 'google')[];
+
 // A phone stops an app's timers when it leaves the screen, so the session is renewed only while it is in front.
 if (Platform.OS !== 'web') {
   AppState.addEventListener('change', (state) => {

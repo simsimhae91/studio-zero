@@ -10,6 +10,13 @@ export const SESSION_COOKIE = 'sb-session';
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 
+/**
+ * The providers a person can sign in with here besides email, as the studio set them up: 'kakao', 'google' or
+ * neither. Show a button for each of these and for no other. In production the same name lists the providers
+ * the product's own developer apps are registered with.
+ */
+export const logins = (process.env.NEXT_PUBLIC_SUPABASE_LOGINS ?? '').split(',').filter(Boolean) as ('kakao' | 'google')[];
+
 /** The connection for Client Components. The session lives in a cookie, so the server sees the same user. */
 export function browserClient() {
   if (!url || !key) throw new Error('NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY are not set. The studio writes them to .env.local when the schema is applied; restart the dev server after that.');

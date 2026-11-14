@@ -1,9 +1,10 @@
-import { accessSync, constants, existsSync, mkdirSync, rmSync, statSync } from 'node:fs';
+import { accessSync, constants, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { z } from 'zod';
 import type { Project } from '@studio-zero/protocol';
 import type { CommandRunner, RunResult } from '../util/run.ts';
+import { loginEnv, usable, withLogins, type LoginKeys, type Provider } from './logins.ts';
 
 /**
  * A project's own backend: a Supabase stack (Postgres, auth, storage, realtime, functions, a mail catcher) that
@@ -39,6 +40,15 @@ export interface StackInfo {
   dbUrl: string;
   /** The catcher that holds the mail the stack would have sent, when the stack runs one. */
   mailUrl: string | null;
+  /** The providers a person can sign in with besides email: those the owner's keys switch on. */
+  logins: Provider[];
+}
+
+/** How a stack is set up for signing in through a provider: the keys, the one address providers send people back to, and where a person may land afterwards. */
+export interface LoginSetup {
+  keys: LoginKeys;
+  callback: string;
+  landings: readonly string[];
 }
 
 export class StackError extends Error {
@@ -83,6 +93,8 @@ export interface SupabaseStackDeps {
   dockerBin: string;
   /** The command line, used as given. Default: looked for on PATH and where Homebrew puts it. */
   supabaseBin?: string;
+  /** The owner's keys for signing in with a provider, read when a stack is started. Without it, email only. */
+  loginKeys?: () => Promise<LoginKeys>;
 }
 
 export class SupabaseStack {
@@ -91,6 +103,9 @@ export class SupabaseStack {
   readonly #engineEndpoint: () => Promise<string>;
   readonly #dockerBin: string;
   readonly #bin: string;
+  readonly #loginKeys: () => Promise<LoginKeys>;
+  /** The keys as last read, for the calls between two starts: the configuration names them, so every call needs them. */
+  #keys: LoginKeys = {};
   #checked = false;
 
   constructor(deps: SupabaseStackDeps) {
@@ -99,6 +114,7 @@ export class SupabaseStack {
     this.#engineEndpoint = deps.engineEndpoint;
     this.#dockerBin = deps.dockerBin;
     this.#bin = deps.supabaseBin ?? resolveSupabaseBin();
+    this.#loginKeys = deps.loginKeys ?? (async () => ({}));
   }
 
   /** Where a project's stack is described. Outside any git repository, on purpose: inside one, the branch would be part of the stack's identity. */
@@ -124,6 +140,8 @@ export class SupabaseStack {
       SUPABASE_EXPERIMENTAL_STACK: '1',
       SUPABASE_TELEMETRY_DISABLED: '1',
       DO_NOT_TRACK: '1',
+      // The secret half of each provider's key, for the configuration's `env(...)`. It is in no file.
+      ...loginEnv(this.#keys),
     };
   }
 
@@ -154,16 +172,28 @@ export class SupabaseStack {
    * Brings the project's stack up and says where it is. Safe to call on a stack that is already up: it answers
    * with the same addresses. The first call on a machine fetches the images and can take minutes.
    */
-  async start(project: Pick<Project, 'id'>): Promise<StackInfo> {
+  async start(project: Pick<Project, 'id'>, logins: Omit<LoginSetup, 'keys'> | null = null): Promise<StackInfo> {
     await this.#check(project);
-    if (!this.has(project)) {
+    const fresh = !this.has(project);
+    if (fresh) {
       // With the stack mode on, `init` writes a configuration with no fixed ports, which is what lets two projects run at once.
       const init = await this.#cli(project, ['init', '--yes'], 60_000);
       if (init.exitCode !== 0) throw new StackError('the project\'s backend could not be set up', lastLines(init.stderr || init.stdout));
     }
+    if (logins) {
+      this.#keys = await this.#loginKeys();
+      const file = join(this.dir(project), 'supabase', 'config.toml');
+      const held = readFileSync(file, 'utf8');
+      const wanted = withLogins(held, this.#keys, logins.callback, logins.landings);
+      if (wanted !== held) {
+        writeFileSync(file, wanted, { mode: 0o600 });
+        // A stack that is up read its configuration when it started. It is taken down so that the start below reads this one.
+        if (!fresh) await this.#cli(project, ['stop'], 120_000);
+      }
+    }
     const res = await this.#cli(project, ['start', '--runtime', 'docker', '--exclude', EXCLUDED, '--output-format', 'json'], START_TIMEOUT_MS);
     if (res.exitCode !== 0) throw new StackError(res.timedOut ? 'the project\'s backend did not start in time' : 'the project\'s backend did not start', lastLines(res.stderr || res.stdout));
-    return readStarted(res.stdout);
+    return { ...readStarted(res.stdout), logins: logins ? usable(this.#keys) : [] };
   }
 
   /** Whether this project has a backend: its stack has been set up on this machine. */
@@ -224,5 +254,5 @@ export function readStarted(stdout: string): StackInfo {
   const sandbox = new URL(apiUrl);
   // A sandbox container's own 127.0.0.1 is itself; the host is this name there.
   sandbox.hostname = 'host.docker.internal';
-  return { id: parsed.id, apiUrl, apiUrlFromSandbox: sandbox.origin, publishableKey, adminKeys, dbUrl: env.DB_URL, mailUrl: env.MAILPIT_URL ?? env.INBUCKET_URL ?? null };
+  return { id: parsed.id, apiUrl, apiUrlFromSandbox: sandbox.origin, publishableKey, adminKeys, dbUrl: env.DB_URL, mailUrl: env.MAILPIT_URL ?? env.INBUCKET_URL ?? null, logins: [] };
 }
