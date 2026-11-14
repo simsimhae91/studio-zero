@@ -1,7 +1,7 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { z } from 'zod';
-import { AcceptanceVerdict, Effort, ReviewerId, ReviewerPref, ScreenSpec as ScreenSpecShape, type AuditReport, type Phase, type PlanFeedback, type ProductMap, type Project, type Task, type TaskState } from '@studio-zero/protocol';
+import { AcceptanceVerdict, Effort, ReviewerId, ReviewerPref, ScreenSpec as ScreenSpecShape, type AuditReport, type Phase, type Finding, type PlanFeedback, type ProductMap, type Project, type Task, type TaskState } from '@studio-zero/protocol';
 import { EngineId, type Config } from '../config.ts';
 import { classifyQuotaFailure } from '../app/QuotaTracker.ts';
 import type { PlanVersionRow, Store } from '../db/Store.ts';
@@ -148,6 +148,14 @@ export class ShutdownSignal extends Error {
  * committed on its own branch, and a failed task puts the workspace back on the integration branch.
  */
 /** What a task's screen spec is held to: whether it must say how the product works, and whether the short plan of a draft will do. */
+/** A measured defect left on a milestone's screen, as the owner reads it on the roadmap. */
+const debtLine = (screen: string, scenario: string, finding: Finding): string => `${screen} 화면 (시나리오 ${scenario}) · ${finding.severity === 'blocker' ? '막는 결함' : '큰 결함'} · ${finding.rule}: ${finding.message}`;
+/** Which screen and which rule a line of debt is about, to tell whether a later walk finds the same thing. */
+const debtKey = (line: string): string | null => {
+  const read = /^(.+?) 화면 \(시나리오 .*?\) · (?:막는 결함|큰 결함) · ([^:]+): /.exec(line);
+  return read ? `${read[1]}|${read[2]}` : null;
+};
+
 /** How many rounds that only corrected the screen plan are not charged to a task's corrections. */
 const FREE_PLAN_ROUNDS = 3;
 
@@ -790,15 +798,7 @@ export class Harness {
    */
   async #walkedScreens(project: Project, task: Task, building: Building, looks: readonly ScreenLook[]): Promise<Failure | null> {
     const scope = { projectId: project.id, taskId: task.id };
-    const lines = [
-      ...new Set(
-        looks.flatMap((look) =>
-          look.findings
-            .filter((finding) => finding.severity !== 'minor')
-            .map((finding) => `Screen ${look.screen} (scenario "${look.scenario}"), ${finding.severity}, ${finding.rule}: ${finding.message}${finding.selector ? ` At ${finding.selector}.` : ''}${finding.fix ? ` ${finding.fix}` : ''}`),
-        ),
-      ),
-    ];
+    const heavy = looks.flatMap((look) => look.findings.filter((finding) => finding.severity !== 'minor').map((finding) => ({ look, finding, key: `${look.screen}|${finding.rule}` })));
     const shots: { screen: string; artifactId: string }[] = [];
     const dir = join(this.#config.artifactsDir, project.id, task.id);
     await mkdir(dir, { recursive: true, mode: 0o700 });
@@ -810,19 +810,45 @@ export class Harness {
       this.#store.insertArtifact({ id: artifactId, projectId: project.id, mime: 'image/png', file, createdAt: this.#clock() });
       shots.push({ screen: look.screen, artifactId });
     }
+
+    // What an earlier milestone's walk left is written against that milestone. It is not this builder's to be
+    // sent back for (the first long run would have paid a nine-minute walk a milestone for one line about the
+    // sign-up screen): it stays where it was found, and the last milestone, which finishes the product, is
+    // handed all of it. What a later walk no longer finds is paid, and comes off.
+    const earlier = this.#store.getRoadmap(project.id)?.milestones.slice(0, building.index) ?? [];
+    const found = new Set(heavy.map((h) => h.key));
+    const measured = new Set(looks.map((look) => look.screen));
+    for (const [i, milestone] of earlier.entries()) {
+      const still = milestone.debt.filter((line) => {
+        const key = debtKey(line);
+        return key === null || !measured.has(key.split('|')[0]!) || found.has(key);
+      });
+      if (still.length !== milestone.debt.length) this.#store.noteMilestone(project.id, i, { debt: still }, this.#clock());
+    }
+    const carried = new Set(earlier.flatMap((milestone) => milestone.debt.map(debtKey)));
+    const last = building.index === building.map.milestones.length - 1;
+    const unique = (lines: string[]): string[] => [...new Set(lines)];
+    const lines = unique(
+      heavy
+        .filter((h) => last || !carried.has(h.key))
+        .map(({ look, finding }) => `Screen ${look.screen} (scenario "${look.scenario}"), ${finding.severity}, ${finding.rule}: ${finding.message}${finding.selector ? ` At ${finding.selector}.` : ''}${finding.fix ? ` ${finding.fix}` : ''}`),
+    );
     // The same findings as the owner reads them on the roadmap: which screen, how heavy, and the measurement.
-    const owed = [
-      ...new Set(
-        looks.flatMap((look) =>
-          look.findings.filter((finding) => finding.severity !== 'minor').map((finding) => `${look.screen} 화면 (시나리오 ${look.scenario}) · ${finding.severity === 'blocker' ? '막는 결함' : '큰 결함'} · ${finding.rule}: ${finding.message}`),
-        ),
-      ),
-    ];
+    const owed = unique(heavy.filter((h) => !carried.has(h.key)).map(({ look, finding }) => debtLine(look.screen, look.scenario, finding)));
+    const kept = unique(heavy.filter((h) => carried.has(h.key)).map((h) => h.key)).length;
     const sendBack = lines.length > 0 && !building.sentBack;
-    this.#events.emit(scope, { type: 'gate.result', gate: 'looks', name: `${looks.length} screens`, passed: lines.length === 0, exitCode: null, durationMs: 0, detail: lines.length === 0 ? `${looks.length} screens measured as the walk stood on them: nothing above minor` : excerpt(lines.join('\n'), 3000) });
+    this.#events.emit(scope, {
+      type: 'gate.result',
+      gate: 'looks',
+      name: `${looks.length} screens`,
+      passed: lines.length === 0,
+      exitCode: null,
+      durationMs: 0,
+      detail: lines.length === 0 ? `${looks.length} screens measured as the walk stood on them: nothing above minor${kept > 0 ? `, besides ${kept} left by earlier milestones and kept for the last` : ''}` : excerpt(lines.join('\n'), 3000),
+    });
     this.#store.noteMilestone(project.id, building.index, { shots, debt: sendBack ? [] : owed.slice(0, 60) }, this.#clock());
     if (!sendBack) {
-      if (lines.length > 0) this.#events.emit(scope, { type: 'notice', level: 'warn', message: `마일스톤 ${building.index + 1}: 걸은 화면에서 잰 결함 ${lines.length}건이 한 번 고친 뒤에도 남았습니다. 로드맵에 남은 일로 적었습니다.` });
+      if (owed.length > 0) this.#events.emit(scope, { type: 'notice', level: 'warn', message: `마일스톤 ${building.index + 1}: 걸은 화면에서 잰 결함 ${owed.length}건이 한 번 고친 뒤에도 남았습니다. 로드맵에 남은 일로 적었습니다.` });
       return null;
     }
     building.sentBack = true;

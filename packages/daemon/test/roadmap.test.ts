@@ -89,6 +89,7 @@ const M2 = [...M1, 'matching', 'ranking', 'meal-photo'];
 const M3 = [...M2, 'health-sync', 'result'];
 
 const smoke: SmokeRunner = { run: async (): Promise<SmokeOutcome> => ({ passed: true, routes: ['/'], issues: [], detail: '1 route loaded without errors', durationMs: 5 }) };
+const DOOR: Finding = { rule: 'material/nothing-drawn', category: 'hierarchy', severity: 'major', source: 'dom', viewport: 'iphone-15-pro', route: 'A-01', message: '첫 화면에 그려진 것이 6%뿐입니다.', selector: null, bbox: null, fix: null, file: null, line: null };
 const MAJOR: Finding = { rule: 'contrast/text', category: 'contrast', severity: 'major', source: 'dom', viewport: 'iphone-15-pro', route: 'H-01', message: '본문 글자의 대비가 2.1:1입니다.', selector: 'p.muted', bbox: null, fix: '글자색을 --sz-fg-muted로 바꿉니다.', file: null, line: null };
 
 function bodies<T extends EventEnvelope['body']['type']>(trace: EventEnvelope[], type: T): Extract<EventEnvelope['body'], { type: T }>[] {
@@ -264,8 +265,10 @@ test('a product is planned whole and built to the end of its map: a milestone a 
     run: async (_project, spec, opts): Promise<ScenarioOutcome> => {
       const features = spec.scenarios.map((scenario) => scenario.feature ?? '');
       walks.push({ features, look: opts?.look === true });
-      // The last milestone's screen has a defect that the one repair it is sent back for does not clear.
-      const looks = features.length === M3.length ? [{ screen: 'H-01', scenario: 'result', findings: [MAJOR], png: Buffer.from('a picture') }] : [{ screen: 'H-01', scenario: 'onboarding', findings: [{ ...MAJOR, severity: 'minor' as const }], png: null }];
+      // The door has a defect from the first milestone on, which one repair there does not clear and which is put
+      // right only at the very end. The last milestone's own screen has one that its one repair does not clear.
+      const door = walks.length <= 4 ? [{ screen: 'A-01', scenario: 'onboarding', findings: [DOOR], png: null }] : [{ screen: 'A-01', scenario: 'onboarding', findings: [], png: null }];
+      const looks = [...door, ...(features.length === M3.length ? [{ screen: 'H-01', scenario: 'result', findings: [MAJOR], png: Buffer.from('a picture') }] : [{ screen: 'H-01', scenario: 'onboarding', findings: [{ ...MAJOR, severity: 'minor' as const }], png: null }])];
       return { passed: true, scenarios: features.length, walked: features.length, problems: [], logins: [], detail: `${features.length} scenarios walked to the end as new people`, durationMs: 3, looks };
     },
   };
@@ -273,6 +276,7 @@ test('a product is planned whole and built to the end of its map: a milestone a 
     // Milestone 1: the frame, the plan with its two features, and a type checker that passes.
     [writePlan('tu_0', M1), use('tu_1', 'write_file', { path: 'tsconfig.json', content: '{ "compilerOptions": { "strict": true } }\n' }), use('tu_2', 'bash', { command: INSTALL_TSC }), use('tu_3', 'write_file', { path: 'src/App.tsx', content: 'export const milestone = 1;\n' })],
     [say('가입과 끼니 기록이 됩니다.')],
+    [say('첫 화면에 그림을 넣었습니다 (모자랐다).')],
     // Milestone 2: built, and the plan forgets the ranking's scenario; then it is put in.
     [writePlan('tu_4', M2.filter((id) => id !== 'ranking')), use('tu_5', 'write_file', { path: 'src/App.tsx', content: 'export const milestone = 2;\n' })],
     [say('매칭과 순위가 됩니다.')],
@@ -332,28 +336,37 @@ test('a product is planned whole and built to the end of its map: a milestone a 
 
     // --- the gates of each milestone
     const gates = (task: Task): string[] => bodies(events.history({ taskId: task.id }, 0, 1000), 'gate.result').filter((g) => ['coverage', 'scenarios', 'looks'].includes(g.gate)).map((g) => `${g.gate}:${g.passed}`);
-    assert.deepEqual(gates(tasks[0]!), ['coverage:true', 'scenarios:true', 'looks:true']);
-    assert.deepEqual(gates(tasks[1]!), ['coverage:false', 'coverage:true', 'scenarios:true', 'looks:true'], 'a feature nothing walks is caught before the browser starts');
+    assert.deepEqual(gates(tasks[0]!), ['coverage:true', 'scenarios:true', 'looks:false', 'coverage:true', 'scenarios:true', 'looks:false'], 'sent back once, and left');
+    assert.deepEqual(gates(tasks[1]!), ['coverage:false', 'coverage:true', 'scenarios:true', 'looks:true'], 'a feature nothing walks is caught before the browser starts; what the first milestone left is not this one\'s to be sent back for');
     assert.deepEqual(gates(tasks[2]!), ['coverage:true', 'scenarios:true', 'looks:false', 'coverage:true', 'scenarios:true', 'looks:false']);
+    assert.equal(bodies(events.history({ taskId: tasks[1]!.id }, 0, 1000), 'gate.result').find((g) => g.gate === 'looks')!.detail, '2 screens measured as the walk stood on them: nothing above minor, besides 1 left by earlier milestones and kept for the last');
     // The walk is of everything built so far, each time, and is asked to measure where it stands.
-    assert.deepEqual(walks.map((w) => [w.features.length, w.look]), [[2, true], [5, true], [7, true], [7, true]]);
+    assert.deepEqual(walks.map((w) => [w.features.length, w.look]), [[2, true], [2, true], [5, true], [7, true], [7, true]]);
 
     // The feature nobody walked goes back by name.
     const coverage = model.sent.map((params) => String(params.messages.at(-1)!.content)).find((text) => text.includes('Check "coverage" failed'))!;
     assert.match(coverage, /<untrusted-data id="[0-9a-f]{24}" source="sandbox-output" check="coverage">\nEvery feature of the milestones built so far is walked by a scenario of the screen plan\. These are not:\n- Feature "ranking" \(ranking 기능\), of milestone 2: no scenario in docs\/screens\.json walks it\./);
     // What was measured goes back once, as measurements.
     const sentBack = model.sent.map((params) => String(params.messages.at(-1)!.content)).filter((text) => text.includes('Check "looks" failed'));
-    assert.equal(sentBack.length, 1, 'once, and not again');
-    assert.match(sentBack[0]!, /source="browser-page" check="looks">\nEvery scenario reached its end\.[\s\S]*- Screen H-01 \(scenario "result"\), major, contrast\/text: 본문 글자의 대비가 2\.1:1입니다\. At p\.muted\. 글자색을 --sz-fg-muted로 바꿉니다\./);
+    assert.equal(sentBack.length, 2, 'once in the milestone that found it, and once in the last: never in between');
+    assert.match(sentBack[0]!, /- Screen A-01 \(scenario "onboarding"\), major, material\/nothing-drawn: 첫 화면에 그려진 것이 6%뿐입니다\./);
+    assert.match(sentBack[1]!, /source="browser-page" check="looks">\nEvery scenario reached its end\.[\s\S]*- Screen A-01 \(scenario "onboarding"\), major, material\/nothing-drawn[\s\S]*- Screen H-01 \(scenario "result"\), major, contrast\/text: 본문 글자의 대비가 2\.1:1입니다\. At p\.muted\. 글자색을 --sz-fg-muted로 바꿉니다\./, 'the last milestone is sent back for what earlier ones left too');
+    // The last milestone was handed what the first one left, before it wrote a line.
+    assert.match(tasks[2]!.prompt, /Measured on screens that earlier milestones built, sent back once there, and still so\. This milestone finishes the product: put each of these right as part of it\.\n<untrusted-data id="[0-9a-f]{24}" source="browser-page">\n- A-01 화면 \(시나리오 onboarding\) · 큰 결함 · material\/nothing-drawn: 첫 화면에 그려진 것이 6%뿐입니다\.\n/);
+    assert.doesNotMatch(tasks[1]!.prompt, /Measured on screens that earlier milestones built/);
+    // While it stood, it was the first milestone's debt and nobody else's.
+    assert.ok(bodies(events.history({ taskId: tasks[0]!.id }, 0, 1000), 'notice').some((n) => /마일스톤 1: 걸은 화면에서 잰 결함 1건이 한 번 고친 뒤에도 남았습니다/.test(n.message)));
     // What one round did not clear is the milestone's debt, with the picture of the screen; the milestone is built.
+    // What the first milestone left was put right at the end, and the last walk, not finding it, took it off.
     assert.deepEqual(done.milestones.map((m) => m.debt.length), [0, 0, 1]);
     assert.equal(done.milestones[2]!.debt[0], 'H-01 화면 (시나리오 result) · 큰 결함 · contrast/text: 본문 글자의 대비가 2.1:1입니다.');
     assert.deepEqual(done.milestones[2]!.shots.map((shot) => shot.screen), ['H-01']);
+    assert.deepEqual(done.milestones[0]!.shots, [], 'a look with no picture leaves none');
     const shot = store.getArtifact(done.milestones[2]!.shots[0]!.artifactId)!;
     assert.equal(shot.mime, 'image/png');
     assert.equal(readFileSync(shot.file, 'utf8'), 'a picture');
     assert.ok(bodies(events.history({ taskId: tasks[2]!.id }, 0, 1000), 'notice').some((n) => n.level === 'warn' && /마일스톤 3: 걸은 화면에서 잰 결함 1건이 한 번 고친 뒤에도 남았습니다/.test(n.message)));
-    assert.equal(model.sent.length, 9, 'every scripted turn was used and no other');
+    assert.equal(model.sent.length, 10, 'every scripted turn was used and no other');
 
     // --- what the owner was told as it went
     const said = bodies(events.history({ projectId: project.id }, 0, 5000), 'roadmap.changed').map((b) => `${b.state}${b.milestone === null ? '' : ` ${b.milestone + 1} ${b.milestoneState}`}`);

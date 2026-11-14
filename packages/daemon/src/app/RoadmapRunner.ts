@@ -198,7 +198,9 @@ export class RoadmapRunner {
     const last = (at: number): Task | null => this.#store.getTask(roadmap.milestones[at]?.taskIds.at(-1) ?? '');
     const earlier = last(index);
     const base = earlier?.branch ?? (roadmap.autoMerge || index === 0 ? null : (last(index - 1)?.branch ?? null));
-    const prompt = milestoneRequest(roadmap.map, index, earlier?.branch ? { branch: earlier.branch, error: this.#whatStopped(progress.taskIds, progress.error) } : undefined);
+    const finishes = index === roadmap.map.milestones.length - 1;
+    const owed = finishes ? roadmap.milestones.slice(0, index).flatMap((m) => m.debt) : [];
+    const prompt = milestoneRequest(roadmap.map, index, earlier?.branch ? { branch: earlier.branch, error: this.#whatStopped(progress.taskIds, progress.error) } : undefined, owed);
     let task: Task;
     try {
       task = await this.#studio.submitTask(OWNER, { projectId, kind: 'build', prompt, track: 'fast', milestone: index, ...(base ? { baseBranch: base } : {}) }, 'system');
