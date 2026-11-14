@@ -198,7 +198,7 @@ export class RoadmapRunner {
     const last = (at: number): Task | null => this.#store.getTask(roadmap.milestones[at]?.taskIds.at(-1) ?? '');
     const earlier = last(index);
     const base = earlier?.branch ?? (roadmap.autoMerge || index === 0 ? null : (last(index - 1)?.branch ?? null));
-    const prompt = milestoneRequest(roadmap.map, index, earlier?.branch ? { branch: earlier.branch, error: this.#whatStopped(earlier, progress.error) } : undefined);
+    const prompt = milestoneRequest(roadmap.map, index, earlier?.branch ? { branch: earlier.branch, error: this.#whatStopped(progress.taskIds, progress.error) } : undefined);
     let task: Task;
     try {
       task = await this.#studio.submitTask(OWNER, { projectId, kind: 'build', prompt, track: 'fast', milestone: index, ...(base ? { baseBranch: base } : {}) }, 'system');
@@ -212,17 +212,21 @@ export class RoadmapRunner {
   }
 
   /**
-   * Why an attempt stopped, for the attempt that follows it: its error, and what the last check that failed said.
-   * The next engine starts with no memory of the last one; without this it finds the same failure by building again.
+   * Why the attempts before this one stopped, for the attempt that follows them: the last one's error, and what
+   * the last check that failed said, in whichever attempt that was (an attempt the owner cancelled a minute in
+   * failed no check; the one before it did). The next engine starts with no memory of the others; without this
+   * it finds the same failure by building again.
    */
-  #whatStopped(task: Task, recorded: string | null): string | null {
-    const failed = this.#events
-      .history({ taskId: task.id }, 0, 10_000)
-      .flatMap((e) => (e.body.type === 'gate.result' && !e.body.passed ? [e.body] : []))
-      .at(-1);
-    const error = recorded ?? task.error;
-    if (!failed) return error;
-    return `${error ?? 'stopped'}\nThe last check that failed (${failed.gate}) said:\n${failed.detail}`;
+  #whatStopped(taskIds: readonly string[], recorded: string | null): string | null {
+    const error = recorded ?? this.#store.getTask(taskIds.at(-1) ?? '')?.error ?? null;
+    for (const id of [...taskIds].reverse()) {
+      const failed = this.#events
+        .history({ taskId: id }, 0, 10_000)
+        .flatMap((e) => (e.body.type === 'gate.result' && !e.body.passed ? [e.body] : []))
+        .at(-1);
+      if (failed) return `${error ?? 'stopped'}\nThe last check that failed (${failed.gate}) said:\n${failed.detail}`;
+    }
+    return error;
   }
 
   #require(projectId: string): Roadmap {
