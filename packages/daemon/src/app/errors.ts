@@ -14,6 +14,17 @@ export class ConflictError extends Error {
   }
 }
 
+/**
+ * The request was made against something that has changed since the client read it: a review of a document that
+ * is no longer the one to revise. The client reads it again and decides. Maps to RPC `stale`.
+ */
+export class StaleError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'StaleError';
+  }
+}
+
 /** A dependency (container runtime, model provider, credential) is missing or unreachable. Maps to RPC `unavailable`. */
 export class UnavailableError extends Error {
   constructor(message: string) {

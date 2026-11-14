@@ -5,6 +5,7 @@ import type { PlanFeedback, PlanVersion, Task } from '@studio-zero/protocol';
 import { stamp } from '../../lib/format.ts';
 import { diffWords } from '../../lib/planDiff.ts';
 import { useAction, useQuery, useStudio } from '../../lib/studio.tsx';
+import { useSelectionQuote } from '../../lib/useSelectionQuote.ts';
 import { Button, Empty, IconButton, Problem, Segmented, Status, inputClass } from '../../ui.tsx';
 
 /** The longest passage a note can quote, as the daemon takes it. */
@@ -49,17 +50,7 @@ export function PlanReview({ task }: { task: Task }) {
 
   // A passage chosen in the plan, by mouse, keyboard or a long press, becomes the quote of the next note.
   const planRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!answerable || comparing) return;
-    const onSelect = (): void => {
-      const selection = document.getSelection();
-      const text = selection?.toString().trim() ?? '';
-      if (text === '' || !planRef.current || !selection?.anchorNode || !planRef.current.contains(selection.anchorNode)) return;
-      setQuote(text.slice(0, QUOTE_MAX));
-    };
-    document.addEventListener('selectionchange', onSelect);
-    return () => document.removeEventListener('selectionchange', onSelect);
-  }, [answerable, comparing]);
+  useSelectionQuote(planRef, answerable && !comparing, (_, text) => setQuote(text.slice(0, QUOTE_MAX)));
 
   const typed: PlanFeedback | null = comment.trim() === '' ? null : { ...(quote ? { quote } : {}), comment: comment.trim() };
   const feedback = typed ? [...notes, typed] : notes;

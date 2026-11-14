@@ -1,4 +1,4 @@
-import { Archive, Check, Copy, FileDown, FileText, MoreHorizontal, Pencil, RotateCw, Square, Trash2 } from 'lucide-react';
+import { Archive, Check, Copy, FileDown, FileText, MessageSquareText, MoreHorizontal, Pencil, RotateCw, Square, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import type { AxBlock, AxResponse, DocumentKind, KnowledgeJob, ScratchMove, Template } from '@studio-zero/protocol';
 import { Block, Markdown } from '@studio-zero/ax/react';
@@ -8,6 +8,7 @@ import { useAction, useQuery, useStudio } from '../lib/studio.tsx';
 import { Button, Menu, MenuItem, MenuSeparator, Problem, Segmented, Sheet, Status, TitlebarSpace } from '../ui.tsx';
 import { EnginePicker, useEngineChoice } from './enginePicker.tsx';
 import { DeleteNoteModal, RenameNoteModal } from './noteActions.tsx';
+import { DocAnnotator } from './panels/DocAnnotator.tsx';
 import { Composer, Entry, OwnWords, Working, useStickToEnd } from './page.tsx';
 import { scratchState, type Route } from './Shell.tsx';
 
@@ -27,6 +28,14 @@ const DOCUMENTS: readonly { id: DocumentKind; label: string }[] = [
 ];
 const LABELS = { recommended: '스튜디오 추천' };
 const answerable = (block: AxBlock): block is Extract<AxBlock, { type: 'choice' | 'form' }> => block.type === 'choice' || block.type === 'form';
+/** A revision of a document that is written or being written; a failed one leaves the document as the one to revise. */
+const revisionOf = (jobs: readonly KnowledgeJob[], job: KnowledgeJob): KnowledgeJob | undefined => jobs.find((j) => j.revisedFrom === job.id && j.state !== 'failed');
+/** The document a line of revisions has reached: the one notes go on now. */
+function newestRevision(jobs: readonly KnowledgeJob[], id: string): KnowledgeJob | null {
+  let current = jobs.find((j) => j.id === id);
+  for (let next = current && revisionOf(jobs, current); next; next = revisionOf(jobs, next)) current = next;
+  return current ?? null;
+}
 
 /** A worksheet: one page where the owner and the studio think something through, in order, top to bottom. */
 export function ScratchPage({ scratchId, onOpen, onChanged }: { scratchId: string; onOpen: (route: Route) => void; onChanged: () => void }) {
@@ -38,6 +47,8 @@ export function ScratchPage({ scratchId, onOpen, onChanged }: { scratchId: strin
   const [turnError, setTurnError] = useState<string | null>(null);
   const [steps, setSteps] = useState<Record<string, string>>({});
   const [papers, setPapers] = useState(false);
+  // The document the owner opened for notes. What they write on is its newest revision, should another arrive.
+  const [annotating, setAnnotating] = useState<string | null>(null);
 
   useEffect(
     () =>
@@ -83,6 +94,7 @@ export function ScratchPage({ scratchId, onOpen, onChanged }: { scratchId: strin
   const pad = data.scratchpad;
   const open = pad.state === 'exploring' || pad.state === 'ready';
   const running = data.jobs.filter((j) => j.state === 'running');
+  const annotated = annotating === null ? null : newestRevision(data.jobs, annotating);
 
   return (
     <>
@@ -151,7 +163,7 @@ export function ScratchPage({ scratchId, onOpen, onChanged }: { scratchId: strin
             ) : null}
             {running.map((job) => (
               <Working key={job.id}>
-                {job.kind === 'research' ? '조사' : '문서 작성'}: {steps[job.id] ?? '시작'}
+                {job.kind === 'research' ? '조사' : job.revisedFrom ? '수정본 작성' : '문서 작성'}: {steps[job.id] ?? '시작'}
                 <StopButton busy={stop.busy} onStop={() => void stop.run(job.id)} />
               </Working>
             ))}
@@ -162,7 +174,7 @@ export function ScratchPage({ scratchId, onOpen, onChanged }: { scratchId: strin
             {stop.error ? <Problem>{stop.error}</Problem> : null}
             {turnError ? <Problem>스튜디오가 이 차례를 마치지 못했습니다. {turnError}</Problem> : null}
             {data.jobs.filter((j) => j.state !== 'running').map((job) => (
-              <JobResult key={job.id} job={job} latest={job.id === data.jobs.at(-1)?.id} />
+              <JobResult key={job.id} job={job} latest={job.id === data.jobs.at(-1)?.id} onAnnotate={job.state === 'succeeded' && !revisionOf(data.jobs, job) ? () => setAnnotating(job.id) : undefined} />
             ))}
             {pad.mode === 'think' && open ? (
               <Promote
@@ -204,6 +216,18 @@ export function ScratchPage({ scratchId, onOpen, onChanged }: { scratchId: strin
 
       <Sheet open={papers} onOpenChange={setPapers} title="명세와 결정 기록" description="만들기로 넘어갈 때 이 두 문서가 그대로 프로젝트에 들어갑니다." wide>
         <Papers spec={data.spec} decisionLog={data.decisionLog} />
+      </Sheet>
+      <Sheet open={annotated !== null} onOpenChange={(next) => !next && setAnnotating(null)} title="주석" description={annotated?.title} wide>
+        {annotated ? (
+          <DocAnnotator
+            job={annotated}
+            onSent={() => {
+              setAnnotating(null);
+              view.reload();
+            }}
+            onStale={view.reload}
+          />
+        ) : null}
       </Sheet>
       <RenameNoteModal note={renaming ? pad : null} onOpenChange={(next) => !next && setRenaming(false)} onRenamed={() => (view.reload(), onChanged())} />
       <DeleteNoteModal
@@ -316,7 +340,7 @@ function StopButton({ busy, onStop }: { busy: boolean; onStop: () => void }) {
 }
 
 /** A finished research or writing job: what it cost, why it failed if it did, and the document as a file. */
-function JobResult({ job, latest }: { job: KnowledgeJob; latest: boolean }) {
+function JobResult({ job, latest, onAnnotate }: { job: KnowledgeJob; latest: boolean; onAnnotate?: () => void }) {
   const { backend } = useStudio();
   const [file, setFile] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -336,7 +360,7 @@ function JobResult({ job, latest }: { job: KnowledgeJob; latest: boolean }) {
     return (
       <div className="flex flex-col items-start gap-3">
         <Problem>
-          {job.kind === 'research' ? '조사' : '문서 작성'}를 마치지 못했습니다. {job.error}
+          {job.kind === 'research' ? '조사를' : job.revisedFrom ? '수정본 작성을' : '문서 작성을'} 마치지 못했습니다. {job.error}
         </Problem>
         {retry.error ? <Problem>{retry.error}</Problem> : null}
         {/* Only the latest attempt offers another: a job that was run again has its answer below. */}
@@ -351,10 +375,16 @@ function JobResult({ job, latest }: { job: KnowledgeJob; latest: boolean }) {
   return (
     <section className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-t border-border pt-6">
       <p className="text-base text-fg-muted">
-        {job.kind === 'research' ? '조사' : '문서'} 완료, 토큰 {tokens(job.spentTokens)} 사용
+        {job.kind === 'research' ? '조사' : job.revisedFrom ? '수정본' : '문서'} 완료, 토큰 {tokens(job.spentTokens)} 사용
       </p>
       {(exportPdf.error ?? copy.error) ? <Problem>{exportPdf.error ?? copy.error}</Problem> : null}
       <div className="flex flex-wrap gap-2">
+      {/* Notes go on the newest version only: one that has been revised already says so by not offering it. */}
+      {onAnnotate ? (
+        <Button onClick={onAnnotate} icon={<MessageSquareText className="size-4" aria-hidden />}>
+          주석
+        </Button>
+      ) : null}
       <Button busy={copy.busy} onClick={() => void copy.run()} icon={copied ? <Check className="size-4 text-success" aria-hidden /> : <Copy className="size-4" aria-hidden />}>
         {copied ? '복사됨' : '글로 복사'}
       </Button>

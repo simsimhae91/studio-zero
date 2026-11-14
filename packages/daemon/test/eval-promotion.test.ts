@@ -43,7 +43,8 @@ test('promotion keeps a check that can fail and is new, and refuses the rest', a
 
 test('checks that could not fail are removed from a database that kept them, and nothing else is', () => {
   const db = new DatabaseSync(':memory:');
-  migrate(db);
+  // Up to version 16, the one that removed them: later migrations are not this test's.
+  migrate(db, 16);
   db.exec(`INSERT INTO projects (id, slug, name, template, created_at) VALUES ('prj_a', 'a', 'A', 'web-vite-react', 1)`);
   const add = db.prepare(`INSERT INTO evals (id, project_id, name, spec_json, enabled, origin_task_id, created_at) VALUES (:id, 'prj_a', :name, :spec, 1, :origin, 1)`);
   const rows: [string, string, string | null][] = [
@@ -53,9 +54,9 @@ test('checks that could not fail are removed from a database that kept them, and
     ['lint', '{"kind":"slop-lint","maxMajor":0}', null],
   ];
   for (const [name, spec, origin] of rows) add.run({ id: `evl_${name}`, name, spec, origin });
-  // The removal is the last migration: run again on rows put in after it, as it ran on a database that had them.
+  // Run the removal again on rows put in after it, as it ran on a database that had them.
   db.exec('PRAGMA user_version = 15');
-  migrate(db);
+  migrate(db, 16);
   assert.deepEqual((db.prepare('SELECT name FROM evals ORDER BY name').all() as { name: string }[]).map((r) => r.name), ['honest', 'lint', 'seeded-tests']);
   db.close();
 });

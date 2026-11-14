@@ -7,6 +7,7 @@ import type {
   Calibration,
   DocumentKind,
   EngineModel,
+  DocumentAnnotation,
   KnowledgeJob,
   McpServerInfo,
   PromotionResult,
@@ -1030,6 +1031,16 @@ export class Studio implements PromotionHost {
     await this.#d.policy.authorize(actor, { kind: 'knowledge.run', jobKind: 'document' });
     if (!this.#d.claude.isConfigured()) throw new UnavailableError(NO_MODEL);
     return this.#d.knowledge.compileDocument(p, origin);
+  }
+
+  /**
+   * The owner's notes on a finished document, sent at once: starts the document's next revision. The same rule as
+   * writing a document in the first place (the owner's own call), and the same model route and budget.
+   */
+  async reviseDocument(actor: Actor, p: { jobId: string; contentHash: string; annotations: DocumentAnnotation[]; note?: string }, origin: Origin): Promise<KnowledgeJob> {
+    await this.#d.policy.authorize(actor, { kind: 'knowledge.run', jobKind: 'document' });
+    if (!this.#d.claude.isConfigured()) throw new UnavailableError(NO_MODEL);
+    return this.#d.knowledge.revise(p, origin);
   }
 
   getKnowledge(jobId: string): { job: KnowledgeJob; markdown: string; report: ResearchReport | null; lint: TextFinding[] } {

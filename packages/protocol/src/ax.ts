@@ -62,12 +62,29 @@ export const KnowledgeJob = z.object({
   state: z.enum(['running', 'succeeded', 'failed']),
   origin: Origin,
   scratchId: z.string().nullable(),
+  /** The document this one is a revision of, written from the owner's notes on it. Null for a first draft. */
+  revisedFrom: z.string().nullable(),
   error: z.string().nullable(),
   spentTokens: z.number().int(),
   createdAt: z.number().int(),
   finishedAt: z.number().int().nullable(),
 });
 export type KnowledgeJob = z.infer<typeof KnowledgeJob>;
+
+/**
+ * One note the owner left on a passage of a document: the lines it covers (1-based, inclusive, in the Markdown
+ * the owner was shown), the words selected there, and what to change. The daemon checks the quote against those
+ * lines before anything reaches a model.
+ */
+export const DocumentAnnotation = z
+  .object({
+    startLine: z.number().int().min(1),
+    endLine: z.number().int().min(1),
+    quote: z.string().min(1).max(2000),
+    comment: z.string().trim().min(1).max(4000),
+  })
+  .refine((a) => a.endLine >= a.startLine, { message: 'endLine comes before startLine' });
+export type DocumentAnnotation = z.infer<typeof DocumentAnnotation>;
 
 export const Fact = z.object({
   claim: z.string(),

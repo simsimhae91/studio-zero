@@ -8,7 +8,8 @@ export type UntrustedSource =
   | 'foreign-repo' // code and metadata from a repository Kirby ingested
   | 'run-trace' // a task's event trace handed to the reflection agent
   | 'engine-output' // text produced by a bridged vendor CLI
-  | 'external-tool'; // what a third-party tool server said: its tool descriptions and the results of calls
+  | 'external-tool' // what a third-party tool server said: its tool descriptions and the results of calls
+  | 'knowledge-document'; // a document a model wrote for the owner, often from web research, quoted back to a model
 
 const TAG = 'untrusted-data';
 

@@ -181,6 +181,7 @@ export function createHandlers(studio: Studio, deps: HandlerDeps): Handlers {
     'knowledge.cancel': (p) => (studio.cancelKnowledge(p.jobId), { accepted: true as const }),
     'knowledge.retry': (p) => studio.retryKnowledge(OWNER, p.jobId),
     'knowledge.get': (p) => studio.getKnowledge(p.jobId),
+    'knowledge.revise': (p) => studio.reviseDocument(OWNER, p, 'desktop'),
     'documents.export': async (p) => ({ artifactId: await studio.exportDocument(p.jobId) }),
     'ax.calibration': () => studio.calibration(),
     'advisor.ask': (p) => studio.askAdvisor(OWNER, p),

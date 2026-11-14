@@ -5,7 +5,7 @@ import type { Logger as PinoLogger } from 'pino';
 import type { WebSocket } from 'ws';
 import { z } from 'zod';
 import { ClientFrame, CloseCode, PROTOCOL_VERSION, isMethodName, matchesFilter, methods, type EventEnvelope, type EventFilter, type RpcErrorCode, type ServerFrame } from '@studio-zero/protocol';
-import { ConflictError, LocalOnlyError, NotFoundError, UnavailableError } from '../app/errors.ts';
+import { ConflictError, LocalOnlyError, NotFoundError, StaleError, UnavailableError } from '../app/errors.ts';
 import type { BridgeSessions } from '../bridge/BridgeSessions.ts';
 import type { Config } from '../config.ts';
 import type { Store } from '../db/Store.ts';
@@ -281,6 +281,7 @@ export class DaemonServer {
     if (err instanceof InvalidParamsError) return as('invalid_params');
     if (err instanceof NotFoundError) return as('not_found');
     if (err instanceof ConflictError) return as('conflict');
+    if (err instanceof StaleError) return as('stale');
     if (err instanceof PolicyDeniedError || err instanceof LocalOnlyError) return as('policy_denied');
     if (err instanceof ApprovalDeniedError) return as('approval_denied');
     if (err instanceof UnavailableError || err instanceof SandboxError || err instanceof VaultError || err instanceof ModelRefusedError) return as('unavailable');

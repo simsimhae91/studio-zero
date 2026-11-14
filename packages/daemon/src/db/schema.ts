@@ -464,12 +464,18 @@ const migrations: string[] = [
      AND json_extract(spec_json, '$.kind') = 'command'
      AND replace(json_extract(spec_json, '$.command'), '||', '') LIKE '%|%';
   `,
+  // 17: a document written from the owner's notes on another is a new job that points back at the one reviewed.
+  `
+  ALTER TABLE knowledge_jobs ADD COLUMN revised_from TEXT REFERENCES knowledge_jobs(id) ON DELETE SET NULL;
+  CREATE INDEX knowledge_by_revised_from ON knowledge_jobs(revised_from);
+  `,
 ];
 
-export function migrate(db: DatabaseSync): void {
+/** Brings the database to the latest version, or to `target` (a test replaying one migration on rows it put in). */
+export function migrate(db: DatabaseSync, target = migrations.length): void {
   db.exec('PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;');
   const row = db.prepare('PRAGMA user_version').get() as { user_version: number };
-  for (let v = row.user_version; v < migrations.length; v++) {
+  for (let v = row.user_version; v < Math.min(target, migrations.length); v++) {
     db.exec('BEGIN IMMEDIATE');
     try {
       db.exec(migrations[v]!);

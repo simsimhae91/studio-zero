@@ -241,7 +241,7 @@ test('scratchpad to build: questions, a calibration gate, a decision log, and lo
 
     // The document that was published and read is what the build goes from: it is the reconciled, approved text.
     assert.equal(studio.publishedPlan(pad.id), null, 'nothing has finished publishing yet');
-    const planJob: KnowledgeJob = { id: 'job_plan', kind: 'document', title: '현장 기사용 청구서 앱', state: 'running', origin: 'desktop', scratchId: pad.id, error: null, spentTokens: 0, createdAt: 5, finishedAt: null };
+    const planJob: KnowledgeJob = { id: 'job_plan', kind: 'document', title: '현장 기사용 청구서 앱', state: 'running', origin: 'desktop', scratchId: pad.id, revisedFrom: null, error: null, spentTokens: 0, createdAt: 5, finishedAt: null };
     d.daemon.store.insertKnowledgeJob(planJob, {});
     d.daemon.store.finishKnowledgeJob(planJob.id, { markdown: '# 현장 기사용 청구서 앱 기획서\n\n## 결론\n\n요구사항은 R1~R10이다. R11은 없다.\n', report: null, lint: [] }, 6);
     assert.match(studio.publishedPlan(pad.id) ?? '', /^# 현장 기사용 청구서 앱 기획서/);

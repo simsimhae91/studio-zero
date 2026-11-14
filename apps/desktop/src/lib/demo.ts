@@ -1,5 +1,6 @@
 import type { Approval, DiffFile, DiffLine, PlanVersion, ReviewDiff, AuditReport, AxBlock, Checkpoint, Eval, EventBody, EventEnvelope, FileEntry, FlowTaskWalk, KnowledgeJob, LedgerEntry, Lesson, MethodName, ParamsOf, Project, ProposalCard, ResultOf, SandboxInfo, ScratchEntry, Scratchpad, ScreenSpec, Session, SubscriptionQuota, Task, OwnerSettings } from '@studio-zero/protocol';
-import { matchesFilter } from '@studio-zero/protocol';
+import { RpcCallError, matchesFilter } from '@studio-zero/protocol';
+import { hashMarkdown } from './annotate.ts';
 import type { Backend } from './backend.ts';
 
 /**
@@ -447,7 +448,31 @@ const capexEntries: ScratchEntry[] = [
   { seq: 20, scratchId: 'scr_capex', at: min(-200), author: 'owner', text: '이번 분기 AI 인프라 투자 규모를 조사해서 한 장으로 정리해줘', response: null, blocks: [] },
   { seq: 21, scratchId: 'scr_capex', at: min(-190), author: 'agent', text: null, response: null, blocks: [{ type: 'text', markdown: capexBrief }, { type: 'sources', title: '출처 2곳', items: [{ title: 'Quarterly filing, capital expenditures', url: 'https://example.com/filing', quote: 'total capital expenditures of $112 billion' }, { title: 'Power contracts tracker', url: 'https://example.org/power', quote: 'contracted capacity reached 9.8 GW' }] }] },
 ];
-const capexJob: KnowledgeJob = { id: 'job_capex', kind: 'research', title: '이번 분기 AI 인프라 투자 규모', state: 'succeeded', origin: 'telegram', scratchId: 'scr_capex', error: null, spentTokens: 184_000, createdAt: min(-200), finishedAt: min(-190) };
+const capexJob: KnowledgeJob = { id: 'job_capex', kind: 'research', title: '이번 분기 AI 인프라 투자 규모', state: 'succeeded', origin: 'telegram', scratchId: 'scr_capex', revisedFrom: null, error: null, spentTokens: 184_000, createdAt: min(-200), finishedAt: min(-190) };
+/**
+ * The research note's documents and conversation as they stand in this window. Notes sent on a document come back
+ * as a canned revision that changes the two passages the owner is most likely to mark; a review of a document that
+ * already has one is stale, as it is in the daemon.
+ */
+const capex = { jobs: [capexJob], docs: new Map([[capexJob.id, capexBrief]]), entries: [...capexEntries] };
+const CANNED_REVISION: readonly [string, string][] = [
+  ['늘어난 금액의 대부분은 GPU 서버와 전력 설비에 쓰였다 [2].', '늘어난 310억 달러 가운데 대부분은 GPU 서버와 전력 설비에 쓰였다 [1][2].'],
+  ['11월 20일 실적 발표에서 4분기 가이던스를 확인한다.', '11월 20일 실적 발표에서 4분기 가이던스를 확인하고, 전력 계약 용량이 10GW를 넘었는지 본다.'],
+];
+async function reviseCapex(p: ParamsOf<'knowledge.revise'>): Promise<KnowledgeJob> {
+  const source = capex.jobs.find((j) => j.id === p.jobId);
+  const text = capex.docs.get(p.jobId);
+  if (!source || text === undefined) throw new RpcCallError('not_found', `job ${p.jobId} not found`);
+  if ((await hashMarkdown(text)) !== p.contentHash || capex.jobs.some((j) => j.revisedFrom === source.id && j.state !== 'failed')) throw new RpcCallError('stale', '이 문서의 수정본이 이미 있습니다. 수정본에 메모를 다시 달아 주세요.');
+  const revised = CANNED_REVISION.reduce((doc, [from, to]) => doc.replace(from, to), text);
+  const at = Date.now();
+  const job: KnowledgeJob = { ...capexJob, id: `job_capex_${capex.jobs.length + 1}`, kind: 'document', origin: 'desktop', revisedFrom: source.id, spentTokens: 38_600, createdAt: at, finishedAt: at };
+  capex.jobs.push(job);
+  capex.docs.set(job.id, revised);
+  capex.entries.push({ seq: 20 + capex.entries.length, scratchId: 'scr_capex', at, author: 'agent', text: null, response: null, blocks: [{ type: 'text', markdown: revised }] });
+  // What the daemon answers: the revision has started. Here it is written by the time the page reads it again.
+  return { ...job, state: 'running', finishedAt: null };
+}
 
 /** A small workspace for the file explorer: what a Vite project looks like after a couple of tasks. */
 const fileBodies: Record<string, string> = {
@@ -511,7 +536,7 @@ const quota: SubscriptionQuota[] = [
   { id: 'cursor', connected: true, detail: '2026.11.11', state: 'unknown', resetsAt: null, limitedSince: null, lastAnswerAt: null, recent: { tokens: 0, calls: 0 }, week: { tokens: 0, calls: 0 } },
 ];
 
-type Handlers = { [M in MethodName]?: (params: ParamsOf<M>) => ResultOf<M> };
+type Handlers = { [M in MethodName]?: (params: ParamsOf<M>) => ResultOf<M> | Promise<ResultOf<M>> };
 
 const demoModels: Record<string, { id: string; label: string }[]> = {
   'native-claude': [{ id: 'claude-fable-5-2', label: 'Claude Fable 5.2' }, { id: 'claude-opus-5-5', label: 'Claude Opus 5.5' }, { id: 'claude-sonnet-5-5', label: 'Claude Sonnet 5.5' }, { id: 'claude-haiku-5-5', label: 'Claude Haiku 5.5' }],
@@ -616,7 +641,7 @@ const handlers: Handlers = {
   'scratch.list': (p) => ({ scratchpads: p.archived ? [{ ...pads[0]!, id: 'scr_shelved', title: '견적서 자동 발송을 넣을지', state: 'archived' as const }] : pads }),
   'scratch.get': (p) =>
     p.scratchId === 'scr_capex'
-      ? { scratchpad: pads[1]!, entries: capexEntries, spec: '', decisionLog: '', readiness: { ready: false, missing: ['기획 명세의 "문제" 항목'] }, thinking: false, jobs: [capexJob] }
+      ? { scratchpad: pads[1]!, entries: capex.entries, spec: '', decisionLog: '', readiness: { ready: false, missing: ['기획 명세의 "문제" 항목'] }, thinking: false, jobs: capex.jobs }
       : {
           scratchpad: pads[0]!, entries: fieldEntries, thinking: false, jobs: [],
           spec: '# 현장 기사용 청구서 앱\n\n## 문제\n\n설비 기사가 미결제 청구서를 사무실에 돌아와서야 확인한다.\n\n## 사용자\n\n하루 5~8곳을 방문하는, 혼자 일하는 설비 기사.',
@@ -626,8 +651,9 @@ const handlers: Handlers = {
   'config.get': () => ({ settings: demoSettings, writable: true, restartRequired: false, supervised: true, file: '~/.studio-zero/config.json', logFile: '~/Library/Logs/studio-zero/daemon.log' }),
   'config.set': (p) => ({ settings: p.settings, restartRequired: true }),
   'system.restart': () => ({ accepted: true as const }),
-  'knowledge.list': () => ({ jobs: [capexJob] }),
-  'knowledge.get': () => ({ job: capexJob, markdown: capexBrief, report: null, lint: [] }),
+  'knowledge.list': () => ({ jobs: capex.jobs }),
+  'knowledge.get': (p) => ({ job: capex.jobs.find((j) => j.id === p.jobId) ?? capexJob, markdown: capex.docs.get(p.jobId) ?? capexBrief, report: null, lint: [] }),
+  'knowledge.revise': reviseCapex,
   'ax.calibration': () => ({ levels: { high: { total: 14, overridden: 1 }, medium: { total: 9, overridden: 4 }, speculative: { total: 3, overridden: 2 } }, highDemoted: false }),
   'mcp.list': () => ({
     servers: [
@@ -646,7 +672,7 @@ export function demoBackend(): Backend {
     demo: true,
     host: 'demo',
     call: async <M extends MethodName>(method: M, params: ParamsOf<M>): Promise<ResultOf<M>> => {
-      const handler = handlers[method] as ((p: ParamsOf<M>) => ResultOf<M>) | undefined;
+      const handler = handlers[method] as ((p: ParamsOf<M>) => ResultOf<M> | Promise<ResultOf<M>>) | undefined;
       if (!handler) throw new Error('데모에서는 변경할 수 없습니다. 데몬에 연결하면 실제로 동작합니다.');
       return handler(params);
     },

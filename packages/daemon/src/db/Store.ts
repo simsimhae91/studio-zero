@@ -1209,8 +1209,8 @@ export class Store {
 
   insertKnowledgeJob(j: KnowledgeJob, input: unknown): void {
     this.#run(
-      `INSERT INTO knowledge_jobs (id, kind, title, state, origin, scratch_id, input_json, created_at) VALUES (:id, :kind, :title, :state, :origin, :scratchId, :input, :createdAt)`,
-      { id: j.id, kind: j.kind, title: j.title, state: j.state, origin: j.origin, scratchId: j.scratchId, input: JSON.stringify(input), createdAt: j.createdAt },
+      `INSERT INTO knowledge_jobs (id, kind, title, state, origin, scratch_id, revised_from, input_json, created_at) VALUES (:id, :kind, :title, :state, :origin, :scratchId, :revisedFrom, :input, :createdAt)`,
+      { id: j.id, kind: j.kind, title: j.title, state: j.state, origin: j.origin, scratchId: j.scratchId, revisedFrom: j.revisedFrom, input: JSON.stringify(input), createdAt: j.createdAt },
     );
   }
 
@@ -1223,6 +1223,11 @@ export class Store {
     return scratchId === undefined
       ? this.#all('SELECT * FROM knowledge_jobs ORDER BY created_at DESC LIMIT 100').map(toKnowledge)
       : this.#all('SELECT * FROM knowledge_jobs WHERE scratch_id = :scratchId ORDER BY created_at', { scratchId }).map(toKnowledge);
+  }
+
+  /** The revisions written from a document, oldest first, failed ones included. */
+  listKnowledgeRevisions(jobId: string): KnowledgeJob[] {
+    return this.#all('SELECT * FROM knowledge_jobs WHERE revised_from = :jobId ORDER BY created_at', { jobId }).map((r) => toKnowledge(r).job);
   }
 
   finishKnowledgeJob(id: string, result: { markdown: string; report: ResearchReport | null; lint: TextFinding[] } | { error: string }, now: number): void {
@@ -1281,6 +1286,7 @@ function toKnowledge(r: Row): KnowledgeRow {
       state: str(r.state) as KnowledgeJob['state'],
       origin: str(r.origin) as Origin,
       scratchId: nstr(r.scratch_id),
+      revisedFrom: nstr(r.revised_from),
       error: nstr(r.error),
       spentTokens: num(r.spent_tokens),
       createdAt: num(r.created_at),

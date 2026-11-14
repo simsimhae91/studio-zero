@@ -56,6 +56,33 @@ const workspaceTab = (project: string, tab: string) => async (page: Page, narrow
   await page.getByRole('tab', { name: tab }).click();
   await page.getByRole('tabpanel').waitFor();
 };
+/** The research note's document, opened for notes. */
+const openNotes = async (page: Page, narrow: boolean): Promise<void> => {
+  await openFromIndex('이번 분기 AI 인프라 투자 규모')(page, narrow);
+  await page.getByRole('button', { name: '주석' }).click();
+  await page.getByRole('dialog', { name: '주석' }).locator('[data-line-start]').first().waitFor();
+};
+/** Selects `text` in the document block that starts at `line`, as a hand would, and leaves a note on it. */
+const addNote = async (page: Page, line: number, text: string, comment: string): Promise<void> => {
+  await page.evaluate(([line, text]) => {
+    const block = document.querySelector(`[role="dialog"] [data-line-start="${line}"]`);
+    const walker = document.createTreeWalker(block ?? document.createElement('div'), NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const at = node.textContent?.indexOf(text) ?? -1;
+      if (at < 0) continue;
+      const range = document.createRange();
+      range.setStart(node, at);
+      range.setEnd(node, at + text.length);
+      document.getSelection()?.removeAllRanges();
+      document.getSelection()?.addRange(range);
+      return;
+    }
+    throw new Error(`no "${text}" at line ${line}`);
+  }, [line, text] as const);
+  await page.getByRole('region', { name: '문서에 메모 달기' }).getByText(`L${line}`, { exact: true }).waitFor();
+  await page.getByRole('textbox', { name: '문서에 남길 메모' }).fill(comment);
+  await page.getByRole('button', { name: '메모 추가' }).click();
+};
 const screens: { name: string; url: string; go: (page: Page, narrow: boolean) => Promise<void> }[] = [
   { name: 'connect', url: '/', go: async () => undefined },
   { name: 'home', url: '/?demo', go: async () => undefined },
@@ -67,6 +94,21 @@ const screens: { name: string; url: string; go: (page: Page, narrow: boolean) =>
     await page.getByRole('dialog').waitFor();
   } },
   { name: 'research', url: '/?demo', go: openFromIndex('이번 분기 AI 인프라 투자 규모') },
+  { name: 'document-notes', url: '/?demo', go: openNotes },
+  { name: 'document-notes-two', url: '/?demo', go: async (page, narrow) => {
+    await openNotes(page, narrow);
+    await addNote(page, 5, '늘어난 금액의 대부분은', '얼마가 늘었는지 금액으로 적어 주세요');
+    await addNote(page, 16, '4분기 가이던스를 확인한다', '전력 계약도 같이 확인할 항목으로 넣어 주세요');
+    await page.getByRole('button', { name: '수정 요청 (메모 2개)' }).waitFor();
+  } },
+  { name: 'document-revised', url: '/?demo', go: async (page, narrow) => {
+    await openNotes(page, narrow);
+    await addNote(page, 5, '늘어난 금액의 대부분은', '얼마가 늘었는지 금액으로 적어 주세요');
+    await addNote(page, 16, '4분기 가이던스를 확인한다', '전력 계약도 같이 확인할 항목으로 넣어 주세요');
+    await page.getByRole('button', { name: '수정 요청 (메모 2개)' }).click();
+    await page.getByRole('dialog').waitFor({ state: 'detached' });
+    await page.getByText(/^수정본 완료/).waitFor();
+  } },
   { name: 'project', url: '/?demo', go: openFromIndex('Ledger') },
   { name: 'project-steps', url: '/?demo', go: async (page, narrow) => {
     await openFromIndex('Ledger')(page, narrow);

@@ -36,7 +36,7 @@ import {
   PlanFeedback,
   PlanVersion,
 } from './domain.ts';
-import { AxResponse, Calibration, DocumentKind, KnowledgeJob, PromotionResult, Readiness, ResearchReport, ScratchEntry, ScratchMode, ScratchMove, Scratchpad, TextFinding } from './ax.ts';
+import { AxResponse, Calibration, DocumentAnnotation, DocumentKind, KnowledgeJob, PromotionResult, Readiness, ResearchReport, ScratchEntry, ScratchMode, ScratchMove, Scratchpad, TextFinding } from './ax.ts';
 import { EventEnvelope, EventFilter } from './events.ts';
 import { ReviewDiff, ReviewOutcome, ReviewResult } from './review.ts';
 
@@ -345,6 +345,18 @@ export const methods = {
   /** Starts a failed job again from what it was asked. A new job; the failed one stays on record. */
   'knowledge.retry': { params: z.object({ jobId: z.string() }), result: KnowledgeJob },
   'knowledge.get': { params: z.object({ jobId: z.string() }), result: z.object({ job: KnowledgeJob, markdown: z.string(), report: ResearchReport.nullable(), lint: z.array(TextFinding) }) },
+  /**
+   * Starts a new revision of a finished document from the owner's notes on it, all at once. `contentHash` is the
+   * sha256 (hex) of the Markdown the notes were written on; when that is no longer the document to revise (its
+   * text differs, or a revision of it already exists) the call fails with `stale`. The reviewed document is kept
+   * as it is: the revision is a new job, linked back to it by `revisedFrom`.
+   */
+  'knowledge.revise': {
+    params: z
+      .object({ jobId: z.string(), contentHash: z.string().regex(/^[0-9a-f]{64}$/), annotations: z.array(DocumentAnnotation).max(50), note: z.string().trim().max(4000).optional() })
+      .refine((p) => p.annotations.length > 0 || (p.note ?? '') !== '', { message: 'give at least one note on a passage, or a note on the whole document' }),
+    result: KnowledgeJob,
+  },
   /** Renders a finished document as a styled PDF and returns the artifact that holds it. */
   'documents.export': { params: z.object({ jobId: z.string() }), result: z.object({ artifactId: z.string() }) },
 
@@ -425,6 +437,8 @@ export const RpcErrorCode = z.enum([
   'unknown_method',
   'not_found',
   'conflict',
+  /** The request was made against something that has changed since the client read it. Read it again, then retry. */
+  'stale',
   /** The deterministic policy engine refused the action. Not retryable without changing the request. */
   'policy_denied',
   /** A human denied the approval or it expired. */
