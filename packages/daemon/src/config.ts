@@ -68,7 +68,10 @@ export const ConfigSchema = z.object({
       /** Use this prebuilt image for sandboxes as is, instead of building one from `baseImage`. */
       image: z.string().regex(/^[\w][\w./:@-]*$/).optional(),
       cpus: z.number().min(0.25).max(16).default(2),
-      memoryMb: z.number().int().min(256).default(2048),
+      // A ceiling, not a reservation. At 2048 a phone project that renders on its server sat at 1GB with its dev
+      // server alone and reached the ceiling 11,772 times in one build, beside the compiler and the tests an
+      // engine runs (measured 2026-11-14 on a 24GB Mac).
+      memoryMb: z.number().int().min(256).default(4096),
       pidsLimit: z.number().int().min(64).default(512),
       previewPorts: z.array(z.number().int().min(1).max(65535)).max(8).default([3000, 5173, 8081]),
       execTimeoutSec: z.number().int().min(5).max(3600).default(600),

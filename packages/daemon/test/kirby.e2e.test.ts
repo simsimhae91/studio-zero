@@ -26,8 +26,9 @@ const TARGET: Record<string, string> = {
   'src/parse.ts': `export function parse(input: any): any {\n  return input.value;\n}\n`,
 };
 
-function fakeModel(): { sdk: Anthropic; cardInputs: string[]; readerInputs: string[]; models: string[] } {
+function fakeModel(): { sdk: Anthropic; cardInputs: string[]; seedInputs: string[]; readerInputs: string[]; models: string[] } {
   const cardInputs: string[] = [];
+  const seedInputs: string[] = [];
   const readerInputs: string[] = [];
   const models: string[] = [];
   const usage = { input_tokens: 500, output_tokens: 100, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 };
@@ -68,6 +69,17 @@ function fakeModel(): { sdk: Anthropic; cardInputs: string[]; readerInputs: stri
         ],
       };
     }
+    if (system.startsWith('You are the engineer who will build a new product')) {
+      seedInputs.push(text);
+      return {
+        title: 'Build a request desk',
+        rationale: 'For a shop owner who takes orders by message. The first screen is today\'s requests.',
+        plannedChanges: [{ path: 'src/App.tsx', action: 'create', description: 'The request list.' }],
+        risk: 'low',
+        estimatedImpact: 'A shop owner might pay a small monthly price; running it costs nothing on a free tier.',
+        implementationBrief: 'Build the request list first.',
+      };
+    }
     if (system.startsWith('You are the engineer responsible for a project')) {
       cardInputs.push(text);
       models.push(params.model);
@@ -97,10 +109,11 @@ function fakeModel(): { sdk: Anthropic; cardInputs: string[]; readerInputs: stri
       },
     },
   } as unknown as Anthropic;
-  return { sdk, cardInputs, readerInputs, models };
+  return { sdk, cardInputs, seedInputs, readerInputs, models };
 }
 
-test('kirby: ingest → read what the repository does → proposal card → built on a branch → measured deltas → merge', async () => {
+/** A daemon with a scripted model, and a throwaway clone container that is really a folder of fixtures. */
+async function setup() {
   const foreign = tempDir('sz-foreign-');
   for (const [path, content] of Object.entries(FOREIGN)) {
     mkdirSync(dirname(join(foreign.dir, path)), { recursive: true });
@@ -130,6 +143,11 @@ test('kirby: ingest → read what the repository does → proposal card → buil
     throw new Error(`timed out waiting for ${what}: ${events.history({}, 0, 500).slice(-8).map((e) => JSON.stringify(e.body)).join('\n')}`);
   };
 
+  return { d, model, foreign, cloneScripts, studio, sandboxes, events, waitFor };
+}
+
+test('kirby: ingest → read what the repository does → proposal card → built on a branch → measured deltas → merge', async () => {
+  const { d, model, foreign, cloneScripts, studio, sandboxes, events, waitFor } = await setup();
   try {
     const project = studio.createProject(OWNER, { name: 'Ledger', slug: 'ledger', template: 'web-vite-react' });
     await waitFor(() => events.history({ projectId: project.id }, 0, 50).some((e) => e.body.type === 'sandbox.state'), 'provisioning');
@@ -208,6 +226,27 @@ test('kirby: ingest → read what the repository does → proposal card → buil
     assert.equal((await sandboxes.exec(project, 'git worktree list | wc -l')).stdout.trim(), '1', 'the comparison worktree was cleaned up');
 
     assert.equal(studio.kirbyReject(byPractice.get('typed-settings')!.id).state, 'rejected');
+
+  } finally {
+    await d.cleanup();
+    foreign.cleanup();
+  }
+});
+
+test('kirby: an empty project is proposed one product, not a card for each thing the repository does', async () => {
+  const { d, model, foreign, studio, events, waitFor } = await setup();
+  try {
+    const empty = studio.createProject(OWNER, { name: 'Desk', slug: 'desk', template: 'web-vite-react' });
+    await waitFor(() => events.history({ projectId: empty.id }, 0, 50).some((e) => e.body.type === 'sandbox.state'), 'provisioning');
+    await studio.kirbyIngest(OWNER, empty.id, 'github.com/acme/widgets/tree/main/src', 3);
+    const [seed, ...more] = await waitFor(() => {
+      const list = studio.kirbyProposals(empty.id);
+      return list.length > 0 && list;
+    }, 'a product seed');
+    assert.deepEqual([seed!.practiceId, seed!.title, seed!.sourceRepo, more.length], ['product-seed', 'Build a request desk', 'https://github.com/acme/widgets', 0], 'one card, from the repository the pasted address names');
+    assert.deepEqual(seed!.evidence.map((e) => `${e.file}:${e.line}`), ['src/routes.ts:2', 'src/env.ts:2'], 'shown by lines from each thing it is built from, the most worth taking first');
+    assert.match(model.seedInputs[0]!, /What it does, "Requests checked at the door" \(checked-requests\):\n<untrusted-data [^>]*capability="checked-requests">[\s\S]*What it does, "Settings checked at start" \(typed-settings\):[\s\S]*The empty project is "Desk" \(template web-vite-react\)\. Write the one card\.$/);
+    assert.match(model.readerInputs.at(-1)!, /The owner's project, to judge each capability against:\n<untrusted-data id="[0-9a-f]{24}" source="sandbox-output">\nThe project "Desk" is empty: nothing has been built in it yet\./);
   } finally {
     await d.cleanup();
     foreign.cleanup();

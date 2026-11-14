@@ -32,7 +32,7 @@ test('ensure() creates a hardened container and keeps the gateway token out of a
   const create = docker.calls.find((c) => c.args.includes('run') && c.args.includes('--detach'))!;
   const line = dockerArgs(create.args).join(' '); // the container's own flags, without the client's --config/--host
   assert.deepEqual([create.args[0], create.args[2], create.args[3]], ['--config', '--host', 'unix:///emulated/docker.sock'], 'own client config, explicit engine socket');
-  for (const flag of ['--user 1000:1000', '--cap-drop ALL', '--security-opt no-new-privileges', '--pids-limit 512', '--memory 2048m', '--network sz-ledger-net', 'type=volume,source=sz-ledger-ws,target=/workspace,volume-nocopy', '--publish 127.0.0.1::5173']) {
+  for (const flag of ['--user 1000:1000', '--cap-drop ALL', '--security-opt no-new-privileges', '--pids-limit 512', '--memory 4096m', '--network sz-ledger-net', 'type=volume,source=sz-ledger-ws,target=/workspace,volume-nocopy', '--publish 127.0.0.1::5173']) {
     assert.ok(line.includes(flag), `missing ${flag}`);
   }
   assert.ok(!/docker\.sock|--privileged|type=bind/.test(line), 'no host mounts, no socket, not privileged');

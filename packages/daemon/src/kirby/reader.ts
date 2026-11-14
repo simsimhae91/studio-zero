@@ -167,10 +167,15 @@ export function locate(files: readonly ExtractedFile[], file: string, line: stri
  * and the shape of its tree. An empty project is said to be empty: there, what is worth taking is what a
  * product could be built around.
  */
+/** What is the project's own: the studio's kits and theme are in every project and say nothing of this one. */
+const ownFiles = (files: readonly ExtractedFile[]): ExtractedFile[] => files.filter((file) => !file.path.startsWith('.studio-zero/') && !file.path.startsWith('public/fonts/'));
+
+/** A project nothing has been built in yet. */
+export const isEmptyProject = (files: readonly ExtractedFile[]): boolean => ownFiles(files).every((file) => file.content === null);
+
 export function describeTarget(files: readonly ExtractedFile[], name: string, extra: string | null = null): string {
-  // The studio's own kits and theme are in every project and say nothing of this one.
-  const own = files.filter((file) => !file.path.startsWith('.studio-zero/') && !file.path.startsWith('public/fonts/'));
-  if (own.every((file) => file.content === null)) return `The project "${name}" is empty: nothing has been built in it yet. Whatever is taken would be what its first version is built around.`;
+  const own = ownFiles(files);
+  if (isEmptyProject(files)) return `The project "${name}" is empty: nothing has been built in it yet. Whatever is taken would be what its first version is built around.`;
   const plan = own.filter((file) => file.content !== null && /^docs\/(?:screens\.md|ARCHITECTURE\.md|spec\.md|product\.md)$/i.test(file.path)).map((file) => ({ path: file.path, text: clip(file.content!, 16_000) }));
   const said = [...opened(own, 16_000), ...plan];
   const parts = [`The project "${name}".`, `Its tree:\n${tree(own)}`, ...said.map((file) => `--- ${file.path}\n${file.text}`), ...(extra ? [extra] : [])];
