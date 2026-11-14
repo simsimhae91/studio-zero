@@ -192,12 +192,20 @@ export function parseUnifiedDiff(text: string, caps: DiffCaps = DIFF_CAPS, cut =
   return { files, truncated };
 }
 
-/** The diff of a task's branch against the branch it started from, read in the project's sandbox. */
-export async function readTaskDiff(sandboxes: Pick<OrbStackManager, 'diff'>, project: Project, task: Pick<Task, 'branch' | 'baseBranch'>): Promise<ReviewDiff> {
+/**
+ * The diff of a task's branch against where it started, read in the project's sandbox.
+ *
+ * `startedAt` is the commit the workspace stood at when the task began (its base checkpoint's). The diff is taken
+ * from there, not from the base branch as it is now: once a task's branch is merged it is an ancestor of that
+ * branch, and `main...branch` then shows no file of a task that changed eighteen. A task that went on from
+ * another task's branch (`baseBranch`) is set against that branch, so the review is of what this task added.
+ */
+export async function readTaskDiff(sandboxes: Pick<OrbStackManager, 'diff'>, project: Project, task: Pick<Task, 'branch' | 'baseBranch'>, startedAt: string | null = null): Promise<ReviewDiff> {
   if (!task.branch) throw new ConflictError('this task has no branch to review');
   const base = task.baseBranch ?? INTEGRATION_BRANCH;
+  const from = task.baseBranch ?? startedAt ?? INTEGRATION_BRANCH;
   // A little over the parse limit, so a diff that fits is never reported cut because of the stat line before it.
-  const read = await sandboxes.diff(project, base, task.branch, DIFF_CAPS.bytes + 4096);
+  const read = await sandboxes.diff(project, from, task.branch, DIFF_CAPS.bytes + 4096);
   const parsed = parseUnifiedDiff(read.diff, DIFF_CAPS, read.truncated);
   return { base, branch: task.branch, files: parsed.files, truncated: parsed.truncated };
 }

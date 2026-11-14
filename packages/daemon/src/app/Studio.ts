@@ -705,7 +705,12 @@ export class Studio implements PromotionHost {
   async reviewDiff(taskId: string): Promise<ReviewDiff> {
     const task = this.getTask(taskId);
     const project = this.getProject(task.projectId);
-    return this.#inSandbox(project, () => readTaskDiff(this.#d.sandboxes, project, task));
+    return this.#inSandbox(project, () => readTaskDiff(this.#d.sandboxes, project, task, this.#taskStart(task)));
+  }
+
+  /** The commit a task's workspace stood at when it began: what its base checkpoint recorded. Null for a task that has none. */
+  #taskStart(task: Task): string | null {
+    return task.baseCheckpointId === null ? null : (this.#d.store.getCheckpoint(task.baseCheckpointId)?.headSha ?? null);
   }
 
   /**
@@ -738,7 +743,7 @@ export class Studio implements PromotionHost {
 
     // The quoted code comes from the diff as the daemon reads it now; a comment on lines that are not there refuses the review.
     const project = this.getProject(task.projectId);
-    const diff = await this.#inSandbox(project, () => readTaskDiff(this.#d.sandboxes, project, task));
+    const diff = await this.#inSandbox(project, () => readTaskDiff(this.#d.sandboxes, project, task, this.#taskStart(task)));
     const prompt = formatReviewFeedback(result, diff, task);
     const rerun = await this.submitTask(
       actor,

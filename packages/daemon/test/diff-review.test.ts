@@ -9,7 +9,7 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import { CORE_PROJECT_ID, ReviewComment, ReviewResult, RpcCallError, RpcClient, type ReviewDiff, type Task } from '@studio-zero/protocol';
 import { ConflictError } from '../src/app/errors.ts';
-import { DIFF_CAPS, countBlocking, formatReviewFeedback, parseUnifiedDiff } from '../src/harness/DiffReview.ts';
+import { DIFF_CAPS, countBlocking, formatReviewFeedback, parseUnifiedDiff, readTaskDiff } from '../src/harness/DiffReview.ts';
 import { emptyRun } from '../src/harness/Ledger.ts';
 import { sampleProject, testDaemon, type TestDaemon } from './helpers.ts';
 
@@ -51,6 +51,37 @@ function workspace(dir: string): (...args: string[]) => string {
   git('checkout', '-q', 'main');
   return git;
 }
+
+test('a merged task still shows what it changed: the diff is taken from where the task began', async () => {
+  const d = await testDaemon();
+  try {
+    const { sandboxes, store } = d.daemon;
+    const project = sampleProject();
+    store.insertProject(project);
+    await d.daemon.provisioner.ensure(project);
+    // What a task's base checkpoint records: the commit the workspace stood at when the task began.
+    const before = store.getCheckpoint((await sandboxes.checkpoint(project, 'before the task')).id)!;
+    await sandboxes.startBranch(project, 'sz/tsk_done', 'main');
+    await sandboxes.writeFile(project, 'src/added.ts', 'export const a = 1;\n');
+    await sandboxes.commitAll(project, 'feat: the task');
+    const task = { branch: 'sz/tsk_done', baseBranch: null };
+    assert.deepEqual((await readTaskDiff(sandboxes, project, task, before.headSha)).files.map((f) => f.path), ['src/added.ts']);
+
+    // Merged, the branch is behind main: set against main as it is now, there is nothing left to see.
+    await sandboxes.merge(project, 'sz/tsk_done', 'main');
+    assert.deepEqual((await readTaskDiff(sandboxes, project, task)).files, [], 'against the base branch as it is now');
+    const diff = await readTaskDiff(sandboxes, project, task, before.headSha);
+    assert.deepEqual([diff.base, diff.files.map((f) => [f.path, f.status, f.additions])], ['main', [['src/added.ts', 'added', 1]]], 'from where it began, it is all there, and the base is still called by its name');
+
+    // A task that went on from another's branch is read against that branch: what it added, not both.
+    await sandboxes.startBranch(project, 'sz/tsk_more', 'sz/tsk_done');
+    await sandboxes.writeFile(project, 'src/more.ts', 'export const b = 2;\n');
+    await sandboxes.commitAll(project, 'fix: the comments');
+    assert.deepEqual((await readTaskDiff(sandboxes, project, { branch: 'sz/tsk_more', baseBranch: 'sz/tsk_done' }, before.headSha)).files.map((f) => f.path), ['src/more.ts']);
+  } finally {
+    await d.cleanup();
+  }
+});
 
 test('a branch\'s diff, read with real git, comes out as files, hunks and numbered lines', async () => {
   const d = await testDaemon();
