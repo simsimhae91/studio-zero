@@ -32,6 +32,7 @@ import { ANCHOR_BRIEF, CONTINUED_BRIEF, DEEP_DIVE_BRIEF, DRAFT_BRIEF, DRAW_ALL_B
 import { chosenTheme, writeProjectTheme } from './themeSeed.ts';
 import type { ReflectionAgent } from './ReflectionAgent.ts';
 import { renderCritique, renderPatch, type Acceptance, type PlanCritique, type SandwichReviewer } from './SandwichReviewer.ts';
+import { foldListing } from './fileListing.ts';
 import type { SelfHosting } from './SelfHosting.ts';
 import { copyBlock } from './TextSlopAuditor.ts';
 
@@ -575,7 +576,9 @@ export class Harness {
   async #plan(project: Project, task: Task, lessonText: string, signal: AbortSignal, want: { anchor: boolean; screens: boolean; references: readonly ReferenceCapture[] }): Promise<Plan | null> {
     if (!this.#claude.isConfigured()) return null; // bridge-only installs: the engine plans for itself
     const captured = want.references.filter((r) => r.ok);
-    const listing = await this.#sandboxes.exec(project, 'git ls-files --cached --others --exclude-standard | head -n 400', { timeoutSec: 30 });
+    // Every file while they fit; beyond that the layout, deepest folders folded first (see `foldListing`).
+    const listed = await this.#sandboxes.exec(project, 'git ls-files --cached --others --exclude-standard', { timeoutSec: 30, maxOutputBytes: 4 * 1024 * 1024 });
+    const listing = foldListing(listed.stdout.split('\n')).join('\n');
     const plan = await this.#claude.structured({
       scope: { projectId: project.id, taskId: task.id },
       model: PLANNER_MODEL,
@@ -587,7 +590,7 @@ export class Harness {
       content: [
         textBlock(`Owner's request (${task.kind}):\n${task.prompt}`),
         ...(lessonText ? [textBlock(lessonText)] : []),
-        textBlock(`Project stack template: ${project.template}. Files in the workspace:\n${untrusted('sandbox-output', listing.stdout.trim() || '(empty workspace)')}`),
+        textBlock(`Project stack template: ${project.template}. Files in the workspace:\n${untrusted('sandbox-output', listing || '(empty workspace)')}`),
         textBlock(want.anchor ? 'This task needs an anchor table: fill in "anchor".' : 'No anchor table is needed from you for this task: set "anchor" to null.'),
         textBlock(want.screens ? 'This task needs a screen spec: fill in "screens".' : 'No screen spec is needed from you for this task: set "screens" to null.'),
         ...(await this.#approvedDesign(project, task)),

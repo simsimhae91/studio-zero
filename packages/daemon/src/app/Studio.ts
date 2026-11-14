@@ -765,7 +765,10 @@ export class Studio implements PromotionHost {
     const branch = this.#d.selfHosting.exportedBranch(taskId);
     if (branch === null) throw new NotFoundError(`an exported branch for task ${taskId}`);
     await this.#d.policy.authorize(actor, { kind: 'selfhost.merge', projectId: task.projectId, branch });
-    return this.#d.selfHosting.merge(taskId);
+    const merged = await this.#d.selfHosting.merge(taskId);
+    // A proposal built there is merged by this, as one in a product is by `merge`.
+    if (task.branch) this.#d.kirby.markMerged(task.projectId, task.branch);
+    return merged;
   }
 
   // ------------------------------------------------------ lessons and evals

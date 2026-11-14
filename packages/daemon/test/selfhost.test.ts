@@ -181,8 +181,14 @@ test('in as a bundle, out as a feature branch: a Core task never touches the che
     await assert.rejects(studio.selfHostMerge(OWNER, task.id), /the checkout is on "side", not "main"/);
     repo.git('checkout', '-q', 'main');
 
+    // Had the work been a proposal's, that merge is what the proposal was waiting for.
+    const { store } = d.daemon;
+    store.insertIngest({ id: 'kig_core0002', projectId: CORE_PROJECT_ID, repoUrl: 'https://github.com/acme/widgets', createdAt: 1 });
+    store.insertProposal({ id: 'prp_core0002', projectId: CORE_PROJECT_ID, ingestId: 'kig_core0002', sourceRepo: 'https://github.com/acme/widgets', sourceCommit: 'a'.repeat(40), practiceId: 'version', title: 'Bump the version', rationale: '', evidence: [], plannedChanges: [], risk: 'low', estimatedImpact: '', state: 'ready', branch: task.branch, taskId: task.id, diff: null, diffStat: null, measured: null, createdAt: 1 }, '');
+
     const merged = await studio.selfHostMerge(OWNER, task.id);
     assert.deepEqual([merged.branch, merged.into, merged.commit], [exported.branch, 'main', repo.git('rev-parse', exported.branch)]);
+    assert.equal(studio.kirbyProposals(CORE_PROJECT_ID)[0]!.state, 'merged', 'a proposal built on that branch is merged with it');
     assert.equal(readFileSync(join(repo.dir, 'packages/daemon/src/app.ts'), 'utf8'), 'export const version = 2;\n');
     assert.deepEqual((await studio.selfHostStatus()).pending, []);
     await assert.rejects(studio.selfHostMerge(OWNER, task.id), /already merged/);
