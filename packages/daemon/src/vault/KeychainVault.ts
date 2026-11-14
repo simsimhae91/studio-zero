@@ -23,6 +23,16 @@ export const CredentialIds = {
   ntfyToken: 'relay/ntfy/token',
   ntfySigningKey: 'relay/ntfy/signing-key',
   clientToken: 'daemon/client-token',
+  /**
+   * The one Kakao and the one Google developer app the studio's prototypes share for sign-in (the owner's
+   * choice, 2026-11-14). The ids are public by nature (they travel in every login address) and are kept here
+   * beside their secrets so that both come from one place; the secrets go to a project's auth service and
+   * never into its sandbox.
+   */
+  kakaoLoginClientId: 'login/kakao/client-id',
+  kakaoLoginClientSecret: 'login/kakao/client-secret',
+  googleLoginClientId: 'login/google/client-id',
+  googleLoginClientSecret: 'login/google/client-secret',
 } as const;
 
 export interface KeychainVaultOptions {
