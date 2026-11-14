@@ -1,6 +1,6 @@
 # Product Depth Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** A product built in the studio is planned as a whole product (a product map), built milestone by milestone until the map is built, and every feature of it is walked and every screen walked is measured.
 
@@ -39,8 +39,8 @@
 **Interfaces:**
 - Produces: `ProductMap`, `ProductFeature`, `ProductMilestone` (zod, in protocol). `readProductMap(input: unknown): { ok: true; map: ProductMap } | { ok: false; problems: string[] }`, `renderProductMap(map: ProductMap): string` (Markdown, Korean headings), `PRODUCT_MAP_FILE = 'docs/product.json'`, `PRODUCT_DOC_FILE = 'docs/product.md'`.
 
-- [ ] Write tests: a sound map reads; each rule of the spec's list refuses with a sentence naming the feature or milestone; rendering is stable (same map, same text).
-- [ ] Implement, run `node --test packages/daemon/test/product-map.test.ts`, commit.
+- [x] Write tests: a sound map reads; each rule of the spec's list refuses with a sentence naming the feature or milestone; rendering is stable (same map, same text).
+- [x] Implement, run `node --test packages/daemon/test/product-map.test.ts`, commit.
 
 ### Task 2: Planning a map
 
@@ -53,8 +53,8 @@
 - Consumes: `ClaudeClient.structured`, `readProductMap`.
 - Produces: `planProductMap(deps: { claude; scope }, input: { request: string; template: Template; connected: string[]; existing: string | null; signal? }): Promise<ProductMap>`: one call, and one more with the problems when the first map does not hold; throws with the problems when the second does not either.
 
-- [ ] Test with a scripted model: a bad first map is sent back with its problems in the user turn and the system prompt is the constant; two bad maps throw.
-- [ ] Implement, commit.
+- [x] Test with a scripted model: a bad first map is sent back with its problems in the user turn and the system prompt is the constant; two bad maps throw.
+- [x] Implement, commit.
 
 ### Task 3: Roadmap storage, policy, RPC
 
@@ -65,8 +65,8 @@
 **Interfaces:**
 - Produces: `Roadmap { projectId, request, state: 'planning'|'planned'|'running'|'stopped'|'done'|'failed', map: ProductMap | null, milestones: { state: 'planned'|'building'|'built'|'failed'; taskIds: string[]; error: string | null; debt: string[]; shots: { screen: string; artifactId: string }[] }[], autoMerge, error, createdAt, updatedAt }`. Store: `getRoadmap`, `putRoadmap`, `listRoadmapsInState`. RPC `roadmap.get | plan | run | stop`. Event `roadmap.changed { state, milestone: number | null, milestoneState: string | null, name: string | null }`.
 
-- [ ] Tests: policy (owner allowed, agent and system denied), store round trip, migration on a copy of a version-17 database.
-- [ ] Implement, commit.
+- [x] Tests: policy (owner allowed, agent and system denied), store round trip, migration on a copy of a version-17 database.
+- [x] Implement, commit.
 
 ### Task 4: The runner
 
@@ -79,8 +79,8 @@
 - Consumes: `planProductMap`, `Studio.submitTask`, `Studio.merge`, events.
 - Produces: `RoadmapRunner.plan(projectId, request)`, `.run(projectId, opts)`, `.stop(projectId)`, `.start()` (boot recovery), `milestoneRequest(map, index, earlier?: { branch: string; error: string | null }): string` whose first line is `마일스톤 k/n: <name>`.
 
-- [ ] Tests (scripted model and engine, real harness, queue, store, git emulator): map → milestone 1 → merged → milestone 2 → done; a failed milestone stops the roadmap and `run` again starts from the failed branch; a restart in the middle goes on without a second submission; `--no-merge` chains by base branch.
-- [ ] Implement, commit.
+- [x] Tests (scripted model and engine, real harness, queue, store, git emulator): map → milestone 1 → merged → milestone 2 → done; a failed milestone stops the roadmap and `run` again starts from the failed branch; a restart in the middle goes on without a second submission; `--no-merge` chains by base branch.
+- [x] Implement, commit.
 
 ### Task 5: The milestone brief and the coverage gate
 
@@ -92,8 +92,8 @@
 **Interfaces:**
 - Produces: `uncovered(map: ProductMap, spec: ScreenSpec, upTo: number): string[]` (one sentence per feature with no scenario). A milestone task's first message carries `MILESTONE_BRIEF` in place of `DRAFT_BRIEF`; its verify fails with `coverage` when `uncovered` is not empty; `docs/product.json` and `docs/product.md` are in the workspace before the engine starts.
 
-- [ ] Tests: coverage sentences; a milestone task whose engine leaves a feature unwalked is sent back with that sentence and passes once the scenario is there; the brief is in the first message and the draft brief is not.
-- [ ] Implement, commit.
+- [x] Tests: coverage sentences; a milestone task whose engine leaves a feature unwalked is sent back with that sentence and passes once the scenario is there; the brief is in the first message and the draft brief is not.
+- [x] Implement, commit.
 
 ### Task 6: Measuring what is walked
 
@@ -104,14 +104,26 @@
 **Interfaces:**
 - Produces: `ScenarioOutcome.looks: { screen: string; scenario: string; findings: Finding[]; png: Buffer | null }[]`, one per screen id, taken after the step that stands on it. In a milestone task, blockers and majors found there fail one verify round (`screens`), then become the milestone's `debt`.
 
-- [ ] Test in real Chrome: a product whose second screen has unreadable text is found at that screen; a clean one has no finding; one look per screen.
-- [ ] Implement, commit.
+- [x] Test in real Chrome: a product whose second screen has unreadable text is found at that screen; a clean one has no finding; one look per screen.
+- [x] Implement, commit.
 
 ### Task 7: Run it for real
 
-- [ ] Deploy. Create the project, plan the map from the owner's example, read the map, run the roadmap to its end, fixing what the first real run shows in the studio.
-- [ ] Record: milestones passed, features and screens walked, what stayed simulated, time and tokens. Put the numbers beside the two earlier builds in `docs/ARCHITECTURE.md`.
+- [x] Deploy. Create the project, plan the map from the owner's example, read the map, run the roadmap to its end, fixing what the first real run shows in the studio.
+- [x] Record: milestones passed, features and screens walked, what stayed simulated, time and tokens. Put the numbers beside the two earlier builds in `docs/ARCHITECTURE.md`.
 
 ### Task 8: The roadmap tab (through the studio)
 
-- [ ] `sz kirby`-free: submit as a Core task with `--plan`: `views/panels/Roadmap.tsx`, tab, demo data, audit screens, built the way `PlanReview.tsx` and `Changes.tsx` are. Review, look at it in `?demo`, merge.
+- [x] `sz kirby`-free: submit as a Core task with `--plan`: `views/panels/Roadmap.tsx`, tab, demo data, audit screens, built the way `PlanReview.tsx` and `Changes.tsx` are. Review, look at it in `?demo`, merge.
+
+---
+
+## What happened (2026-11-15)
+
+All eight tasks are done. Differences from the plan as written:
+
+- Task 4: a milestone whose checks still fail is retried once by the runner from its branch before the roadmap stops (the plan had it stop at once). The next attempt is handed what the last failing check said.
+- Task 5: a plan whose scenarios name features is read as a product's plan by every reader (the plan had the wide limits only for the milestone task). Screens: 90.
+- Task 6: the look is taken after every press and before the first, named by the screen's own `data-screen` mark; the core screen and the door are held to first-screen rules; debt stays on the milestone that found it and is handed to the last one. Gate name `looks` (the plan said `screens`, which was taken).
+- Task 7: the run and what it changed are in `docs/runs/2026-11-15-diet-battle/README.md`. Added because of it: plan-shape problems said in one reading and not charged to corrections, 24 presses a step, the sample photo for file choosers, the `walk_scenario` tool, a lean walk.
+- Task 8: built directly, not as a Core task, so that two engines would not draw on the same subscription during the run.
