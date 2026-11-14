@@ -14,6 +14,7 @@ import { DRAFT_BRIEF } from '../src/harness/prompts.ts';
 import { isConsoleNoise, probeRoute, renderSmokeFeedback, type SmokeOutcome, type SmokeRunner } from '../src/qa/SmokeTester.ts';
 import { OrbStackManager } from '../src/sandbox/OrbStackManager.ts';
 import { sleep } from '../src/util/core.ts';
+import { SCREEN_SPEC } from './fixtures-mockup.ts';
 import { localDocker, sampleProject, tempDir, testDaemon } from './helpers.ts';
 
 const OWNER = { type: 'owner', via: 'desktop' } as const;
@@ -66,7 +67,10 @@ function bodies<T extends EventEnvelope['body']['type']>(trace: EventEnvelope[],
   return trace.flatMap((e) => (e.body.type === type ? [e.body as Extract<EventEnvelope['body'], { type: T }>] : []));
 }
 
-test('Draft 0: no planning call, the compiler error goes back verbatim, then the console error, then it passes; no design gates, no reflection', async () => {
+/** A draft's short plan: the screens named, without their elements and states, and how the product works in full. */
+const SHORT_PLAN = { ...SCREEN_SPEC, screens: SCREEN_SPEC.screens.map((screen) => ({ ...screen, elements: [], states: [] })), events: [] };
+
+test('Draft 0: no planning call, a short plan of how it works, the compiler error back verbatim, then the console error, then it passes; no design gates, no reflection', async () => {
   const smokeRuns: string[][] = [];
   const consoleError = { kind: 'console' as const, route: '/', text: 'TypeError: Cannot read properties of undefined (reading "map")\n    at /src/App.tsx:31' };
   const smoke: SmokeRunner = {
@@ -77,7 +81,7 @@ test('Draft 0: no planning call, the compiler error goes back verbatim, then the
     },
   };
   const model = scripted([
-    [use('tu_1', 'write_file', { path: 'tsconfig.json', content: '{ "compilerOptions": { "strict": true } }\n' }), use('tu_2', 'bash', { command: INSTALL_TSC }), use('tu_3', 'write_file', { path: 'src/App.tsx', content: 'export const count: number = "BROKEN";\n' })],
+    [use('tu_0', 'write_file', { path: 'docs/screens.json', content: JSON.stringify(SHORT_PLAN) }), use('tu_1', 'write_file', { path: 'tsconfig.json', content: '{ "compilerOptions": { "strict": true } }\n' }), use('tu_2', 'bash', { command: INSTALL_TSC }), use('tu_3', 'write_file', { path: 'src/App.tsx', content: 'export const count: number = "BROKEN";\n' })],
     [say('Mosaic screen is up.')],
     [use('tu_4', 'write_file', { path: 'src/App.tsx', content: 'export const count: number = 1;\nexport const rows = undefined;\n' })],
     [say('Fixed the type error.')],
@@ -122,6 +126,12 @@ test('Draft 0: no planning call, the compiler error goes back verbatim, then the
     assert.ok(opening.startsWith(DRAFT_BRIEF), 'the draft brief leads the first turn');
     assert.match(opening, /Do not ask questions[\s\S]*The owner's request:\n사진 속 아파트 동 호수를 가려 주는 앱\n\nOne more thing is not left to defaults in a draft: what its first screen is made of\.[\s\S]*<what_a_screen_is_made_of>[\s\S]*\nE5\. Colour\. Strong colour is welcome: a fifth to a third of the first screen[\s\S]*<\/what_a_screen_is_made_of>$/);
     assert.ok(!opening.includes('Plan drafted for this request'));
+    // A draft is a product that works, and writes the one document that says how: nothing of fixtures is left in its brief.
+    assert.match(opening, /write one document only: the short screen plan below[\s\S]*make it work: a person signs up, what they enter is kept in the backend, and another person cannot read it/);
+    assert.match(opening, /Data: the project's own backend \(see Working product\)[\s\S]*Demo rows go in supabase\/seed\.sql[\s\S]*The short screen plan\. Before any interface code, write docs\/screens\.json[\s\S]*a draft may leave elements and states empty[\s\S]*- "roles": who uses the product[\s\S]*- "entry": how a person gets in and out[\s\S]*- "scenarios": for each role[\s\S]*- "data": every table the product keeps/);
+    assert.doesNotMatch(opening, /no backend yet|JSON fixtures|src\/fixtures/);
+    assert.doesNotMatch(opening, /does not hold as the screen plan yet/, 'with no plan in the workspace the brief has said it all');
+    assert.match(String(first.system?.[0] && typeof first.system !== 'string' ? first.system.map((block) => block.text).join('\n') : first.system), /Working product\. What you build is used, not shown[\s\S]*Fixtures are not a data source[\s\S]*call apply_schema[\s\S]*data-step="sign-up:1"[\s\S]*the email field is type="email"[\s\S]*data-done="sign-in"[\s\S]*it reloads the page[\s\S]*restarts the backend[\s\S]*as a stranger with an account and as a visitor without one/);
 
     const compilerFeedback = String(compileFix.messages.at(-1)!.content);
     assert.match(
@@ -137,6 +147,8 @@ test('Draft 0: no planning call, the compiler error goes back verbatim, then the
     assert.deepEqual(looks, [2], 'the draft is measured once, after the smoke that passed, and the task is not sent back for what the look found');
 
     assert.equal(readFileSync(join(d.workspace, 'src/App.tsx'), 'utf8'), 'export const count: number = 1;\nexport const rows: string[] = [];\n');
+    // The plan held, so it was written out for the owner to read and went into the task's commit.
+    assert.match(readFileSync(join(d.workspace, 'docs/screens.md'), 'utf8'), /^# 화면설계서\n[\s\S]*## 시나리오\n\n### 같이 사는 사람: `first`/);
     assert.match(task.summary ?? '', /Assumed three sample photos/);
   } finally {
     await d.cleanup();

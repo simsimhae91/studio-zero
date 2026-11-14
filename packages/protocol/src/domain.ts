@@ -431,6 +431,36 @@ export const ScreenSpec = z.object({
   ),
   tasks: z.array(z.object({ id: z.string(), goal: z.string(), outcome: z.string(), screen: z.string() })),
   events: z.array(z.object({ name: z.string(), when: z.string(), measures: z.string() })),
+  /**
+   * From here down is what makes the plan one for a product that works and not for a picture of one: who uses
+   * it, how they get in, what each of them does from arriving to done, and what is kept and who may read it.
+   * A spec written before these existed has none of them and still reads.
+   */
+  /** Who uses the product, each a kind of person with their own way through it. */
+  roles: z.array(z.object({ id: z.string(), name: z.string(), does: z.string() })).default([]),
+  /**
+   * How a person gets in and out. `signUp` and `signIn` are the ids of the screens it happens on; the rest say
+   * in a sentence what happens. `null` for a product nobody signs in to, which then says why in `noAccounts`.
+   */
+  entry: z.object({ signUp: z.string(), signIn: z.string(), signOut: z.string(), sessionEnded: z.string(), forgot: z.string(), leave: z.string() }).nullable().default(null),
+  noAccounts: z.string().nullable().default(null),
+  /**
+   * What each role does, from arriving for the first time to having done what they came for, as numbered steps.
+   * A step is something a browser can carry out: its `id` is what its controls are marked with, like a task's.
+   * `after` names the scenario this one follows, when it depends on what another person did there.
+   */
+  scenarios: z
+    .array(
+      z.object({
+        id: z.string(),
+        role: z.string(),
+        after: z.string().nullable().optional(),
+        steps: z.array(z.object({ id: z.string(), screen: z.string(), does: z.string(), saves: z.string().nullable().optional(), outcome: z.string() })),
+      }),
+    )
+    .default([]),
+  /** What is kept, table by table, and who may read it: `owner`, `members`, `signed-in` or `anyone`. */
+  data: z.array(z.object({ table: z.string(), holds: z.string(), readers: z.string() })).default([]),
 });
 export type ScreenSpec = z.infer<typeof ScreenSpec>;
 

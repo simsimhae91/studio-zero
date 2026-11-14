@@ -17,7 +17,7 @@ import { walkApp } from '../src/qa/SmokeTester.ts';
 import { toScreenReview, visionParts, type VisionInput, type VisionReply } from '../src/qa/vision.ts';
 import { VisualAuditor } from '../src/qa/VisualAuditor.ts';
 import type { OrbStackManager } from '../src/sandbox/OrbStackManager.ts';
-import { SCREEN_SPEC_FILE, checkScreenSpec, coreStates, readScreenSpec, renderScreenSpec, stateLabel } from '../src/scratch/ScreenSpec.ts';
+import { SCREEN_SPEC_FILE, checkScreenSpec, checkWorks, coreStates, readScreenSpec, renderScreenSpec, screenSpecMarkdown, stateLabel } from '../src/scratch/ScreenSpec.ts';
 import { COVERED, DEAD, FLOW_TASKS, FROZEN, OPERABLE, SCREEN_SPEC } from './fixtures-mockup.ts';
 import { quietLog, sampleProject, testDaemon } from './helpers.ts';
 
@@ -62,7 +62,7 @@ test('the screen spec check: a spec that holds, and what each miss says', () => 
   assert.match(problems((s) => void (s.screens[0]!.id = 'home')), /screen home: the id must be one to three capital letters, a hyphen and two digits/);
   assert.match(problems((s) => void (s.screens[1]!.id = 'H-01')), /screen H-01: this id is used twice/);
   assert.match(problems((s) => void (s.screens[0]!.entry = [])), /screen H-01: entry is empty/);
-  assert.match(problems((s) => void (s.screens[0]!.entry = ['S-01'])), /no screen can be reached from outside the product/);
+  assert.match(problems((s) => void (s.screens[0]!.entry = ['S-01'], s.screens[2]!.entry = ['H-01'])), /no screen can be reached from outside the product/);
   assert.match(problems((s) => void (s.screens[1]!.entry = ['Z-09'])), /screen S-01: entry names Z-09, which is not a screen in this spec/);
   assert.match(problems((s) => void (s.screens[0]!.elements[0]!.rule = '누름')), /screen H-01, element 1 \(집안일 줄\): rule is empty or a label/);
   assert.match(problems((s) => void (s.screens[0]!.elements[2]!.goesTo = 'S-02')), /element 3 \(집안일 고치기\): goesTo names S-02/);
@@ -85,6 +85,72 @@ test('the screen spec check: a spec that holds, and what each miss says', () => 
   assert.match(text, /H-01 오늘 장부: 방금 한 집안일을 한 번 눌러 적는다\.\n {2}entry: 앱 실행 · 알림\n {2}1\. 집안일 줄: 누르면 오늘 칸에/);
   assert.match(text, /state "저장 실패": 적지 못했어요/);
   assert.match(text, /Events:\n {2}chore_logged: 기록이 저장될 때 \(measures 주간 기록 수\)/);
+  assert.match(text, /Roles:\n {2}housemate \(같이 사는 사람\): 자기가 한 집안일을 적고[\s\S]*Getting in and out:\n {2}sign up on A-01, sign in on A-01\n {2}sign out: 집안일 고치기 화면의 로그아웃/);
+  assert.match(text, /Scenario second \(housemate, after first\):\n {2}1\. \[sign-up\] on A-01: 초대받은 이메일로 가입한다 → 오늘 장부가 보인다 \(saves auth 사용자와 members 행\)\n {2}2\. \[see\] on H-01: 오늘 장부를 본다 → 먼저 가입한 사람의 설거지 기록이 보인다\n\nData:\n {2}members: 한 집에 속한 한 사람 \(read by members\)/);
+});
+
+test('a plan for a product that works: who uses it, how they get in, what each does to the end, and what is kept', () => {
+  const problems = (change: (spec: typeof SCREEN_SPEC) => void, opts: { draft?: boolean } = {}): string => {
+    const spec = structuredClone(SCREEN_SPEC);
+    change(spec);
+    return checkScreenSpec(spec, opts).join('\n');
+  };
+  assert.deepEqual(checkWorks(SCREEN_SPEC), []);
+
+  // A plan from before these parts existed still reads as a screen plan, and a build is not accepted on it.
+  const { roles: _roles, entry: _entry, noAccounts: _none, scenarios: _scenarios, data: _data, ...screensOnly } = SCREEN_SPEC;
+  const old = readScreenSpec(JSON.stringify(screensOnly));
+  assert.equal(old.ok, true);
+  const owed = readScreenSpec(JSON.stringify(screensOnly), { works: true });
+  assert.equal(owed.ok, false);
+  assert.match((owed as { problems: string[] }).problems.join('\n'), /says what the screens are and not how the product works\. Add "roles"[\s\S]*"entry"[\s\S]*"noAccounts"[\s\S]*"scenarios"[\s\S]*"data"/);
+  assert.equal(readScreenSpec(JSON.stringify(SCREEN_SPEC), { works: true }).ok, true);
+
+  // Once it says any of it, it says all of it, and the references resolve.
+  assert.match(problems((s) => void (s.roles = [])), /roles is empty[\s\S]*scenario first: role names housemate, which is not a role in this spec/);
+  assert.match(problems((s) => void (s.roles[0]!.id = 'House Mate')), /role House Mate: the id must be a short lowercase word/);
+  assert.match(problems((s) => void (s.roles.push({ id: 'guest', name: '손님', does: '초대받아 구경만 한다.' }))), /role guest: no scenario is theirs/);
+  assert.match(problems((s) => void (s.entry.signUp = 'Z-09')), /entry\.signUp names Z-09, which is not a screen of the first version/);
+  assert.match(problems((s) => void (s.entry.forgot = '없음')), /entry\.forgot is empty: say in a sentence what happens/);
+  assert.match(problems((s) => void ((s as { entry: unknown }).entry = null)), /entry is missing: say how a person gets in[\s\S]*"noAccounts"[\s\S]*data lists tables and nobody signs in[\s\S]*"sign-up" is the first step of a scenario in a product that has accounts/);
+  assert.match(problems((s) => void ((s as { noAccounts: unknown }).noAccounts = '계산만 하고 아무것도 남기지 않는다.')), /entry and noAccounts are both given/);
+  assert.match(problems((s) => void (s.scenarios = [])), /scenarios is empty: for each role/);
+  assert.match(problems((s) => void (s.scenarios[1]!.after = 'third')), /scenario second: after names third, which is not a scenario listed before this one/);
+  assert.match(problems((s) => void s.scenarios[0]!.steps.shift()), /scenario first: the first step must be "sign-up": every scenario starts with a person who has never been here/);
+  assert.match(problems((s) => void (s.scenarios[0]!.steps[1]!.id = 'sign-in')), /"sign-in" is not a step of a scenario/);
+  assert.match(problems((s) => void (s.scenarios[0]!.steps[0]!.screen = 'H-01')), /signing up happens on A-01 \(entry\.signUp\), and this step says H-01/);
+  assert.match(problems((s) => void (s.scenarios[0]!.steps[1]!.screen = 'X-99')), /scenario first, step 2 \(log\): screen names X-99, which is not a screen of the first version/);
+  assert.match(problems((s) => void (s.scenarios[0]!.steps[1]!.outcome = '')), /step 2 \(log\): outcome is empty: say what is on the screen once it is done and stays there after a reload/);
+  assert.match(problems((s) => void (s.scenarios[0]!.steps[1]!.id = 'sign-up')), /step 2 \(sign-up\): this id is used twice in the scenario/);
+  assert.match(problems((s) => void (s.data = [])), /data is empty: a product people sign in to keeps something/);
+  assert.match(problems((s) => void (s.data[0]!.table = 'Club Members')), /data Club Members: table is the table's name in the database/);
+  assert.match(problems((s) => void (s.data[1]!.readers = 'the household')), /data logs: readers must be one of "owner"[\s\S]*"members"[\s\S]*"signed-in"[\s\S]*"anyone"/);
+
+  // A product nobody signs in to says so, with the reason, and keeps nothing.
+  const tool = structuredClone(SCREEN_SPEC) as unknown as Record<string, unknown> & typeof SCREEN_SPEC;
+  Object.assign(tool, { entry: null, noAccounts: '시간만 재고 아무것도 남기지 않는다.', data: [], scenarios: [{ id: 'visitor', role: 'housemate', steps: [{ id: 'log', screen: 'H-01', does: '설거지 20분을 적는다', saves: null, outcome: '오늘 칸에 기록이 남는다' }] }] });
+  assert.deepEqual(checkScreenSpec(tool), []);
+  assert.deepEqual(checkWorks(tool), []);
+
+  // A draft's short plan lists its screens without their elements and states, and says how it works all the same.
+  const short = (s: typeof SCREEN_SPEC): void => {
+    for (const screen of s.screens) Object.assign(screen, { elements: [], states: [] });
+    s.events = [];
+  };
+  assert.match(problems(short), /elements is empty[\s\S]*the core flow happens here[\s\S]*events is empty/);
+  assert.equal(problems(short, { draft: true }), '');
+  assert.match(problems((s) => void (short(s), (s.scenarios = [])), { draft: true }), /scenarios is empty/);
+
+  // The same plan for a person to read, headed in the language it is written in.
+  const doc = screenSpecMarkdown(SCREEN_SPEC);
+  assert.match(doc, /^# 화면설계서\n\n> 이 문서는 docs\/screens\.json에서 만들어진다\. 고칠 것은 그 파일에서 고친다\.\n\n## 핵심 순간\n\n지우가 설거지를 끝내고 3초 안에 20분을 적는다\.\n\n## 역할\n\n\| 역할 \| 이름 \| 보고 하는 일 \|\n\| --- \| --- \| --- \|\n\| `housemate` \| 같이 사는 사람 \|/);
+  assert.match(doc, /## 들어오고 나가기\n\n[\s\S]*\| 가입 \| A-01 가입과 로그인 \|\n\| 로그인 \| A-01 가입과 로그인 \|\n\| 로그아웃 \| 집안일 고치기 화면의 로그아웃을 누르면/);
+  assert.match(doc, /## 시나리오\n\n### 같이 사는 사람: `first`\n\n\| # \| 화면 \| 보고 하는 일 \| 끝난 뒤 화면에 있는 것 \| 저장되는 것 \|\n\| --- \| --- \| --- \| --- \| --- \|\n\| 1 `sign-up` \| A-01 가입과 로그인 \| 이메일과 비밀번호로 가입한다 \| 오늘 장부가 보인다 \| auth 사용자와 members 행 \|\n\| 2 `log` \| H-01 오늘 장부 \|[\s\S]*### 같이 사는 사람: `second` \(앞선 시나리오 `first`\)/);
+  assert.match(doc, /## 데이터\n\n\| 테이블 \| 한 행은 \| 읽을 수 있는 사람 \|\n\| --- \| --- \| --- \|\n\| `members` \| 한 집에 속한 한 사람 \| 같이 쓰는 사람들 \|/);
+  assert.match(doc, /## 화면\n\n### H-01 오늘 장부\n\n방금 한 집안일을 한 번 눌러 적는다\.\n\n들어오는 길: 앱 실행 · 알림\n\n\| 요소 \| 규칙 \| 이동 \|[\s\S]*\| 집안일 고치기 \| 집안일 이름과 걸리는 시간을 고치는 화면으로 간다\. \| S-01 집안일 고치기 \|/);
+  assert.match(screenSpecMarkdown({ ...SCREEN_SPEC, coreMoment: 'Jiu logs twenty minutes of dishes in three seconds.', screens: SCREEN_SPEC.screens.map((screen) => ({ ...screen, name: 'Screen' })) }), /^# Screen plan\n\n> This document is generated from docs\/screens\.json\.[\s\S]*## Roles[\s\S]*## Getting in and out[\s\S]*## Scenarios[\s\S]*## Data/);
+  // A bar inside a cell would end the cell.
+  assert.match(screenSpecMarkdown({ ...SCREEN_SPEC, roles: [{ id: 'housemate', name: '같이 사는 사람', does: '적는다 | 본다\n둘 다' }] }), /\| 적는다 \\\| 본다 둘 다 \|/);
 });
 
 test('a mock-up page is given what it points at: its pictures from the asset folder and the theme faces it names, and nothing else', async () => {
