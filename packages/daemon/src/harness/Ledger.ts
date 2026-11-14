@@ -157,6 +157,9 @@ export class Ledger {
       review: { plan: run.planReviewer, acceptance: run.acceptanceReviewer, verdict: run.verdict },
       flow: run.flow ? { tasks: run.flow.tasks, reached: run.flow.reached, presses: run.flow.presses, scrolls: run.flow.scrolls, smallestTargetPx: run.flow.smallestTargetPx, answered: run.flow.answered } : null,
     };
+    // A task the owner's code review started carries how many of its comments were blocking.
+    const review = this.#store.reviewThatStarted(task.id);
+    if (review) measured.reviewBlockingCount = review.blockingCount;
     const previous = this.#store.listLedgerEntries(project.id, 2).find((e) => e.taskId !== task.id);
     const delta = previous ? ledgerDelta(previous, measured) : [];
     const entry: LedgerEntry = { ...measured, delta, proof: delta.map((d) => `${d.metric} ${d.before}→${d.after}`).join(', ') };

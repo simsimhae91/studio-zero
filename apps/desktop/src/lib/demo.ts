@@ -1,4 +1,4 @@
-import type { Approval, PlanVersion, AuditReport, AxBlock, Checkpoint, Eval, EventBody, EventEnvelope, FileEntry, FlowTaskWalk, KnowledgeJob, LedgerEntry, Lesson, MethodName, ParamsOf, Project, ProposalCard, ResultOf, SandboxInfo, ScratchEntry, Scratchpad, ScreenSpec, Session, SubscriptionQuota, Task, OwnerSettings } from '@studio-zero/protocol';
+import type { Approval, DiffFile, DiffLine, PlanVersion, ReviewDiff, AuditReport, AxBlock, Checkpoint, Eval, EventBody, EventEnvelope, FileEntry, FlowTaskWalk, KnowledgeJob, LedgerEntry, Lesson, MethodName, ParamsOf, Project, ProposalCard, ResultOf, SandboxInfo, ScratchEntry, Scratchpad, ScreenSpec, Session, SubscriptionQuota, Task, OwnerSettings } from '@studio-zero/protocol';
 import { matchesFilter } from '@studio-zero/protocol';
 import type { Backend } from './backend.ts';
 
@@ -532,6 +532,39 @@ const demoSettings: OwnerSettings = {
   approvals: { ttlSec: 3600 },
 };
 
+// A finished task's code as the 변경 tab reads it: two edits in one file, a new file, a moved file, a picture,
+// and one long generated file that opens folded.
+const same = (oldLine: number, newLine: number, text: string): DiffLine => ({ kind: 'context', oldLine, newLine, text });
+const gone = (oldLine: number, text: string): DiffLine => ({ kind: 'del', oldLine, newLine: null, text });
+const added = (newLine: number, text: string): DiffLine => ({ kind: 'add', oldLine: null, newLine, text });
+const seedRows = Array.from({ length: 450 }, (_, i) => added(i + 3, `  { id: 'inv_${String(i + 1).padStart(3, '0')}', customer: '고객 ${i + 1}', amount: ${((i + 1) * 37_000) % 990_000}, issuedAt: '2026-10-${String((i % 28) + 1).padStart(2, '0')}', paidAt: null },`));
+const demoDiffFiles: DiffFile[] = [
+  {
+    path: 'src/App.tsx', oldPath: null, status: 'modified', binary: false, additions: 6, deletions: 3,
+    hunks: [
+      { oldStart: 1, oldLines: 6, newStart: 1, newLines: 7, lines: [same(1, 1, "import { useState } from 'react';"), gone(2, "import { invoices, type Invoice } from './invoices.ts';"), added(2, "import { invoices, type Invoice } from './data/invoices.ts';"), added(3, "import { daysOverdue } from './lib/dates.ts';"), same(3, 4, ''), same(4, 5, '// Unpaid invoices, oldest first.'), same(5, 6, 'export function App() {')] },
+      {
+        oldStart: 10, oldLines: 7, newStart: 11, newLines: 9,
+        lines: [same(10, 11, '      <ul>'), same(11, 12, '        {unpaid.map((invoice) => ('), gone(12, '          <li key={invoice.id} onClick={() => setSelected(invoice)}>'), gone(13, "            {invoice.customer}: {invoice.amount.toLocaleString('ko')}원"), added(13, '          <li key={invoice.id}>'), added(14, '            <button type="button" onClick={() => setSelected(invoice)}>'), added(15, "              {invoice.customer}: {invoice.amount.toLocaleString('ko')}원 · {daysOverdue(invoice)}일 지남"), added(16, '            </button>'), same(14, 17, '          </li>'), same(15, 18, '        ))}'), same(16, 19, '      </ul>')],
+      },
+    ],
+  },
+  {
+    path: 'src/lib/dates.ts', oldPath: null, status: 'added', binary: false, additions: 6, deletions: 0,
+    hunks: [{ oldStart: 0, oldLines: 0, newStart: 1, newLines: 6, lines: [added(1, "import type { Invoice } from '../data/invoices.ts';"), added(2, ''), added(3, '/** Whole days since the invoice was issued, counted in the owner\'s time zone. */'), added(4, 'export function daysOverdue(invoice: Invoice, now = new Date()): number {'), added(5, '  return Math.floor((now.getTime() - new Date(invoice.issuedAt).getTime()) / 86_400_000);'), added(6, '}')] }],
+  },
+  {
+    path: 'src/data/invoices.ts', oldPath: 'src/invoices.ts', status: 'renamed', binary: false, additions: 1, deletions: 1,
+    hunks: [{ oldStart: 1, oldLines: 3, newStart: 1, newLines: 3, lines: [same(1, 1, 'export interface Invoice {'), gone(2, '  id: number;'), added(2, '  id: string;'), same(3, 3, '  customer: string;')] }],
+  },
+  { path: 'public/receipt.png', oldPath: null, status: 'added', binary: true, additions: 0, deletions: 0, hunks: [] },
+  {
+    path: 'src/data/seed.ts', oldPath: null, status: 'added', binary: false, additions: 452, deletions: 0,
+    hunks: [{ oldStart: 0, oldLines: 0, newStart: 1, newLines: 452, lines: [added(1, "import type { Invoice } from './invoices.ts';"), added(2, 'export const seed: Invoice[] = ['), ...seedRows] }],
+  },
+];
+const demoDiff = (branch: string): ReviewDiff => ({ base: 'main', branch, files: demoDiffFiles, truncated: false });
+
 const handlers: Handlers = {
   'system.status': () => ({
     version: '0.1.0', protocol: 1, uptimeSec: 86_400, runtime: { context: 'orbstack', reachable: true, detail: '29.8.2 linux/arm64' }, relays: [{ id: 'telegram', state: 'connected' }, { id: 'slack', state: 'disabled' }, { id: 'ntfy', state: 'disabled' }], queue: { queued: 0, running: 1 },
@@ -567,6 +600,9 @@ const handlers: Handlers = {
   'tasks.list': (p) => ({ tasks: tasks.filter((t) => p.projectId === undefined || t.projectId === p.projectId) }),
   'tasks.get': (p) => tasks.find((t) => t.id === p.taskId)!,
   'approvals.list': (p) => ({ approvals: approvals.filter((a) => p.state === undefined || a.state === p.state) }),
+  'reviews.diff': (p) => demoDiff(tasks.find((t) => t.id === p.taskId)?.branch ?? 'sz/tsk_list'),
+  // Nothing is merged or started in the demo: the answer is what the daemon would say.
+  'reviews.submit': (p) => ({ reviewId: 'rev_demo', decision: p.result.decision, blockingCount: p.result.comments.filter((c) => c.blocking).length, mergedInto: p.result.decision === 'approved' ? 'main' : null, rerunTaskId: null }),
   'plans.list': (p) => ({ versions: planVersions.filter((v) => v.taskId === p.taskId), revisionsLeft: 2 }),
   'checkpoints.list': (p) => ({ checkpoints: checkpoints.filter((c) => c.projectId === p.projectId) }),
   'audits.list': (p) => ({ audits: [audit, unreviewedAudit].filter((a) => a.projectId === p.projectId).map((a) => ({ id: a.id, taskId: a.taskId, createdAt: a.createdAt, score: a.score, passed: a.passed })) }),

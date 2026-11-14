@@ -1,5 +1,5 @@
 import { Template } from '@studio-zero/protocol';
-import type { ApprovalState, DesignGrade, LessonState, Phase, PowerMode, ProjectTemplate, ProposalState, RedesignAction, ReviewerId, ReviewerPref, ScreenArchetype, Severity, TaskKind, TaskState, ViewportId, VisionCoverage } from '@studio-zero/protocol';
+import type { ApprovalState, DesignGrade, LessonState, Phase, PowerMode, ProjectTemplate, ProposalState, RedesignAction, ReviewLabel, ReviewerId, ReviewerPref, ScreenArchetype, Severity, TaskKind, TaskState, ViewportId, VisionCoverage } from '@studio-zero/protocol';
 
 export const taskStateLabel: Record<TaskState, string> = {
   queued: '대기 중',
@@ -80,6 +80,9 @@ export function visionGap(vision: VisionCoverage): string {
 export const lessonStateLabel: Record<LessonState, string> = { candidate: '후보', active: '적용 중', quarantined: '격리됨', retired: '폐기' };
 
 export const proposalStateLabel: Record<ProposalState, string> = { proposed: '제안됨', materializing: '구현 중', ready: '검토 가능', merged: '병합됨', rejected: '거절됨', failed: '구현 실패' };
+
+/** What a comment on a line of code is. Only the first two can hold the work back (차단). */
+export const reviewLabelText: Record<ReviewLabel, string> = { issue: '문제', suggestion: '제안', question: '질문' };
 
 export const approvalStateLabel: Record<ApprovalState, string> = { pending: '대기', approved: '승인됨', denied: '거절됨', expired: '만료됨', consumed: '승인됨' };
 

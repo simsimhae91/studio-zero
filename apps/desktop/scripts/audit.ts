@@ -128,6 +128,15 @@ const screens: { name: string; url: string; go: (page: Page, narrow: boolean) =>
     await page.getByRole('button', { name: '앞 안과 비교' }).click();
     await page.getByRole('region', { name: /1번째 안과 2번째 안의 차이/ }).waitFor();
   } },
+  { name: 'changes', url: '/?demo', go: async (page, narrow) => {
+    await workspaceTab('Ledger', '변경')(page, narrow);
+    await page.getByRole('heading', { name: '이 작업이 바꾼 코드' }).waitFor();
+  } },
+  { name: 'changes-comment', url: '/?demo', go: async (page, narrow) => {
+    await workspaceTab('Studio Zero Core', '변경')(page, narrow);
+    await page.getByRole('button', { name: '바뀐 뒤 2번 줄에 코멘트' }).first().click();
+    await page.getByRole('group', { name: '코멘트 쓰기' }).waitFor();
+  } },
   { name: 'ledger', url: '/?demo', go: workspaceTab('Ledger', '장부') },
   { name: 'quota', url: '/?demo', go: async (page) => {
     await page.getByRole('button', { name: '구독 사용 현황' }).click();

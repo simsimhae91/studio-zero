@@ -394,3 +394,113 @@ body {
   background: color-mix(in oklch, var(--color-danger) 14%, transparent);
   text-decoration: line-through;
 }
+
+/* A task's diff in the 변경 tab (views/panels/Changes.tsx). One set of elements, two layouts chosen by the pane's
+   own width, not the window's: below 900px every line is a row with both numbers; from 900px each run of changed
+   lines is set side by side, taken out on the left and put in on the right, and lines that stayed show on both. */
+.changes {
+  container-type: inline-size;
+}
+.diff-hunk {
+  border-block-start: 1px solid var(--color-border);
+}
+.diff-head {
+  padding: 0.25rem 0.75rem;
+  color: var(--color-fg-muted);
+  background: var(--color-sunken);
+}
+.diff-row {
+  display: grid;
+  grid-template-columns: 3.5rem 3.5rem minmax(0, 1fr);
+}
+.diff-row > * {
+  grid-row: 1;
+}
+.diff-row > .diff-old {
+  grid-column: 1;
+}
+.diff-row > .diff-new {
+  grid-column: 2;
+}
+.diff-row > .diff-code {
+  grid-column: 3;
+}
+.diff-row > .diff-mirror {
+  display: none;
+}
+.diff-num {
+  padding-inline: 0.5rem;
+  text-align: end;
+  color: var(--color-fg-muted);
+  user-select: none;
+}
+button.diff-num:hover,
+button.diff-num[aria-pressed="true"] {
+  color: var(--color-fg);
+  background: var(--color-sunken);
+}
+.diff-code {
+  min-inline-size: 0;
+  padding-inline-end: 0.5rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.diff-sign {
+  display: inline-block;
+  inline-size: 2ch;
+  user-select: none;
+}
+.diff-row[data-kind="add"] {
+  background: color-mix(in oklch, var(--color-success) 12%, transparent);
+}
+.diff-row[data-kind="del"] {
+  background: color-mix(in oklch, var(--color-danger) 10%, transparent);
+}
+.diff-row[data-picked] {
+  background: color-mix(in oklch, var(--color-accent) 18%, transparent);
+  box-shadow: inset 3px 0 0 var(--color-accent);
+}
+@container (min-width: 900px) {
+  .diff-block {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-auto-flow: row dense;
+  }
+  .diff-block > [data-kind="del"] {
+    grid-column: 1;
+  }
+  .diff-block > [data-kind="add"] {
+    grid-column: 2;
+  }
+  .diff-row {
+    grid-template-columns: 3.5rem minmax(0, 1fr);
+  }
+  .diff-row[data-kind="del"] > .diff-new,
+  .diff-row[data-kind="add"] > .diff-old {
+    display: none;
+  }
+  .diff-row[data-kind="add"] > .diff-new,
+  .diff-row[data-kind="del"] > .diff-old {
+    grid-column: 1;
+  }
+  .diff-row[data-kind="add"] > .diff-code,
+  .diff-row[data-kind="del"] > .diff-code {
+    grid-column: 2;
+  }
+  .diff-row[data-kind="context"] {
+    grid-template-columns: 3.5rem minmax(0, 1fr) 3.5rem minmax(0, 1fr);
+  }
+  .diff-row[data-kind="context"] > .diff-old {
+    grid-column: 1;
+  }
+  .diff-row[data-kind="context"] > .diff-code {
+    grid-column: 2;
+  }
+  .diff-row[data-kind="context"] > .diff-new {
+    grid-column: 3;
+  }
+  .diff-row[data-kind="context"] > .diff-mirror {
+    display: block;
+    grid-column: 4;
+  }
+}

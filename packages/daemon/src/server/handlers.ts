@@ -127,6 +127,8 @@ export function createHandlers(studio: Studio, deps: HandlerDeps): Handlers {
     'checkpoints.rollback': (p) => studio.rollback(OWNER, p.projectId, p.checkpointId),
     'checkpoints.fork': async (p) => ({ branch: await studio.forkCheckpoint(OWNER, p.projectId, p.checkpointId) }),
     'git.merge': (p) => studio.merge(OWNER, p.projectId, p.branch),
+    'reviews.diff': (p) => studio.reviewDiff(p.taskId),
+    'reviews.submit': (p) => studio.submitReview(OWNER, p.taskId, p.result, 'desktop'),
 
     'audits.run': (p) => studio.runAudit(OWNER, p.projectId, p.routes),
     'audits.get': (p) => studio.getAudit(p.auditId),

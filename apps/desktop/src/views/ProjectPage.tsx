@@ -1,7 +1,7 @@
 import * as Tabs from '@radix-ui/react-tabs';
-import { Check, ChevronDown, ClipboardList, FileText, Film, FolderTree, GitFork, GitMerge, Globe, History as HistoryIcon, KeyRound, Lightbulb, Maximize2, MessageCircleQuestion, Monitor, MoreHorizontal, Pencil, Plus, ReceiptText, RotateCw, ScanEye, Smartphone, Sparkles, Square, SquareTerminal, Star, Trash2, X, Power } from 'lucide-react';
+import { Check, ChevronDown, ClipboardList, FileDiff, FileText, Film, FolderTree, GitFork, GitMerge, Globe, History as HistoryIcon, KeyRound, Lightbulb, Maximize2, MessageCircleQuestion, Monitor, MoreHorizontal, Pencil, Plus, ReceiptText, RotateCw, ScanEye, Smartphone, Sparkles, Square, SquareTerminal, Star, Trash2, X, Power } from 'lucide-react';
 import { Suspense, lazy, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { ReviewerPref, type AdvisorId, type Approval, type Project, type Session, type Task, type TaskKind, type TaskState, type TaskTrack } from '@studio-zero/protocol';
+import { ReviewerPref, type AdvisorId, type Approval, type Project, type ReviewComment, type Session, type Task, type TaskKind, type TaskState, type TaskTrack } from '@studio-zero/protocol';
 import { Markdown } from '@studio-zero/ax/react';
 import { duration, effortLabel, elapsed, engineLabel, kindLabel, phaseLabel, stamp, subscriptionLabel, taskStateLabel, templateLabel, tokens, upcoming } from '../lib/format.ts';
 import { redrawRequest, revisionRequest, type MockupNote } from '../lib/mockups.ts';
@@ -16,6 +16,7 @@ import { ExternalApisModal } from './ExternalApis.tsx';
 import { MockupDeskContext, MockupThumb, useMockupDesk, useMockupPages, type MockupDesk } from './mockupDesk.tsx';
 import { Composer, useStickToEnd } from './page.tsx';
 import { Audit } from './panels/Audit.tsx';
+import { Changes } from './panels/Changes.tsx';
 import { FileTree } from './panels/FileTree.tsx';
 import { History } from './panels/History.tsx';
 import { Learning } from './panels/Learning.tsx';
@@ -30,7 +31,7 @@ import type { Route } from './Shell.tsx';
 // The terminal emulator is the largest thing in the client: fetched when the terminal tab is first opened.
 const InteractiveTerminal = lazy(() => import('./panels/InteractiveTerminal.tsx').then((m) => ({ default: m.InteractiveTerminal })));
 
-type TabId = 'preview' | 'plan' | 'files' | 'terminal' | 'history' | 'audit' | 'ledger' | 'proposals' | 'learning';
+type TabId = 'preview' | 'plan' | 'changes' | 'files' | 'terminal' | 'history' | 'audit' | 'ledger' | 'proposals' | 'learning';
 /** Addresses typed into the reference field: up to three, separated by spaces, commas or new lines. */
 const referencesOf = (text: string): string[] => text.split(/[\s,]+/).filter((part) => part !== '').slice(0, 3);
 type Pane = 'chat' | 'work';
@@ -130,6 +131,8 @@ function Workbench({ project, onOpen, onChanged }: { project: Project; onOpen: (
   const [asking, setAsking] = useState<AdvisorId | null>(null);
   const [askError, setAskError] = useState<string | null>(null);
   const [advice, setAdvice] = useState<Advice[]>([]);
+  // Comments on a task's code not yet sent, per task: they outlast a look at another tab or another task.
+  const [reviewNotes, setReviewNotes] = useState<Record<string, ReviewComment[]>>({});
 
   const sessionList = sessions.data?.sessions ?? [];
   // A session that was closed elsewhere falls back to the default stream.
@@ -166,6 +169,12 @@ function Workbench({ project, onOpen, onChanged }: { project: Project; onOpen: (
   useEffect(() => {
     if (tab === 'plan' && !hasPlan) setTab('preview');
   }, [tab, hasPlan]);
+  // The code of the task in view, when it has a branch of its own. A design task's branch holds documents and pages, which are read elsewhere.
+  const reviewTask = selected?.branch && selected.kind !== 'ideate' ? selected : null;
+  const hasChanges = reviewTask !== null;
+  useEffect(() => {
+    if (tab === 'changes' && !hasChanges) setTab('preview');
+  }, [tab, hasChanges]);
   const pickSession = (id: string | null): void => {
     setSessionId(id);
     setSeen((prev) => new Set(prev).add(id ?? DEFAULT_SESSION));
@@ -298,6 +307,7 @@ function Workbench({ project, onOpen, onChanged }: { project: Project; onOpen: (
   const tabs: readonly { id: TabId; label: string; icon: typeof Monitor }[] = [
     { id: 'preview', label: '프리뷰', icon: project.template === 'mobile-expo' ? Smartphone : Monitor },
     ...(planTask ? [{ id: 'plan' as const, label: '계획', icon: ClipboardList }] : []),
+    ...(reviewTask ? [{ id: 'changes' as const, label: '변경', icon: FileDiff }] : []),
     { id: 'files', label: '파일', icon: FolderTree },
     { id: 'terminal', label: '터미널', icon: SquareTerminal },
     { id: 'history', label: '시점', icon: HistoryIcon },
@@ -312,6 +322,25 @@ function Workbench({ project, onOpen, onChanged }: { project: Project; onOpen: (
         return <Preview project={project} busy={busy} ready={ready} />;
       case 'plan':
         return planTask ? <PlanReview key={planTask.id} task={planTask} /> : null;
+      case 'changes':
+        return reviewTask ? (
+          <Changes
+            key={reviewTask.id}
+            task={reviewTask}
+            comments={reviewNotes[reviewTask.id] ?? []}
+            onComments={(next) => setReviewNotes((prev) => ({ ...prev, [reviewTask.id]: next }))}
+            onDone={(outcome) => {
+              setReviewNotes((prev) => ({ ...prev, [reviewTask.id]: [] }));
+              if (outcome.mergedInto) rememberMerged(reviewTask.id, outcome.mergedInto);
+              // The task that addresses the comments is the one to follow now, in the conversation.
+              if (outcome.rerunTaskId) {
+                setPicked((prev) => ({ ...prev, [key]: outcome.rerunTaskId! }));
+                setPane('chat');
+              }
+              tasks.reload();
+            }}
+          />
+        ) : null;
       case 'files':
         return <FileTree project={project} openPath={openFile} />;
       case 'terminal':
@@ -958,7 +987,7 @@ function Passage({ task, items, pending, onShow, onCheckpoint, onFile, onBuild, 
           ) : task.state === 'succeeded' && task.kind === 'ideate' ? (
             <DesignDecision task={task} mockups={mockups} onFile={onFile} onBuild={(track, mockup) => onBuild(track, mockup, task.branch)} />
           ) : core && task.state === 'succeeded' ? (
-            <CoreHandover task={task} />
+            <CoreHandover task={task} onReview={() => onShow('changes')} />
           ) : (
             <div className="flex flex-wrap gap-2">
               {task.state === 'succeeded' ? (
@@ -974,6 +1003,12 @@ function Passage({ task, items, pending, onShow, onCheckpoint, onFile, onBuild, 
                     합치기
                   </Button>
                 )
+              ) : null}
+              {/* Asking for changes in words still works from the field below; this pins them to lines of the code. */}
+              {(task.state === 'succeeded' || task.state === 'failed') && task.branch && !merged ? (
+                <Button onClick={() => onShow('changes')} icon={<FileDiff className="size-4" aria-hidden />}>
+                  줄에 코멘트 달기
+                </Button>
               ) : null}
               {/* A failed task's work is committed on its branch. The next task can start from there instead of from scratch. */}
               {task.state === 'failed' && task.branch ? (
@@ -1003,7 +1038,7 @@ function Passage({ task, items, pending, onShow, onCheckpoint, onFile, onBuild, 
  * The end of a task on the studio's own repository. Its branch has been copied to this Mac's checkout as a
  * feature branch; nothing is merged until the owner, having read it, says so here.
  */
-function CoreHandover({ task }: { task: Task }) {
+function CoreHandover({ task, onReview }: { task: Task; onReview: () => void }) {
   const { backend } = useStudio();
   const status = useQuery('selfhost.status', {}, ['selfhost.exported', 'selfhost.merged']);
   const [merged, setMerged] = useState<string | null>(null);
@@ -1031,6 +1066,9 @@ function CoreHandover({ task }: { task: Task }) {
       <div className="flex flex-wrap gap-2">
         <Button variant="primary" busy={merge.busy} onClick={() => void merge.run()} icon={<GitMerge className="size-4" aria-hidden />}>
           {status.data?.baseBranch}에 머지
+        </Button>
+        <Button onClick={onReview} icon={<FileDiff className="size-4" aria-hidden />}>
+          줄에 코멘트 달기
         </Button>
       </div>
     </div>

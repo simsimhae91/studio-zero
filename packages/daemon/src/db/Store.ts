@@ -31,6 +31,7 @@ import {
   type Phase,
   type PlanFeedback,
   type Project,
+  type ReviewComment,
   type ProposalState,
   type Schedule,
   type ScheduleMode,
@@ -67,6 +68,18 @@ export interface PlanVersionRow {
   feedback: PlanFeedback[];
   createdAt: number;
   resolvedAt: number | null;
+}
+
+/** One accepted code review of a task's diff (see `reviews.submit`). */
+export interface TaskReviewRow {
+  id: string;
+  taskId: string;
+  decision: 'approved' | 'annotated';
+  comments: ReviewComment[];
+  blockingCount: number;
+  /** The task an annotated review started. */
+  rerunTaskId: string | null;
+  createdAt: number;
 }
 
 export interface CheckpointRow extends Checkpoint {
@@ -489,6 +502,27 @@ export class Store {
   /** Records the verdict on a version that is still waiting. Returns false when it was already resolved (a second verdict lost the race). */
   resolvePlanVersion(taskId: string, version: number, verdict: 'approve' | 'changes', feedback: readonly PlanFeedback[], at: number): boolean {
     return this.#run(`UPDATE plan_versions SET verdict = :verdict, feedback_json = :feedback, resolved_at = :at WHERE task_id = :taskId AND version = :version AND verdict IS NULL`, { taskId, version, verdict, feedback: JSON.stringify(feedback), at }) > 0;
+  }
+
+  // ----------------------------------------------------------- code review
+
+  insertTaskReview(r: TaskReviewRow): void {
+    this.#run(
+      `INSERT INTO task_reviews (id, task_id, decision, comments_json, blocking_count, rerun_task_id, created_at)
+       VALUES (:id, :taskId, :decision, :comments, :blockingCount, :rerunTaskId, :createdAt)`,
+      { ...r, comments: JSON.stringify(r.comments) },
+    );
+  }
+
+  /** A task's reviews, newest first. */
+  listTaskReviews(taskId: string): TaskReviewRow[] {
+    return this.#all('SELECT * FROM task_reviews WHERE task_id = :taskId ORDER BY created_at DESC, rowid DESC', { taskId }).map(toTaskReview);
+  }
+
+  /** The review that started this task, if one did. */
+  reviewThatStarted(taskId: string): TaskReviewRow | null {
+    const r = this.#get('SELECT * FROM task_reviews WHERE rerun_task_id = :taskId LIMIT 1', { taskId });
+    return r ? toTaskReview(r) : null;
   }
 
   requestCancel(id: string): void {
@@ -1330,6 +1364,18 @@ function toTask(r: Row): Task {
     createdAt: num(r.created_at),
     startedAt: nnum(r.started_at),
     finishedAt: nnum(r.finished_at),
+  };
+}
+
+function toTaskReview(r: Row): TaskReviewRow {
+  return {
+    id: str(r.id),
+    taskId: str(r.task_id),
+    decision: str(r.decision) as TaskReviewRow['decision'],
+    comments: JSON.parse(str(r.comments_json)) as ReviewComment[],
+    blockingCount: num(r.blocking_count),
+    rerunTaskId: nstr(r.rerun_task_id),
+    createdAt: num(r.created_at),
   };
 }
 

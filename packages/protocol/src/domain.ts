@@ -670,6 +670,8 @@ export const LedgerEntry = z.object({
    * by or the app could not be opened; absent on entries from before builds were walked.
    */
   flow: FlowTotals.nullable().optional(),
+  /** Blocking comments of the owner's code review this task was started to address (`reviews.submit`). Absent on any other task. */
+  reviewBlockingCount: z.number().int().min(0).optional(),
   delta: z.array(LedgerDelta),
   /** The deltas as one line, written by code: "타입 에러 3→0, 디자인 등급 B→S". Empty for a project's first entry. */
   proof: z.string(),

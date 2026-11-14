@@ -438,6 +438,22 @@ const migrations: string[] = [
     PRIMARY KEY (task_id, version)
   ) STRICT;
   `,
+  // 15: the owner's line-by-line review of a task's diff, one row per accepted submission. comments_json holds the
+  // validated comments; rerun_task_id is the task an annotated review started, so that task's receipt can say
+  // how many blocking comments it was asked to address.
+  `
+  CREATE TABLE task_reviews (
+    id              TEXT PRIMARY KEY,
+    task_id         TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+    decision        TEXT NOT NULL CHECK (decision IN ('approved', 'annotated')),
+    comments_json   TEXT NOT NULL,
+    blocking_count  INTEGER NOT NULL,
+    rerun_task_id   TEXT,
+    created_at      INTEGER NOT NULL
+  ) STRICT;
+  CREATE INDEX task_reviews_by_task ON task_reviews(task_id, created_at);
+  CREATE INDEX task_reviews_by_rerun ON task_reviews(rerun_task_id);
+  `,
 ];
 
 export function migrate(db: DatabaseSync): void {

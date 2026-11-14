@@ -38,6 +38,7 @@ import {
 } from './domain.ts';
 import { AxResponse, Calibration, DocumentKind, KnowledgeJob, PromotionResult, Readiness, ResearchReport, ScratchEntry, ScratchMode, ScratchMove, Scratchpad, TextFinding } from './ax.ts';
 import { EventEnvelope, EventFilter } from './events.ts';
+import { ReviewDiff, ReviewOutcome, ReviewResult } from './review.ts';
 
 const empty = z.object({});
 
@@ -250,6 +251,21 @@ export const methods = {
   'checkpoints.fork': { params: z.object({ projectId: z.string(), checkpointId: z.string() }), result: z.object({ branch: z.string() }) },
 
   'git.merge': { params: z.object({ projectId: z.string(), branch: z.string().min(1).max(120) }), result: z.object({ commit: z.string(), into: z.string() }) },
+
+  /**
+   * The diff of a task's branch against the branch it started from, read with git inside the project's sandbox
+   * (the studio's own project included). Parsed and checked line by line on the daemon; `truncated` when a size
+   * or count limit cut it short.
+   */
+  'reviews.diff': { params: z.object({ taskId: z.string() }), result: ReviewDiff },
+  /**
+   * The owner's review of that diff. `approved` goes to the same merge the task's merge button makes (`git.merge`,
+   * or `selfhost.merge` on Studio Zero Core) and is refused where that merge is; `annotated` starts a task on the
+   * reviewed branch whose request is the comments, each with its file, lines, label and the quoted code. A comment
+   * whose lines are not in one hunk of the current diff refuses the whole review (`conflict`). Each accepted
+   * review is recorded.
+   */
+  'reviews.submit': { params: z.object({ taskId: z.string(), result: ReviewResult }), result: ReviewOutcome },
 
   'audits.run': { params: z.object({ projectId: z.string(), routes: z.array(z.string()).min(1).max(8).optional() }), result: AuditReport },
   'audits.get': { params: z.object({ auditId: z.string() }), result: AuditReport },

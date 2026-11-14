@@ -37,6 +37,8 @@ import type {
   Project,
   ProposalCard,
   ResultOf,
+  ReviewDiff,
+  ReviewOutcome,
   SandboxInfo,
   Schedule,
   Session,
@@ -45,7 +47,7 @@ import type {
   TaskTrack,
   Template,
 } from '@studio-zero/protocol';
-import { CORE_PROJECT_ID, PROTOCOL_VERSION } from '@studio-zero/protocol';
+import { CORE_PROJECT_ID, PROTOCOL_VERSION, ReviewResult } from '@studio-zero/protocol';
 import type { ConfidenceCalibration } from '../ax/Calibration.ts';
 import type { SteeringQueue } from '../ax/Steering.ts';
 import type { Config, Effort, EngineId } from '../config.ts';
@@ -53,6 +55,7 @@ import type { Store } from '../db/Store.ts';
 import type { EventLog } from '../events/EventLog.ts';
 import type { WorkspaceProvisioner } from '../harness/bootstrap.ts';
 import { ensureDevServer } from '../harness/devServer.ts';
+import { countBlocking, formatReviewFeedback, readTaskDiff } from '../harness/DiffReview.ts';
 import type { EvalRunner } from '../harness/EvalRunner.ts';
 import { INTEGRATION_BRANCH } from '../harness/Harness.ts';
 import type { Ledger } from '../harness/Ledger.ts';
@@ -694,6 +697,62 @@ export class Studio implements PromotionHost {
     this.#d.events.emit(scope, { type: 'git.merged', branch, into: INTEGRATION_BRANCH, commit });
     this.#d.kirby.markMerged(projectId, branch);
     return { commit, into: INTEGRATION_BRANCH };
+  }
+
+  // ----------------------------------------------------------- code review
+
+  /** The diff of a task's branch against the branch it started from, read with git in the project's sandbox. */
+  async reviewDiff(taskId: string): Promise<ReviewDiff> {
+    const task = this.getTask(taskId);
+    const project = this.getProject(task.projectId);
+    return this.#inSandbox(project, () => readTaskDiff(this.#d.sandboxes, project, task));
+  }
+
+  /**
+   * The owner's line-by-line review of a finished task's code, dispatched on its decision and on nothing else.
+   * `approved` is the merge the task's own merge button makes: `selfHostMerge` on Studio Zero Core, `merge`
+   * anywhere else. `annotated` is a new task on the reviewed branch whose request is the comments, the way a
+   * change is asked for after any task (`submitTask`). No action of its own: each way inherits the policy and the
+   * guards of the call it makes, and a review is recorded only once that call has gone through.
+   */
+  async submitReview(actor: Actor, taskId: string, submitted: ReviewResult, origin: Origin): Promise<ReviewOutcome> {
+    const parsed = ReviewResult.safeParse(submitted);
+    if (!parsed.success) throw new ConflictError(`the review is not valid: ${parsed.error.issues.map((i) => i.message).join('; ')}`);
+    const result = parsed.data;
+    const task = this.getTask(taskId);
+    if (!task.branch) throw new ConflictError('this task has no branch to review');
+    if (task.state !== 'succeeded' && task.state !== 'failed' && task.state !== 'cancelled') throw new ConflictError(`task is ${task.state}; its code can be reviewed once it has finished`);
+    const blockingCount = countBlocking(result);
+    const record = (rerunTaskId: string | null): string => {
+      const id = newId('rev');
+      this.#d.store.insertTaskReview({ id, taskId, decision: result.decision, comments: result.comments, blockingCount, rerunTaskId, createdAt: this.#d.clock() });
+      return id;
+    };
+
+    if (result.decision === 'approved') {
+      // As the task's own merge button: only work that passed is offered for merging.
+      if (task.state !== 'succeeded') throw new ConflictError(`task is ${task.state}; only a task that succeeded is merged`);
+      const into = task.projectId === CORE_PROJECT_ID ? (await this.selfHostMerge(actor, taskId)).into : (await this.merge(actor, task.projectId, task.branch)).into;
+      return { reviewId: record(null), decision: 'approved', blockingCount, mergedInto: into, rerunTaskId: null };
+    }
+
+    // The quoted code comes from the diff as the daemon reads it now; a comment on lines that are not there refuses the review.
+    const project = this.getProject(task.projectId);
+    const diff = await this.#inSandbox(project, () => readTaskDiff(this.#d.sandboxes, project, task));
+    const prompt = formatReviewFeedback(result, diff, task);
+    const rerun = await this.submitTask(
+      actor,
+      {
+        projectId: task.projectId,
+        kind: task.kind === 'refactor' || task.kind === 'inline_edit' ? task.kind : 'build',
+        prompt,
+        track: task.track,
+        baseBranch: task.branch,
+        ...(task.sessionId ? { sessionId: task.sessionId } : {}),
+      },
+      origin,
+    );
+    return { reviewId: record(rerun.id), decision: 'annotated', blockingCount, mergedInto: null, rerunTaskId: rerun.id };
   }
 
   // ---------------------------------------------------------------- audits
