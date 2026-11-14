@@ -42,7 +42,7 @@ const TYPE: readonly Rule[] = [
   { id: 'T4', says: 'Three weights a screen at most: 400 for reading, 600 or 700 for names, titles and values, 800 for the one figure.' },
   { id: 'T5', says: 'Text is upright and horizontal: no rotated labels, no Hangul stacked a syllable to a line, no numerals turned around a dial or laid along a curve.' },
   { id: 'T6', says: 'Text aligns to the start. Only numbers in a column align to the end; only a lone figure with its caption, or an empty state, is centred. A block of words never aligns to the end.' },
-  { id: 'T7', says: 'Leading: body 1.5 to 1.6, titles 1.2 to 1.3, the figure 1.0 to 1.1. A label never runs to a third line. A figure never breaks onto a second line: give its column the width of its longest value, or set it a step smaller. No text is drawn over other text.' },
+  { id: 'T7', says: 'Leading: body 1.5 to 1.6, titles 1.2 to 1.3, the figure 1.0 to 1.1. A label never runs to a third line; a button\'s stays on one. A figure never breaks onto a second line: give its column the width of its longest value, or set it a step smaller. No text is drawn over other text.' },
 ];
 
 const COLOUR: readonly Rule[] = [

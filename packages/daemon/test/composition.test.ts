@@ -254,6 +254,29 @@ test('composition, read off a real page: a screen that keeps the handbook is cle
     assert.match(buried[0]!.message, /^Scrolled to its end, the page leaves its last \d+px of text under the bar or the control that floats over it\.$/);
     assert.ok(buried[0]!.severity === 'major' && buried[0]!.fix!.startsWith('E4: '));
 
+    // T7: a control's label on two lines. The owner's own find, on a product the gates had passed: two buttons
+    // sharing a dock, and the narrower one's label broken in two ("저장한 팁 보기" beside "저장함").
+    const PAIR = '.pair{display:flex;gap:12px}.pair button{min-height:52px;padding:0 20px;border:1px solid var(--sz-border);border-radius:8px;background:var(--sz-surface);color:var(--sz-fg);font:inherit;font-size:18px;font-weight:700}.pair .wide{flex:1}';
+    const pair = (css: string): Change => ({ css: `${PAIR}${css}`, extra: '<div class="pair"><button type="button" class="tips">저장한 팁 보기</button><button type="button" class="wide">저장함</button></div>' });
+    const squeezed = runDomChecks(await measure(screen(pair('.pair .tips{width:116px}'))), phone, contract);
+    assert.deepEqual(rules(squeezed), ['type/broken-label'], said(squeezed));
+    assert.match(squeezed[0]!.message, /^"저장한 팁 보기" is broken onto 2 lines inside its control\.$/);
+    assert.ok(squeezed[0]!.severity === 'major' && squeezed[0]!.fix!.startsWith('T7: '));
+    // Given the width of its words, the same pair says nothing.
+    assert.deepEqual(rules(runDomChecks(await measure(screen(pair(''))), phone, contract)), []);
+    const unbroken = async (change: Change): Promise<void> => {
+      const found = runDomChecks(await measure(screen(change)), phone, contract);
+      assert.ok(!rules(found).includes('type/broken-label'), said(found));
+    };
+    // A tile is a drawing over its caption, and a caption may take two lines: the label is not what the control is.
+    await unbroken({ css: '.tile{display:flex;flex-direction:column;align-items:center;gap:8px;width:104px;padding:16px 8px;border:0;border-radius:8px;background:var(--sz-surface);color:var(--sz-fg);font:inherit;font-weight:600}.tile i{width:56px;height:56px;border-radius:8px;background:var(--sz-border)}', extra: '<button type="button" class="tile"><i></i><span>저장한 팁 모아 보기</span></button>' });
+    // A row that is one sentence no line of this screen holds: it wraps because it is long, not because it was squeezed.
+    await unbroken({ css: '.tip{display:block;padding:12px 0;color:inherit;text-decoration:none}', extra: '<a class="tip" href="#tip">식사 20분 전에 물 한 컵을 마시면 포만감이 빨리 와서 덜 먹게 돼요</a>' });
+    // A link inside a sentence runs on with the sentence, over the end of a line like any other words.
+    await unbroken({ extra: '<p>어제 기록을 놓쳤다면 지금이라도 <a href="#fix">지난 기록 고치는 방법 보기</a>를 눌러 주세요</p>' });
+    // A break that was made is not a break that was suffered.
+    await unbroken({ css: `${PAIR}.pair .tips{width:116px}`, extra: '<div class="pair"><button type="button" class="tips">저장한 팁<br>보기</button><button type="button" class="wide">저장함</button></div>' });
+
     // A desk has no thumb to crowd: the count of controls is a touch-screen rule.
     const crowded = await measure(screen({ extra: CHIPS }), 'desk');
     assert.ok(crowded.composition!.controls > COMPOSITION_LIMITS.controls);
@@ -454,7 +477,7 @@ test('the page a real engine drew on 2026-11-13, which the check of its own page
 
 test('where a share of pixels becomes a finding: over the limit, on a phone app laid on light paper', () => {
   const composition: Composition = { microShare: 0, microSentences: [], families: ['Pretendard Variable'], monoOutsideCode: [], figuresAtLargest: [], turnedText: [], stackedText: [], endAlignedText: [], controls: 1, halfEmptyCards: [], nestedCards: 0, figuresTwice: [], mediaBoxes: [], paper: [0.97, 0.98, 0.99] };
-  const text = { id: 'e1', tag: 'p', role: '', selector: 'p', text: '오늘 체중 기록', textLength: 8, interactive: false, inline: false, x: 16, y: 16, w: 300, h: 24, color: [0.1, 0.1, 0.1, 1], background: [1, 1, 1, 1], backgroundIndeterminate: false, ownBackground: [0, 0, 0, 0], backgroundImage: 'none', fontSize: 16, fontWeight: 400, fontFamily: 'Pretendard Variable', lineHeight: 1.5, letterSpacingEm: 0, uppercase: false, radius: 0, padding: [0, 0, 0, 0], margin: [0, 0, 0, 0], gap: 0, shadow: 'none', hasBorder: false, clipped: false, charsPerLine: 0, siblingKey: 'main|P' } satisfies PageDigest['elements'][number];
+  const text = { id: 'e1', tag: 'p', role: '', selector: 'p', text: '오늘 체중 기록', textLength: 8, interactive: false, inline: false, x: 16, y: 16, w: 300, h: 24, color: [0.1, 0.1, 0.1, 1], background: [1, 1, 1, 1], backgroundIndeterminate: false, ownBackground: [0, 0, 0, 0], backgroundImage: 'none', fontSize: 16, fontWeight: 400, fontFamily: 'Pretendard Variable', lineHeight: 1.5, letterSpacingEm: 0, uppercase: false, radius: 0, padding: [0, 0, 0, 0], margin: [0, 0, 0, 0], gap: 0, shadow: 'none', hasBorder: false, clipped: false, brokenLabel: false, charsPerLine: 0, siblingKey: 'main|P' } satisfies PageDigest['elements'][number];
   const digest = (over: Partial<Composition> = {}): PageDigest => ({ title: 't', lang: 'ko', width: 393, height: 659, scrollWidth: 393, scrollHeight: 1200, loadedFonts: ['Pretendard Variable'], elements: [text], composition: { ...composition, ...over } });
   const found = (shares: { saturated: number; dark: number }, ctx: Partial<CheckContext> = {}, over: Partial<Composition> = {}): string[] => rules(runDomChecks(digest(over), { ...phone, shares, ...ctx }, contract));
 

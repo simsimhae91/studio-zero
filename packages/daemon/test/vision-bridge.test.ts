@@ -37,7 +37,7 @@ const DIGEST: PageDigest = {
     id: 'e1', tag: 'div', role: 'button', selector: 'main > div.dropzone', text: '가릴 사진 가져오기', textLength: 10, interactive: true, inline: false,
     x: 16, y: 84, w: 361, h: 451, color: [0.1, 0.1, 0.1, 1], background: [1, 1, 1, 1], backgroundIndeterminate: false, ownBackground: [0, 0, 0, 0], backgroundImage: 'none',
     fontSize: 18, fontWeight: 600, fontFamily: 'Geist', lineHeight: 1.6, letterSpacingEm: 0, uppercase: false, radius: 12, padding: [0, 0, 0, 0], margin: [0, 0, 0, 0], gap: 0,
-    shadow: 'none', hasBorder: true, clipped: false, charsPerLine: 0, siblingKey: 'main|DIV',
+    shadow: 'none', hasBorder: true, clipped: false, brokenLabel: false, charsPerLine: 0, siblingKey: 'main|DIV',
   }],
 };
 

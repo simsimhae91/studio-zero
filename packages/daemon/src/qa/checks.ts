@@ -130,6 +130,19 @@ export function runDomChecks(digest: PageDigest, ctx: CheckContext, c: DesignCon
     3,
     (e, rest) => add('responsive/clipped-text', 'responsive', 'major', `"${e.text.slice(0, 40)}" is cut off inside its box${rest ? ` (${rest} more)` : ''}.`, 'Let the text wrap (remove truncate / fixed height) or shorten the copy.', e),
   );
+  addTop(
+    texts.filter((e) => e.brokenLabel),
+    3,
+    (e, rest) =>
+      add(
+        'type/broken-label',
+        'typography',
+        'major',
+        `"${e.text.slice(0, 40)}" is broken onto ${Math.max(2, Math.round(e.h / Math.max(1, e.fontSize * e.lineHeight)))} lines inside its control${rest ? ` (${rest} more)` : ''}.`,
+        'T7: A button, a chip or a tab says its label on one line. Give this one the width of its words: stack the two controls, let this one take the row, or shorten the label. Do not set it smaller, and do not cut it off.',
+        e,
+      ),
+  );
 
   // 4. Touch targets (WCAG 2.5.5 AAA, 2.5.8 AA) ---------------------------------------------------------
   if (ctx.touch) {

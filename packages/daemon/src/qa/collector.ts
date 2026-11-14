@@ -37,6 +37,12 @@ export const DigestElement = z.object({
   shadow: z.string().max(200),
   hasBorder: z.boolean(),
   clipped: z.boolean(),
+  /**
+   * The only words of a button, a chip or a tab, set on two lines or more though one line of this screen holds
+   * them: the control was squeezed, the label is not long. Not a caption under a tile's drawing, not a link
+   * that runs on inside a sentence, and not a break the page made itself.
+   */
+  brokenLabel: z.boolean().default(false),
   charsPerLine: z.number(),
   siblingKey: z.string().max(120),
 });
@@ -168,6 +174,34 @@ export function collectDigest(maxElements: number): unknown {
   const INTERACTIVE_TAGS = new Set(['A', 'BUTTON', 'INPUT', 'SELECT', 'TEXTAREA', 'SUMMARY']);
   const INTERACTIVE_ROLES = new Set(['button', 'link', 'tab', 'menuitem', 'checkbox', 'radio', 'switch', 'option', 'combobox', 'slider']);
   const SKIP = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'TEMPLATE', 'HEAD', 'META', 'LINK', 'BR', 'WBR']);
+  /** What is pressed and named by its words. A field is not: what it holds is typed, not a label. */
+  const LABELLED = 'button, a[href], summary, [role=button], [role=link], [role=tab], [role=menuitem], [tabindex]:not([tabindex="-1"])';
+  /** The two gutters a screen keeps: a line of words fits the screen when it fits between them. */
+  const GUTTERS = 32;
+  const wordsOf = (el: Element): string => {
+    let words = '';
+    for (const child of el.childNodes) if (child.nodeType === Node.TEXT_NODE) words += child.textContent ?? '';
+    return words.trim();
+  };
+  /** Whether these words are a control's whole label and were broken by the room it was given. See `brokenLabel`. */
+  const isBrokenLabel = (node: Element): boolean => {
+    const control = node.closest(LABELLED);
+    if (!control || control.matches('input, select, textarea') || getComputedStyle(control).display === 'inline' || control.querySelector('br')) return false;
+    // One label: a row with a title and a value, or a card, is not a button.
+    for (const other of control.querySelectorAll('*')) if (other !== node && !other.closest('svg') && wordsOf(other) !== '' && other.getBoundingClientRect().width >= 1) return false;
+    if (control !== node && wordsOf(control) !== '') return false;
+    const range = document.createRange();
+    range.selectNodeContents(node);
+    const runs = [...range.getClientRects()].filter((r) => r.width >= 0.5 && r.height >= 0.5);
+    if (runs.length < 2) return false;
+    const tops: number[] = [];
+    for (const r of runs) if (!tops.some((top) => Math.abs(top - r.top) < r.height / 2)) tops.push(r.top);
+    if (tops.length < 2) return false;
+    const length = runs.reduce((sum, r) => sum + r.width, 0);
+    const tall = Math.max(...runs.map((r) => r.bottom)) - Math.min(...runs.map((r) => r.top));
+    // Half the control's height or more is its label: a button or a chip, not a drawing with a caption under it.
+    return length <= innerWidth - GUTTERS && tall >= control.getBoundingClientRect().height / 2;
+  };
   // Pictures have no text and no fill, but they take up the screen: a reviewer has to be able to point at one.
   const MEDIA = new Set(['IMG', 'VIDEO', 'CANVAS']);
 
@@ -263,6 +297,7 @@ export function collectDigest(maxElements: number): unknown {
       shadow: cs.boxShadow.slice(0, 200),
       hasBorder,
       clipped: Boolean(ownText) && hidesOverflow && node.scrollWidth > node.clientWidth + 1,
+      brokenLabel: Boolean(ownText) && !(node instanceof HTMLInputElement || node instanceof HTMLTextAreaElement) && isBrokenLabel(node),
       charsPerLine: lines >= 2 && fullText.length > 0 ? fullText.length / lines : 0,
       siblingKey: parent ? `${selectorOf(parent)}|${node.tagName}`.slice(0, 120) : '',
     };

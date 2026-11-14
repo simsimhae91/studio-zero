@@ -16,7 +16,7 @@ function el(over: Partial<DigestElement>): DigestElement {
     id: `e${++n}`, tag: 'p', role: '', selector: `p:nth-of-type(${n})`, text: 'Readable text', textLength: 13, interactive: false, inline: false,
     x: 16, y: 16 * n, w: 300, h: 24, color: [...INK], background: [...WHITE], backgroundIndeterminate: false, ownBackground: [0, 0, 0, 0], backgroundImage: 'none',
     fontSize: 16, fontWeight: 400, fontFamily: 'Pretendard Variable', lineHeight: 1.6, letterSpacingEm: 0, uppercase: false, radius: 0, padding: [0, 0, 0, 0], margin: [0, 0, 0, 0], gap: 0,
-    shadow: 'none', hasBorder: false, clipped: false, charsPerLine: 0, siblingKey: 'main|P', ...over,
+    shadow: 'none', hasBorder: false, clipped: false, brokenLabel: false, charsPerLine: 0, siblingKey: 'main|P', ...over,
   };
 }
 
