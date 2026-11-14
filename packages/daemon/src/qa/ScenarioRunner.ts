@@ -59,7 +59,12 @@ export interface ScenarioOutcome {
 }
 
 export interface ScenarioRunnerLike {
-  run(project: Project, spec: ScreenSpec, opts?: { signal?: AbortSignal; look?: boolean }): Promise<ScenarioOutcome>;
+  /**
+   * Walks the plan's scenarios. With `look`, each screen walked over is measured. With `brief`, only the walks
+   * themselves are made (each to its end and through a reload): not the restart of the backend, the second
+   * sign-in, the provider buttons or the stranger's read, which are checks of the whole product.
+   */
+  run(project: Project, spec: ScreenSpec, opts?: { signal?: AbortSignal; look?: boolean; brief?: boolean }): Promise<ScenarioOutcome>;
 }
 
 /**
@@ -262,7 +267,7 @@ async function lookAt(browser: Browser, page: Page, at: { screen: string; scenar
  * `backend` is null for a product nobody signs in to: its scenarios are walked as a visitor and that is all.
  * `restart` takes the backend down and brings it back. `run` names the walk (see `walkFlow`).
  */
-export async function walkScenarios(deps: { browser: Browser; base: string; phone: BrowserContextOptions | null; spec: ScreenSpec; backend: Backend | null; restart: () => Promise<void>; run: string; signal?: AbortSignal; look?: { template: Template } }): Promise<ScenarioWalk> {
+export async function walkScenarios(deps: { browser: Browser; base: string; phone: BrowserContextOptions | null; spec: ScreenSpec; backend: Backend | null; restart: () => Promise<void>; run: string; signal?: AbortSignal; look?: { template: Template }; brief?: boolean }): Promise<ScenarioWalk> {
   const { browser, base, spec, backend, run } = deps;
   const touch = deps.phone !== null;
   const problems: string[] = [];
@@ -299,6 +304,17 @@ export async function walkScenarios(deps: { browser: Browser; base: string; phon
   const said = (text: string, refused: readonly string[]): string => `${text.trim() === '' ? ' The screen was empty.' : ` The screen said: "${excerpt(text.replace(/\s+/g, ' ').trim(), 300)}"`}${refused.length > 0 ? ` The backend refused: ${refused.slice(-3).join(' | ')}` : ''}`;
 
   let before: Tables = backend ? await backend.tables() : new Map();
+  /**
+   * What the scenario's person had made in the backend when a step stopped, for whoever has to find out why: a
+   * builder cannot reach the backend from its sandbox, and "the screen said" is not what was saved. A few rows a
+   * table, cut short.
+   */
+  const madeSoFar = async (): Promise<string> => {
+    if (!backend) return '';
+    const made = madeBetween(before, await backend.tables().catch(() => before));
+    if (made.size === 0) return ' No row of any table had been made or changed by then.';
+    return ` Rows made or changed by then: ${[...made].map(([table, rows]) => `${table} (${rows.length}) ${excerpt(JSON.stringify(rows.slice(0, 3)), 600)}`).join('; ').slice(0, 2400)}`;
+  };
   for (const scenario of spec.scenarios) {
     if (deps.signal?.aborted) throw deps.signal.reason;
     const who = person(scenario.id, run);
@@ -334,7 +350,7 @@ export async function walkScenarios(deps: { browser: Browser; base: string; phon
         // A step may be something the person only sees. Signing up is never that.
         const reached = walk?.reached === true || (i > 0 && walk?.stopped === 'already-done');
         if (!reached) {
-          problems.push(`${at}, step ${i + 1} "${step.id}" (${step.does.trim()}): ${stoppedBecause(step.id, walk?.stopped ?? 'step-missing', walk?.stoppedAtStep ?? null, walk?.presses ?? 0)}. Expected afterwards: ${step.outcome.trim()}.${said(await onScreen(page), refused)}`);
+          problems.push(`${at}, step ${i + 1} "${step.id}" (${step.does.trim()}): ${stoppedBecause(step.id, walk?.stopped ?? 'step-missing', walk?.stoppedAtStep ?? null, walk?.presses ?? 0)}. Expected afterwards: ${step.outcome.trim()}.${said(await onScreen(page), refused)}` + (await madeSoFar()));
           through = false;
           break;
         }
@@ -349,7 +365,7 @@ export async function walkScenarios(deps: { browser: Browser; base: string; phon
       const last = scenario.steps.at(-1)!;
       await page.reload({ waitUntil: 'networkidle', timeout: 45_000 }).catch(() => undefined);
       if (!(await showing(page, last.id, PATIENCE_MS))) {
-        problems.push(`${at}: after a reload, nothing carrying ${DONE_ATTR}="${last.id}" is on screen (${last.outcome.trim()}). What a step leaves has to be read back from the backend, and the session has to survive a reload.${said(await onScreen(page), refused)}`);
+        problems.push(`${at}: after a reload, nothing carrying ${DONE_ATTR}="${last.id}" is on screen (${last.outcome.trim()}). What a step leaves has to be read back from the backend, and the session has to survive a reload.${said(await onScreen(page), refused)}` + (await madeSoFar()));
         continue;
       }
       const text = await onScreen(page);
@@ -376,7 +392,7 @@ export async function walkScenarios(deps: { browser: Browser; base: string; phon
       await close();
     }
   }
-  if (!backend) return { walked, problems, logins: [], looks };
+  if (!backend || deps.brief) return { walked, problems, logins: [], looks };
   // Whatever became of the scenarios, the provider buttons are pressed: a builder is told everything in one go.
   const pressed = await walkLogins({ browser, base, phone: deps.phone, apiOrigin: backend.apiOrigin, on: backend.logins });
   if (problems.length > 0 || walked === 0) return { walked, problems: [...problems, ...pressed.problems], logins: pressed.offered, looks };
@@ -435,7 +451,7 @@ export class ScenarioRunner implements ScenarioRunnerLike {
     this.#arms = deps.arms;
   }
 
-  async run(project: Project, spec: ScreenSpec, opts: { signal?: AbortSignal; look?: boolean } = {}): Promise<ScenarioOutcome> {
+  async run(project: Project, spec: ScreenSpec, opts: { signal?: AbortSignal; look?: boolean; brief?: boolean } = {}): Promise<ScenarioOutcome> {
     const started = Date.now();
     const total = spec.scenarios.length;
     const finish = (walked: number, problems: string[], logins: string[] = [], looks: ScreenLook[] = []): ScenarioOutcome => ({
@@ -467,10 +483,10 @@ export class ScenarioRunner implements ScenarioRunnerLike {
     };
     try {
       const result = await this.#browser.use(project, opts.signal, ({ browser, host, devices }) =>
-        walkScenarios({ browser, base: `http://${host}:${file.dev.port}`, phone: project.template === 'mobile-expo' ? devices['iPhone 15 Pro']! : null, spec, backend, restart, run, ...(opts.signal ? { signal: opts.signal } : {}), ...(opts.look ? { look: { template: project.template === 'studio-core' ? 'web-vite-react' : project.template } } : {}) }),
+        walkScenarios({ browser, base: `http://${host}:${file.dev.port}`, phone: project.template === 'mobile-expo' ? devices['iPhone 15 Pro']! : null, spec, backend, restart, run, ...(opts.signal ? { signal: opts.signal } : {}), ...(opts.look ? { look: { template: project.template === 'studio-core' ? 'web-vite-react' : project.template } } : {}), ...(opts.brief ? { brief: true } : {}) }),
       );
       const problems = [...result.problems];
-      if (backend) {
+      if (backend && !opts.brief) {
         // A key that passes every policy has no way into the sandbox. This looks anyway: one would undo all of the above.
         const found = await this.#sandboxes.exec(project, `grep -rIlF ${backend.adminKeys.map((key) => `-e '${key.replaceAll("'", '')}'`).join(' ')} --exclude-dir=node_modules --exclude-dir=.git . 2>/dev/null | head -5; true`, { timeoutSec: 60 });
         const files = found.stdout.split('\n').map((line) => line.trim()).filter(Boolean);

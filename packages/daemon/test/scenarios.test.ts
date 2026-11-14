@@ -172,6 +172,9 @@ test('a real walk: a product that works passes; one that fakes its sign-up, forg
     mode = 'memory';
     const memory = await walk('cccc3333');
     assert.match(memory.problems.join('\n'), /Scenario "treasurer" \(총무\): after a reload, nothing carrying data-done="post" is on screen \(장부에 줄이 생긴다\)[\s\S]*The screen said: "내 장부 sz-treasurer-cccc3333@example\.com 모임 RUN-cccc3333[\s\S]*아직 올린 지출이 없어요/);
+    // What that person did save is said with it: a builder cannot ask the backend from its sandbox.
+    assert.match(memory.problems.join('\n'), /Rows made or changed by then: clubs \(1\) \[\{.*"code":"RUN-cccc3333".*members \(1\) \[\{/);
+    assert.doesNotMatch(memory.problems.join('\n'), /entries \(\d+\)/, 'and what it did not save is not there to be seen');
     await backend.forget('cccc3333');
 
     // --- the product is right and a policy is not: any signed-in person may read the ledger
@@ -189,6 +192,7 @@ test('a real walk: a product that works passes; one that fakes its sign-up, forg
     const refused = await walk('eeee5555');
     assert.equal(refused.walked, 0);
     assert.match(refused.problems[0]!, /^Scenario "treasurer" \(총무\), step 2 "open-club" \(코드를 정해 모임을 만든다\): 2 marked controls were pressed and nothing carrying data-done="open-club" came on screen\. Expected afterwards: 모임 이름이 보인다\. The screen said: "내 장부 sz-treasurer-eeee5555@example\.com new row violates row-level security policy for table "clubs" 모임 만들기 코드로 들어가기" The backend refused: 403 POST \/rest\/v1\/clubs: \{"code":"42501"[^|]*row-level security/);
+    assert.match(refused.problems[0]!, / No row of any table had been made or changed by then\.$/);
     await backend.forget('eeee5555');
   } finally {
     await browser.close().catch(() => undefined);

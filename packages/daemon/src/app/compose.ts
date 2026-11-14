@@ -230,6 +230,8 @@ export async function createDaemon(config: Config, log: PinoLogger, overrides: D
   const mockups = new MockupRenderer({ config, store, sandboxes, browser: qaBrowser, auditor, clock, log: log.child({ mod: 'mockups' }) });
   toolbox.useMockups(mockups);
   const scenarios = overrides.scenarios !== undefined ? overrides.scenarios : new ScenarioRunner({ config, sandboxes, browser: qaBrowser, arms });
+  // A builder may have one scenario walked while it works: the backend does not answer inside its sandbox.
+  if (scenarios) toolbox.useScenarios(scenarios);
   // A task submitted with `reviewPlan` waits here for the owner's word on its plan. One that was waiting when the
   // daemon stopped is queued again on boot (see `Store.recoverInterruptedTasks`) and comes back to its stored plan.
   const planGate = new PlanGate({ store, events, config: config.planReview, clock });

@@ -12,6 +12,8 @@ import { MIGRATIONS_DIR, SEED_FILE } from '../arms/schema.ts';
 import { ARMS_KIT_DIR, ENV_FILE } from '../arms/kit.ts';
 import type { ImageDesk } from '../qa/ImageDesk.ts';
 import { MOCKUP_DIR, MOCKUP_FILES, renderMockupCheck, type MockupRenderer } from '../qa/MockupRenderer.ts';
+import { renderScenarioFeedback, type ScenarioRunnerLike } from '../qa/ScenarioRunner.ts';
+import { SCREEN_SPEC_FILE, readScreenSpec } from '../scratch/ScreenSpec.ts';
 import { WEB_GUIDANCE_VERSION } from './houseBar.ts';
 import { THEME_SEED_FILE, ThemeChoice, chosenTheme, writeProjectTheme } from './themeSeed.ts';
 
@@ -59,6 +61,7 @@ export class Toolbox {
   #images: Pick<ImageDesk, 'make'> | null = null;
   #mockups: Pick<MockupRenderer, 'check'> | null = null;
   #arms: Pick<ProjectArms, 'applySchema'> | null = null;
+  #scenarios: ScenarioRunnerLike | null = null;
   readonly #policy: PolicyEngine;
   readonly #events: EventLog;
   readonly #mcp: McpRegistry;
@@ -147,12 +150,18 @@ export class Toolbox {
     this.#mockups = mockups;
   }
 
+  /** What walks a product's scenarios when its work is checked: a builder may have one walked while it works. */
+  useScenarios(scenarios: ScenarioRunnerLike): void {
+    this.#scenarios = scenarios;
+  }
+
   #buildTools(): ToolDef[] {
     const sandboxes = this.#sandboxes;
     const events = this.#events;
     const images = (): Pick<ImageDesk, 'make'> | null => this.#images;
     const mockups = (): Pick<MockupRenderer, 'check'> | null => this.#mockups;
     const arms = (): Pick<ProjectArms, 'applySchema'> | null => this.#arms;
+    const scenarios = (): ScenarioRunnerLike | null => this.#scenarios;
     const mcp = this.#mcp;
     return [
       define({
@@ -230,6 +239,38 @@ export class Toolbox {
           if (!backend) return { text: 'The studio cannot run a backend here.', ok: false, exitCode: null };
           const result = await backend.applySchema(ctx.project);
           return { text: result.text, ok: result.ok, exitCode: null };
+        },
+      }),
+      define({
+        name: 'walk_scenario',
+        description:
+          `Have the studio carry out one scenario of ${SCREEN_SPEC_FILE} on the running product, the way it does when it checks your work: as people it makes up, who sign up for real against the backend, press the marked controls step by step, and reload at the end. It tells you whether the scenario reached its end and, where it did not, the step it stopped at, what the screen said, what the backend refused, and the rows those people had made in each table by then. The backend does not answer from inside the sandbox, so this is how you see what the product really does against it: walk a feature's scenario when you have built the feature, and again after each fix, rather than reasoning about what it would do. A scenario that follows another ("after") is walked with the ones it follows. About a minute. The whole check (every scenario, a restart of the backend, a stranger's read) is still made when you stop.`,
+        schema: z.object({ scenario: z.string().min(1).max(40).describe(`The scenario's "id" in ${SCREEN_SPEC_FILE}.`) }),
+        action: (input, project) => ({ kind: 'sandbox.exec', projectId: project.id, command: `walk_scenario ${input.scenario.replace(/[^a-z0-9-]/gi, '')}` }),
+        // What the product's screens and its backend said comes back in the answer.
+        source: 'browser-page',
+        summarize: (input) => input.scenario,
+        run: async (input, ctx) => {
+          const walker = scenarios();
+          if (!walker) return { text: 'The studio cannot walk a product here. The scenarios are walked when you stop.', ok: false, exitCode: null };
+          const file = await sandboxes.exec(ctx.project, `[ -f ${SCREEN_SPEC_FILE} ] && head -c 262144 ${SCREEN_SPEC_FILE}`, { timeoutSec: 20, maxOutputBytes: 300_000 });
+          const read = file.exitCode !== 0 || file.stdout.trim() === '' ? null : readScreenSpec(file.stdout, { works: true, draft: true, wide: true });
+          if (!read) return { text: `${SCREEN_SPEC_FILE} is missing: there is no scenario to walk until the plan is written.`, ok: false, exitCode: null };
+          if (!read.ok) return { text: `${SCREEN_SPEC_FILE} does not hold yet, so its scenarios cannot be walked. Put these right first:\n${read.problems.map((problem) => `- ${problem}`).join('\n')}`, ok: false, exitCode: null };
+          const byId = new Map(read.spec.scenarios.map((scenario) => [scenario.id, scenario]));
+          if (!byId.has(input.scenario)) return { text: `The plan has no scenario "${input.scenario}". Its scenarios are: ${[...byId.keys()].join(', ') || '(none)'}.`, ok: false, exitCode: null };
+          // The ones it follows first, in the plan's order: what the second person sees is what the first one made.
+          const wanted = new Set<string>();
+          for (let id: string | null | undefined = input.scenario; id && byId.has(id) && !wanted.has(id); id = byId.get(id)!.after?.trim()) wanted.add(id);
+          const chain = read.spec.scenarios.filter((scenario) => wanted.has(scenario.id));
+          try {
+            const outcome = await walker.run(ctx.project, { ...read.spec, scenarios: chain }, { ...(ctx.signal ? { signal: ctx.signal } : {}), brief: true });
+            if (outcome.passed) return { text: `Scenario "${input.scenario}" reached its end${chain.length > 1 ? ` (walked after ${chain.slice(0, -1).map((scenario) => `"${scenario.id}"`).join(', ')})` : ''}, and its last outcome was still on screen after a reload.`, ok: true, exitCode: null };
+            return { text: renderScenarioFeedback(outcome), ok: false, exitCode: null };
+          } catch (err) {
+            if (ctx.signal?.aborted) throw err;
+            return { text: `The studio could not walk it this time (${errorMessage(err)}). That says nothing about the product; carry on, it is walked when you stop.`, ok: false, exitCode: null };
+          }
         },
       }),
       define({

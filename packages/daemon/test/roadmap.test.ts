@@ -432,6 +432,53 @@ test('a milestone whose checks still fail is tried once more by itself, then sto
   }
 });
 
+test('a builder can have one scenario walked while it works: with the ones it follows, briefly, and told what the walk found', async () => {
+  const asked: { ids: string[]; brief: boolean; look: boolean }[] = [];
+  let outcome: Pick<ScenarioOutcome, 'passed' | 'problems'> = { passed: true, problems: [] };
+  const scenarios: ScenarioRunnerLike = {
+    run: async (_project, spec, opts): Promise<ScenarioOutcome> => {
+      asked.push({ ids: spec.scenarios.map((scenario) => scenario.id), brief: opts?.brief === true, look: opts?.look === true });
+      return { ...outcome, scenarios: spec.scenarios.length, walked: outcome.passed ? spec.scenarios.length : 0, logins: [], detail: 'walked', durationMs: 1 };
+    },
+  };
+  const d = await testDaemon({}, { scenarios });
+  try {
+    const { studio, store, toolbox, sandboxes } = d.daemon;
+    const project = studio.createProject(OWNER, { name: 'Battle', slug: 'battle', template: 'mobile-expo' });
+    const task = store.insertTask({ id: 'tsk_walk', projectId: project.id, kind: 'build', prompt: 'x', origin: 'desktop', budgetTokens: 1_000_000, branch: null, createdAt: 1 });
+    const walk = (scenario: string) => toolbox.call({ project, taskId: task.id }, 'walk_scenario', { scenario });
+    assert.ok(toolbox.definitions().some((tool) => tool.name === 'walk_scenario'));
+    assert.equal(toolbox.mutates('walk_scenario'), false, 'a walk changes nothing in the workspace');
+
+    // No plan yet, then a plan that does not hold: nothing is walked, and it is said why.
+    await d.daemon.provisioner.ensure(project);
+    assert.match((await walk('meal-log')).content, /docs\/screens\.json is missing: there is no scenario to walk until the plan is written\./);
+    await sandboxes.writeFile(project, 'docs/screens.json', JSON.stringify({ ...planWith(M2), events: [{ name: 'x', when: 'y' }] }));
+    assert.match((await walk('meal-log')).content, /does not hold yet, so its scenarios cannot be walked\. Put these right first:\n- events\.0\.measures: Invalid input/);
+    assert.deepEqual(asked, []);
+
+    // The ranking is seen by a second person after the first is matched: both are walked, in the plan's order, briefly.
+    const plan = planWith(M2);
+    plan.scenarios.find((scenario) => scenario.id === 'ranking')!.after = 'matching';
+    await sandboxes.writeFile(project, 'docs/screens.json', JSON.stringify(plan));
+    const reached = await walk('ranking');
+    assert.equal(reached.isError, false);
+    assert.match(reached.content, /<untrusted-data id="[0-9a-f]{24}" source="browser-page" tool="walk_scenario">\nScenario "ranking" reached its end \(walked after "matching"\), and its last outcome was still on screen after a reload\.\n/);
+    assert.deepEqual(asked, [{ ids: ['matching', 'ranking'], brief: true, look: false }]);
+
+    // What the walk found comes back whole, as what a page and a backend said.
+    outcome = { passed: false, problems: ['Scenario "meal-log" (같이 사는 사람), step 2 "log" (설거지 20분을 적는다): 1 marked control was pressed and nothing carrying data-done="log" came on screen. The screen said: "저장하지 못했어요" Rows made or changed by then: logs (1) [{"id":7,"minutes":null}]'] };
+    const stopped = await walk('meal-log');
+    assert.equal(stopped.isError, true);
+    assert.match(stopped.content, /The studio walked the plan's scenarios on the running build as new people: 0 of 1 reached the end\.\n- Scenario "meal-log"[\s\S]*Rows made or changed by then: logs \(1\) \[\{"id":7,"minutes":null\}\]/);
+    assert.deepEqual(asked.at(-1), { ids: ['meal-log'], brief: true, look: false });
+    assert.match((await walk('rankng')).content, /The plan has no scenario "rankng"\. Its scenarios are: onboarding, meal-log, matching, ranking, meal-photo\./);
+    assert.equal(asked.length, 2);
+  } finally {
+    await d.cleanup();
+  }
+});
+
 /** The runner over a real store, with the studio it submits through and merges by recorded. */
 async function runnerRig(): Promise<{ d: TestDaemon; projectId: string; submitted: { milestone: number; baseBranch: string | null; id: string }[]; merged: string[]; fail: { merge: string | null }; make: () => RoadmapRunner; finish: (taskId: string, state: 'succeeded' | 'failed' | 'cancelled', error?: string) => void }> {
   const d = await testDaemon();
