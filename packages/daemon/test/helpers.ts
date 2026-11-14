@@ -131,7 +131,9 @@ export async function testDaemon(configOverrides: z.input<typeof ConfigSchema> =
   const security = fakeSecurity();
   const docker = localDocker(ws.dir);
   // The studio's own repository is not mounted unless a test asks for it: a test daemon is not a place to work on it.
-  const config = testConfig(home.dir, { listen: { port: 0 }, gateway: { port: 0 }, engines: { claudeCode: { enabled: false } }, selfHosting: { enabled: false }, ...configOverrides });
+  // Slots are off unless a test asks for them, and two tasks at once as before them: what these tests say of a
+  // task in the project's own workspace is said of that lane.
+  const config = testConfig(home.dir, { listen: { port: 0 }, gateway: { port: 0 }, engines: { claudeCode: { enabled: false } }, selfHosting: { enabled: false }, slots: { perProject: 0 }, queue: { concurrency: 2 }, ...configOverrides });
   // Tests never ask a real provider whether a key is good. And a test's scripted build has no backend to be walked
   // on: the walk of the plan's scenarios is off unless a test hands one in.
   const daemon = await createDaemon(config, quietLog, { run: wrapDocker(docker.run), securityRun: security.run, checkKey: async () => 'accepted', scenarios: null, ...overrides });

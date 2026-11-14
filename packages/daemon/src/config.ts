@@ -20,7 +20,11 @@ export type RouteCandidate = z.infer<typeof RouteCandidate>;
  * the native loop; verification-side model calls are fixed in code: the audit's design review to `claude-fable-5-2`
  * (`qa/vision.ts`), reflection to `claude-opus-5-5`.
  */
-const defaultRoutes: Record<TaskKind, z.input<typeof RouteCandidate>[]> = {
+/** The kinds an engine works on. A full check (`check`) is the studio's own walk and is routed nowhere. */
+export const EngineKind = TaskKind.exclude(['check']);
+export type EngineKind = z.infer<typeof EngineKind>;
+
+const defaultRoutes: Record<EngineKind, z.input<typeof RouteCandidate>[]> = {
   ideate: [
     { engine: 'native-claude', model: 'claude-fable-5-2', effort: 'high' },
     { engine: 'claude-code', model: 'claude-fable-5-2', effort: 'high' },
@@ -75,6 +79,24 @@ export const ConfigSchema = z.object({
       pidsLimit: z.number().int().min(64).default(512),
       previewPorts: z.array(z.number().int().min(1).max(65535)).max(8).default([3000, 5173, 8081]),
       execTimeoutSec: z.number().int().min(5).max(3600).default(600),
+    })
+    .prefault({}),
+  /**
+   * Slots: clones of a project in containers of their own, where a small edit or a full check runs beside the
+   * project's heavy task (see `sandbox/Slots.ts`). `perProject: 0` turns them off: such a task then runs in the
+   * project's own workspace, one at a time, as every task did before there were slots.
+   */
+  slots: z
+    .object({
+      perProject: z.number().int().min(0).max(4).default(2),
+      /** A slot nobody has taken for this long has its container stopped: its dev server holds over a gigabyte. */
+      idleStopMinutes: z.number().int().min(1).max(240).default(15),
+    })
+    .prefault({}),
+  queue: z
+    .object({
+      /** Tasks at once, over all projects. Two until there were slots; three is a heavy task and two small edits. */
+      concurrency: z.number().int().min(1).max(8).default(3),
     })
     .prefault({}),
   budgets: z
@@ -143,7 +165,7 @@ export const ConfigSchema = z.object({
       antigravity: z.object({ enabled: z.boolean().default(true), bin: z.string().default('agy') }).prefault({}),
     })
     .prefault({}),
-  routes: z.record(TaskKind, z.array(RouteCandidate).min(1)).default(defaultRoutes as Record<TaskKind, RouteCandidate[]>),
+  routes: z.record(EngineKind, z.array(RouteCandidate).min(1)).default(defaultRoutes as Record<EngineKind, RouteCandidate[]>),
   images: z
     .object({
       /** Whether engines may have pictures made for a product through a connected subscription's image tool. */

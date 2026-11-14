@@ -7,7 +7,11 @@ export const DEFAULT_GATEWAY_PORT = 49201;
 
 export const Slug = z.string().regex(/^[a-z][a-z0-9-]{1,38}[a-z0-9]$/, 'lowercase letters, digits and dashes (3-40 chars)');
 
-export const TaskKind = z.enum(['build', 'refactor', 'inline_edit', 'ideate', 'kirby_materialize']);
+/**
+ * `check` is the one kind no engine works on: the studio walks every scenario of the project's main as it stands
+ * and writes down where the walk went and what each screen was found breaking (see `ProjectWalks`).
+ */
+export const TaskKind = z.enum(['build', 'refactor', 'inline_edit', 'ideate', 'kirby_materialize', 'check']);
 export type TaskKind = z.infer<typeof TaskKind>;
 
 /**
@@ -138,6 +142,14 @@ export const Task = z.object({
   reviewPlan: z.boolean().optional(),
   /** The milestone of the project's product map this task builds, counted from 0 (see `Roadmap`). Null or absent for any other task. */
   milestone: z.number().int().min(0).nullable().optional(),
+  /**
+   * The slot the task ran in, counted from 1: a clone of the project in a container of its own, where a small
+   * edit or a full check works beside whatever else the project is doing. Null or absent for a task that ran in
+   * the project's own workspace.
+   */
+  slot: z.number().int().min(1).nullable().optional(),
+  /** The commit the task's work became on main, when it was put there by itself (a small edit that passed its checks). */
+  landedCommit: z.string().nullable().optional(),
   createdAt: z.number().int(),
   startedAt: z.number().int().nullable(),
   finishedAt: z.number().int().nullable(),

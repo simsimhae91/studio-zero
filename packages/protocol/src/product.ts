@@ -106,3 +106,26 @@ export const Roadmap = z.object({
   updatedAt: z.number().int(),
 });
 export type Roadmap = z.infer<typeof Roadmap>;
+
+/** Where a walk went: for each scenario, the screens its person was on, in order, and the step they were carrying out. */
+export const Trails = z.record(z.string(), z.array(z.object({ screen: z.string(), step: z.string() })));
+export type Trails = z.infer<typeof Trails>;
+
+/** What each screen was last found breaking on main, above minor: the rules' ids, and when it was measured. */
+export const ScreenLedger = z.record(z.string(), z.object({ rules: z.array(z.string()), at: z.number().int() }));
+export type ScreenLedger = z.infer<typeof ScreenLedger>;
+
+/**
+ * What a project remembers of its walks, for checking a small edit in proportion to what it changed. `trails`
+ * says which scenarios reach a screen that no step of the plan names; `ledger` tells a defect an edit brought
+ * from one the screen already had. Written by a walk of every scenario (a full check, a milestone) and, a
+ * screen at a time, by an edit that lands.
+ */
+export const ProjectWalks = z.object({
+  trails: Trails,
+  ledger: ScreenLedger,
+  /** The commit of main the trails were walked on. */
+  commit: z.string().nullable(),
+  updatedAt: z.number().int(),
+});
+export type ProjectWalks = z.infer<typeof ProjectWalks>;

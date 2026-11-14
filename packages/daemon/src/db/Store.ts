@@ -13,6 +13,9 @@ import {
   UNREVIEWED_SCORE_CAP,
   type Confidence,
   type KnowledgeJob,
+  type ProjectWalks,
+  type ScreenLedger,
+  type Trails,
   type ScratchEntry,
   type ScratchMode,
   type ScratchState,
@@ -50,8 +53,20 @@ import { migrate } from './schema.ts';
 
 type Row = Record<string, SQLInputValue>;
 
+/** The kinds that run in a slot, beside a project's heavy task (see `claimNextTask`). */
+export const LIGHT_KINDS: readonly TaskKind[] = ['inline_edit', 'check'];
+
+/**
+ * Whether a task runs in a slot of its project: a small edit or a full check, on any project but the studio's
+ * own repository, where projects have slots at all (`slots` is how many each has; with none, such a task is a
+ * task like any other and runs in the project's own workspace).
+ */
+export const isLight = (task: { kind: TaskKind; projectId: string }, slots: number): boolean => slots > 0 && LIGHT_KINDS.includes(task.kind) && task.projectId !== CORE_PROJECT_ID;
+
 export interface SandboxRow {
   projectId: string;
+  /** 0 for the project's own sandbox; 1 and up for its slots. */
+  slot: number;
   container: string;
   volume: string;
   network: string;
@@ -314,23 +329,49 @@ export class Store {
 
   // ------------------------------------------------------------ sandboxes
 
-  upsertSandbox(s: SandboxRow, now: number): void {
+  upsertSandbox(s: Omit<SandboxRow, 'slot'> & { slot?: number }, now: number): void {
     this.#run(
-      `INSERT INTO sandboxes (project_id, container, volume, network, image, gateway_token_hash, created_at)
-       VALUES (:projectId, :container, :volume, :network, :image, :gatewayTokenHash, :now)
-       ON CONFLICT (project_id) DO UPDATE SET image = excluded.image, gateway_token_hash = excluded.gateway_token_hash`,
-      { ...s, now },
+      `INSERT INTO sandboxes (project_id, slot, container, volume, network, image, gateway_token_hash, created_at)
+       VALUES (:projectId, :slot, :container, :volume, :network, :image, :gatewayTokenHash, :now)
+       ON CONFLICT (project_id, slot) DO UPDATE SET image = excluded.image, gateway_token_hash = excluded.gateway_token_hash`,
+      { ...s, slot: s.slot ?? 0, now },
     );
   }
 
-  getSandbox(projectId: string): SandboxRow | null {
-    const r = this.#get('SELECT * FROM sandboxes WHERE project_id = :projectId', { projectId });
+  /** The project's own sandbox, or with `slot` (1 and up) one of its slots. */
+  getSandbox(projectId: string, slot = 0): SandboxRow | null {
+    const r = this.#get('SELECT * FROM sandboxes WHERE project_id = :projectId AND slot = :slot', { projectId, slot });
     return r ? toSandbox(r) : null;
+  }
+
+  /** The project's own sandbox and its slots, in that order. */
+  listSandboxes(projectId: string): SandboxRow[] {
+    return this.#all('SELECT * FROM sandboxes WHERE project_id = :projectId ORDER BY slot', { projectId }).map(toSandbox);
+  }
+
+  deleteSandbox(projectId: string, slot: number): void {
+    this.#run('DELETE FROM sandboxes WHERE project_id = :projectId AND slot = :slot', { projectId, slot });
   }
 
   getSandboxByTokenHash(hash: string): SandboxRow | null {
     const r = this.#get('SELECT * FROM sandboxes WHERE gateway_token_hash = :hash', { hash });
     return r ? toSandbox(r) : null;
+  }
+
+  // ---------------------------------------------------------------- walks
+
+  /** What the project remembers of its walks (see `ProjectWalks`), or null before its first full walk. */
+  getWalks(projectId: string): ProjectWalks | null {
+    const r = this.#get('SELECT * FROM project_walks WHERE project_id = :projectId', { projectId });
+    return r ? { trails: JSON.parse(str(r.trails_json)) as Trails, ledger: JSON.parse(str(r.ledger_json)) as ScreenLedger, commit: nstr(r.commit_sha), updatedAt: num(r.updated_at) } : null;
+  }
+
+  putWalks(projectId: string, walks: ProjectWalks): void {
+    this.#run(
+      `INSERT INTO project_walks (project_id, trails_json, ledger_json, commit_sha, updated_at) VALUES (:projectId, :trails, :ledger, :commit, :updatedAt)
+       ON CONFLICT (project_id) DO UPDATE SET trails_json = excluded.trails_json, ledger_json = excluded.ledger_json, commit_sha = excluded.commit_sha, updated_at = excluded.updated_at`,
+      { projectId, trails: JSON.stringify(walks.trails), ledger: JSON.stringify(walks.ledger), commit: walks.commit, updatedAt: walks.updatedAt },
+    );
   }
 
   // ---------------------------------------------------------------- tasks
@@ -364,15 +405,21 @@ export class Store {
   }
 
   /**
-   * Atomically claims the oldest queued task whose project has nothing in flight. One task per project at a time:
-   * the workspace volume is shared mutable state.
+   * Atomically claims the oldest queued task that has somewhere to run. A project's own workspace is one working
+   * tree, so one heavy task of a project at a time. A light task (`LIGHT_KINDS`, off the studio's own repository)
+   * runs in a slot, a clone of the project in a container of its own: as many at a time as the project has
+   * slots, beside the heavy task and not in its way. With no slots every task is heavy.
    */
-  claimNextTask(now: number): Task | null {
+  claimNextTask(now: number, slots = 0): Task | null {
     return this.tx(() => {
+      const light = (alias: string): string => (slots > 0 ? `(${alias}.kind IN (${LIGHT_KINDS.map((kind) => `'${kind}'`).join(', ')}) AND ${alias}.project_id <> '${CORE_PROJECT_ID}')` : '(0)');
+      const active = `('running', 'awaiting_approval', 'awaiting_plan_review')`;
       const r = this.#get(
-        `SELECT id FROM tasks t WHERE state = 'queued'
-           AND NOT EXISTS (SELECT 1 FROM tasks r WHERE r.project_id = t.project_id AND r.state IN ('running', 'awaiting_approval', 'awaiting_plan_review'))
-         ORDER BY created_at LIMIT 1`,
+        `SELECT id FROM tasks t WHERE state = 'queued' AND (
+           (${light('t')} AND (SELECT COUNT(*) FROM tasks r WHERE r.project_id = t.project_id AND ${light('r')} AND r.state IN ${active}) < :slots)
+           OR (NOT ${light('t')} AND NOT EXISTS (SELECT 1 FROM tasks r WHERE r.project_id = t.project_id AND NOT ${light('r')} AND r.state IN ${active}))
+         ) ORDER BY created_at LIMIT 1`,
+        { slots },
       );
       if (!r) return null;
       this.#run(`UPDATE tasks SET state = 'running', attempt = attempt + 1, started_at = COALESCE(started_at, :now) WHERE id = :id`, { id: str(r.id), now });
@@ -417,6 +464,8 @@ export class Store {
       summary: string;
       error: string | null;
       finishedAt: number;
+      slot: number | null;
+      landedCommit: string | null;
     }>,
   ): Task {
     const columns: Record<string, string> = {
@@ -430,6 +479,8 @@ export class Store {
       summary: 'summary',
       error: 'error',
       finishedAt: 'finished_at',
+      slot: 'slot',
+      landedCommit: 'landed_commit',
     };
     const sets: string[] = [];
     const params: Row = { id };
@@ -1368,6 +1419,7 @@ function toProject(r: Row): Project {
 function toSandbox(r: Row): SandboxRow {
   return {
     projectId: str(r.project_id),
+    slot: num(r.slot),
     container: str(r.container),
     volume: str(r.volume),
     network: str(r.network),
@@ -1407,6 +1459,8 @@ function toTask(r: Row): Task {
     parkCount: num(r.park_count),
     reviewPlan: num(r.review_plan) === 1,
     milestone: nnum(r.milestone),
+    slot: nnum(r.slot),
+    landedCommit: nstr(r.landed_commit),
     createdAt: num(r.created_at),
     startedAt: nnum(r.started_at),
     finishedAt: nnum(r.finished_at),

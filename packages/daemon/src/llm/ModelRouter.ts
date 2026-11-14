@@ -64,7 +64,10 @@ export class ModelRouter {
    * asked for Codex should not find out afterwards that something else did the work, and the same goes for the
    * model and the effort they asked of it. What they left unsaid comes from the routing table's entry for that engine.
    */
-  async route(kind: TaskKind, pick: EnginePick | null = null): Promise<RouteDecision> {
+  async route(asked: TaskKind, pick: EnginePick | null = null): Promise<RouteDecision> {
+    // A full check is the studio's own walk: no engine works on it, and asking for one is a mistake in the caller.
+    if (asked === 'check') throw new UnavailableError('a full check is not routed to an engine');
+    const kind = asked;
     if (pick) {
       const pref = pick.engine;
       const engine = this.#engines.get(pref);

@@ -103,7 +103,7 @@ export const EventBody = z.discriminatedUnion('type', [
      * `anchor`: the anchor table a design task owes before code. `build`: the production build, measured for the ledger.
      * `screens`: the screen spec a design task owes. `flow`: the core flow of that spec, walked on the mock-ups.
      */
-    gate: z.enum(['compiler', 'smoke', 'anchor', 'build', 'screens', 'flow', 'directions', 'scenarios', 'coverage', 'looks']),
+    gate: z.enum(['compiler', 'smoke', 'anchor', 'build', 'screens', 'flow', 'directions', 'scenarios', 'coverage', 'looks', 'scope']),
     /** What ran: the command line for the compiler gate, the routes for the smoke gate. */
     name: z.string(),
     passed: z.boolean(),
@@ -145,6 +145,8 @@ export const EventBody = z.discriminatedUnion('type', [
   z.object({ type: z.literal('kirby.proposal'), proposalId: z.string(), title: z.string(), state: ProposalState }),
   z.object({ type: z.literal('sandbox.state'), state: SandboxState }),
   z.object({ type: z.literal('git.merged'), branch: z.string(), into: z.string(), commit: z.string() }),
+  /** A task's work was put on the integration branch by the studio itself, as this commit: a small edit that passed its checks. */
+  z.object({ type: z.literal('task.landed'), commit: z.string(), into: z.string() }),
   /** The owner sent a message to a running task. It is delivered at the engine's next turn, without stopping it. */
   z.object({ type: z.literal('steer.queued'), text: z.string() }),
   z.object({ type: z.literal('steer.delivered'), count: z.number().int() }),

@@ -238,7 +238,7 @@ export async function createDaemon(config: Config, log: PinoLogger, overrides: D
   const harness = new Harness({ config, store, events, policy, sandboxes, provisioner, router, claude, evals, compiler, smoke, scenarios, lessons, reflection, refkit, reviewer, ledger, build: new BuildMeter({ sandboxes }), mockups, selfHosting, planGate, clock, log: log.child({ mod: 'harness' }) });
   // The roadmap runner is made further down, after the studio it submits through: the queue tells it of each task that has wholly ended.
   const settled: { tell: ((taskId: string) => void) | null } = { tell: null };
-  const queue = new TaskQueue({ store, events, execute: (task, signal) => harness.run(task, signal), clock, log: log.child({ mod: 'queue' }), onSettled: (taskId) => settled.tell?.(taskId) });
+  const queue = new TaskQueue({ store, events, execute: (task, signal) => harness.run(task, signal), concurrency: config.queue.concurrency, slots: config.slots.perProject, clock, log: log.child({ mod: 'queue' }), onSettled: (taskId) => settled.tell?.(taskId) });
   // Tasks suspended for want of a design reviewer are queued again when one answers.
   const resumer = new ReviewResumer({ store, vision, queue, log: log.child({ mod: 'resumer' }) });
   const kirby = new KirbyEngine({ config, store, events, sandboxes, claude, clock, log: log.child({ mod: 'kirby' }) });

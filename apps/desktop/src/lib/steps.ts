@@ -232,7 +232,7 @@ function refresh(group: Building): void {
 const laneName = (lane: string): string => (/^[abc]$/.test(lane) ? `${lane.toUpperCase()}안` : lane);
 
 /** A gate of the harness, as the owner reads its name. */
-export const gateLabel = { compiler: '컴파일', smoke: '스모크 테스트', anchor: '고정표', build: '프로덕션 빌드', screens: '화면 명세', flow: '시안에서 핵심 흐름 걷기', directions: '시안 방향표', scenarios: '시나리오 걷기', coverage: '기능마다 걷는 시나리오', looks: '걸은 화면 측정' } as const;
+export const gateLabel = { compiler: '컴파일', smoke: '스모크 테스트', anchor: '고정표', build: '프로덕션 빌드', screens: '화면 명세', flow: '시안에서 핵심 흐름 걷기', directions: '시안 방향표', scenarios: '시나리오 걷기', coverage: '기능마다 걷는 시나리오', looks: '걸은 화면 측정', scope: '검사 범위' } as const;
 
 /**
  * A task's event stream as what the owner reads: a short list of steps with their outcome, the agent's closing

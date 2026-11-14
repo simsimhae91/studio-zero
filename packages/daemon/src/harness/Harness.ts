@@ -1382,6 +1382,6 @@ export function repairMessage(failures: readonly Failure[]): string {
 }
 
 function commitSubject(task: Task): string {
-  const prefix = { build: 'feat', refactor: 'refactor', inline_edit: 'fix', ideate: 'docs', kirby_materialize: 'feat' }[task.kind];
+  const prefix = { build: 'feat', refactor: 'refactor', inline_edit: 'fix', ideate: 'docs', kirby_materialize: 'feat', check: 'chore' }[task.kind];
   return `${prefix}: ${task.prompt.split('\n')[0]!.replace(/\s+/g, ' ').slice(0, 68)}\n\nStudio Zero task ${task.id}`;
 }

@@ -8,8 +8,9 @@ const MAX_ATTEMPTS = 2;
 
 /**
  * Durable task queue on SQLite. Tasks survive restarts: anything that was mid-flight when the daemon stopped is
- * re-queued once on boot (and failed if it had already been retried). At most one task runs per project,
- * because a project's workspace is a single working tree.
+ * re-queued once on boot (and failed if it had already been retried). At most one heavy task runs per project,
+ * because a project's workspace is a single working tree; small edits and full checks run beside it in the
+ * project's slots, as many as it has (see `Store.claimNextTask`).
  *
  * A suspended task is not in flight: it holds no slot and does not block its project. `resume` queues it again.
  *
@@ -26,6 +27,7 @@ export class TaskQueue {
   readonly #events: EventLog;
   readonly #execute: (task: Task, signal: AbortSignal) => Promise<void>;
   readonly #concurrency: number;
+  readonly #slots: number;
   readonly #clock: Clock;
   readonly #log: Logger;
   readonly #running = new Map<string, { abort: AbortController; done: Promise<void> }>();
@@ -37,12 +39,13 @@ export class TaskQueue {
    * `onSettled` is told when a task's run has wholly ended, whatever became of it: after its verdict, its receipt
    * and its reflection, with its workspace no longer in use. A task's `succeeded` event is earlier than that.
    */
-  constructor(deps: { store: Store; events: EventLog; execute: (task: Task, signal: AbortSignal) => Promise<void>; concurrency?: number; clock: Clock; log: Logger; onSettled?: (taskId: string) => void }) {
+  constructor(deps: { store: Store; events: EventLog; execute: (task: Task, signal: AbortSignal) => Promise<void>; concurrency?: number; /** How many slots a project has, for light tasks (see `Store.claimNextTask`). */ slots?: number; clock: Clock; log: Logger; onSettled?: (taskId: string) => void }) {
     this.#onSettled = deps.onSettled ?? null;
     this.#store = deps.store;
     this.#events = deps.events;
     this.#execute = deps.execute;
     this.#concurrency = deps.concurrency ?? 2;
+    this.#slots = deps.slots ?? 0;
     this.#clock = deps.clock;
     this.#log = deps.log;
   }
@@ -96,7 +99,7 @@ export class TaskQueue {
   /** Call after enqueueing or when a slot may have freed up. Cheap and idempotent. */
   pump(): void {
     while (this.#accepting && this.#running.size < this.#concurrency) {
-      const task = this.#store.claimNextTask(this.#clock());
+      const task = this.#store.claimNextTask(this.#clock(), this.#slots);
       if (!task) return;
       const abort = new AbortController();
       const done = this.#execute(task, abort.signal)

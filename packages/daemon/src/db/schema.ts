@@ -485,6 +485,35 @@ const migrations: string[] = [
   ) STRICT;
   ALTER TABLE tasks ADD COLUMN milestone INTEGER;
   `,
+  // 19: slots. A project has clones of itself in containers of their own, where small edits run beside its
+  // heavy task: a sandbox row for each (slot 0 is the project's own), the slot a task ran in and the commit it
+  // put on main, and what the project remembers of its walks (where they went, what each screen was found breaking).
+  `
+  CREATE TABLE sandboxes_19 (
+    project_id          TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    slot                INTEGER NOT NULL DEFAULT 0,
+    container           TEXT NOT NULL UNIQUE,
+    volume              TEXT NOT NULL,
+    network             TEXT NOT NULL,
+    image               TEXT NOT NULL,
+    gateway_token_hash  TEXT NOT NULL UNIQUE,
+    created_at          INTEGER NOT NULL,
+    PRIMARY KEY (project_id, slot)
+  ) STRICT;
+  INSERT INTO sandboxes_19 (project_id, slot, container, volume, network, image, gateway_token_hash, created_at)
+    SELECT project_id, 0, container, volume, network, image, gateway_token_hash, created_at FROM sandboxes;
+  DROP TABLE sandboxes;
+  ALTER TABLE sandboxes_19 RENAME TO sandboxes;
+  ALTER TABLE tasks ADD COLUMN slot INTEGER;
+  ALTER TABLE tasks ADD COLUMN landed_commit TEXT;
+  CREATE TABLE project_walks (
+    project_id   TEXT PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,
+    trails_json  TEXT NOT NULL,
+    ledger_json  TEXT NOT NULL,
+    commit_sha   TEXT,
+    updated_at   INTEGER NOT NULL
+  ) STRICT;
+  `,
 ];
 
 /** Brings the database to the latest version, or to `target` (a test replaying one migration on rows it put in). */
