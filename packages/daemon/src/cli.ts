@@ -13,7 +13,9 @@ const USAGE = `sz — Studio Zero command line
   sz approvals                                                               list pending approvals
   sz approve <approval-id> | sz deny <approval-id>
   sz merge <project-slug> <branch>
-  sz kirby <project-slug> <https://github.com/owner/repo>
+  sz kirby <project-slug> <https://github.com/owner/repo>                     read a repository for what it does and propose what this project lacks
+  sz kirby list <project-slug>                                               the proposals, newest first
+  sz kirby build <proposal-id> | sz kirby reject <proposal-id>               build a proposal on its own branch (a draft build), or put it aside
   sz vault list | sz vault set <credential-id> | sz vault rm <credential-id>   (set reads the secret from stdin)
                                                                              Kakao and Google sign-in: login/{kakao,google}/client-{id,secret} (how to get them: docs/guides/studio-zero/shared-login-apps.html)
   sz token                                                                   print the client token, to pair another machine
@@ -200,6 +202,23 @@ async function main(argv: string[]): Promise<number> {
         return 0;
       }
       case 'kirby': {
+        if (args[0] === 'list') {
+          const project = await projectBySlug(client, args[1]);
+          const { proposals } = await client.call('kirby.proposals', { projectId: project.id });
+          for (const card of [...proposals].sort((x, y) => y.createdAt - x.createdAt)) process.stdout.write(`${card.id}  ${card.state.padEnd(13)} risk ${card.risk.padEnd(6)} ${card.title}\n${' '.repeat(26)}from ${card.sourceRepo.replace('https://', '')} (${card.practiceId})\n`);
+          if (proposals.length === 0) process.stdout.write('no proposals yet\n');
+          return 0;
+        }
+        if (args[0] === 'build') {
+          const task = await client.call('kirby.materialize', { proposalId: args[1] ?? '' });
+          process.stdout.write(`building on ${task.branch} as task ${task.id}\n`);
+          return 0;
+        }
+        if (args[0] === 'reject') {
+          const card = await client.call('kirby.reject', { proposalId: args[1] ?? '' });
+          process.stdout.write(`${card.id} is ${card.state}\n`);
+          return 0;
+        }
         const project = await projectBySlug(client, args[0]);
         const { ingestId } = await client.call('kirby.ingest', { projectId: project.id, repoUrl: args[1] ?? '' });
         process.stdout.write(`ingest ${ingestId} started; proposals arrive as events (sz events ${project.slug})\n`);
