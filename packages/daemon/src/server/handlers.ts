@@ -148,7 +148,7 @@ export function createHandlers(studio: Studio, deps: HandlerDeps): Handlers {
 
     'kirby.ingest': (p) => studio.kirbyIngest(OWNER, p.projectId, p.repoUrl, p.maxProposals ?? 3),
     'kirby.proposals': (p) => ({ proposals: studio.kirbyProposals(p.projectId) }),
-    'kirby.materialize': (p) => studio.kirbyMaterialize(OWNER, p.proposalId, 'desktop'),
+    'kirby.materialize': (p) => studio.kirbyMaterialize(OWNER, p.proposalId, 'desktop', { reviewPlan: p.reviewPlan }),
     'kirby.reject': (p) => studio.kirbyReject(p.proposalId),
 
     'scratch.create': (p) => studio.createScratchpad(OWNER, p, 'desktop'),

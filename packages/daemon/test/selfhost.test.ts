@@ -248,7 +248,8 @@ test('what is taken from another repository is built into the studio as a planne
     store.insertIngest({ id: 'kig_core0001', projectId: CORE_PROJECT_ID, repoUrl: 'https://github.com/acme/widgets', createdAt: 1 });
     const card: ProposalCard = { id: 'prp_core0001', projectId: CORE_PROJECT_ID, ingestId: 'kig_core0001', sourceRepo: 'https://github.com/acme/widgets', sourceCommit: 'a'.repeat(40), practiceId: 'schedules', title: 'Add owner-set schedules', rationale: 'It runs work on a timer.', evidence: [], plannedChanges: [], risk: 'medium', estimatedImpact: '', state: 'proposed', branch: null, taskId: null, diff: null, diffStat: null, measured: null, createdAt: 1 };
     store.insertProposal(card, 'Add the table, then the scheduler.');
-    const task = await studio.kirbyMaterialize(OWNER, card.id, 'desktop');
+    const task = await studio.kirbyMaterialize(OWNER, card.id, 'desktop', { reviewPlan: true });
+    assert.equal(task.reviewPlan, true, 'and, planned, its plan can be asked for before any code');
     assert.deepEqual([task.kind, task.track], ['kirby_materialize', 'full'], 'a product takes a card as a draft; the studio\'s own code is planned first and held to all of its gates');
     assert.match(task.prompt, /^Add owner-set schedules\n\nBuild this into the project\. /, 'the card\'s title leads the request');
     assert.equal(featureBranch(task), `feature/add-owner-set-schedules-${task.id.slice(-6).toLowerCase()}`, 'so the branch that reaches the checkout is named by what was built');

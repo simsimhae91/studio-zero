@@ -24,7 +24,7 @@ const USAGE = `sz — Studio Zero command line
   sz merge <project-slug> <branch>                                           on studio-zero-core: a task's exported feature/ branch, into this checkout (fast-forward only)
   sz kirby <project-slug> <https://github.com/owner/repo>                     read a repository for what it does and propose what this project lacks
   sz kirby list <project-slug>                                               the proposals, newest first
-  sz kirby build <proposal-id> | sz kirby reject <proposal-id>               build a proposal on its own branch (a draft build), or put it aside
+  sz kirby build <proposal-id> [--plan] | sz kirby reject <proposal-id>      build a proposal on its own branch, or put it aside (--plan, on studio-zero-core: wait for the plan to be approved first)
   sz vault list | sz vault set <credential-id> | sz vault rm <credential-id>   (set reads the secret from stdin)
                                                                              Kakao and Google sign-in: login/{kakao,google}/client-{id,secret} (how to get them: docs/guides/studio-zero/shared-login-apps.html)
   sz token                                                                   print the client token, to pair another machine
@@ -316,8 +316,9 @@ async function main(argv: string[]): Promise<number> {
           return 0;
         }
         if (args[0] === 'build') {
-          const task = await client.call('kirby.materialize', { proposalId: args[1] ?? '' });
-          process.stdout.write(`building on ${task.branch} as task ${task.id}\n`);
+          const reviewPlan = args.includes('--plan');
+          const task = await client.call('kirby.materialize', { proposalId: args.slice(1).find((word) => word !== '--plan') ?? '', ...(reviewPlan ? { reviewPlan: true } : {}) });
+          process.stdout.write(`building on ${task.branch} as task ${task.id}${task.reviewPlan ? `: it stops for its plan to be approved (sz plan ${task.id})` : reviewPlan ? ' (--plan was not taken: this build is a draft and drafts no plan)' : ''}\n`);
           return 0;
         }
         if (args[0] === 'reject') {

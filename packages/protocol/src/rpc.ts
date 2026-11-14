@@ -280,7 +280,8 @@ export const methods = {
   },
   'kirby.proposals': { params: z.object({ projectId: z.string() }), result: z.object({ proposals: z.array(ProposalCard) }) },
   /** Implements a proposal on its own branch, runs the regression evals and attaches the real diff and measured deltas. */
-  'kirby.materialize': { params: z.object({ proposalId: z.string() }), result: Task },
+  /** `reviewPlan`: stop after planning until the owner approves the plan (`plans.resolve`). Only where the build plans: the studio's own repository. */
+  'kirby.materialize': { params: z.object({ proposalId: z.string(), reviewPlan: z.boolean().optional() }), result: Task },
   'kirby.reject': { params: z.object({ proposalId: z.string() }), result: ProposalCard },
 
   // Scratchpad: thinking, research and drafting without a sandbox. Promotion turns one into a project or a document.
