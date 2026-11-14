@@ -1158,14 +1158,15 @@ function DesignDecision({ task, mockups, onFile, onBuild }: { task: Task; mockup
                   {m.flow ? <Measured {...flowLine(m.flow)} /> : null}
                   {m.measures ? <Measured {...measuresLine(m.measures)} /> : null}
                 </button>
-                <button type="button" onClick={() => desk.view(m.file)} className="flex min-h-9 pointer-coarse:min-h-11 items-center gap-2 border-t border-border px-3 text-sm text-fg-muted hover:bg-sunken">
+                {/* Two words each: a card is half a phone's width at its narrowest, and a label there has one line (T7). */}
+                <button type="button" title="프리뷰에 띄워 직접 눌러 보기" onClick={() => desk.view(m.file)} className="flex min-h-9 pointer-coarse:min-h-11 items-center gap-2 border-t border-border px-3 text-sm text-fg-muted hover:bg-sunken">
                   <Maximize2 className="size-4 shrink-0" aria-hidden />
-                  프리뷰에서 눌러 보기
+                  눌러 보기
                 </button>
                 {m.flow?.filmArtifactId ? (
-                  <button type="button" onClick={() => setFilm(m)} className="flex min-h-9 pointer-coarse:min-h-11 items-center gap-2 border-t border-border px-3 text-sm text-fg-muted hover:bg-sunken">
+                  <button type="button" title="QA 브라우저가 이 시안을 눌러 본 장면" onClick={() => setFilm(m)} className="flex min-h-9 pointer-coarse:min-h-11 items-center gap-2 border-t border-border px-3 text-sm text-fg-muted hover:bg-sunken">
                     <Film className="size-4 shrink-0" aria-hidden />
-                    브라우저가 눌러 본 장면
+                    눌러 본 장면
                   </button>
                 ) : null}
               </div>
