@@ -426,8 +426,12 @@ export class OrbStackManager {
     if (res.exitCode !== 0) throw new SandboxError(`cannot check out ${branch}`, lastLine(res.stderr));
   }
 
-  async commitAll(project: Project, message: string): Promise<string> {
-    const res = await this.exec(project, commitAllScript({ workspace: WORKSPACE_DIR, message }), { timeoutSec: 120 });
+  /**
+   * Commits what is in the working tree. With `only`, commits what is under those paths and leaves the rest
+   * as it lies: for a caller that wrote a few files on a branch whose other contents are not its to judge.
+   */
+  async commitAll(project: Project, message: string, only?: readonly string[]): Promise<string> {
+    const res = await this.exec(project, commitAllScript({ workspace: WORKSPACE_DIR, message, ...(only ? { only } : {}) }), { timeoutSec: 120 });
     if (res.exitCode !== 0) throw new SandboxError('commit failed', lastLine(res.stderr));
     return res.stdout.trim().split('\n').at(-1) ?? '';
   }

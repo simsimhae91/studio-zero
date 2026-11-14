@@ -1,10 +1,11 @@
 // Where a project's colours come from. A new project's theme is a placeholder that says so; an engine replaces
 // it through one tool, choosing from the subject, and whatever it chooses comes out legible.
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { THEME_GENERATOR, faceFiles, faces, seedFromName } from '@studio-zero/design';
+import { AX_DIR } from '../src/harness/axKit.ts';
 import { FONT_DIR, fontFile } from '../src/harness/fontKit.ts';
 import type { Project } from '@studio-zero/protocol';
 import { PLACEHOLDER_SOURCE, THEME_SEED_FILE, ThemeChoice, chosenTheme, faceHome, writeProjectTheme } from '../src/harness/themeSeed.ts';
@@ -136,6 +137,21 @@ test('a project from before the faces were fixed has its sheet regenerated from 
     await provisioner.ensure(project);
     assert.equal(await head(), regenerated, 'nothing more was committed');
     assert.equal(await read(THEME_FILE), css);
+
+    // What the studio adds to a branch is committed alone. Here the branch is one the product was not built
+    // on: no .gitignore, and what an engine installed still lying in the folder (as after a task that failed).
+    mkdirSync(join(d.workspace, 'node_modules/left-pad'), { recursive: true });
+    writeFileSync(join(d.workspace, 'node_modules/left-pad/index.js'), 'module.exports = 1;\n');
+    writeFileSync(join(d.workspace, 'notes.txt'), 'the engine was in the middle of this\n');
+    await sandboxes.exec(project, `git rm -rq ${AX_DIR} && git -c user.name=t -c user.email=t@t commit -qm 'test: a branch from before the kit'`, { timeoutSec: 20 });
+    await provisioner.ensure(project);
+    assert.equal(await subject(), 'chore: add the Studio Zero AX kit');
+    const tracked = (await sandboxes.exec(project, 'git ls-files', { timeoutSec: 20 })).stdout.split('\n');
+    assert.ok(tracked.includes(`${AX_DIR}/index.ts`), 'the kit is in');
+    assert.ok(!tracked.some((path) => path.startsWith('node_modules/') || path === 'notes.txt'), 'and nothing the studio did not write');
+    assert.equal((await sandboxes.exec(project, 'git status --porcelain', { timeoutSec: 20 })).stdout, '?? node_modules/\n?? notes.txt\n', 'which lies where it lay');
+    rmSync(join(d.workspace, 'node_modules'), { recursive: true });
+    rmSync(join(d.workspace, 'notes.txt'));
 
     // What cannot be regenerated is left as it was: a sheet with no seed beside it, and a seed that is not one.
     for (const stored of [null, '{ "hue": "orange" }\n', 'not json']) {

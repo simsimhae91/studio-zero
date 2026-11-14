@@ -1,5 +1,5 @@
 import { THEME_GENERATOR, themeGeneratorOf } from '@studio-zero/design';
-import { THEME_SEED_FILE, placeholderTheme, regeneratedTheme, writeProjectTheme } from './themeSeed.ts';
+import { THEME_SEED_FILE, faceHome, placeholderTheme, regeneratedTheme, writeProjectTheme } from './themeSeed.ts';
 import type { Project, SandboxInfo } from '@studio-zero/protocol';
 import { EXTERNAL_ENV_FILE, type ExternalApis } from '../app/ExternalApis.ts';
 import type { ProjectArms } from '../arms/ProjectArms.ts';
@@ -10,6 +10,9 @@ import { MOBILE_KIT_DIR, MOBILE_KIT_ENTRY, mobileKitFiles } from './mobileKit.ts
 import { PROJECT_FILE, defaultProjectFile } from './projectFile.ts';
 import { THEME_FILE } from './prompts.ts';
 import type { SelfHosting } from './SelfHosting.ts';
+
+/** Where everything the studio writes into a project lives, but for a phone project's face, which its web target serves from elsewhere. */
+const STUDIO_DIR = '.studio-zero';
 
 /**
  * Brings a project to the state every task assumes: sandbox running, /workspace a git repository, and the
@@ -106,7 +109,11 @@ export class WorkspaceProvisioner {
       if (backend) added.push(...backend.added);
       if (added.length > 0) {
         const list = added.length === 1 ? added[0] : `${added.slice(0, -1).join(', ')} and ${added.at(-1)}`;
-        await this.#sandboxes.commitAll(project, has.has('theme') ? `chore: add the Studio Zero ${list}` : `chore: add Studio Zero ${list}`);
+        // Only what was written here. The branch that is checked out may be one the product was never built
+        // on: after a task fails the workspace is back on the integration branch, where the engine's
+        // .gitignore does not exist and its node_modules still lie. A commit of everything took 89,960 of
+        // those files into a project's main branch (2026-11-14).
+        await this.#sandboxes.commitAll(project, has.has('theme') ? `chore: add the Studio Zero ${list}` : `chore: add Studio Zero ${list}`, [STUDIO_DIR, faceHome(project.template).dir]);
       }
       return info;
     });

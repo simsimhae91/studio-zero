@@ -99,10 +99,12 @@ git checkout -q -B ${shq(p.branch)}`;
 }
 
 /** Commits everything on the current branch. Prints the resulting HEAD; a clean tree is not an error. */
-export function commitAllScript(p: { workspace: string; message: string }): string {
+export function commitAllScript(p: { workspace: string; message: string; only?: readonly string[] }): string {
+  // `only` names what the caller wrote. A path nothing matches (never written, never tracked) is passed over.
+  const stage = p.only ? p.only.map((path) => `git add -A -- ${shq(path)} 2>/dev/null || true`).join('\n') : 'git add -A .';
   return `set -eu
 cd ${shq(p.workspace)}
-git add -A .
+${stage}
 git diff --cached --quiet || git ${GIT_ID} commit -q -m ${shq(p.message)}
 git rev-parse HEAD`;
 }
