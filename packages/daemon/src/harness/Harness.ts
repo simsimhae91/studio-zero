@@ -148,6 +148,9 @@ export class ShutdownSignal extends Error {
  * committed on its own branch, and a failed task puts the workspace back on the integration branch.
  */
 /** What a task's screen spec is held to: whether it must say how the product works, and whether the short plan of a draft will do. */
+/** How many rounds that only corrected the screen plan are not charged to a task's corrections. */
+const FREE_PLAN_ROUNDS = 3;
+
 interface SpecDemand {
   works: boolean;
   draft: boolean;
@@ -460,6 +463,7 @@ export class Harness {
       /** Verifies, and has the engine repair what failed, until a round is clean or the corrections run out. */
       const verifyUntilClean = async (): Promise<void> => {
         const corrections = this.#config.budgets.verifyRounds;
+        let planRounds = 0;
         for (let used = 0; ; ) {
           round += 1;
           phase('verify', round);
@@ -483,8 +487,16 @@ export class Harness {
           // What was measured on a milestone's walked screens is sent back once and never again (`#walkedScreens`),
           // so it cannot loop, and it is not charged to the corrections a product that does not yet work needs.
           const looksOnly = failures.every((f) => f.name === 'looks');
-          if (!looksOnly && used >= corrections) throw new Error(`verification still failing after ${corrections} corrections: ${failures.map((f) => f.name).join(', ')}`);
-          if (!looksOnly) used += 1;
+          // A plan that does not hold yet (its shape, a feature with no scenario) is a document to correct: a
+          // turn of seconds that says nothing about whether the product works. The first real build to a map
+          // spent all three corrections on it and failed at the first check of the product itself. A few such
+          // rounds are not charged; past them it is charged like anything else, so it cannot go on for ever.
+          // (A design task's documents are its work, and it is held to them as before.)
+          const planOnly = !ideation && failures.every((f) => f.name === 'screen-spec' || f.name === 'coverage') && planRounds < FREE_PLAN_ROUNDS;
+          if (planOnly) planRounds += 1;
+          const free = looksOnly || planOnly;
+          if (!free && used >= corrections) throw new Error(`verification still failing after ${corrections} corrections: ${failures.map((f) => f.name).join(', ')}`);
+          if (!free) used += 1;
 
           phase('execute', round + 1);
           result = await send(repairMessage(failures));

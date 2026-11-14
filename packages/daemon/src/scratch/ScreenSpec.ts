@@ -16,6 +16,12 @@ const MAX_SCENARIOS = 6;
 /** In a product built to a map there is a scenario for each feature, and a map has many. */
 const MAX_SCENARIOS_WIDE = 30;
 const MAX_SCREENS_WIDE = 90;
+/**
+ * How many marked presses (fields included) the studio carries out in one step of a scenario before it stops
+ * and looks for the step's outcome. A step is one thing a person gets done; a form of five pages is several.
+ * Builders are told this number, and a step that runs past it is told so.
+ */
+export const MAX_STEP_PRESSES = 24;
 
 /**
  * Whether this is the plan of a product built to a product map: its scenarios say which feature each walks
@@ -217,6 +223,58 @@ export function checkWorks(spec: ScreenSpec): string[] {
     : ['The spec says what the screens are and not how the product works. Add "roles" (who uses it), "entry" (how a person signs up, signs in and leaves; or "noAccounts" with the reason, for a product that keeps nothing), "scenarios" (what each role does from arriving to done, as steps a browser can carry out) and "data" (each table and who may read it).'];
 }
 
+const SHAPES: [RegExp, string][] = [
+  [/^screens\.\d+\.elements\b/, 'Each element is { "name", "rule", "goesTo" }; a screen with none listed has "elements": [].'],
+  [/^screens\.\d+\.states\b/, 'Each state is { "name", "shows" }; a screen with none listed has "states": [].'],
+  [/^screens\.\d+\.exceptions\b/, '"exceptions" is a list of sentences.'],
+  [/^screens\b/, 'Each screen is { "id", "name", "purpose", "entry": [], "elements": [], "states": [], "exceptions": [] }.'],
+  [/^events\b/, 'Each event is { "name", "when", "measures" }; a plan that records none has "events": [].'],
+  [/^tasks\b/, 'Each task is { "id", "goal", "outcome", "screen" }.'],
+  [/^scenarios\.\d+\.steps\b/, 'Each step is { "id", "screen", "does", "saves", "outcome" }.'],
+  [/^scenarios\b/, 'Each scenario is { "id", "role", "feature", "after", "steps" }.'],
+  [/^roles\b/, 'Each role is { "id", "name", "does" }.'],
+  [/^data\b/, 'Each table is { "table", "holds", "readers" }.'],
+  [/^entry\b/, '"entry" is { "signUp", "signIn", "signOut", "sessionEnded", "forgot", "leave" }, or null with "noAccounts".'],
+];
+
+/** What is wrong with a plan's shape: each kind of slip once, with where it first is, how many more there are, and the shape that part takes. */
+function shapeProblems(issues: readonly { path: readonly PropertyKey[]; message: string }[]): string[] {
+  const kinds = new Map<string, { first: string; more: number; message: string }>();
+  for (const issue of issues) {
+    const path = issue.path.map(String);
+    const kind = `${path.map((part) => (/^\d+$/.test(part) ? '*' : part)).join('.')}|${issue.message}`;
+    const seen = kinds.get(kind);
+    if (seen) seen.more += 1;
+    else kinds.set(kind, { first: path.join('.') || 'the spec', more: 0, message: issue.message });
+  }
+  return [...kinds.values()].slice(0, 16).map(({ first, more, message }) => {
+    const shape = SHAPES.find(([at]) => at.test(first))?.[1];
+    return `${first}: ${message}${more > 0 ? ` (and ${more} more ${more === 1 ? 'place' : 'places'} like it)` : ''}${shape ? ` ${shape}` : ''}`;
+  });
+}
+
+/**
+ * A copy of what was read with the lists a model most often fills in the wrong shape (a screen's elements and
+ * states, the events) emptied wherever they do not parse, so that the rest of the plan can be checked in the
+ * same reading. Used only to find more to say; never accepted as the plan.
+ */
+function mend(value: unknown): unknown {
+  if (typeof value !== 'object' || value === null) return value;
+  const plan = structuredClone(value) as Record<string, unknown>;
+  const isObject = (item: unknown): item is Record<string, unknown> => typeof item === 'object' && item !== null && !Array.isArray(item);
+  const strings = (item: Record<string, unknown>, keys: readonly string[]): boolean => keys.every((key) => typeof item[key] === 'string');
+  if (Array.isArray(plan.events) && !plan.events.every((event) => isObject(event) && strings(event, ['name', 'when', 'measures']))) plan.events = [];
+  if (Array.isArray(plan.screens)) {
+    for (const screen of plan.screens) {
+      if (!isObject(screen)) continue;
+      if (!Array.isArray(screen.elements) || !screen.elements.every((element) => isObject(element) && strings(element, ['name', 'rule']))) screen.elements = [];
+      if (!Array.isArray(screen.states) || !screen.states.every((state) => isObject(state) && strings(state, ['name', 'shows']))) screen.states = [];
+      if (!Array.isArray(screen.exceptions) || !screen.exceptions.every((line) => typeof line === 'string')) screen.exceptions = [];
+    }
+  }
+  return plan;
+}
+
 export type ScreenSpecRead = { ok: true; spec: ScreenSpec } | { ok: false; problems: string[] };
 
 /**
@@ -234,7 +292,13 @@ export function readScreenSpec(input: unknown, opts: { works?: boolean; draft?: 
     }
   }
   const parsed = ScreenSpecShape.safeParse(value);
-  if (!parsed.success) return { ok: false, problems: parsed.error.issues.slice(0, 10).map((issue) => `${issue.path.join('.') || 'the spec'}: ${issue.message}`) };
+  if (!parsed.success) {
+    // Said in one go: each kind of wrong shape once, and what the rest of the plan owes once its shape is put
+    // right. A plan sent back three times for three kinds of slip is three engine turns that built nothing.
+    const mended = ScreenSpecShape.safeParse(mend(value));
+    const rest = mended.success ? [...checkScreenSpec(mended.data, opts), ...(opts.works ? checkWorks(mended.data) : [])] : [];
+    return { ok: false, problems: [...shapeProblems(parsed.error.issues), ...rest].slice(0, 30) };
+  }
   const problems = [...checkScreenSpec(parsed.data, opts), ...(opts.works ? checkWorks(parsed.data) : [])];
   return problems.length > 0 ? { ok: false, problems } : { ok: true, spec: parsed.data };
 }

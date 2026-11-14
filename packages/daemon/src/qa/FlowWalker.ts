@@ -150,8 +150,10 @@ function moving(): number[] {
  * sample that has to be unique (a code a person picks, a handle) carries `{run}`, which is filled with it, so
  * that the same walk can be made again tomorrow and two people in one walk can type the same code.
  */
-export async function walkFlow(page: Page, tasks: readonly FlowTask[], opts: { touch: boolean; patienceMs?: number; identity?: { email: string; password: string }; run?: string }): Promise<Walk> {
+export async function walkFlow(page: Page, tasks: readonly FlowTask[], opts: { touch: boolean; patienceMs?: number; identity?: { email: string; password: string }; run?: string; maxPresses?: number }): Promise<Walk> {
   const patience = opts.patienceMs ?? 0;
+  // A mock-up's core flow is a few presses a task. A step of a running product (a profile form) is longer, and its walker says how long.
+  const most = opts.maxPresses ?? MAX_STEPS;
   /** Looks, and keeps looking until `ready` or patience runs out. Null when the page gave nothing readable. */
   const seek = async (q: { step: string; done: string }, ready: (seen: z.infer<typeof Look>) => boolean): Promise<z.infer<typeof Look> | null> => {
     const until = Date.now() + patience;
@@ -210,7 +212,7 @@ export async function walkFlow(page: Page, tasks: readonly FlowTask[], opts: { t
     const result: FlowTaskWalk = { id: task.id, reached: false, stopped: null, stoppedAtStep: null, presses: 0, typed: 0, scrolls: 0, smallestTargetPx: null, answered: 0, responseMs: null };
     walked.push(result);
 
-    for (let step = 1; step <= MAX_STEPS; step++) {
+    for (let step = 1; step <= most; step++) {
       // After the first step, the outcome showing means the steps are over: no need to wait for one more.
       const seen = await seek(selectors(step), (s) => s.target !== null || s.done);
       if (seen === null) {
@@ -264,7 +266,7 @@ export async function walkFlow(page: Page, tasks: readonly FlowTask[], opts: { t
     }
 
     if (result.stopped === null) {
-      const after = await seek(selectors(MAX_STEPS + 1), (s) => s.done);
+      const after = await seek(selectors(most + 1), (s) => s.done);
       if (after?.done) result.reached = true;
       else Object.assign(result, { stopped: 'outcome-not-shown', stoppedAtStep: null });
     }

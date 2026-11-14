@@ -272,3 +272,39 @@ test('what a walk stands on is measured where it stands: once a screen, at the s
     await new Promise((resolve) => server.close(resolve));
   }
 });
+
+test('a step longer than a core flow\'s is carried out to its end; one past what the studio presses in a step is told to split', async (t) => {
+  const browser = await chromium.launch({ channel: 'chrome', headless: true, timeout: 15_000 }).catch(() => null);
+  if (!browser) return t.skip('headless Chrome cannot be launched here');
+  // A profile form: each press shows the next control, and the outcome comes after the last. Kept across a reload.
+  const form = (presses: number): string => `<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>프로필</title>
+<style>body{margin:0;padding:24px;font:16px/1.6 system-ui;background:#fff;color:#111}button{font:inherit;min-height:48px;padding:0 20px;border:0;border-radius:8px;background:#124;color:#fff}button:active{background:#000}</style></head>
+<body><div id="app"></div><script>
+let at=Number(localStorage.getItem('at')||'1');
+function render(){document.getElementById('app').innerHTML=at>${presses}?'<p data-done="profile">프로필을 저장했어요</p>':'<button id="next" data-step="profile:'+at+'">'+at+'번째 칸 채우기</button>';
+ const next=document.getElementById('next');if(next)next.onclick=()=>{at+=1;localStorage.setItem('at',String(at));render();};}
+render();
+</script></body></html>`;
+  const plan = ScreenSpec.parse({
+    ...COUNTER_PLAN,
+    scenarios: [{ id: 'fills', role: 'visitor', steps: [{ id: 'profile', screen: 'H-01', does: '프로필을 채운다', saves: null, outcome: '저장했다는 표시가 보인다' }] }],
+  });
+  let presses = 12;
+  const server = createServer((_req, res) => res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' }).end(form(presses)));
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  const walk = () => walkScenarios({ browser, base, phone: devices['iPhone 15 Pro']!, spec: plan, backend: null, run: 'abab7777', restart: async () => undefined });
+  try {
+    // Twelve presses: more than a mock-up's core flow is walked for (eight), and a step of a real product.
+    const long = await walk();
+    assert.deepEqual([long.walked, long.problems], [1, []]);
+    presses = 30;
+    const tooLong = await walk();
+    assert.equal(tooLong.walked, 0);
+    assert.equal(tooLong.problems.length, 1);
+    assert.match(tooLong.problems[0]!, /^Scenario "fills" \(쓰는 사람\), step 1 "profile" \(프로필을 채운다\): 24 marked controls were pressed, which is as far as the studio goes in one step, and nothing carrying data-done="profile" had come on screen\. Split it: a step is one thing a person gets done, with its own id, its own marks counted from 1 and its own outcome on screen\. Expected afterwards: 저장했다는 표시가 보인다\. The screen said: "25번째 칸 채우기"/);
+  } finally {
+    await browser.close().catch(() => undefined);
+    await new Promise((resolve) => server.close(resolve));
+  }
+});

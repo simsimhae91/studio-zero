@@ -20,6 +20,7 @@ import { renderProductMap } from '../src/product/ProductMap.ts';
 import type { ScenarioOutcome, ScenarioRunnerLike } from '../src/qa/ScenarioRunner.ts';
 import type { SmokeOutcome, SmokeRunner } from '../src/qa/SmokeTester.ts';
 import { sleep } from '../src/util/core.ts';
+import { readScreenSpec } from '../src/scratch/ScreenSpec.ts';
 import { SCREEN_SPEC } from './fixtures-mockup.ts';
 import { SOUND } from './fixtures-product.ts';
 import { quietLog, testDaemon, type TestDaemon } from './helpers.ts';
@@ -181,6 +182,66 @@ test('every feature of the milestones built so far is walked by a scenario, or i
   const typo = planWith(M1);
   typo.scenarios[1]!.feature = 'meal-logs';
   assert.deepEqual(uncovered(SOUND, typo, 0).map((line) => line.split(':')[0]), ['Feature "meal-log" (meal-log 기능), of milestone 1', 'Scenario "meal-log" is marked "feature"']);
+});
+
+test('a plan in the wrong shape is told everything in one reading: each kind of slip once, and what the rest of it owes', () => {
+  // As the first real milestone wrote it: elements and states as sentences, events without what they measure,
+  // and signing in as a step of a scenario. Sent back a kind at a time, that was three turns and every correction.
+  const plan = planWith(M1) as unknown as { screens: { elements: unknown[]; states: unknown[] }[]; events: unknown[]; scenarios: { steps: { id: string; screen: string; does: string; saves: string | null; outcome: string }[] }[] };
+  for (const screen of plan.screens) Object.assign(screen, { elements: ['가입 버튼', '이메일 칸'], states: ['이미 쓰는 이메일'] });
+  plan.events = [{ name: 'signed_up', when: '가입을 마쳤을 때' }, { name: 'logged', when: '기록했을 때' }];
+  plan.scenarios[1]!.steps.push({ id: 'sign-in', screen: 'A-01', does: '다시 로그인한다', saves: null, outcome: '기록이 그대로 보인다' });
+  const read = readScreenSpec(JSON.stringify(plan), { works: true, draft: true, wide: true });
+  assert.ok(!read.ok);
+  assert.deepEqual(read.problems, [
+    `screens.0.elements.0: Invalid input: expected object, received string (and ${plan.screens.length * 2 - 1} more places like it) Each element is { "name", "rule", "goesTo" }; a screen with none listed has "elements": [].`,
+    `screens.0.states.0: Invalid input: expected object, received string (and ${plan.screens.length - 1} more places like it) Each state is { "name", "shows" }; a screen with none listed has "states": [].`,
+    'events.0.measures: Invalid input: expected string, received undefined (and 1 more place like it) Each event is { "name", "when", "measures" }; a plan that records none has "events": [].',
+    'scenario meal-log, step 3 (sign-in): "sign-in" is not a step of a scenario. A scenario starts with a new person; signing in again is checked by the studio after it, on the screen entry.signIn names.',
+  ]);
+  // Nothing mended is ever the plan: put right by hand, the same text reads.
+  assert.ok(readScreenSpec(JSON.stringify(planWith(M1)), { works: true, draft: true, wide: true }).ok);
+  assert.deepEqual(readScreenSpec('{ not json').ok, false);
+});
+
+test('rounds that only put the screen plan right are not charged to a milestone\'s corrections', async () => {
+  const scenarios: ScenarioRunnerLike = { run: async (_project, spec): Promise<ScenarioOutcome> => ({ passed: true, scenarios: spec.scenarios.length, walked: spec.scenarios.length, problems: [], logins: [], detail: 'walked', durationMs: 1, looks: [] }) };
+  const misshapen = { ...planWith(M1), events: [{ name: 'signed_up', when: '가입을 마쳤을 때' }] };
+  const model = scripted([
+    // The plan in a wrong shape; then with a feature nobody walks; then a build that does not compile; then right.
+    [use('tu_0', 'write_file', { path: 'docs/screens.json', content: JSON.stringify(misshapen) }), use('tu_1', 'write_file', { path: 'tsconfig.json', content: '{}\n' }), use('tu_2', 'bash', { command: INSTALL_TSC }), use('tu_3', 'write_file', { path: 'src/App.tsx', content: 'export const milestone = 0;\n' })],
+    [say('1 완료')],
+    [writePlan('tu_4', ['onboarding'])],
+    [say('명세를 고쳤다')],
+    [writePlan('tu_5', M1), use('tu_5b', 'write_file', { path: 'src/App.tsx', content: 'BROKEN\n' })],
+    [say('시나리오를 넣었다')],
+    [use('tu_6', 'write_file', { path: 'src/App.tsx', content: 'export const milestone = 1;\n' })],
+    [say('컴파일을 고쳤다')],
+  ]);
+  // One correction is all this task has: it passes only if the two plan rounds cost none.
+  const d = await testDaemon({ budgets: { verifyRounds: 1 } }, { anthropic: model.sdk, smoke, scenarios });
+  await d.daemon.start();
+  const { studio, events } = d.daemon;
+  d.daemon.evals.measureDraft = async () => null;
+  try {
+    const project = studio.createProject(OWNER, { name: 'Battle', slug: 'battle', template: 'mobile-expo' });
+    await studio.planRoadmap(OWNER, project.id, '다이어트 배틀');
+    await roadmapIn(d, project.id, 'planned');
+    await studio.runRoadmap(OWNER, project.id);
+    const first = await until(() => {
+      const id = studio.getRoadmap(project.id)?.milestones[0]?.taskIds[0];
+      const task = id ? studio.getTask(id) : null;
+      return task && ['succeeded', 'failed'].includes(task.state) ? task : null;
+    }, 'the first milestone to end');
+    await studio.stopRoadmap(OWNER, project.id).catch(() => undefined);
+    assert.equal(first.state, 'succeeded', first.error ?? '');
+    const gates = bodies(events.history({ taskId: first.id }, 0, 1000), 'gate.result').map((g) => `${g.gate}:${g.passed}`);
+    assert.deepEqual(gates.filter((g) => !g.startsWith('smoke') && !g.startsWith('scenarios') && !g.startsWith('looks')), ['compiler:true', 'screens:false', 'compiler:true', 'coverage:false', 'compiler:false', 'compiler:true', 'coverage:true']);
+    const sentBack = model.sent.map((params) => String(params.messages.at(-1)!.content)).filter((text) => text.startsWith('The harness verified your work'));
+    assert.equal(sentBack.length, 3);
+  } finally {
+    await d.cleanup();
+  }
 });
 
 test('a milestone\'s request names it on its first line and carries the map\'s account of it as data', () => {

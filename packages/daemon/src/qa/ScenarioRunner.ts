@@ -8,7 +8,7 @@ import type { Config } from '../config.ts';
 import { ensureDevServer } from '../harness/devServer.ts';
 import { readProjectFile } from '../harness/projectFile.ts';
 import type { OrbStackManager } from '../sandbox/OrbStackManager.ts';
-import { SIGN_IN, SIGN_UP } from '../scratch/ScreenSpec.ts';
+import { MAX_STEP_PRESSES, SIGN_IN, SIGN_UP } from '../scratch/ScreenSpec.ts';
 import { excerpt } from '../util/core.ts';
 import { runDomChecks } from './checks.ts';
 import { PageDigest, collectDigest } from './collector.ts';
@@ -198,7 +198,9 @@ const stoppedBecause = (id: string, stopped: string | null, atStep: number | nul
       ? `the control marked ${STEP_ATTR}="${id}:${atStep}" lies under another element and cannot be pressed`
       : stopped === 'already-done'
         ? `[${DONE_ATTR}="${id}"] was on screen before anything was pressed, so there was nothing to carry out`
-        : `${presses === 0 ? 'nothing was pressed' : `${plural(presses, 'marked control')} ${presses === 1 ? 'was' : 'were'} pressed`} and nothing carrying ${DONE_ATTR}="${id}" came on screen`;
+        : presses >= MAX_STEP_PRESSES
+          ? `${presses} marked controls were pressed, which is as far as the studio goes in one step, and nothing carrying ${DONE_ATTR}="${id}" had come on screen. Split it: a step is one thing a person gets done, with its own id, its own marks counted from 1 and its own outcome on screen`
+          : `${presses === 0 ? 'nothing was pressed' : `${plural(presses, 'marked control')} ${presses === 1 ? 'was' : 'were'} pressed`} and nothing carrying ${DONE_ATTR}="${id}" came on screen`;
 
 /** A person made up for one walk. The address says which walk, so its people can be found and taken out again. */
 const person = (name: string, run: string): { email: string; password: string } => ({ email: `sz-${name}-${run}@example.com`, password: `Sz-${randomBytes(9).toString('base64url')}` });
@@ -277,7 +279,7 @@ export async function walkScenarios(deps: { browser: Browser; base: string; phon
     try {
       let through = true;
       for (const [i, step] of scenario.steps.entries()) {
-        const walk = (await walkFlow(page, [{ id: step.id, goal: step.does, outcome: step.outcome }], { touch, patienceMs: PATIENCE_MS, identity: who, run })).tasks[0];
+        const walk = (await walkFlow(page, [{ id: step.id, goal: step.does, outcome: step.outcome }], { touch, patienceMs: PATIENCE_MS, identity: who, run, maxPresses: MAX_STEP_PRESSES })).tasks[0];
         // A step may be something the person only sees. Signing up is never that.
         const reached = walk?.reached === true || (i > 0 && walk?.stopped === 'already-done');
         if (!reached) {
@@ -342,7 +344,7 @@ export async function walkScenarios(deps: { browser: Browser; base: string; phon
   const [firstId, first] = [...people.entries()][0]!;
   const again = await open();
   try {
-    const walk = (await walkFlow(again.page, [{ id: SIGN_IN, goal: 'sign in again', outcome: 'signed in' }], { touch, patienceMs: PATIENCE_MS, identity: first, run })).tasks[0];
+    const walk = (await walkFlow(again.page, [{ id: SIGN_IN, goal: 'sign in again', outcome: 'signed in' }], { touch, patienceMs: PATIENCE_MS, identity: first, run, maxPresses: MAX_STEP_PRESSES })).tasks[0];
     if (walk?.reached !== true) {
       problems.push(`Signing in again: the person who signed up in scenario "${firstId}" opened the product on a fresh browser, and ${stoppedBecause(SIGN_IN, walk?.stopped ?? 'step-missing', walk?.stoppedAtStep ?? null, walk?.presses ?? 0)}. From the signed-out screen the sign-in controls are marked ${STEP_ATTR}="${SIGN_IN}:1", ":2", ... (a link to the sign-in screen may be the first), and ${DONE_ATTR}="${SIGN_IN}" is on something only a signed-in person sees.${said(await onScreen(again.page), again.refused)}`);
     }
