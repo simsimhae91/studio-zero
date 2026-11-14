@@ -420,8 +420,8 @@ export const ScreenSpec = z.object({
       id: z.string(),
       name: z.string(),
       purpose: z.string(),
-      /** Where a person comes from: another screen's id, or something outside the product (a push, a link, opening the app). */
-      entry: z.array(z.string()),
+      /** Where a person comes from: another screen's id, or something outside the product (a push, a link, opening the app). One, written bare, reads as a list of one. */
+      entry: z.preprocess((value) => (typeof value === 'string' ? [value] : value), z.array(z.string())),
       elements: z.array(z.object({ name: z.string(), rule: z.string(), goesTo: z.string().nullable().optional() })),
       states: z.array(z.object({ name: z.string(), shows: z.string() })),
       exceptions: z.array(z.string()),

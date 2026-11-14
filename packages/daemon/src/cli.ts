@@ -8,7 +8,7 @@ const USAGE = `sz — Studio Zero command line
   sz project list
   sz project create <slug> <name> [${Template.options.join('|')}]
   sz project rm <slug> [--delete-workspace]
-  sz task <project-slug> <build|refactor|inline_edit|ideate> [--draft] <prompt...>   submit and follow a task (--draft: the fast track)
+  sz task <project-slug> <build|refactor|inline_edit|ideate> [--draft] [--from <branch>] <prompt...>   submit and follow a task (--draft: the fast track; --from: start from that branch, e.g. a failed task's)
   sz events [project-slug]                                                   follow the event stream
   sz approvals                                                               list pending approvals
   sz approve <approval-id> | sz deny <approval-id>
@@ -164,7 +164,11 @@ async function main(argv: string[]): Promise<number> {
         const project = await projectBySlug(client, args[0]);
         // --draft: the fast track (Draft 0), as the desktop client's composer offers it.
         const draft = args.includes('--draft');
-        const task = await client.call('tasks.submit', { projectId: project.id, kind: args[1] as Exclude<TaskKind, 'kirby_materialize'>, prompt: args.slice(2).filter((word) => word !== '--draft').join(' '), ...(draft ? { track: 'fast' as const } : {}) });
+        // --from <branch>: the work starts from that branch and not from the default one. For going on from a task that failed.
+        const fromAt = args.indexOf('--from');
+        const from = fromAt >= 2 ? args[fromAt + 1] : undefined;
+        const words = args.slice(2).filter((word, i) => word !== '--draft' && i + 2 !== fromAt && i + 2 !== fromAt + 1);
+        const task = await client.call('tasks.submit', { projectId: project.id, kind: args[1] as Exclude<TaskKind, 'kirby_materialize'>, prompt: words.join(' '), ...(draft ? { track: 'fast' as const } : {}), ...(from ? { baseBranch: from } : {}) });
         process.stdout.write(`task ${task.id}\n`);
         return await new Promise<number>((resolve) => {
           client.subscribe({ taskId: task.id }, (e) => {

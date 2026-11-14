@@ -62,14 +62,15 @@ export function checkScreenSpec(spec: ScreenSpec, opts: { draft?: boolean } = {}
     if (entry.length === 0) problems.push(`${at}: entry is empty: say where a person arrives from (another screen's id, or opening the app, a notification, a shared link).`);
     for (const from of entry) if (SCREEN_ID.test(from.trim()) && !ids.has(from.trim())) problems.push(`${at}: entry names ${from.trim()}, which is not a screen in this spec.`);
     if (full && screen.elements.length === 0) problems.push(`${at}: elements is empty: list what is on the screen, and for each what it does and under which rule.`);
-    screen.elements.forEach((element, i) => {
+    // A draft's plan does not owe its elements; what it gives of them anyway is not held against it.
+    (full ? screen.elements : []).forEach((element, i) => {
       const row = `${at}, element ${i + 1}${blank(element.name) ? '' : ` (${element.name.trim().slice(0, 30)})`}`;
       if (blank(element.name)) problems.push(`${row}: name is empty.`);
       if (blank(element.rule) || element.rule.trim().length < 8) problems.push(`${row}: rule is empty or a label. Say what it does when used, what it shows, and any limit that applies.`);
       const to = element.goesTo?.trim();
       if (to !== undefined && to !== '' && !ids.has(to)) problems.push(`${row}: goesTo names ${to}, which is not a screen in this spec.`);
     });
-    for (const state of screen.states) if (blank(state.name) || blank(state.shows)) problems.push(`${at}: a state needs a name and what the screen shows in it.`);
+    for (const state of full ? screen.states : []) if (blank(state.name) || blank(state.shows)) problems.push(`${at}: a state needs a name and what the screen shows in it.`);
   }
   // Every id that is an entry is also a screen, so "from outside" is whatever is not one.
   if (spec.screens.length > 0 && !spec.screens.some((screen) => screen.entry.some((from) => !blank(from) && !ids.has(from.trim())))) {
@@ -95,7 +96,7 @@ export function checkScreenSpec(spec: ScreenSpec, opts: { draft?: boolean } = {}
 
   if (full && spec.events.length === 0) problems.push('events is empty: name what the product records so its use can be measured (at least the completion of each core task), each with when it fires and what it measures.');
   const eventNames = new Set<string>();
-  for (const event of spec.events) {
+  for (const event of full ? spec.events : []) {
     const at = `event ${event.name || '(no name)'}`;
     if (!EVENT_NAME.test(event.name)) problems.push(`${at}: the name must be snake_case ("chore_logged").`);
     else if (eventNames.has(event.name)) problems.push(`${at}: this name is used twice.`);

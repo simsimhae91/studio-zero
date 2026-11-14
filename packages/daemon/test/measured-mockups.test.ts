@@ -140,6 +140,9 @@ test('a plan for a product that works: who uses it, how they get in, what each d
   assert.match(problems(short), /elements is empty[\s\S]*the core flow happens here[\s\S]*events is empty/);
   assert.equal(problems(short, { draft: true }), '');
   assert.match(problems((s) => void (short(s), (s.scenarios = [])), { draft: true }), /scenarios is empty/);
+  // What a draft gives of its elements, states and events anyway is not held against it, and one way in written bare is a list of one.
+  assert.equal(problems((s) => void (s.screens[0]!.elements[0]!.rule = '누름', (s.screens[0]!.states[0]!.shows = ''), (s.events[0]!.name = 'choreLogged')), { draft: true }), '');
+  assert.equal(readScreenSpec(JSON.stringify({ ...SCREEN_SPEC, screens: SCREEN_SPEC.screens.map((screen) => ({ ...screen, entry: screen.entry[0] })) }), { works: true, draft: true }).ok, true);
 
   // The same plan for a person to read, headed in the language it is written in.
   const doc = screenSpecMarkdown(SCREEN_SPEC);
@@ -491,6 +494,32 @@ rest();
     assert.deepEqual((await walkApp(browser, `${base}/`, FLOW_TASKS, null))?.tasks.map((task) => task.reached), [true, true], 'and at a desk as on a phone');
     assert.equal(await walkApp(browser, `${base}/blocked`, FLOW_TASKS, null), null, 'a refusal from the server is not the app: there is nothing to walk');
     assert.equal(await walkApp(browser, 'http://127.0.0.1:1/', FLOW_TASKS, null), null);
+
+    // A sheet that slides in by script, as React Native's does on the web: the browser reports no animation,
+    // and the button is seen while it is still travelling. The walk waits for it to stop before it presses.
+    // (The first real build that was walked lost its last press this way, and the product was blamed.)
+    const sliding = `<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><style>button{min-height:56px;min-width:160px;font-size:18px}button:active{transform:scale(.97)}#sheet{position:fixed;left:0;right:0;bottom:0;padding:24px;background:#eee}</style></head><body>
+<main id="app"><button data-step="log:1">김민재</button></main>
+<script>
+const app = document.getElementById('app');
+app.firstElementChild.onclick = () => {
+  const sheet = document.createElement('div'); sheet.id = 'sheet';
+  sheet.innerHTML = '<button data-step="log:2">받았어요</button>';
+  sheet.firstElementChild.onclick = () => { sheet.remove(); app.insertAdjacentHTML('beforeend', '<p data-done="log">받았어요</p>'); };
+  document.body.appendChild(sheet);
+  const from = performance.now();
+  const slide = (now) => { const t = Math.min(1, (now - from) / 600); sheet.style.transform = 'translateY(' + (1 - t) * 320 + 'px)'; if (t < 1) requestAnimationFrame(slide); };
+  sheet.style.transform = 'translateY(320px)'; requestAnimationFrame(slide);
+};
+</script></body></html>`;
+    const slideServer = createServer((_req, res) => res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }).end(sliding)).listen(0, '127.0.0.1');
+    await new Promise((resolve) => slideServer.once('listening', resolve));
+    try {
+      const slid = await walkApp(browser, `http://127.0.0.1:${(slideServer.address() as AddressInfo).port}/`, [FLOW_TASKS[0]!], devices['iPhone 15 Pro']!);
+      assert.deepEqual(slid?.tasks.map((task) => [task.id, task.reached, task.presses]), [['log', true, 2]], 'the second press landed on the button, where it came to rest');
+    } finally {
+      slideServer.close();
+    }
   } finally {
     await browser.close();
     server.close();

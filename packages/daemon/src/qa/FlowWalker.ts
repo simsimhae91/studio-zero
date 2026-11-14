@@ -162,6 +162,25 @@ export async function walkFlow(page: Page, tasks: readonly FlowTask[], opts: { t
       await page.waitForTimeout(100);
     }
   };
+  /**
+   * Waits for a control to stop moving before it is pressed. On a running app a sheet or a screen may still be
+   * sliding in when its button is first seen, driven by a script the browser does not report as an animation
+   * (React Native's own): a press aimed at where the button was lands beside it and does nothing, and the walk
+   * would blame the product. Seen on the first real build that was walked. Up to a second and a half.
+   */
+  const atRest = async (q: { step: string; done: string }, first: NonNullable<z.infer<typeof Look>['target']>): Promise<NonNullable<z.infer<typeof Look>['target']>> => {
+    let last = first;
+    for (let i = 0; i < 16; i++) {
+      await page.waitForTimeout(90);
+      const next = Look.safeParse(await page.evaluate(look, q).catch(() => null));
+      if (!next.success || !next.data.target) return last;
+      const still = Math.abs(next.data.target.x - last.x) < 1 && Math.abs(next.data.target.y - last.y) < 1 && next.data.target.covered === last.covered;
+      // What was scrolled to on the first look stays counted as a scroll.
+      last = { ...next.data.target, scrolled: first.scrolled || next.data.target.scrolled };
+      if (still) return last;
+    }
+    return last;
+  };
   const frames: WalkFrame[] = [];
   const shoot = async (task: number | null, step: number | null): Promise<void> => void frames.push({ task, step, jpeg: await page.screenshot({ type: 'jpeg', quality: 72 }) });
   /** Waits for what is moving to finish, up to the cap. Returns how long the answer to a press ran, if there was one. */
@@ -203,12 +222,12 @@ export async function walkFlow(page: Page, tasks: readonly FlowTask[], opts: { t
         Object.assign(result, { stopped: 'already-done', stoppedAtStep: 1 });
         break;
       }
-      const target = seen.target;
-      if (!target) {
+      if (!seen.target) {
         // Out of marked steps: the task is over, and whether it worked is what the outcome says.
         if (step === 1) Object.assign(result, { stopped: 'step-missing', stoppedAtStep: 1 });
         break;
       }
+      const target = patience > 0 ? await atRest(selectors(step), seen.target) : seen.target;
       if (target.scrolled) result.scrolls += 1;
       if (target.covered) {
         Object.assign(result, { stopped: 'covered', stoppedAtStep: step });
