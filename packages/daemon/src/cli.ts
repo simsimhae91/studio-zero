@@ -9,6 +9,9 @@ const USAGE = `sz — Studio Zero command line
   sz project create <slug> <name> [${Template.options.join('|')}]
   sz project rm <slug> [--delete-workspace]
   sz task <project-slug> <build|refactor|inline_edit|ideate> [--draft] [--from <branch>] <prompt...>   submit and follow a task (--draft: the fast track; --from: start from that branch, e.g. a failed task's)
+  sz schedule add <project-slug> <build|refactor|inline_edit|ideate> <prompt...> --every <n>h|<n>m | --at 2026-11-15T07:00
+                                                                             submit the prompt as a task every n hours or minutes (at least 1h), or once at that local time
+  sz schedule list [project-slug] | sz schedule pause|resume|rm <schedule-id>
   sz events [project-slug]                                                   follow the event stream
   sz approvals                                                               list pending approvals
   sz approve <approval-id> | sz deny <approval-id>
@@ -86,6 +89,21 @@ function printEvent(e: EventEnvelope): void {
     }
   })();
   process.stdout.write(`${time} ${text}\n`);
+}
+
+/** `24h` or `90m`, in minutes. Nothing finer than a minute and no calendar: a schedule is an interval or a time. */
+function everyMinutes(text: string): number {
+  const m = /^(\d+)(h|m)$/.exec(text.trim());
+  if (!m) throw new Error(`--every takes hours or minutes, like 24h or 90m (got "${text}")`);
+  return Number(m[1]) * (m[2] === 'h' ? 60 : 1);
+}
+
+/** `2026-11-15T07:00`, read on this machine's clock. A zone or an offset is not taken: the time is local. */
+function localTime(text: string): number {
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(text)) throw new Error(`--at takes a local time like 2026-11-15T07:00 (got "${text}")`);
+  const at = new Date(text).getTime();
+  if (Number.isNaN(at)) throw new Error(`--at: "${text}" is not a time`);
+  return at;
 }
 
 async function readSecret(): Promise<string> {
@@ -179,6 +197,48 @@ async function main(argv: string[]): Promise<number> {
             if (e.body.type === 'task.state' && ['succeeded', 'failed', 'cancelled'].includes(e.body.state)) resolve(e.body.state === 'succeeded' ? 0 : 1);
           }, 0);
         });
+      }
+      case 'schedule': {
+        if (args[0] === 'add') {
+          const project = await projectBySlug(client, args[1]);
+          const flag = (name: string): string | undefined => {
+            const at = args.indexOf(name);
+            return at >= 0 ? args[at + 1] : undefined;
+          };
+          const every = flag('--every');
+          const at = flag('--at');
+          const flagged = new Set(['--every', '--at'].flatMap((name) => (args.includes(name) ? [args.indexOf(name), args.indexOf(name) + 1] : [])));
+          const prompt = args.slice(3).filter((_word, i) => !flagged.has(i + 3)).join(' ');
+          const schedule = await client.call('schedules.create', { projectId: project.id, kind: args[2] as Exclude<TaskKind, 'kirby_materialize'>, prompt, ...(every !== undefined ? { everyMinutes: everyMinutes(every) } : {}), ...(at !== undefined ? { at: localTime(at) } : {}) });
+          process.stdout.write(`schedule ${schedule.id}: first run ${new Date(schedule.nextDueAt!).toLocaleString()}
+`);
+          return 0;
+        }
+        if (args[0] === 'pause' || args[0] === 'resume') {
+          const schedule = await client.call('schedules.setEnabled', { scheduleId: args[1] ?? '', enabled: args[0] === 'resume' });
+          process.stdout.write(`${schedule.id} ${schedule.enabled ? `on, next run ${new Date(schedule.nextDueAt!).toLocaleString()}` : 'paused'}
+`);
+          return 0;
+        }
+        if (args[0] === 'rm') {
+          await client.call('schedules.delete', { scheduleId: args[1] ?? '' });
+          process.stdout.write('deleted\n');
+          return 0;
+        }
+        if (args[0] === 'list' || args[0] === undefined) {
+          const { projects } = await client.call('projects.list', {});
+          const projectId = args[1] ? (await projectBySlug(client, args[1])).id : undefined;
+          const { schedules } = await client.call('schedules.list', projectId ? { projectId } : {});
+          for (const sc of schedules) {
+            const slug = projects.find((p) => p.id === sc.projectId)?.slug ?? sc.projectId;
+            const when = sc.mode === 'every' ? `every ${sc.intervalMinutes! % 60 === 0 ? `${sc.intervalMinutes! / 60}h` : `${sc.intervalMinutes}m`}` : 'once';
+            const next = sc.nextDueAt === null ? '-' : new Date(sc.nextDueAt).toLocaleString();
+            process.stdout.write(`${sc.id}  ${slug.padEnd(20)} ${sc.kind.padEnd(11)} ${when.padEnd(10)} next ${next.padEnd(24)} ${sc.enabled ? 'on    ' : 'paused'} last ${sc.lastTaskId ?? '-'}\n`);
+          }
+          if (schedules.length === 0) process.stdout.write('no schedules\n');
+          return 0;
+        }
+        throw new Error(`unknown schedule command: ${args[0]}`);
       }
       case 'events': {
         const filter = args[0] ? { projectId: (await projectBySlug(client, args[0])).id } : {};

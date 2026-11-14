@@ -51,7 +51,7 @@ const PANES: readonly { id: Pane; label: string }[] = [
 const DEFAULT_SESSION = 'default';
 const advisorName: Record<AdvisorId, string> = { codex: 'Codex', gemini: 'Gemini' };
 const live = (state: TaskState): boolean => state === 'queued' || state === 'running' || state === 'awaiting_approval';
-const stateTone = { queued: 'neutral', running: 'active', awaiting_approval: 'warn', suspended: 'warn', succeeded: 'good', failed: 'bad', cancelled: 'neutral' } as const;
+const stateTone = { queued: 'neutral', running: 'active', awaiting_approval: 'warn', suspended: 'warn', parked: 'warn', succeeded: 'good', failed: 'bad', cancelled: 'neutral' } as const;
 const sandboxLabel = { running: '샌드박스 실행 중', stopped: '샌드박스 꺼짐', absent: '샌드박스 없음' } as const;
 
 /** The documents a deep-track task leaves behind, and what each is. */

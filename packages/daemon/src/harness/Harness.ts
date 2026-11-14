@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { z } from 'zod';
 import { AcceptanceVerdict, Effort, ReviewerId, ReviewerPref, ScreenSpec as ScreenSpecShape, type AuditReport, type Phase, type Project, type Task, type TaskState } from '@studio-zero/protocol';
 import { EngineId, type Config } from '../config.ts';
+import { classifyQuotaFailure } from '../app/QuotaTracker.ts';
 import type { Store } from '../db/Store.ts';
 import type { EventLog } from '../events/EventLog.ts';
 import { pngBlock, textBlock, type ClaudeClient } from '../llm/ClaudeClient.ts';
@@ -35,6 +36,7 @@ import type { SelfHosting } from './SelfHosting.ts';
 import { copyBlock } from './TextSlopAuditor.ts';
 
 export const INTEGRATION_BRANCH = 'main';
+const HOUR_MS = 60 * 60 * 1000;
 /** How many times one task may ask the owner for more tokens. */
 const MAX_BUDGET_EXTENSIONS = 2;
 const PLANNER_MODEL = 'claude-fable-5-2';
@@ -125,6 +127,13 @@ export class ShutdownSignal extends Error {
  * could not be had because every reviewer is at a usage limit, the work is committed and the task is
  * `suspended`: it holds no engine and no slot. When a reviewer answers again the task is queued, and this loop
  * picks it up at Verify, on the same branch, without planning or executing a second time.
+ *
+ * A task can also stop short for a while. When its engine (or the session brain) is refused by a subscription
+ * for a usage limit, and the refusal names when the limit resets, within `quotaPark.maxWaitHours`, the
+ * unfinished work is committed on its branch and the task is `parked` until then. The queue wakes it at that
+ * time and it runs again the way an interrupted task does after a restart: from its base, on its branch. After
+ * `quotaPark.maxParks` waits the next such refusal fails the task, with `parkCapHit` on the failure. A refusal
+ * that names no reset time fails the task as any other error does.
  *
  * Whatever happens, the workspace is left recoverable: there is a checkpoint from before the task, the work is
  * committed on its own branch, and a failed task puts the workspace back on the integration branch.
@@ -513,9 +522,26 @@ export class Harness {
         return;
       }
       const cancelled = err instanceof Cancelled || signal.aborted;
+      // A subscription that refused for a usage limit and said when it resets: the task waits for that, a few
+      // times at most, instead of failing on something time alone fixes.
+      const limit = cancelled ? null : classifyQuotaFailure({ engine: task.engine, error: err }, this.#clock());
+      const soonEnough = limit !== null && limit.resetAt - this.#clock() <= this.#config.quotaPark.maxWaitHours * HOUR_MS;
+      const parks = this.#store.getTask(task.id)?.parkCount ?? task.parkCount;
+      const { maxParks } = this.#config.quotaPark;
+      if (limit !== null && soonEnough && parks < maxParks) {
+        this.#log.warn({ taskId: task.id, subscription: limit.subscription, resumeAt: limit.resetAt }, 'task parked on a usage limit');
+        if (onBranch) await this.#parkBranch(project, task, 'waiting for a usage limit to reset');
+        const parked = this.#store.parkTask(task.id, limit.resetAt);
+        if (parked) {
+          task = parked;
+          this.#events.emit(scope, { type: 'task.parked', subscription: limit.subscription, resumeAt: limit.resetAt, parkCount: parked.parkCount });
+          this.#events.emit(scope, { type: 'task.state', state: 'parked', error: null });
+          return;
+        }
+      }
       if (!cancelled) this.#log.error({ taskId: task.id, err: errorMessage(err) }, 'task failed');
       if (onBranch) await this.#parkBranch(project, task, cancelled ? 'cancelled' : 'failed');
-      task = this.#finish(task, cancelled ? 'cancelled' : 'failed', { error: cancelled ? 'cancelled by the owner' : errorMessage(err) });
+      task = this.#finish(task, cancelled ? 'cancelled' : 'failed', { error: cancelled ? 'cancelled by the owner' : errorMessage(err) }, limit !== null && soonEnough && maxParks > 0 && parks >= maxParks);
     } finally {
       await closeAll();
     }
@@ -992,10 +1018,11 @@ export class Harness {
     }
   }
 
-  #finish(task: Task, state: Extract<TaskState, 'succeeded' | 'failed' | 'cancelled'>, patch: { summary?: string; error?: string }): Task {
+  /** `parkCapHit`: the task fails on a usage limit it could have waited out, had it not waited as often as it may already. */
+  #finish(task: Task, state: Extract<TaskState, 'succeeded' | 'failed' | 'cancelled'>, patch: { summary?: string; error?: string }, parkCapHit = false): Task {
     this.#store.kvDelete(resumeKey(task.id));
     const updated = this.#store.updateTask(task.id, { state, phase: null, finishedAt: this.#clock(), ...patch });
-    this.#events.emit({ projectId: task.projectId, taskId: task.id }, { type: 'task.state', state, error: patch.error ?? null });
+    this.#events.emit({ projectId: task.projectId, taskId: task.id }, { type: 'task.state', state, error: patch.error ?? null, ...(parkCapHit ? { parkCapHit: true } : {}) });
     return updated;
   }
 }

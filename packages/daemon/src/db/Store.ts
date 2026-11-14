@@ -31,6 +31,8 @@ import {
   type Phase,
   type Project,
   type ProposalState,
+  type Schedule,
+  type ScheduleMode,
   type Session,
   type Task,
   type TaskKind,
@@ -415,12 +417,88 @@ export class Store {
     return this.#run(`UPDATE tasks SET state = 'queued', attempt = 0 WHERE id = :id AND state = 'suspended'`, { id }) > 0 ? this.getTask(id) : null;
   }
 
+  /**
+   * Parks a task that is in flight on a subscription's usage limit until `until`. It leaves the queue's way:
+   * a parked task holds no slot and is not claimed. Returns null when the task was not in flight.
+   */
+  parkTask(id: string, until: number): Task | null {
+    const parked = this.#run(`UPDATE tasks SET state = 'parked', phase = NULL, parked_until = :until, park_count = park_count + 1 WHERE id = :id AND state IN ('running', 'awaiting_approval')`, { id, until });
+    return parked > 0 ? this.getTask(id) : null;
+  }
+
+  /** Parked tasks, the soonest to wake first. */
+  listParkedTasks(): Task[] {
+    return this.#all(`SELECT * FROM tasks WHERE state = 'parked' ORDER BY parked_until, created_at`).map(toTask);
+  }
+
+  /**
+   * Queues a parked task again, as `recoverInterruptedTasks` queues an interrupted one. A wait is not a retry
+   * after a crash, so the attempt count starts over: the park count is what bounds how often a task waits.
+   */
+  wakeTask(id: string): Task | null {
+    return this.#run(`UPDATE tasks SET state = 'queued', phase = NULL, parked_until = NULL, attempt = 0 WHERE id = :id AND state = 'parked'`, { id }) > 0 ? this.getTask(id) : null;
+  }
+
   requestCancel(id: string): void {
     this.#run('UPDATE tasks SET cancel_requested = 1 WHERE id = :id', { id });
   }
 
   isCancelRequested(id: string): boolean {
     return num(this.#get('SELECT cancel_requested AS c FROM tasks WHERE id = :id', { id })?.c) === 1;
+  }
+
+  // ------------------------------------------------------------ schedules
+
+  insertSchedule(s: Schedule): Schedule {
+    this.#run(
+      `INSERT INTO schedules (id, project_id, kind, prompt, engine, model, mode, run_at, interval_minutes, enabled, next_due_at, last_fired_at, last_task_id, created_at)
+       VALUES (:id, :projectId, :kind, :prompt, :engine, :model, :mode, :runAt, :intervalMinutes, :enabled, :nextDueAt, :lastFiredAt, :lastTaskId, :createdAt)`,
+      { ...s, enabled: s.enabled ? 1 : 0 },
+    );
+    return this.getSchedule(s.id)!;
+  }
+
+  getSchedule(id: string): Schedule | null {
+    const r = this.#get('SELECT * FROM schedules WHERE id = :id', { id });
+    return r ? toSchedule(r) : null;
+  }
+
+  listSchedules(projectId?: string): Schedule[] {
+    return projectId === undefined
+      ? this.#all('SELECT * FROM schedules ORDER BY created_at, id').map(toSchedule)
+      : this.#all('SELECT * FROM schedules WHERE project_id = :projectId ORDER BY created_at, id', { projectId }).map(toSchedule);
+  }
+
+  /** Switched on, with their time come. Soonest first. */
+  dueSchedules(now: number): Schedule[] {
+    return this.#all('SELECT * FROM schedules WHERE enabled = 1 AND next_due_at IS NOT NULL AND next_due_at <= :now ORDER BY next_due_at, id', { now }).map(toSchedule);
+  }
+
+  setScheduleEnabled(id: string, enabled: boolean, nextDueAt: number | null): Schedule | null {
+    this.#run('UPDATE schedules SET enabled = :enabled, next_due_at = :nextDueAt WHERE id = :id', { id, enabled: enabled ? 1 : 0, nextDueAt });
+    return this.getSchedule(id);
+  }
+
+  /**
+   * Moves a due schedule on to its next time, in one statement, and only if it is still at the time it was read
+   * at (`dueAt`): of two callers that both saw it due, one moves it and the other gets false. `firedAt` is set
+   * when a run is being started, and left as it was when the run is skipped.
+   */
+  advanceSchedule(id: string, p: { dueAt: number; nextDueAt: number | null; enabled: boolean; firedAt: number | null }): boolean {
+    return (
+      this.#run(
+        'UPDATE schedules SET next_due_at = :nextDueAt, enabled = :enabled, last_fired_at = COALESCE(:firedAt, last_fired_at) WHERE id = :id AND enabled = 1 AND next_due_at = :dueAt',
+        { id, dueAt: p.dueAt, nextDueAt: p.nextDueAt, enabled: p.enabled ? 1 : 0, firedAt: p.firedAt },
+      ) > 0
+    );
+  }
+
+  setScheduleLastTask(id: string, taskId: string): void {
+    this.#run('UPDATE schedules SET last_task_id = :taskId WHERE id = :id', { id, taskId });
+  }
+
+  deleteSchedule(id: string): boolean {
+    return this.#run('DELETE FROM schedules WHERE id = :id', { id }) > 0;
   }
 
   // --------------------------------------------------------------- events
@@ -1129,6 +1207,25 @@ function toKnowledge(r: Row): KnowledgeRow {
   };
 }
 
+function toSchedule(r: Row): Schedule {
+  return {
+    id: str(r.id),
+    projectId: str(r.project_id),
+    kind: str(r.kind) as TaskKind,
+    prompt: str(r.prompt),
+    engine: nstr(r.engine),
+    model: nstr(r.model),
+    mode: str(r.mode) as ScheduleMode,
+    runAt: nnum(r.run_at),
+    intervalMinutes: nnum(r.interval_minutes),
+    enabled: num(r.enabled) === 1,
+    nextDueAt: nnum(r.next_due_at),
+    lastFiredAt: nnum(r.last_fired_at),
+    lastTaskId: nstr(r.last_task_id),
+    createdAt: num(r.created_at),
+  };
+}
+
 function toSession(r: Row): Session {
   return { id: str(r.id), projectId: str(r.project_id), name: str(r.name), createdAt: num(r.created_at) };
 }
@@ -1175,6 +1272,8 @@ function toTask(r: Row): Task {
     track: str(r.track) as TaskTrack,
     summary: nstr(r.summary),
     error: nstr(r.error),
+    parkedUntil: nnum(r.parked_until),
+    parkCount: num(r.park_count),
     createdAt: num(r.created_at),
     startedAt: nnum(r.started_at),
     finishedAt: nnum(r.finished_at),

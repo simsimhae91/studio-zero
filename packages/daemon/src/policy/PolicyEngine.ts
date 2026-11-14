@@ -215,6 +215,15 @@ const rules: Rule[] = [
     },
   },
   {
+    // A schedule starts paid work later with nobody watching. Only the owner sets one up; nothing an agent reads
+    // or writes can, so injected text cannot book work for itself. Each run is still a `task.submit`.
+    id: 'schedule.configure-owner-only',
+    evaluate: (actor, action) => {
+      if (action.kind !== 'schedule.configure') return undefined;
+      return actor.type === 'owner' ? allow('owner-initiated') : deny('only the owner can set up, change or remove a schedule');
+    },
+  },
+  {
     // Things only the owner starts, from any of their channels: redirecting a task, branching history,
     // turning a scratchpad into a project, starting research or a document, asking another model's opinion.
     id: 'owner-initiated',

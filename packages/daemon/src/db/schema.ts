@@ -394,6 +394,31 @@ const migrations: string[] = [
   ALTER TABLE tasks ADD COLUMN effort_pref TEXT;
   ALTER TABLE tasks ADD COLUMN effort TEXT;
   `,
+  // 12: a task parked on a subscription's usage limit, until the reset time the vendor named; and how often it was.
+  `
+  ALTER TABLE tasks ADD COLUMN parked_until INTEGER;
+  ALTER TABLE tasks ADD COLUMN park_count INTEGER NOT NULL DEFAULT 0;
+  `,
+  // 13: the owner's schedules. A run moves next_due_at on before its task is submitted: a crash loses a run, never doubles one.
+  `
+  CREATE TABLE schedules (
+    id                TEXT PRIMARY KEY,
+    project_id        TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    kind              TEXT NOT NULL,
+    prompt            TEXT NOT NULL,
+    engine            TEXT,
+    model             TEXT,
+    mode              TEXT NOT NULL CHECK (mode IN ('at', 'every')),
+    run_at            INTEGER,
+    interval_minutes  INTEGER,
+    enabled           INTEGER NOT NULL DEFAULT 1,
+    next_due_at       INTEGER,
+    last_fired_at     INTEGER,
+    last_task_id      TEXT,
+    created_at        INTEGER NOT NULL
+  ) STRICT;
+  CREATE INDEX schedules_due ON schedules(enabled, next_due_at);
+  `,
 ];
 
 export function migrate(db: DatabaseSync): void {

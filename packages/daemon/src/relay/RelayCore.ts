@@ -1,4 +1,4 @@
-import type { EventEnvelope, Task } from '@studio-zero/protocol';
+import type { EventEnvelope, ReviewerPref, Task } from '@studio-zero/protocol';
 import type { Studio } from '../app/Studio.ts';
 import type { Store } from '../db/Store.ts';
 import type { EventLog } from '../events/EventLog.ts';
@@ -104,7 +104,7 @@ export class RelayCore {
       case '/status': {
         const { activeProjectId } = store.getChat(channel, chat);
         const project = activeProjectId ? store.getProject(activeProjectId) : null;
-        const tasks = studio.listTasks(project?.id, 50).filter((t) => t.state === 'running' || t.state === 'awaiting_approval' || t.state === 'queued' || t.state === 'suspended');
+        const tasks = studio.listTasks(project?.id, 50).filter((t) => t.state === 'running' || t.state === 'awaiting_approval' || t.state === 'queued' || t.state === 'suspended' || t.state === 'parked');
         return say(
           ['프로젝트: ', bold(project ? project.name : '선택 안 됨')],
           [`대기 중인 승인: ${studio.listApprovals('pending').length}건`],
@@ -134,7 +134,7 @@ export class RelayCore {
       case '/cancel': {
         const projectId = this.#activeProject(chat);
         if (!projectId) return;
-        const running = studio.listTasks(projectId, 20).find((t) => t.state === 'running' || t.state === 'awaiting_approval' || t.state === 'queued' || t.state === 'suspended');
+        const running = studio.listTasks(projectId, 20).find((t) => t.state === 'running' || t.state === 'awaiting_approval' || t.state === 'queued' || t.state === 'suspended' || t.state === 'parked');
         if (!running) return say(['취소할 작업이 없습니다.']);
         studio.cancelTask(running.id);
         return say(['작업 ', code(running.id), ' 취소를 요청했습니다.']);
@@ -246,8 +246,21 @@ export class RelayCore {
       case 'task.state': {
         if (e.taskId === null || (body.state !== 'succeeded' && body.state !== 'failed')) return;
         const task = this.#d.store.getTask(e.taskId);
-        if (task) this.#broadcast(this.#taskMessage(task));
+        if (task) this.#broadcast(this.#taskMessage(task, body.parkCapHit === true));
         return;
+      }
+      case 'task.parked': {
+        // Work stopped for hours is news; that it starts again by itself is what makes it nothing to act on.
+        const task = e.taskId === null ? null : this.#d.store.getTask(e.taskId);
+        if (!task) return;
+        const project = this.#d.store.getProject(task.projectId);
+        return this.#broadcast({
+          lines: [
+            [bold(project?.name ?? task.projectId), ' · ', code(task.id)],
+            [`${subscriptionName[body.subscription]} 구독이 사용 한도에 걸려 작업을 멈췄습니다.`],
+            [`한도가 풀리는 ${localTime(body.resumeAt)}에 처음부터 다시 시작합니다 (${body.parkCount}번째 대기).`],
+          ],
+        });
       }
       case 'kirby.proposal':
         if (body.state === 'proposed') this.#broadcast({ lines: [[bold('Kirby 제안')], [body.title], [], ['데스크톱에서 내용을 확인하고 구현을 시작할 수 있습니다.']] });
@@ -271,12 +284,13 @@ export class RelayCore {
     }
   }
 
-  #taskMessage(task: Task): OutMessage {
+  #taskMessage(task: Task, parkCapHit = false): OutMessage {
     const { store } = this.#d;
     const project = store.getProject(task.projectId);
     const title: Line = [bold(project?.name ?? task.projectId), ' · ', code(task.id)];
     if (task.state === 'failed') {
-      return { lines: [title, [`작업 실패: ${(task.error ?? '알 수 없는 오류').slice(0, 500)}`], ['워크스페이스는 작업 전 브랜치로 돌아갔습니다.']], priority: 'high' };
+      const waited: Line[] = parkCapHit ? [[`사용 한도를 ${task.parkCount}번 기다린 뒤라 더 기다리지 않고 멈췄습니다.`]] : [];
+      return { lines: [title, [`작업 실패: ${(task.error ?? '알 수 없는 오류').slice(0, 500)}`], ...waited, ['워크스페이스는 작업 전 브랜치로 돌아갔습니다.']], priority: 'high' };
     }
     const audit = store.listAudits(task.projectId, 10).find((a) => a.taskId === task.id);
     const report = audit ? store.getAudit(audit.id) : null;
@@ -300,6 +314,14 @@ export class RelayCore {
   #broadcast(message: OutMessage): void {
     for (const chat of this.#d.owners()) this.#d.send(chat, message);
   }
+}
+
+const subscriptionName: Record<ReviewerPref, string> = { 'claude-code': 'Claude', codex: 'Codex', antigravity: 'Antigravity', cursor: 'Cursor' };
+
+/** A moment on this Mac's clock, as the owner reads it on a phone: `11월 15일 07:00`. */
+export function localTime(at: number): string {
+  const d = new Date(at);
+  return `${d.getMonth() + 1}월 ${d.getDate()}일 ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 
 export function approvalMessage(approvalId: string, summary: string, expiresAt: number): OutMessage {

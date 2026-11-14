@@ -27,6 +27,7 @@ import {
   Slug,
   SubscriptionQuota,
   ReviewerPref,
+  Schedule,
   Task,
   TaskKind,
   TaskTrack,
@@ -191,6 +192,29 @@ export const methods = {
   'tasks.cancel': { params: z.object({ taskId: z.string() }), result: Task },
   /** Queues a suspended task again now, without waiting for the daemon's own check that a reviewer is back. */
   'tasks.resume': { params: z.object({ taskId: z.string() }), result: Task },
+
+  /**
+   * The owner's schedules: a prompt submitted as a task once at a time, or every so many minutes. Each run is a
+   * `tasks.submit` as the owner, queued behind whatever the project is running; a run is skipped while the
+   * task from the one before is still queued, running or parked. Times are epoch milliseconds.
+   */
+  'schedules.list': { params: z.object({ projectId: z.string().optional() }), result: z.object({ schedules: z.array(Schedule) }) },
+  /** Exactly one of `at` (in the future) and `everyMinutes` (an hour or more). The first run of an interval is one interval from now. */
+  'schedules.create': {
+    params: z.object({
+      projectId: z.string(),
+      kind: TaskKind.exclude(['kirby_materialize']),
+      prompt: z.string().min(1).max(20_000),
+      engine: EnginePref.optional(),
+      model: ModelId.optional(),
+      at: z.number().int().positive().optional(),
+      everyMinutes: z.number().int().min(60).max(60 * 24 * 366).optional(),
+    }),
+    result: Schedule,
+  },
+  /** Pauses or resumes. A resumed interval picks up at its next time from now: what was missed while paused does not run. */
+  'schedules.setEnabled': { params: z.object({ scheduleId: z.string(), enabled: z.boolean() }), result: Schedule },
+  'schedules.delete': { params: z.object({ scheduleId: z.string() }), result: z.object({ deleted: z.literal(true) }) },
 
   'approvals.list': { params: z.object({ state: ApprovalState.optional() }), result: z.object({ approvals: z.array(Approval) }) },
   'approvals.resolve': { params: z.object({ approvalId: z.string(), decision: z.enum(['approve', 'deny']) }), result: Approval },

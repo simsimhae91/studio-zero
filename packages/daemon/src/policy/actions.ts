@@ -16,6 +16,9 @@ export const Action = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('scratch.promote'), scratchId: z.string(), target: z.enum(['build', 'document']) }),
   z.object({ kind: z.literal('knowledge.run'), jobKind: z.enum(['research', 'document']) }),
   z.object({ kind: z.literal('task.submit'), projectId: z.string(), taskKind: TaskKind, budgetTokens: z.number().int() }),
+  // Saving, pausing, resuming or removing a prompt the daemon submits as a task by itself later. Each run it
+  // starts is still a `task.submit` and spends through `llm.request`; this decides who may set one up at all.
+  z.object({ kind: z.literal('schedule.configure'), projectId: z.string(), op: z.enum(['create', 'pause', 'resume', 'delete']), scheduleId: z.string().nullable(), taskKind: TaskKind, every: z.number().int().nullable() }),
 
   // Confined to the project's container. The command text is recorded for the audit trail, not pattern-matched:
   // filtering shell strings is not a security boundary, the container is.
@@ -107,6 +110,11 @@ export function describeAction(action: Action): string {
       return action.jobKind === 'research' ? '자료 조사 시작' : '문서 작성 시작';
     case 'task.submit':
       return `${action.taskKind} 작업 시작 (예산 ${n(action.budgetTokens)} 토큰)`;
+    case 'schedule.configure': {
+      const when = action.every === null ? '정한 시각에 한 번' : `${n(action.every)}분마다`;
+      const op = { create: '추가', pause: '일시 정지', resume: '다시 켜기', delete: '삭제' }[action.op];
+      return `프로젝트 ${action.projectId}의 예약 작업 ${op} (${action.taskKind}, ${when})`;
+    }
     case 'sandbox.exec':
       return `샌드박스에서 실행: ${action.command.slice(0, 200)}`;
     case 'sandbox.write':

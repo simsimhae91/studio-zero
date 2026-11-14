@@ -36,6 +36,7 @@ import type {
   ProposalCard,
   ResultOf,
   SandboxInfo,
+  Schedule,
   Session,
   Task,
   TaskKind,
@@ -82,6 +83,7 @@ import type { ProjectArms } from '../arms/ProjectArms.ts';
 import type { ExternalApis } from './ExternalApis.ts';
 import type { ProjectNamer } from './ProjectNamer.ts';
 import type { QuotaTracker } from './QuotaTracker.ts';
+import { nextSlot } from './Scheduler.ts';
 
 /** A vendor CLI that can be asked one question with no tools in reach (see `CliBridgeEngine.ask`). */
 export interface Advisor {
@@ -155,6 +157,11 @@ const REDESIGN_REQUEST = `디자인 심사 결과대로 화면을 다시 디자�
 /** Where the power mode is kept, so a restarted daemon holds the Mac awake as it was asked to. */
 const POWER_KEY = 'power.mode';
 const CORE_FIXED = 'Studio Zero Core는 스튜디오 자신의 저장소입니다. 이름을 바꾸거나 삭제할 수 없습니다.';
+
+/** The longest prompt a schedule keeps: the same as a task takes (`tasks.submit`). */
+const SCHEDULE_PROMPT_MAX = 20_000;
+/** The shortest interval between a schedule's runs, in minutes. Each run is paid work nobody is watching. */
+const SCHEDULE_MIN_INTERVAL = 60;
 
 const NO_MODEL = '쓸 수 있는 모델이 없습니다. Claude Code에 로그인하거나(터미널에서 claude 실행), 설정에서 Anthropic API 키를 저장해 주세요.';
 
@@ -512,6 +519,72 @@ export class Studio implements PromotionHost {
     this.getTask(taskId);
     this.#d.queue.cancel(taskId);
     return this.getTask(taskId);
+  }
+
+  // ------------------------------------------------------------- schedules
+
+  listSchedules(projectId: string | undefined): Schedule[] {
+    if (projectId !== undefined) this.getProject(projectId);
+    return this.#d.store.listSchedules(projectId);
+  }
+
+  /**
+   * Saves a prompt to be submitted as a task later: once `at` a time, or every `everyMinutes`. Only the owner
+   * can (`schedule.configure`); each run is then an ordinary `submitTask`, held to the same rules and budgets.
+   */
+  async createSchedule(actor: Actor, p: { projectId: string; kind: Exclude<TaskKind, 'kirby_materialize'>; prompt: string; engine?: EngineId; model?: string; at?: number; everyMinutes?: number }): Promise<Schedule> {
+    this.getProject(p.projectId);
+    assertPick(p, this.#d.router);
+    if (p.prompt.trim() === '') throw new ConflictError('예약할 작업 내용이 비어 있습니다.');
+    if (p.prompt.length > SCHEDULE_PROMPT_MAX) throw new ConflictError(`작업 내용은 ${SCHEDULE_PROMPT_MAX.toLocaleString('en-US')}자까지 예약할 수 있습니다.`);
+    if ((p.at === undefined) === (p.everyMinutes === undefined)) throw new ConflictError('정한 시각(at)과 반복 간격(every) 중 하나만 정해 주세요.');
+    const now = this.#d.clock();
+    if (p.everyMinutes !== undefined && (!Number.isInteger(p.everyMinutes) || p.everyMinutes < SCHEDULE_MIN_INTERVAL)) throw new ConflictError(`반복 간격은 ${SCHEDULE_MIN_INTERVAL}분 이상이어야 합니다.`);
+    if (p.at !== undefined && p.at <= now) throw new ConflictError('예약 시각이 이미 지났습니다.');
+    const every = p.everyMinutes ?? null;
+    await this.#d.policy.authorize(actor, { kind: 'schedule.configure', projectId: p.projectId, op: 'create', scheduleId: null, taskKind: p.kind, every });
+    return this.#d.store.insertSchedule({
+      id: newId('sch'),
+      projectId: p.projectId,
+      kind: p.kind,
+      prompt: p.prompt,
+      engine: p.engine ?? null,
+      model: p.model ?? null,
+      mode: every === null ? 'at' : 'every',
+      runAt: p.at ?? null,
+      intervalMinutes: every,
+      enabled: true,
+      nextDueAt: every === null ? p.at! : now + every * 60 * 1000,
+      lastFiredAt: null,
+      lastTaskId: null,
+      createdAt: now,
+    });
+  }
+
+  /** Pauses or resumes a schedule. Resumed, it runs at its next time from now: slots missed while it was paused do not run. */
+  async setScheduleEnabled(actor: Actor, scheduleId: string, enabled: boolean): Promise<Schedule> {
+    const schedule = this.#schedule(scheduleId);
+    await this.#d.policy.authorize(actor, { kind: 'schedule.configure', projectId: schedule.projectId, op: enabled ? 'resume' : 'pause', scheduleId, taskKind: schedule.kind, every: schedule.intervalMinutes });
+    if (!enabled) return this.#d.store.setScheduleEnabled(scheduleId, false, schedule.nextDueAt)!;
+    const now = this.#d.clock();
+    if (schedule.mode === 'at' || schedule.intervalMinutes === null) {
+      if (schedule.runAt === null || schedule.runAt <= now || schedule.lastFiredAt !== null) throw new ConflictError('이 예약은 시각이 지났습니다. 새로 예약해 주세요.');
+      return this.#d.store.setScheduleEnabled(scheduleId, true, schedule.runAt)!;
+    }
+    const from = schedule.nextDueAt ?? schedule.createdAt + schedule.intervalMinutes * 60 * 1000;
+    return this.#d.store.setScheduleEnabled(scheduleId, true, nextSlot(from, schedule.intervalMinutes, now))!;
+  }
+
+  async deleteSchedule(actor: Actor, scheduleId: string): Promise<void> {
+    const schedule = this.#schedule(scheduleId);
+    await this.#d.policy.authorize(actor, { kind: 'schedule.configure', projectId: schedule.projectId, op: 'delete', scheduleId, taskKind: schedule.kind, every: schedule.intervalMinutes });
+    this.#d.store.deleteSchedule(scheduleId);
+  }
+
+  #schedule(scheduleId: string): Schedule {
+    const schedule = this.#d.store.getSchedule(scheduleId);
+    if (!schedule) throw new NotFoundError(`schedule ${scheduleId}`);
+    return schedule;
   }
 
   // ------------------------------------------------------------- approvals

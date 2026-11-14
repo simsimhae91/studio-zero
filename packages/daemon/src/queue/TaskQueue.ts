@@ -12,6 +12,11 @@ const MAX_ATTEMPTS = 2;
  * because a project's workspace is a single working tree.
  *
  * A suspended task is not in flight: it holds no slot and does not block its project. `resume` queues it again.
+ *
+ * Nor is a parked one (see `Harness`): it waits for the reset time its subscription named. One timer is kept for
+ * the soonest of them; when it is due the task is queued again, behind whatever its project is running, and runs
+ * as an interrupted task does after a restart. A wake is not a crash, so it does not spend the restart retry.
+ * Parked tasks stay parked across a restart, and those whose time passed while the daemon was down wake on boot.
  */
 export class TaskQueue {
   readonly #store: Store;
@@ -22,6 +27,7 @@ export class TaskQueue {
   readonly #log: Logger;
   readonly #running = new Map<string, { abort: AbortController; done: Promise<void> }>();
   #accepting = false;
+  #wakeTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(deps: { store: Store; events: EventLog; execute: (task: Task, signal: AbortSignal) => Promise<void>; concurrency?: number; clock: Clock; log: Logger }) {
     this.#store = deps.store;
@@ -40,6 +46,41 @@ export class TaskQueue {
     }
     if (requeued.length + failed.length > 0) this.#log.info({ requeued, failed }, 'recovered interrupted tasks');
     this.#accepting = true;
+    this.wakeDue();
+    this.pump();
+  }
+
+  /** Queues every parked task whose time has come, and sets the timer for the next. Returns the ids woken. */
+  wakeDue(): string[] {
+    const now = this.#clock();
+    const woken: string[] = [];
+    for (const task of this.#store.listParkedTasks()) {
+      if (task.parkedUntil !== null && task.parkedUntil > now) break;
+      const queued = this.#store.wakeTask(task.id);
+      if (!queued) continue;
+      this.#log.info({ taskId: task.id }, 'a usage limit has reset; the parked task is queued again');
+      this.#queued(queued);
+      woken.push(task.id);
+    }
+    this.#armWake();
+    return woken;
+  }
+
+  /** One timer, for the soonest parked task. Re-armed whenever a task may have been parked or woken. */
+  #armWake(): void {
+    if (this.#wakeTimer) clearTimeout(this.#wakeTimer);
+    this.#wakeTimer = null;
+    if (!this.#accepting) return;
+    const next = this.#store.listParkedTasks()[0]?.parkedUntil;
+    if (next === undefined) return;
+    // A timer longer than about 24.8 days overflows; one that fires early only finds nothing due and re-arms.
+    const delay = Math.min(Math.max(0, (next ?? 0) - this.#clock()), 2 ** 31 - 1);
+    this.#wakeTimer = setTimeout(() => void this.wakeDue(), delay);
+    this.#wakeTimer.unref();
+  }
+
+  #queued(task: Task): void {
+    this.#events.emit({ projectId: task.projectId, taskId: task.id }, { type: 'task.state', state: 'queued', error: null });
     this.pump();
   }
 
@@ -58,20 +99,22 @@ export class TaskQueue {
         })
         .finally(() => {
           this.#running.delete(task.id);
+          // The task may have been parked: its wake time may now be the soonest.
+          this.#armWake();
           this.pump();
         });
       this.#running.set(task.id, { abort, done });
     }
   }
 
-  /** Cancels a queued or running task. Returns false when the task is already finished. */
+  /** Cancels a queued, running, suspended or parked task. Returns false when the task is already finished. */
   cancel(taskId: string): boolean {
     const task = this.#store.getTask(taskId);
     if (!task || task.state === 'succeeded' || task.state === 'failed' || task.state === 'cancelled') return false;
     this.#store.requestCancel(taskId);
     const running = this.#running.get(taskId);
     if (running) running.abort.abort(new Error('cancelled by the owner'));
-    else if (task.state === 'queued' || task.state === 'suspended') {
+    else if (task.state === 'queued' || task.state === 'suspended' || task.state === 'parked') {
       this.#store.updateTask(taskId, { state: 'cancelled', finishedAt: this.#clock(), error: 'cancelled by the owner' });
       this.#events.emit({ projectId: task.projectId, taskId }, { type: 'task.state', state: 'cancelled', error: 'cancelled by the owner' });
     }
@@ -82,14 +125,14 @@ export class TaskQueue {
   resume(taskId: string): boolean {
     const task = this.#store.resumeTask(taskId);
     if (!task) return false;
-    this.#events.emit({ projectId: task.projectId, taskId }, { type: 'task.state', state: 'queued', error: null });
-    this.pump();
+    this.#queued(task);
     return true;
   }
 
   /** Stops taking work and waits for running tasks to wind down. They are re-queued by `start()` on the next boot. */
   async stop(graceMs = 10_000): Promise<void> {
     this.#accepting = false;
+    this.#armWake();
     for (const { abort } of this.#running.values()) abort.abort(new ShutdownSignal());
     const all = Promise.allSettled([...this.#running.values()].map((r) => r.done));
     await Promise.race([all, new Promise((resolve) => setTimeout(resolve, graceMs).unref())]);

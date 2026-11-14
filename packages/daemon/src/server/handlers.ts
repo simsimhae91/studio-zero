@@ -109,6 +109,14 @@ export function createHandlers(studio: Studio, deps: HandlerDeps): Handlers {
     'tasks.cancel': (p) => studio.cancelTask(p.taskId),
     'tasks.resume': (p) => studio.resumeTask(p.taskId),
 
+    'schedules.list': (p) => ({ schedules: studio.listSchedules(p.projectId) }),
+    'schedules.create': (p) => studio.createSchedule(OWNER, p),
+    'schedules.setEnabled': (p) => studio.setScheduleEnabled(OWNER, p.scheduleId, p.enabled),
+    'schedules.delete': async (p) => {
+      await studio.deleteSchedule(OWNER, p.scheduleId);
+      return { deleted: true as const };
+    },
+
     'approvals.list': (p) => ({ approvals: studio.listApprovals(p.state) }),
     'approvals.resolve': (p) => studio.resolveApproval(p.approvalId, p.decision, 'desktop'),
 

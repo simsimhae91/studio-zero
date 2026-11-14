@@ -14,8 +14,12 @@ export type TaskKind = z.infer<typeof TaskKind>;
  * `suspended`: the work is done and committed on its branch, and the checks it still owes cannot be had right
  * now (every design reviewer is at its usage limit). The task holds no slot and no engine; the daemon queues it
  * again by itself when a reviewer answers, and it then resumes at verification.
+ *
+ * `parked`: the engine's subscription refused the work for a usage limit and said when the limit resets. The
+ * task holds no slot; at `parkedUntil` the daemon queues it again, and it runs from its base checkpoint as an
+ * interrupted task does after a restart. A task is parked a bounded number of times (`parkCount`), then fails.
  */
-export const TaskState = z.enum(['queued', 'running', 'awaiting_approval', 'suspended', 'succeeded', 'failed', 'cancelled']);
+export const TaskState = z.enum(['queued', 'running', 'awaiting_approval', 'suspended', 'parked', 'succeeded', 'failed', 'cancelled']);
 export type TaskState = z.infer<typeof TaskState>;
 
 export const Phase = z.enum(['plan', 'execute', 'verify', 'reflect', 'evolve']);
@@ -123,11 +127,41 @@ export const Task = z.object({
   track: TaskTrack,
   summary: z.string().nullable(),
   error: z.string().nullable(),
+  /** While `parked`: when the subscription said its limit resets, and the task is queued again. */
+  parkedUntil: z.number().int().nullable(),
+  /** How many times this task has been parked for a usage limit. */
+  parkCount: z.number().int(),
   createdAt: z.number().int(),
   startedAt: z.number().int().nullable(),
   finishedAt: z.number().int().nullable(),
 });
 export type Task = z.infer<typeof Task>;
+
+/**
+ * A prompt the owner saved to be submitted as a task later: once at a time (`at`), or every `intervalMinutes`
+ * (`every`, at least an hour). Each run is an ordinary `tasks.submit`, with its policy and budget checks.
+ * `nextDueAt` is null once an `at` schedule has fired.
+ */
+export const ScheduleMode = z.enum(['at', 'every']);
+export type ScheduleMode = z.infer<typeof ScheduleMode>;
+export const Schedule = z.object({
+  id: z.string(),
+  projectId: z.string(),
+  kind: TaskKind,
+  prompt: z.string(),
+  /** The engine and model to run each task on, when the owner chose them. Null: the routing table's. */
+  engine: z.string().nullable(),
+  model: z.string().nullable(),
+  mode: ScheduleMode,
+  runAt: z.number().int().nullable(),
+  intervalMinutes: z.number().int().nullable(),
+  enabled: z.boolean(),
+  nextDueAt: z.number().int().nullable(),
+  lastFiredAt: z.number().int().nullable(),
+  lastTaskId: z.string().nullable(),
+  createdAt: z.number().int(),
+});
+export type Schedule = z.infer<typeof Schedule>;
 
 export const ApprovalState = z.enum(['pending', 'approved', 'denied', 'expired', 'consumed']);
 export type ApprovalState = z.infer<typeof ApprovalState>;

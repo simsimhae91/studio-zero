@@ -19,7 +19,19 @@ const MockupOption = z.object({
  * Clients render from the stream and resume with `sinceSeq` after a reconnect, so a flaky tunnel never loses state.
  */
 export const EventBody = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('task.state'), state: TaskState, error: z.string().nullable() }),
+  // `parkCapHit`: the task failed on a usage limit that named its reset time, after it had already waited out
+  // as many limits as it may (`quotaPark.maxParks`). Absent otherwise.
+  z.object({ type: z.literal('task.state'), state: TaskState, error: z.string().nullable(), parkCapHit: z.boolean().optional() }),
+  /** One of the owner's schedules submitted its prompt as task `taskId`. */
+  z.object({ type: z.literal('schedule.fired'), scheduleId: z.string(), taskId: z.string(), firedAt: z.number().int() }),
+  /**
+   * A schedule's time came and no task was started: the task from its last run is still queued, running or
+   * parked (`previous_active`), or the submission was refused, by policy or a budget (`submit_rejected`). The
+   * run is not tried again; the schedule moves on to its next time.
+   */
+  z.object({ type: z.literal('schedule.skipped'), scheduleId: z.string(), reason: z.enum(['previous_active', 'submit_rejected']), detail: z.string() }),
+  /** The task's subscription refused it for a usage limit that resets at `resumeAt`: the task waits and is queued again then. */
+  z.object({ type: z.literal('task.parked'), subscription: ReviewerPref, resumeAt: z.number().int(), parkCount: z.number().int() }),
   z.object({ type: z.literal('task.phase'), phase: Phase, round: z.number().int() }),
   z.object({
     type: z.literal('route.decided'),

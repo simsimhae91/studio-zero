@@ -161,6 +161,23 @@ export const ConfigSchema = z.object({
       sandwich: z.boolean().default(true),
     })
     .prefault({}),
+  quotaPark: z
+    .object({
+      /**
+       * How many times one task may wait out a subscription's usage limit before it fails. A task is parked
+       * only when the vendor named the time its limit resets; each wait ends with the task run again.
+       */
+      maxParks: z.number().int().min(0).max(10).default(2),
+      /** The longest wait a task is parked for. A limit that resets later than this fails the task, as before. */
+      maxWaitHours: z.number().min(0).max(24 * 7).default(6),
+    })
+    .prefault({}),
+  scheduler: z
+    .object({
+      /** Whether the owner's schedules fire. Off, they are kept and can still be listed and changed. */
+      enabled: z.boolean().default(true),
+    })
+    .prefault({}),
   selfHosting: z
     .object({
       /** Mount the studio's own repository as the pinned first project. */

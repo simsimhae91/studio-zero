@@ -66,6 +66,7 @@ import { SupabaseStack } from '../arms/SupabaseStack.ts';
 import { ExternalApis } from './ExternalApis.ts';
 import { ProjectNamer } from './ProjectNamer.ts';
 import { QuotaTracker } from './QuotaTracker.ts';
+import { Scheduler } from './Scheduler.ts';
 import { Studio } from './Studio.ts';
 
 export const VERSION = '0.1.0';
@@ -133,6 +134,7 @@ export interface Daemon {
   router: ModelRouter;
   vision: QaVisionBridge;
   resumer: ReviewResumer;
+  scheduler: Scheduler;
   pty: PtyManager;
   files: SandboxFileService;
   ledger: Ledger;
@@ -275,6 +277,9 @@ export async function createDaemon(config: Config, log: PinoLogger, overrides: D
   const advisors = { codex, gemini: antigravity };
   const studio: Studio = new Studio({ config, store, events, policy, sandboxes, provisioner, arms, queue, vault, claude, router, auditor, evals, lessons, kirby, scratch, knowledge, calibration, steering, mcp, files, mockups, pty, namer, ledger, power, quota, selfHosting, external, advisors, relayStates, clock, log: log.child({ mod: 'studio' }), version: VERSION });
 
+  // The owner's schedules: each run goes in through the same `submitTask` as a task typed at the desk.
+  const scheduler = new Scheduler({ store, events, studio, clock, log: log.child({ mod: 'scheduler' }) });
+
   // The token every owner client presents. Created on first boot and kept in the Keychain, where the desktop
   // client on this Mac reads it directly; a second machine is paired by copying it once (`sz token`).
   let clientToken = await vault.get(CredentialIds.clientToken);
@@ -353,6 +358,7 @@ export async function createDaemon(config: Config, log: PinoLogger, overrides: D
     router,
     vision,
     resumer,
+    scheduler,
     pty,
     files,
     ledger,
@@ -376,6 +382,7 @@ export async function createDaemon(config: Config, log: PinoLogger, overrides: D
       kirby.start();
       queue.start();
       resumer.start();
+      if (config.scheduler.enabled) scheduler.start();
       // The relay is a convenience channel: if Telegram is unreachable at boot the daemon still comes up.
       await relay?.start().catch((err: unknown) => log.error({ err: errorMessage(err) }, 'telegram relay failed to start'));
       await slack?.start().catch((err: unknown) => log.error({ err: errorMessage(err) }, 'slack relay failed to start'));
@@ -386,6 +393,7 @@ export async function createDaemon(config: Config, log: PinoLogger, overrides: D
       await slack?.stop();
       await ntfy?.stop();
       resumer.stop();
+      await scheduler.stop();
       power.stop();
       await queue.stop();
       await pty.stop();

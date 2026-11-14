@@ -98,7 +98,7 @@ flowchart LR
 
 | 원칙 | 코드에서 강제되는 방식 | 파일 | 검증하는 테스트 |
 |---|---|---|---|
-| **Policy lives in the server** | 모든 부수효과는 타입이 있는 `Action`(31종)이다. 27개 규칙의 순서 있는 테이블이 `allow / deny / require_approval`을 결정하고, 일치하는 규칙이 없으면 거부한다. 규칙은 모델을 호출하지 않는다. 승인은 액션의 SHA-256 해시에 묶이고 1회용이며 만료된다. 승인 문구도 액션 필드에서 코드가 만든다. | `policy/actions.ts`, `policy/PolicyEngine.ts` | `vault-policy.test.ts` |
+| **Policy lives in the server** | 모든 부수효과는 타입이 있는 `Action`(32종)이다. 28개 규칙의 순서 있는 테이블이 `allow / deny / require_approval`을 결정하고, 일치하는 규칙이 없으면 거부한다. 규칙은 모델을 호출하지 않는다. 승인은 액션의 SHA-256 해시에 묶이고 1회용이며 만료된다. 승인 문구도 액션 필드에서 코드가 만든다. | `policy/actions.ts`, `policy/PolicyEngine.ts` | `vault-policy.test.ts` |
 | **토큰 예산** | 모델 요청 전에 항상 `llm.request` 규칙(태스크 예산, 프로젝트 24시간 예산)을 평가한다. 데몬 자체 호출, 게이트웨이 경유 호출, CLI 브릿지 호출 모두 같은 규칙을 탄다. | `llm/ClaudeClient.ts`, `llm/LlmGateway.ts` | `vault-policy.test.ts`, `relay-gateway.test.ts` |
 | **Untrusted by default** | 비신뢰 텍스트는 `untrusted()`로 감싼다(블록마다 96비트 난수 ID, 내용은 자기 블록을 닫을 수 없음). 시스템 프롬프트는 전부 상수이며 동적 내용을 이어 붙이는 코드 경로가 없다. | `trust/dataBlock.ts`, `harness/prompts.ts` | `vault-policy.test.ts`, `e2e.test.ts` |
 | **Keys stay out of the sandbox** | 컨테이너 환경변수는 `OrbStackManager`가 타입 있는 입력으로만 조립한다. 샌드박스에는 프로바이더 키 대신 샌드박스 전용 토큰과 게이트웨이 주소가 들어간다. 게이트웨이가 호스트에서 토큰을 실제 키로 바꾼다. DB에는 토큰의 해시만 있다. 외부 도구 서버의 토큰도 같다: 호출은 데몬이 호스트에서 하고, 토큰은 Keychain에서 그 서버로 가는 요청 헤더로만 나간다. | `sandbox/OrbStackManager.ts`, `llm/LlmGateway.ts`, `vault/KeychainVault.ts`, `mcp/McpRegistry.ts` | `sandbox.test.ts`, `relay-gateway.test.ts`, `mcp.test.ts`, `engine.integration.test.ts` |
@@ -203,7 +203,8 @@ sequenceDiagram
 | 가둠, ACP | `bridge/jail.ts`, `bridge/acp.ts`, `bridge/cli.ts` | 자기 도구를 끌 수 없는 CLI를 가두는 macOS 샌드박스 프로필, Agent Client Protocol 클라이언트, CLI 공통 환경. §4.1. |
 | `Toolbox` | `harness/Toolbox.ts` | 도구 6개: 샌드박스용 `bash`, `read_file`, `write_file`, `edit_file`과 외부 도구용 `find_tools`, `use_tool`. 스키마 검증 → 정책 → 샌드박스 또는 MCP 클라이언트 → 결과를 데이터 블록으로. 파일을 바꾼 턴마다 체크포인트를 남긴다. |
 | `WorkspaceProvisioner` | `harness/bootstrap.ts`, `harness/axKit.ts`, `harness/mobileKit.ts` | 샌드박스를 띄우고 프로젝트 고유 테마, 런타임 설명 파일, AX 키트(§12)를 첫 커밋으로 넣는다. 모바일(Expo) 프로젝트에는 모바일 키트(`packages/design/src/mobile`: `MobileShell`, `InteractiveDropzone`, `BottomSheet`, `TactileButton`, 토큰)도 `.studio-zero/mobile-kit`에 넣는다. 이미 있으면 덮어쓰지 않고, 태스크 브랜치를 만든 뒤 한 번 더 확인해서 키트보다 먼저 생긴 프로젝트도 작업 브랜치에서 키트를 받는다. |
-| `Harness`, `TaskQueue` | `harness/Harness.ts`, `queue/TaskQueue.ts` | §8. 큐는 SQLite 위에 있고 재시작 후 중단된 태스크를 한 번 다시 넣는다. 프로젝트당 동시 1건. |
+| `Harness`, `TaskQueue` | `harness/Harness.ts`, `queue/TaskQueue.ts` | §8. 큐는 SQLite 위에 있고 재시작 후 중단된 태스크를 한 번 다시 넣는다. 프로젝트당 동시 1건. 사용 한도로 멈춘(`parked`) 태스크를 풀리는 시각에 다시 넣는 타이머 하나도 큐에 있다(§20). |
+| `Scheduler` | `app/Scheduler.ts` | §20. 소유자가 저장한 예약을 1분마다 보고, 때가 된 프롬프트를 `Studio.submitTask`로 넣는다. |
 | `CompilerGate`, `SmokeTester` | `harness/CompilerGate.ts`, `qa/SmokeTester.ts` | §8. 검증의 앞 두 단계. 모델을 쓰지 않는다. |
 | `QaBrowser` | `qa/QaBrowser.ts` | 스모크 게이트와 시각 감사가 함께 쓰는 브라우저 컨테이너 한 개. 쓸 때만 프로젝트 네트워크에 붙고 10분 쉬면 내려간다. 이미지(`qaBrowserDockerfile`)는 Playwright 이미지에 `playwright` 패키지와 Pretendard를 더하고, fontconfig에 그 서체를 한국어와 `sans-serif` · `system-ui`의 기본으로 알린 것이다(파일만 깔면 `fc-match :lang=ko`는 여전히 WenQuanYi를 답한다): Playwright 이미지의 한글 폴백은 중국어 서체 WenQuanYi Zen Hei라, 서체를 아직 싣지 않은 한국어 화면은 전부 그 서체로 찍혀 리뷰어에게 갔다. 레시피의 해시가 태그라 레시피가 바뀌면 다음 사용 때 다시 만든다. |
 | `VisualAuditor`, `EvalRunner` | `qa/`, `harness/EvalRunner.ts` | §7. |
@@ -281,7 +282,7 @@ API 키는 선택 사항이다. 금고에 Anthropic 키가 없으면 데몬은 �
 
 ## 5. 프로토콜
 
-`packages/protocol/src/rpc.ts`의 테이블 하나가 서버 검증, 클라이언트 타입, 이 문서의 근거다. 메서드 89개, 이벤트 45종.
+`packages/protocol/src/rpc.ts`의 테이블 하나가 서버 검증, 클라이언트 타입, 이 문서의 근거다. 메서드 93개, 이벤트 48종.
 
 - 연결: `ws://127.0.0.1:49200/v1/ws`. 첫 프레임은 `{t:"hello", protocol, token, client}`. 5초 안에 오지 않거나 토큰이 틀리면 닫는다.
 - 프레임: 클라이언트 `hello | req | sub | unsub | terminal.data`, 서버 `ready | res | err | evt | sub_closed | terminal.output | terminal.exit`.
@@ -296,12 +297,12 @@ API 키는 선택 사항이다. 금고에 Anthropic 키가 없으면 데몬은 �
 
 ## 6. 데이터베이스
 
-`~/.studio-zero/studio-zero.db`, WAL, `STRICT` 테이블 30개(`db/schema.ts`). 마이그레이션은 전진 전용이다(현재 11단계).
+`~/.studio-zero/studio-zero.db`, WAL, `STRICT` 테이블 31개(`db/schema.ts`). 마이그레이션은 전진 전용이다(현재 13단계).
 
 | 영역 | 테이블 |
 |---|---|
 | 프로젝트 | `projects`, `sandboxes`(게이트웨이 토큰은 해시만) |
-| 실행 | `tasks`(세션과 트랙 포함), `sessions`(프로젝트 안의 이름 붙은 작업 흐름), `events`(추가 전용 트레이스), `usage_ledger` |
+| 실행 | `tasks`(세션과 트랙, 한도 대기 시각과 횟수 포함), `sessions`(프로젝트 안의 이름 붙은 작업 흐름), `schedules`(소유자의 예약), `events`(추가 전용 트레이스), `usage_ledger` |
 | 정책 | `approvals`, `policy_decisions`(허용 포함 전부) |
 | 복구 | `checkpoints` |
 | 품질 | `audits`, `artifacts`, `evals`, `eval_runs`, `ledger_entries`(태스크당 영수증 한 줄) |
@@ -1039,7 +1040,7 @@ pnpm sz task ledger build "미결제 청구서 화면을 만들어줘"
 
 ## 17. 검증 현황
 
-`pnpm typecheck`와 `pnpm test`가 통과한다: 263개 가운데 246개 통과, 17개는 옵트인이라 기본 실행에서 건너뛴다(실제 Keychain 1개, 실제 컨테이너 엔진 7개, 실제 구독 CLI 9개). 헤드리스 Chrome이 필요한 테스트는 Chrome이 없으면 건너뛴다. 옵트인 `SZ_TEST_ENGINE=1`은 이 Mac의 OrbStack에서 9개 하위 테스트가 모두 통과했다.
+`pnpm typecheck`와 `pnpm test`가 통과한다: 280개 가운데 263개 통과, 17개는 옵트인이라 기본 실행에서 건너뛴다(실제 Keychain 1개, 실제 컨테이너 엔진 7개, 실제 구독 CLI 9개). 헤드리스 Chrome이 필요한 테스트는 Chrome이 없으면 건너뛴다. 옵트인 `SZ_TEST_ENGINE=1`은 이 Mac의 OrbStack에서 9개 하위 테스트가 모두 통과했다.
 
 | 검증됨 | 방법 |
 |---|---|
@@ -1058,6 +1059,8 @@ pnpm sz task ledger build "미결제 청구서 화면을 만들어줘"
 | 조사: 실제로 받은 URL만 출처로 인정, 인용 대조, 근거 기반 확신도, 버린 주장 기록 | 프로바이더 응답 형태의 픽스처 |
 | 문서: 린트에 걸린 초안이 줄 번호와 함께 되돌아가 고쳐지는 루프, 인용 번호 검사 | 스크립트된 모델 |
 | PDF 내보내기 (스크립트·네트워크 끔) | 실제 Chrome |
+| 사용 한도 대기: 풀리는 시각을 말한 거부만 대기, 시각 전에는 깨우지 않음, 한 번 깨워 다시 실행, 상한에서 실패와 `parkCapHit`, 시각 없는 거부와 너무 먼 시각은 전과 같이 실패, 재시작을 건너 대기 유지와 재시도 기회 보존, 취소, 폰 알림 | 스크립트된 엔진 + 실제 하네스·큐·저장소, 움직이는 가짜 시계 (`scheduler.test.ts`) |
+| 예약: 다음 시각 계산, 소유자만 설정, 평범한 `tasks.submit`으로 들어감, 쓰기와 제출 사이에 죽어도 두 번 돌지 않음, 이전 태스크가 남아 있으면 건너뜀, 내려가 있던 동안 놓친 시각은 한 번, 일시 정지·재개·삭제 | 실제 Studio·정책·저장소, 가짜 시계 (`scheduler.test.ts`) |
 | AX 키트: 바이트가 어디서 잘려도 같은 이벤트, 스키마 밖 블록과 `javascript:` 링크 거부, 텔레메트리 배치 | 단위 테스트 |
 | AX 키트가 프로젝트에 들어가는 형태 그대로 번들되는 것 (외부 의존은 react, zod뿐) | esbuild |
 | MCP: 발견, 도구별 1회 승인과 기억, 거부·없는 도구·OAuth 서버 처리, 토큰이 이벤트에 없음 | **공식 MCP SDK 클라이언트가 같은 SDK의 실제 서버와 HTTP로 통신** |
@@ -1178,6 +1181,9 @@ pnpm sz task ledger build "미결제 청구서 화면을 만들어줘"
 | 실제 제공자에 대한 외부 API 게이트웨이 | 가짜 제공자 서버로만 확인했다. 서명이 요청 본문 전체에 걸리는 API(HMAC)는 대역 교체 뒤 서명이 맞지 않으므로 이 방식으로는 안 된다. |
 | 실제 모델이 그린 시안 | 그리는 쪽, 걷는 쪽, 재는 쪽은 실제 Chrome과 실제 컨테이너에서 확인했다. 새 지침은 실제 모델에 한 번 넣어 봤다(옵트인 `SZ_TEST_SESSION=1`, Claude 구독의 Fable 5.2, 도구 없이 한 장, 349초): 스크립트 없는 22KB 페이지가 왔고, 조작 전 상태로 열렸으며, 걷기가 두 작업을 끝까지 해냈다(누름 1번, 2번; 폰 크기 측정에서 블로커 0, 메이저 0). 이 한 장이 걷기의 잘못도 하나 드러냈다: 모델은 누름에 줄 전체로 답했는데(`.row:has(input:active)`) 걷기는 컨트롤 자신의 스타일만 읽어 "답이 없다"고 적었다. 그래서 둘레의 화면도 읽게 고쳤다. 아직 모르는 것: 실제 설계 태스크 전체(세 방향, `set_theme`, 그림 만들기, 측정 결과를 받고 고쳐 오는 회차)는 돌려 보지 않았다. 지침을 바꾸기 전의 실제 시안 여섯 장은 전부 조작 뒤의 한 순간으로 얼어 있었다. 기준과 플랫폼 지침을 넣은 뒤 한 번 더 넣었다(2026-11-13, 같은 모델, 296초): 23KB 페이지가 `popovertarget` · `@starting-style` · `allow-discrete`를 실제로 썼고, 걷기가 두 작업을 끝까지 갔으며(누름 3번 모두 답함), 폰 크기 측정에서 결함이 0건이었다. 방향별 엔진을 나란히 돌리는 설계 태스크 전체, 엔진이 `check_mockup`과 `web_guidance`를 실제로 부르는 것은 실제 모델로 돌려 보지 않았다 |
 | 실제 빌드에서의 흐름 걷기 | 걷기 자체는 스크립트가 도는 페이지에서 실제 Chrome으로 확인했다. 실제 엔진이 `data-step` · `data-done`을 구현에 남기는지, React Native Web에서 `dataSet`이 그 속성으로 나오는지, 실제 앱의 흐름이 2.5초 기다림 안에 따라오는지는 설계에서 이어진 빌드를 실제로 돌려 봐야 안다. 그래서 게이트가 아니라 계측이다. |
+| 실제 CLI의 한도 거부 문구 | 풀리는 시각은 기존 `parseResetHint`가 읽는 두 꼴("try again in 2h 30m", "resets 3pm")만 읽는다. 지금의 Claude Code, Codex, Cursor, Antigravity가 한도에 걸렸을 때 실제로 무엇을 내놓는지는 다시 확인하지 않았다. 문구가 달라 시각을 못 읽으면 태스크는 전처럼 실패한다(기다리는 쪽으로 틀리지 않는다). 시각만 있고 날짜·시간대가 없으면 이 Mac의 시계로 다음에 오는 그 시각으로 읽는다. |
+| 실제 구독 한도에서의 대기와 재개 | 스크립트된 엔진으로만 확인했다. 실제 구독이 한도에 걸린 빌드를 기다렸다가 이어 가 본 적은 없다. |
+| 실제 Mac mini에서 하루짜리 예약 | 가짜 시계로만 확인했다. 잠자기와 재시작을 건너 24시간 예약이 다음 날 실제로 도는지는 돌려 보지 않았다. 잠든 동안 놓친 시각은 깨어난 뒤 첫 확인 때 한 번 돈다. |
 | 시안 리뷰의 실제 비용 | 설계 태스크 한 번에 리뷰어 호출이 측정 한 회차당 시안 수만큼(2~3번), 고치는 회차까지 최대 세 회차라 많으면 9번 나간다. 실제 구독에서 얼마나 걸리고 한도를 얼마나 쓰는지는 재지 않았다. |
 
 ## 18. 브리프와 다르게 한 결정, 그리고 만들지 않은 것
@@ -1219,6 +1225,8 @@ pnpm sz task ledger build "미결제 청구서 화면을 만들어줘"
 
 만들지 않은 것:
 
+- **에이전트가 만드는 예약, 목표 이어 가기 프롬프트, 자율 턴·시간 예산.** 예약은 소유자만 만든다(`schedule.configure-owner-only`): 에이전트가 예약을 만들 수 있으면 주입된 글이 유료 작업을 걸어 둘 수 있다. 끝났는지는 하네스의 검증이 정하므로 이어 가라는 프롬프트는 없고, 지출은 `llm.request` 예산이 막는다.
+- **cron 식과 예약 화면.** 예약은 정한 시각 한 번, 또는 60분 이상의 간격뿐이다. 만들고 바꾸는 것은 `sz schedule`과 `schedules.*` RPC로만 하고, 데스크톱 화면은 아직 없다.
 - **데이터 분석.** 지식 작업 가운데 조사와 문서만 있다. 데이터 파일을 받아 샌드박스에서 분석하는 작업 종류는 없다.
 - **게임용 프로젝트 템플릿.** Blender, Unity, Aseprite 같은 도구는 로컬 MCP 서버로 연결할 수 있지만, 프로젝트 템플릿은 웹과 Expo뿐이다. Unity 프로젝트처럼 호스트의 에디터 안에 사는 작업물은 샌드박스·시각 감사 흐름에 들어오지 않는다.
 - **MCP 결과의 이미지.** 뷰포트 캡처 같은 이미지 결과는 모델에 전달되지 않는다.
@@ -1259,7 +1267,7 @@ merge  소유자가 데스크톱에서 누르거나 터미널에서 `sz merge st
 - **Core에는 제품 초안의 지시문이 가지 않는다.** 초안 트랙(`track: 'fast'`)의 첫 지시는 제품을 시작하는 법(화면 계획, 가입, 백엔드)이라서, 이 저장소에서는 계획 호출과 디자인 게이트만 건너뛰고 그 지시문은 붙이지 않는다. 다른 저장소에서 가져오는 것(§9의 materialize)은 여기서는 전체 트랙으로 짓는다.
 - **처음 실제로 돌리기 전에 기준선을 쟀고, `main`은 자기 게이트를 통과하지 못하고 있었다(2026-11-14).** 커밋된 `main`을 Core 샌드박스에 넣고 게이트를 그대로 돌렸더니, 어떤 태스크든 자기 탓이 아닌 이유로 실패했을 것 셋이 나왔다. 슬롭 린트는 자기 색을 직접 적은 `docs/guides/`의 페이지 셋에서 6건을 잡았다. `pnpm test`는 12개가 실패했다: 리눅스에서는 임시 작업 폴더가 `/tmp/sz-ws-…`인데 테스트의 컨테이너 에뮬레이터가 경로를 두 번 바꿔 없는 폴더에서 명령을 돌렸고, 실패한 테스트가 데몬을 켜 둔 채 끝나 실행이 끝나지 않았다(게이트의 900초를 다 쓴다). 그리고 데스크톱의 `theme.css`는 빌드할 때마다 새로 쓰이는데 추적되고 있어서 체크아웃이 늘 수정 상태였고, 머지는 그 상태를 거부한다. 고친 뒤 샌드박스 안에서: 타입 검사 2초, 테스트 24초(281개 가운데 236 통과, 45 건너뜀, 실패 없음), 빌드 1초. 그래서 `pnpm test`는 테스트가 끝나면 열려 있는 것이 있어도 끝내고(`--test-force-exit`), `theme.css`는 추적하지 않으며, 저장소가 자기 린트를 통과하는지는 테스트가 본다(`selfhost.test.ts`).
 
-## 20. 이 Mac: 잠자기 방지와 구독 현황
+## 20. 이 Mac: 잠자기 방지, 구독 현황, 한도 대기와 예약
 
 **잠자기 방지** (`util/CaffeinateManager.ts`, `power.get` · `power.set`). `caffeinate` 프로세스를 하나만 쥔다.
 
@@ -1280,3 +1288,18 @@ merge  소유자가 데스크톱에서 누르거나 터미널에서 `sz merge st
 - 한도 거부: 엔진과 `SessionBrain`이 호출마다 결과를 알리고, 벤더가 사용 한도로 거부하면 `limited`가 된다. 거부 문구에 풀리는 때가 있으면("try again in 3h 12m", "resets at 5pm") 읽어서 남은 시간을 센다. 다음 호출이 성공하면 풀린다. 상태가 바뀌면 `quota.changed`.
 
 같은 구독을 다른 도구로도 쓰고 있으면 실제 한도는 이 숫자보다 가까이 있을 수 있다. 화면도 그렇게 적는다.
+
+**사용 한도에서 기다리기** (`classifyQuotaFailure`, `Harness`, `TaskQueue`). 태스크의 엔진이나 세션 브레인이 구독의 사용 한도로 거부당해 태스크가 실패하려는 자리에서, 하네스는 먼저 그 거부를 읽는다. 거부 문구가 사용 한도라고 분명히 말하고(`usage limit`, `limit reached`, `hit your … limit`. 속도 제한, 429, 과부하는 해당하지 않는다) 풀리는 시각을 미래로 말할 때만 구독과 시각이 나온다. 시각은 `parseResetHint`가 읽은 것뿐이고, 기본값이나 창의 길이로 짐작하지 않는다. API 키로 도는 네이티브 엔진은 구독이 아니므로 해당하지 않는다.
+
+- 그 시각이 `quotaPark.maxWaitHours`(기본 6시간) 안이고 이 태스크가 기다린 횟수가 `quotaPark.maxParks`(기본 2번)보다 적으면: 하던 일을 브랜치에 커밋하고 워크스페이스를 통합 브랜치로 돌려놓은 뒤, 태스크를 `parked`로 두고 `parked_until`과 `park_count`를 DB에 적는다. `task.parked`(구독, 다시 시작하는 시각, 몇 번째인지)가 나가고, 릴레이가 그것을 폰으로 알린다. 태스크는 큐 자리를 내놓고 프로젝트는 다른 작업을 받는다.
+- 큐는 가장 이른 `parked_until`에 타이머 하나를 걸어 둔다. 때가 되면 태스크를 다시 큐에 넣는다. 재시작 뒤 중단된 태스크를 넣는 것과 같은 길이라, 그 프로젝트의 지금 작업 뒤에서 기다렸다가 기준 체크포인트부터, 같은 브랜치 이름으로 다시 돈다(멈추기 전의 부분 작업은 이어 쓰지 않는다). 기다림은 충돌이 아니므로 재시작 재시도 한 번은 쓰지 않는다(시도 횟수를 0으로 돌린다). 기다린 횟수가 그 한도다.
+- 재시작 복구는 `parked`를 건드리지 않는다. 기동 때 시각이 이미 지난 것은 바로 깨우고 나머지에 타이머를 다시 건다. 기다리는 태스크도 취소할 수 있다.
+- 상한에 닿은 뒤의 한도 거부는 전처럼 실패하고, 실패 이벤트에 `parkCapHit: true`가 붙어 알림에 "N번 기다린 뒤 멈췄다"는 줄이 더해진다. 시각이 없거나 너무 먼 거부, 다른 모든 오류는 지금과 똑같이 실패한다.
+
+**예약** (`app/Scheduler.ts`, `schedules.list` · `schedules.create` · `schedules.setEnabled` · `schedules.delete`, `sz schedule`). 소유자가 프롬프트 하나를 정한 시각 한 번(`at`), 또는 N분마다(`every`, 60분 이상) 넣어 두면 데몬이 그때 그것을 태스크로 제출한다. `sz schedule add ledger build "…" --every 24h`, `--at 2026-11-15T07:00`(이 Mac의 시각).
+
+- 만들기, 멈추기, 다시 켜기, 지우기는 `schedule.configure` 액션이고 소유자만 할 수 있다. 에이전트와 데몬 자신은 거부된다. 에이전트 도구, MCP shim, 샌드박스 출력 어디에도 예약을 만드는 길은 없다. 프롬프트는 소유자가 만들 때 쓴 것이므로 실행은 소유자의 태스크로(`owner:desktop`, 출처 `system`) `Studio.submitTask`를 그대로 지나고, `task.submit`과 `llm.request` 규칙, 예산이 다른 태스크와 똑같이 걸린다. 결과는 평범한 태스크 알림과 장부로 온다.
+- 첫 실행은 `at`이면 그 시각, `every`면 만든 때부터 한 간격 뒤다. `Scheduler`는 기동할 때 한 번, 그 뒤 1분마다 본다(`scheduler.enabled`, 기본 켜짐. 꺼도 예약을 만들고 바꾸는 것과 한도 대기는 그대로 된다).
+- 한 번만: 때가 된 예약은 먼저 다음 시각으로 옮기고(읽었을 때의 시각 그대로일 때만, 한 문장으로), 그다음에 제출한다. 둘 사이에 데몬이 죽으면 그 회차는 사라지고, 두 번 돌지는 않는다. 텔레그램 릴레이와 같은 규칙이다. 제출이 정책이나 예산으로 거부되면 `schedule.skipped`(`submit_rejected`)가 나가고 다시 시도하지 않는다.
+- 지난 회차의 태스크가 아직 대기·실행·승인 대기·한도 대기 중이면 이번 회차는 건너뛰고(`schedule.skipped`, `previous_active`) 다음 시각으로 옮긴다. 스티어링으로 끼어들지 않는다: 한 프로젝트에는 한 번에 한 태스크다.
+- 데몬이 내려가 있던 동안 놓친 시각이 몇 개든 기동 뒤 한 번만 돌고, 다음 시각은 원래 박자대로다. 멈췄던 예약을 다시 켜면 지금 뒤의 다음 박자부터 돈다(멈춰 있던 동안의 것은 돌지 않는다). 시각이 지난 `at` 예약은 다시 켤 수 없다. 프로젝트를 지우면 그 예약도 지워진다.

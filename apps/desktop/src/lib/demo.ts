@@ -19,7 +19,7 @@ const projects: Project[] = [
   { id: 'prj_pace', slug: 'pace', name: 'Pace 2주 식단', template: 'mobile-expo', createdAt: min(-12) },
 ];
 
-const baseTask = { projectId: 'prj_ledger', origin: 'desktop', engine: 'native-claude', model: 'claude-opus-5-5', budgetTokens: 2_000_000, error: null, baseBranch: null, enginePref: null, modelPref: null, effort: 'high', effortPref: null, sessionId: null, reviewerPref: null, references: [] as string[], track: 'full' } as const;
+const baseTask = { projectId: 'prj_ledger', origin: 'desktop', engine: 'native-claude', model: 'claude-opus-5-5', budgetTokens: 2_000_000, error: null, baseBranch: null, enginePref: null, modelPref: null, effort: 'high', effortPref: null, sessionId: null, reviewerPref: null, references: [] as string[], track: 'full', parkedUntil: null, parkCount: 0 } as const;
 const sessions: Session[] = [{ id: 'ses_refactor', projectId: 'prj_ledger', name: 'refactor/dates', createdAt: min(-241) }];
 const tasks: Task[] = [
   {

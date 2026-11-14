@@ -43,6 +43,27 @@ export function parseResetHint(text: string, now: number): number | null {
 }
 
 /**
+ * Words that are a usage limit and nothing else. Narrower than `saysUsageLimit`, which also takes rate limits,
+ * 429s, overload and capacity: those are a busy server, not a subscription waiting for its reset.
+ */
+const EXPLICIT_LIMIT = /usage limit|limit reached|hit your [\w ]*limit/i;
+
+/**
+ * Whether a failed engine turn was a subscription's usage limit with the time it resets, read from what the
+ * CLI or provider said. `engine` is the engine the task ran on; a refusal through the session brain is the
+ * Claude subscription's whoever the engine was. Null unless both the limit and a reset time in the future were
+ * said in so many words: a reset time is never guessed, from a default or from the length of a window.
+ */
+export function classifyQuotaFailure(failure: { engine: string | null; error: unknown }, now: number): { subscription: ReviewerPref; resetAt: number } | null {
+  const said = errorMessage(failure.error);
+  if (!EXPLICIT_LIMIT.test(said)) return null;
+  const subscription = failure.error instanceof Error && failure.error.name === 'SessionBrainError' ? 'claude-code' : ReviewerPref.safeParse(failure.engine).data;
+  if (subscription === undefined) return null;
+  const resetAt = parseResetHint(said, now);
+  return resetAt !== null && resetAt > now ? { subscription, resetAt } : null;
+}
+
+/**
  * What the daemon knows about each subscription it works through, from its own side of the wire.
  *
  * The daemon never reads a vendor's login, so it cannot ask an account for its balance, and none of the four

@@ -6,6 +6,7 @@ export const taskStateLabel: Record<TaskState, string> = {
   running: '진행 중',
   awaiting_approval: '승인 대기',
   suspended: '한도 복구 대기',
+  parked: '한도 풀릴 때까지 대기',
   succeeded: '완료',
   failed: '실패',
   cancelled: '취소됨',
