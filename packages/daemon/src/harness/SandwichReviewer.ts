@@ -199,10 +199,20 @@ function trimAcceptance(a: Acceptance): Acceptance {
   };
 }
 
-/** The critique as the builder receives it. A model wrote it from untrusted inputs: the caller fences it as data. */
-export function renderCritique(c: PlanCritique): string {
+/** The headings a critique's parts are given: for the builder, and for the owner reading it beside the plan. */
+const CRITIQUE_HEADINGS = {
+  builder: { defaults: 'Stock defaults', gaps: 'Gaps', blandness: 'Blandness' },
+  owner: { defaults: '흔한 기본값에 머문 곳', gaps: '빠진 것', blandness: '밋밋해질 수 있는 곳' },
+} as const;
+
+/**
+ * The critique as text: as the builder receives it, or (`for: 'owner'`) as the owner reads it beside the plan.
+ * A model wrote it from untrusted inputs: the caller fences it as data, or shows it as plain text.
+ */
+export function renderCritique(c: PlanCritique, to: keyof typeof CRITIQUE_HEADINGS = 'builder'): string {
+  const headings = CRITIQUE_HEADINGS[to];
   const section = (title: string, items: readonly string[]): string => (items.length === 0 ? '' : `${title}:\n${items.map((item) => `- ${item}`).join('\n')}`);
-  return [c.verdict, section('Stock defaults', c.defaults), section('Gaps', c.gaps), section('Blandness', c.blandness)].filter(Boolean).join('\n\n');
+  return [c.verdict, section(headings.defaults, c.defaults), section(headings.gaps, c.gaps), section(headings.blandness, c.blandness)].filter(Boolean).join('\n\n');
 }
 
 /** The corrective patch as the builder receives it, with what it answers. Fenced as data by the caller. */

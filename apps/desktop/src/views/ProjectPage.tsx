@@ -477,10 +477,10 @@ function Workbench({ project, onOpen, onChanged }: { project: Project; onOpen: (
                   <Segmented compact label="검증 범위" value={track} options={TRACKS} onChange={setTrackChoice} />
                   <EnginePicker choice={choice} />
                   {plans ? (
-                    <label title="계획과 교차 검토 의견을 먼저 보여 드리고, 승인해야 코드를 씁니다" className={`${pickerClass} cursor-pointer`}>
-                      <input type="checkbox" checked={reviewPlan} onChange={(e) => setReviewPlan(e.target.checked)} className="size-4 accent-accent" />
+                    <button type="button" aria-pressed={reviewPlan} title="계획과 교차 검토 의견을 먼저 보여 드리고, 승인해야 코드를 씁니다" onClick={() => setReviewPlan((on) => !on)} className={`${pickerClass} ${reviewPlan ? 'bg-sunken text-fg' : ''}`}>
+                      {reviewPlan ? <Check className="size-4 text-accent" aria-hidden /> : <ClipboardList className="size-4" aria-hidden />}
                       계획 먼저 보기
-                    </label>
+                    </button>
                   ) : null}
                   {designed && reviewers.length > 2 ? (
                     <Menu
@@ -508,7 +508,7 @@ function Workbench({ project, onOpen, onChanged }: { project: Project; onOpen: (
                       inputMode="url"
                       autoCapitalize="none"
                       spellCheck={false}
-                      className={`${inputClass} min-h-9 pointer-coarse:min-h-11 max-w-sm flex-1 text-sm`}
+                      className={`${inputClass} min-h-9 pointer-coarse:min-h-11 min-w-56 max-w-sm flex-1 text-sm`}
                     />
                   ) : null}
                   {/* What the verified track holds this build to, said before it is started: it is why it takes longer than a draft. */}

@@ -151,7 +151,7 @@ test('approved: the engine starts only on the owner\'s word, on the version they
     assert.ok(v1);
     assert.equal(v1.planMarkdown, renderPlanMarkdown(PLAN_1));
     assert.equal(v1.sha256, hashPlan(v1.planMarkdown));
-    assert.match(v1.reviewerNotes ?? '', /^표가 화면의 주인이라[\s\S]*Gaps:\n- 입항 시각이/, 'the cross-reviewer\'s notes are kept with the version');
+    assert.match(v1.reviewerNotes ?? '', /^표가 화면의 주인이라[\s\S]*빠진 것:\n- 입항 시각이/, 'the cross-reviewer\'s notes are kept with the version, under headings the owner reads');
     const requested = r.bodies(task.id).filter((b) => b.type === 'plan.review_requested');
     assert.deepEqual(requested, [{ type: 'plan.review_requested', version: 1, planHash: v1.sha256 }]);
 

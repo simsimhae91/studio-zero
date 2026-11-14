@@ -102,6 +102,7 @@ export function Shell({ onDisconnect }: { onDisconnect: () => void }) {
                 project={p}
                 sandbox={state?.sandbox ?? 'absent'}
                 busy={state?.busy ?? false}
+                planWaiting={state?.planWaiting ?? false}
                 waiting={waiting.get(p.id) ?? 0}
                 current={route.kind === 'project' && route.id === p.id}
                 onOpen={() => go({ kind: 'project', id: p.id })}
@@ -399,19 +400,21 @@ const sandboxWord: Record<SandboxState, string> = { running: '샌드박스 실�
  * A project in the rail: a mark for its sandbox (green while it runs, pulsing while a task is working in it),
  * the kind of app, its name, and a menu for what can be done to it without opening it.
  */
-function ProjectCard({ project, sandbox, busy, waiting, current, onOpen, onRename, onRestart, onDelete }: { project: Project; sandbox: SandboxState; busy: boolean; waiting: number; current: boolean; onOpen: () => void; onRename: () => void; onRestart: () => void; onDelete: () => void }) {
+function ProjectCard({ project, sandbox, busy, planWaiting, waiting, current, onOpen, onRename, onRestart, onDelete }: { project: Project; sandbox: SandboxState; busy: boolean; planWaiting: boolean; waiting: number; current: boolean; onOpen: () => void; onRename: () => void; onRestart: () => void; onDelete: () => void }) {
   // The studio's own repository: marked, and neither renamed nor deleted from here.
   const core = project.template === 'studio-core';
   const Icon = core ? Star : project.template === 'mobile-expo' ? Smartphone : Globe;
-  const state = busy ? '작업 중' : sandboxWord[sandbox];
+  // What is the owner's to answer comes first: an approval, then a plan. Neither is the studio at work.
+  const turn = waiting > 0 ? `승인 대기 ${waiting}건` : planWaiting ? '계획 검토 대기' : null;
+  const state = turn ?? (busy ? '작업 중' : sandboxWord[sandbox]);
   return (
     <div className={`rail-item flex items-center rounded-md ${current ? 'bg-bg' : 'hover:bg-bg'}`}>
       <button type="button" onClick={onOpen} aria-current={current ? 'page' : undefined} title={`${project.name}, ${state}`} className="flex min-h-11 min-w-0 flex-1 items-center gap-3 rounded-md py-1 pl-2 text-left">
-        <span className={`size-2 shrink-0 rounded-full ${sandbox === 'running' ? 'bg-success' : 'bg-control-border'} ${busy ? 'status-pulse' : ''}`} aria-hidden />
+        <span className={`size-2 shrink-0 rounded-full ${sandbox === 'running' ? 'bg-success' : 'bg-control-border'} ${busy && turn === null ? 'status-pulse' : ''}`} aria-hidden />
         <Icon className="size-4 shrink-0 text-fg-muted" aria-hidden />
         <span className="flex min-w-0 flex-col">
           <span className="line-clamp-2 break-words text-sm font-medium">{project.name}</span>
-          <span className={`break-all text-sm ${waiting > 0 ? 'font-medium text-accent' : 'text-fg-muted'}`}>{waiting > 0 ? `승인 대기 ${waiting}건` : busy ? '작업 중' : project.slug}</span>
+          <span className={`break-all text-sm ${turn !== null ? 'font-medium text-accent' : 'text-fg-muted'}`}>{turn ?? (busy ? '작업 중' : project.slug)}</span>
         </span>
       </button>
       <Menu

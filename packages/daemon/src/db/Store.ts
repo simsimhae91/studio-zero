@@ -268,6 +268,11 @@ export class Store {
     this.#run('DELETE FROM sessions WHERE id = :id', { id });
   }
 
+  /** Every task in one state, oldest first. */
+  listTasksInState(state: TaskState): Task[] {
+    return this.#all('SELECT * FROM tasks WHERE state = :state ORDER BY created_at', { state }).map(toTask);
+  }
+
   /** Projects with a task that holds their workspace right now. */
   busyProjectIds(): Set<string> {
     return new Set(this.#all(`SELECT DISTINCT project_id FROM tasks WHERE state IN ('running', 'awaiting_approval', 'awaiting_plan_review')`).map((r) => str(r.project_id)));

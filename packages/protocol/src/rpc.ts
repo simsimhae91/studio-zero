@@ -97,7 +97,7 @@ export const methods = {
    * `live` says, per project, whether its sandbox is running and whether a task is using it right now. It is
    * read from the container engine in one call; when the engine cannot be reached every sandbox reads `absent`.
    */
-  'projects.list': { params: empty, result: z.object({ projects: z.array(Project), live: z.array(z.object({ projectId: z.string(), sandbox: SandboxState, busy: z.boolean() })) }) },
+  'projects.list': { params: empty, result: z.object({ projects: z.array(Project), live: z.array(z.object({ projectId: z.string(), sandbox: SandboxState, busy: z.boolean(), /** A task of this project waits for the owner's word on its plan. */ planWaiting: z.boolean().optional() })) }) },
   /** Changes the display name. The slug (and with it the container and volume names) stays as it was. */
   'projects.rename': { params: z.object({ projectId: z.string(), name: Project.shape.name }), result: Project },
   /**

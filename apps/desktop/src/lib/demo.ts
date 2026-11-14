@@ -106,12 +106,12 @@ const harborPlanV2 = `## 요약
 const planVersions: PlanVersion[] = [
   {
     taskId: 'tsk_harbor_plan', version: 1, planMarkdown: harborPlanV1, sha256: 'a'.repeat(64), verdict: 'changes', createdAt: min(-7), resolvedAt: min(-5),
-    reviewerNotes: '표가 화면의 주인이라 요청의 "오늘 들어오는 배"가 칸 하나로 묻힙니다.\n\nGaps:\n- 입항 시각이 바뀐 예약을 어떻게 보여 줄지 계획에 없습니다.',
+    reviewerNotes: '표가 화면의 주인이라 요청의 "오늘 들어오는 배"가 칸 하나로 묻힙니다.\n\n빠진 것:\n- 입항 시각이 바뀐 예약을 어떻게 보여 줄지 계획에 없습니다.',
     feedback: [{ quote: '행은 정박지, 열은 날짜이고 예약된 칸을 칠합니다.', comment: '표보다 오늘 들어오는 배 목록이 먼저입니다. 표는 그 아래로 내려 주세요.' }],
   },
   {
     taskId: 'tsk_harbor_plan', version: 2, planMarkdown: harborPlanV2, sha256: 'b'.repeat(64), verdict: null, createdAt: min(-3), resolvedAt: null, feedback: [],
-    reviewerNotes: '오늘 입항 목록이 먼저 나와 요청과 맞습니다.\n\nGaps:\n- 늦게 도착한 배를 목록에서 어떻게 구분할지 정해 두면 좋습니다.',
+    reviewerNotes: '오늘 입항 목록이 먼저 나와 요청과 맞습니다.\n\n빠진 것:\n- 늦게 도착한 배를 목록에서 어떻게 구분할지 정해 두면 좋습니다.',
   },
 ];
 const harborBodies: EventBody[] = [
@@ -546,7 +546,7 @@ const handlers: Handlers = {
   }),
   // Cursor's level is part of its model names; the others take it as a setting of their own.
   'engines.models': (p) => ({ models: demoModels[p.engine] ?? [], efforts: p.engine === 'cursor' || p.engine === 'antigravity' ? [] : ['low', 'medium', 'high', 'xhigh', 'max'] }),
-  'projects.list': () => ({ projects, live: [{ projectId: 'prj_core', sandbox: 'running', busy: false }, { projectId: 'prj_ledger', sandbox: 'running', busy: true }, { projectId: 'prj_atlas', sandbox: 'stopped', busy: false }, { projectId: 'prj_tide', sandbox: 'stopped', busy: false }, { projectId: 'prj_pace', sandbox: 'running', busy: true }, { projectId: 'prj_harbor', sandbox: 'running', busy: true }] }),
+  'projects.list': () => ({ projects, live: [{ projectId: 'prj_core', sandbox: 'running', busy: false }, { projectId: 'prj_ledger', sandbox: 'running', busy: true }, { projectId: 'prj_atlas', sandbox: 'stopped', busy: false }, { projectId: 'prj_tide', sandbox: 'stopped', busy: false }, { projectId: 'prj_pace', sandbox: 'running', busy: true }, { projectId: 'prj_harbor', sandbox: 'running', busy: true, planWaiting: true }] }),
   'ledger.list': (p) => ({ entries: ledger.filter((e) => e.projectId === p.projectId) }),
   'external.list': (p) => ({ apis: p.projectId === 'prj_ledger' ? [{ projectId: 'prj_ledger', name: 'tosspay', origin: 'https://api.tosspayments.com', variables: ['SECRET_KEY'], createdAt: min(-200) }] : [] }),
   'power.get': () => ({ mode: 'system', supported: true }),

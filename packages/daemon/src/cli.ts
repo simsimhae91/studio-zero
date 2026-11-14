@@ -8,7 +8,12 @@ const USAGE = `sz — Studio Zero command line
   sz project list
   sz project create <slug> <name> [${Template.options.join('|')}]
   sz project rm <slug> [--delete-workspace]
-  sz task <project-slug> <build|refactor|inline_edit|ideate> [--draft] [--from <branch>] <prompt...>   submit and follow a task (--draft: the fast track; --from: start from that branch, e.g. a failed task's)
+  sz task <project-slug> <build|refactor|inline_edit|ideate> [--draft] [--plan] [--from <branch>] <prompt...>
+                                                                             submit and follow a task (--draft: the fast track; --plan: stop after planning until the plan
+                                                                             is approved; --from: start from that branch, e.g. a failed task's)
+  sz cancel <task-id>                                                        stop a task that is queued, running or waiting; its work stays on its branch
+  sz plan <task-id>                                                          the plan a task is waiting with, and the other model's notes on it
+  sz plan approve <task-id> | sz plan change <task-id> <what to change...>   approve it (the build starts), or send it back to be drafted again
   sz schedule add <project-slug> <build|refactor|inline_edit|ideate> <prompt...> [--every <n>h|<n>m] [--at 2026-11-15T07:00]
                                                                              submit the prompt as a task every n hours or minutes (at least 1h), once at that local time,
                                                                              or with both from that time on: --every 24h --at 2026-11-15T07:00 is every day at seven
@@ -64,6 +69,10 @@ function printEvent(e: EventEnvelope): void {
         return `engine ${b.engine} / ${b.model} (${b.effort})`;
       case 'plan.created':
         return `plan: ${b.summary}`;
+      case 'plan.review_requested':
+        return `PLAN ${b.version} WAITS for you: sz plan ${e.taskId ?? '<task-id>'}`;
+      case 'plan.review_resolved':
+        return b.outcome === 'timeout' ? `plan ${b.version}: nobody answered in time` : `plan ${b.version}: ${b.outcome === 'approve' ? 'approved' : 'sent back for changes'}`;
       case 'tool.call':
         return `$ ${b.tool} ${b.input.split('\n')[0]!.slice(0, 140)}`;
       case 'tool.result':
@@ -186,11 +195,14 @@ async function main(argv: string[]): Promise<number> {
         const project = await projectBySlug(client, args[0]);
         // --draft: the fast track (Draft 0), as the desktop client's composer offers it.
         const draft = args.includes('--draft');
+        // --plan: the task stops after planning, and goes on when the plan is approved (sz plan approve).
+        const reviewPlan = args.includes('--plan');
         // --from <branch>: the work starts from that branch and not from the default one. For going on from a task that failed.
         const fromAt = args.indexOf('--from');
         const from = fromAt >= 2 ? args[fromAt + 1] : undefined;
-        const words = args.slice(2).filter((word, i) => word !== '--draft' && i + 2 !== fromAt && i + 2 !== fromAt + 1);
-        const task = await client.call('tasks.submit', { projectId: project.id, kind: args[1] as Exclude<TaskKind, 'kirby_materialize'>, prompt: words.join(' '), ...(draft ? { track: 'fast' as const } : {}), ...(from ? { baseBranch: from } : {}) });
+        const words = args.slice(2).filter((word, i) => word !== '--draft' && word !== '--plan' && i + 2 !== fromAt && i + 2 !== fromAt + 1);
+        const task = await client.call('tasks.submit', { projectId: project.id, kind: args[1] as Exclude<TaskKind, 'kirby_materialize'>, prompt: words.join(' '), ...(draft ? { track: 'fast' as const } : {}), ...(from ? { baseBranch: from } : {}), ...(reviewPlan ? { reviewPlan: true } : {}) });
+        if (reviewPlan && !task.reviewPlan) process.stdout.write('--plan was not taken: only a build or a refactor on the full track drafts a plan to show\n');
         process.stdout.write(`task ${task.id}\n`);
         return await new Promise<number>((resolve) => {
           client.subscribe({ taskId: task.id }, (e) => {
@@ -245,6 +257,29 @@ async function main(argv: string[]): Promise<number> {
         const filter = args[0] ? { projectId: (await projectBySlug(client, args[0])).id } : {};
         client.subscribe(filter, printEvent);
         return await new Promise<number>(() => undefined);
+      }
+      case 'cancel': {
+        const task = await client.call('tasks.cancel', { taskId: args[0] ?? '' });
+        process.stdout.write(`task ${task.id} is ${task.state === 'cancelled' ? 'cancelled' : `${task.state}; it stops at its next step`}\n`);
+        return 0;
+      }
+      case 'plan': {
+        // The version a verdict is given on is the one read here: the daemon refuses it if the plan has moved on since.
+        const verb = args[0] === 'approve' || args[0] === 'change' ? args[0] : null;
+        const taskId = (verb ? args[1] : args[0]) ?? '';
+        const { versions, revisionsLeft } = await client.call('plans.list', { taskId });
+        const latest = versions.at(-1);
+        if (!latest) throw new Error(`task ${taskId} has no plan to show (it was not submitted with --plan, or it has not planned yet)`);
+        if (verb === null) {
+          const state = latest.verdict === null ? `waiting for you; it can be sent back ${revisionsLeft} more time(s)` : latest.verdict === 'approve' ? 'approved' : 'sent back for changes';
+          process.stdout.write(`plan ${latest.version} of task ${taskId} (${state})\n\n${latest.planMarkdown}${latest.reviewerNotes ? `\n--- the other model's notes\n${latest.reviewerNotes}\n` : ''}`);
+          return 0;
+        }
+        const note = args.slice(2).join(' ').trim();
+        if (verb === 'change' && note === '') throw new Error('say what to change: sz plan change <task-id> <what to change...>');
+        const resolved = await client.call('plans.resolve', { taskId, version: latest.version, planHash: latest.sha256, verdict: verb === 'approve' ? 'approve' : 'changes', ...(verb === 'change' ? { feedback: [{ comment: note }] } : {}) });
+        process.stdout.write(verb === 'approve' ? `plan ${resolved.version} approved: the build starts\n` : `plan ${resolved.version} sent back: a new one will wait for you (sz plan ${taskId})\n`);
+        return 0;
       }
       case 'approvals': {
         for (const a of (await client.call('approvals.list', { state: 'pending' })).approvals) process.stdout.write(`${a.id}  ${a.summary}  (expires ${new Date(a.expiresAt).toLocaleTimeString()})\n`);

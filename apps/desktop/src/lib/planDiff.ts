@@ -4,6 +4,9 @@ export interface DiffOp {
   text: string;
 }
 
+/** The largest word-by-word table the diff builds: 4,000 changed words against 4,000, about 64 MB. */
+export const MAX_CELLS = 16_000_000;
+
 /**
  * Splits text into words with the whitespace after each kept on it, so that joining the tokens gives the text
  * back exactly, line breaks included. Leading whitespace is a token of its own.
@@ -28,9 +31,25 @@ export function diffWords(before: string, after: string): DiffOp[] {
   const x = a.slice(head, a.length - tail);
   const y = b.slice(head, b.length - tail);
 
-  // lcs[i * (m + 1) + j]: the longest common run of x[i..] and y[j..].
+  const ops: DiffOp[] = [];
+  const push = (kind: DiffOp['kind'], text: string): void => {
+    const last = ops.at(-1);
+    if (last?.kind === kind) last.text += text;
+    else ops.push({ kind, text });
+  };
   const n = x.length;
   const m = y.length;
+  // The table below is n × m. Past this many cells (a plan with a long screen spec, rewritten end to end) it would
+  // take tens of megabytes to say what is plain anyway: the middle is shown as taken out and put in whole.
+  if ((n + 1) * (m + 1) > MAX_CELLS) {
+    for (const token of a.slice(0, head)) push('same', token);
+    for (const token of x) push('del', token);
+    for (const token of y) push('add', token);
+    for (const token of a.slice(a.length - tail)) push('same', token);
+    return ops;
+  }
+
+  // lcs[i * (m + 1) + j]: the longest common run of x[i..] and y[j..].
   const lcs = new Uint32Array((n + 1) * (m + 1));
   for (let i = n - 1; i >= 0; i--) {
     for (let j = m - 1; j >= 0; j--) {
@@ -38,12 +57,6 @@ export function diffWords(before: string, after: string): DiffOp[] {
     }
   }
 
-  const ops: DiffOp[] = [];
-  const push = (kind: DiffOp['kind'], text: string): void => {
-    const last = ops.at(-1);
-    if (last?.kind === kind) last.text += text;
-    else ops.push({ kind, text });
-  };
   for (const token of a.slice(0, head)) push('same', token);
   let i = 0;
   let j = 0;

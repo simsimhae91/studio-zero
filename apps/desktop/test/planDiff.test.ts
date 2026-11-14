@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { diffWords, tokenize, type DiffOp } from '../src/lib/planDiff.ts';
+import { MAX_CELLS, diffWords, tokenize, type DiffOp } from '../src/lib/planDiff.ts';
 
 const side = (ops: readonly DiffOp[], drop: DiffOp['kind']): string => ops.filter((op) => op.kind !== drop).map((op) => op.text).join('');
 const both = (ops: readonly DiffOp[], before: string, after: string): void => {
@@ -64,4 +64,14 @@ test('runs of one kind are merged, so the view gets one span per change', () => 
   const ops = diffWords('a b c', 'x y z');
   both(ops, 'a b c', 'x y z');
   for (let i = 1; i < ops.length; i++) assert.notEqual(ops[i]!.kind, ops[i - 1]!.kind);
+});
+
+test('two long texts with nothing in common are not set word against word: the middle goes out and comes in whole', () => {
+  const words = Math.ceil(Math.sqrt(MAX_CELLS)) + 10;
+  const before = `머리말 ${Array.from({ length: words }, (_, i) => `가${i}`).join(' ')} 맺음말`;
+  const after = `머리말 ${Array.from({ length: words }, (_, i) => `나${i}`).join(' ')} 맺음말`;
+  const ops = diffWords(before, after);
+  assert.deepEqual(ops.map((op) => op.kind), ['same', 'del', 'add', 'same']);
+  assert.equal(ops.filter((op) => op.kind !== 'add').map((op) => op.text).join(''), before, 'what was there is all still there');
+  assert.equal(ops.filter((op) => op.kind !== 'del').map((op) => op.text).join(''), after);
 });

@@ -186,7 +186,7 @@ export function toWire(row: PlanVersionRow): PlanVersion {
     version: row.version,
     planMarkdown: row.planMarkdown,
     sha256: row.sha256,
-    reviewerNotes: notes?.success ? renderCritique(notes.data) : null,
+    reviewerNotes: notes?.success ? renderCritique(notes.data, 'owner') : null,
     verdict: row.verdict,
     feedback: row.feedback,
     createdAt: row.createdAt,

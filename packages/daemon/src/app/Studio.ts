@@ -245,13 +245,15 @@ export class Studio implements PromotionHost {
   async projectsOverview(): Promise<ResultOf<'projects.list'>> {
     const projects = this.listProjects();
     const busy = this.#d.store.busyProjectIds();
+    // A plan in front of the owner is their turn: the list says so instead of calling the project busy.
+    const planWaiting = new Set(this.#d.store.listTasksInState('awaiting_plan_review').map((t) => t.projectId));
     let states = new Map<string, 'running' | 'stopped'>();
     try {
       states = await this.#d.sandboxes.states();
     } catch {
       // The container engine is not reachable: every sandbox reads as absent, and the list still loads.
     }
-    return { projects, live: projects.map((p) => ({ projectId: p.id, sandbox: states.get(sandboxNames(p.slug).container) ?? ('absent' as const), busy: busy.has(p.id) })) };
+    return { projects, live: projects.map((p) => ({ projectId: p.id, sandbox: states.get(sandboxNames(p.slug).container) ?? ('absent' as const), busy: busy.has(p.id), planWaiting: planWaiting.has(p.id) })) };
   }
 
   /** The display name only. The slug names the container, the volume and the preview host, so it stays. */
