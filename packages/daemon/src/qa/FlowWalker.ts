@@ -13,6 +13,8 @@ export const STEP_ATTR = 'data-step';
 export const DONE_ATTR = 'data-done';
 /** A text field among the steps says what a person would type into it. */
 export const SAMPLE_ATTR = 'data-sample';
+/** In a sample, where the walk's own name goes (see `walkFlow`). */
+export const RUN_MARK = '{run}';
 
 /** A task id as the screen spec allows it: the only thing of the spec's that is put into a selector. */
 const TASK_ID = /^[a-z][a-z0-9-]{0,23}$/;
@@ -91,13 +93,16 @@ function look(q: { step: string; done: string }): unknown {
   const tag = el.tagName;
   const type = (el.getAttribute('type') ?? 'text').toLowerCase();
   const field = tag === 'TEXTAREA' || (tag === 'INPUT' && !['checkbox', 'radio', 'button', 'submit', 'reset', 'range', 'color', 'file', 'image', 'hidden'].includes(type));
-  return { done, target: { index, x: cx, y: cy, w: r.width, h: r.height, scrolled, covered, field, sample: (el.getAttribute('data-sample') ?? '').slice(0, 80) } };
+  // What a field is for, as the page itself declares it to a browser and a keyboard: the address a person signs in with, their password, or anything else.
+  const hint = `${el.getAttribute('inputmode') ?? ''} ${el.getAttribute('autocomplete') ?? ''}`.toLowerCase();
+  const kind = !field ? 'none' : type === 'password' || /\b(current|new)-password\b/.test(hint) ? 'password' : type === 'email' || /\b(email|username)\b/.test(hint) ? 'email' : 'text';
+  return { done, target: { index, x: cx, y: cy, w: r.width, h: r.height, scrolled, covered, field, kind, sample: (el.getAttribute('data-sample') ?? '').slice(0, 80) } };
 }
 
 const Look = z.object({
   done: z.boolean(),
   target: z
-    .object({ index: z.number().int().min(0).max(10_000), x: z.number(), y: z.number(), w: z.number().min(0).max(100_000), h: z.number().min(0).max(100_000), scrolled: z.boolean(), covered: z.boolean(), field: z.boolean(), sample: z.string().max(80) })
+    .object({ index: z.number().int().min(0).max(10_000), x: z.number(), y: z.number(), w: z.number().min(0).max(100_000), h: z.number().min(0).max(100_000), scrolled: z.boolean(), covered: z.boolean(), field: z.boolean(), kind: z.enum(['none', 'email', 'password', 'text']).catch('text'), sample: z.string().max(80) })
     .nullable(),
 });
 
@@ -139,9 +144,13 @@ function moving(): number[] {
  * `touch` says the page is being looked at as a phone: there, how a control looks under a hovering pointer is
  * not an answer to anything. `patienceMs` is how long the walk waits for the next thing to appear after a
  * press: nothing on a mock-up, whose states are CSS and change at once; a couple of seconds on a running app,
- * where a press may go through a render or a request first.
+ * where a press may go through a render or a request first. `identity` is who is walking: with one, the field
+ * for an address gets theirs and the field for a password gets theirs, whatever sample the page carries, so
+ * that a product with accounts can be walked as a person nobody has been before. `run` names this walk: a
+ * sample that has to be unique (a code a person picks, a handle) carries `{run}`, which is filled with it, so
+ * that the same walk can be made again tomorrow and two people in one walk can type the same code.
  */
-export async function walkFlow(page: Page, tasks: readonly FlowTask[], opts: { touch: boolean; patienceMs?: number }): Promise<Walk> {
+export async function walkFlow(page: Page, tasks: readonly FlowTask[], opts: { touch: boolean; patienceMs?: number; identity?: { email: string; password: string }; run?: string }): Promise<Walk> {
   const patience = opts.patienceMs ?? 0;
   /** Looks, and keeps looking until `ready` or patience runs out. Null when the page gave nothing readable. */
   const seek = async (q: { step: string; done: string }, ready: (seen: z.infer<typeof Look>) => boolean): Promise<z.infer<typeof Look> | null> => {
@@ -219,7 +228,8 @@ export async function walkFlow(page: Page, tasks: readonly FlowTask[], opts: { t
       const seen2 = await around(target);
       await page.mouse.up();
       if (target.field) {
-        const sample = (target.sample.trim() || '1').slice(0, MAX_SAMPLE);
+        const own = opts.identity && target.kind === 'email' ? opts.identity.email : opts.identity && target.kind === 'password' ? opts.identity.password : null;
+        const sample = own ?? (target.sample.trim().replaceAll(RUN_MARK, opts.run ?? '') || '1').slice(0, MAX_SAMPLE);
         await page.keyboard.type(sample);
         result.typed += [...sample].length;
       }

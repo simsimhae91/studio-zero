@@ -129,8 +129,9 @@ export async function testDaemon(configOverrides: z.input<typeof ConfigSchema> =
   const docker = localDocker(ws.dir);
   // The studio's own repository is not mounted unless a test asks for it: a test daemon is not a place to work on it.
   const config = testConfig(home.dir, { listen: { port: 0 }, gateway: { port: 0 }, engines: { claudeCode: { enabled: false } }, selfHosting: { enabled: false }, ...configOverrides });
-  // Tests never ask a real provider whether a key is good.
-  const daemon = await createDaemon(config, quietLog, { run: wrapDocker(docker.run), securityRun: security.run, checkKey: async () => 'accepted', ...overrides });
+  // Tests never ask a real provider whether a key is good. And a test's scripted build has no backend to be walked
+  // on: the walk of the plan's scenarios is off unless a test hands one in.
+  const daemon = await createDaemon(config, quietLog, { run: wrapDocker(docker.run), securityRun: security.run, checkKey: async () => 'accepted', scenarios: null, ...overrides });
   const port = (): number => (daemon.server.app.server.address() as { port: number }).port;
   return {
     daemon,

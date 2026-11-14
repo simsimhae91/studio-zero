@@ -60,6 +60,7 @@ import { Secret, errorMessage, systemClock, type Clock } from '../util/core.ts';
 import { runCommand, type CommandRunner } from '../util/run.ts';
 import { CredentialIds, KeychainVault } from '../vault/KeychainVault.ts';
 import { ProjectArms } from '../arms/ProjectArms.ts';
+import { ScenarioRunner, type ScenarioRunnerLike } from '../qa/ScenarioRunner.ts';
 import { SupabaseStack } from '../arms/SupabaseStack.ts';
 import { ExternalApis } from './ExternalApis.ts';
 import { ProjectNamer } from './ProjectNamer.ts';
@@ -95,6 +96,8 @@ export interface DaemonOverrides {
   ptyOpen?: PtyOpen;
   /** Replaces the headless-browser smoke load. */
   smoke?: SmokeRunner;
+  /** Replaces the walk of the plan's scenarios on the build, or switches it off with null. */
+  scenarios?: ScenarioRunnerLike | null;
   /** Replaces `/usr/bin/caffeinate`. */
   powerSpawn?: PowerSpawner;
   /** Replaces the platform check behind keeping the Mac awake. */
@@ -204,7 +207,8 @@ export async function createDaemon(config: Config, log: PinoLogger, overrides: D
   const ledger = new Ledger({ config, store, events, clock, log: log.child({ mod: 'ledger' }) });
   const mockups = new MockupRenderer({ config, store, sandboxes, browser: qaBrowser, auditor, clock, log: log.child({ mod: 'mockups' }) });
   toolbox.useMockups(mockups);
-  const harness = new Harness({ config, store, events, policy, sandboxes, provisioner, router, claude, evals, compiler, smoke, lessons, reflection, refkit, reviewer, ledger, build: new BuildMeter({ sandboxes }), mockups, selfHosting, clock, log: log.child({ mod: 'harness' }) });
+  const scenarios = overrides.scenarios !== undefined ? overrides.scenarios : new ScenarioRunner({ config, sandboxes, browser: qaBrowser, arms });
+  const harness = new Harness({ config, store, events, policy, sandboxes, provisioner, router, claude, evals, compiler, smoke, scenarios, lessons, reflection, refkit, reviewer, ledger, build: new BuildMeter({ sandboxes }), mockups, selfHosting, clock, log: log.child({ mod: 'harness' }) });
   const queue = new TaskQueue({ store, events, execute: (task, signal) => harness.run(task, signal), clock, log: log.child({ mod: 'queue' }) });
   // Tasks suspended for want of a design reviewer are queued again when one answers.
   const resumer = new ReviewResumer({ store, vision, queue, log: log.child({ mod: 'resumer' }) });

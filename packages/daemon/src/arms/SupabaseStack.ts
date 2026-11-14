@@ -33,8 +33,8 @@ export interface StackInfo {
   apiUrlFromSandbox: string;
   /** Safe to ship in what a browser downloads. */
   publishableKey: string;
-  /** The key that passes every row's guard. It never leaves the daemon. */
-  secretKey: string;
+  /** The keys that pass every row's guard, under each name the stack gives them. They never leave the daemon; they are kept to look for. */
+  adminKeys: string[];
   /** Postgres, for the daemon's own use (applying a schema, taking a snapshot). */
   dbUrl: string;
   /** The catcher that holds the mail the stack would have sent, when the stack runs one. */
@@ -219,10 +219,10 @@ export function readStarted(stdout: string): StackInfo {
   const env = parsed.env;
   const apiUrl = env.API_URL;
   const publishableKey = env.PUBLISHABLE_KEY ?? env.ANON_KEY;
-  const secretKey = env.SECRET_KEY ?? env.SERVICE_ROLE_KEY;
-  if (!apiUrl || !publishableKey || !secretKey || !env.DB_URL) throw new StackError('the project\'s backend did not give its address and keys', Object.keys(env).join(', '));
+  const adminKeys = [env.SECRET_KEY, env.SERVICE_ROLE_KEY].filter((key): key is string => typeof key === 'string' && key !== '');
+  if (!apiUrl || !publishableKey || adminKeys.length === 0 || !env.DB_URL) throw new StackError('the project\'s backend did not give its address and keys', Object.keys(env).join(', '));
   const sandbox = new URL(apiUrl);
   // A sandbox container's own 127.0.0.1 is itself; the host is this name there.
   sandbox.hostname = 'host.docker.internal';
-  return { id: parsed.id, apiUrl, apiUrlFromSandbox: sandbox.origin, publishableKey, secretKey, dbUrl: env.DB_URL, mailUrl: env.MAILPIT_URL ?? env.INBUCKET_URL ?? null };
+  return { id: parsed.id, apiUrl, apiUrlFromSandbox: sandbox.origin, publishableKey, adminKeys, dbUrl: env.DB_URL, mailUrl: env.MAILPIT_URL ?? env.INBUCKET_URL ?? null };
 }

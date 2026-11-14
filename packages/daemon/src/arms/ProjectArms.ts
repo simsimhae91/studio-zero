@@ -150,6 +150,11 @@ export class ProjectArms {
     });
   }
 
+  /** Runs a script of the studio's own in the project's database (see `SupabaseStack.sql`). For checks that have to see past every policy. */
+  sql(project: Project, script: string): ReturnType<Stack['sql']> {
+    return this.#stack.sql(project, script);
+  }
+
   /** Takes the backend down with its data kept, as when the project's sandbox is stopped. */
   async rest(project: Project): Promise<void> {
     await this.#locks.run(project.id, async () => {

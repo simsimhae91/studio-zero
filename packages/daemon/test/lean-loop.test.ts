@@ -11,6 +11,7 @@ import { Store } from '../src/db/Store.ts';
 import { CompilerGate } from '../src/harness/CompilerGate.ts';
 import { repairMessage } from '../src/harness/Harness.ts';
 import { DRAFT_BRIEF } from '../src/harness/prompts.ts';
+import type { ScenarioOutcome, ScenarioRunnerLike } from '../src/qa/ScenarioRunner.ts';
 import { isConsoleNoise, probeRoute, renderSmokeFeedback, type SmokeOutcome, type SmokeRunner } from '../src/qa/SmokeTester.ts';
 import { OrbStackManager } from '../src/sandbox/OrbStackManager.ts';
 import { sleep } from '../src/util/core.ts';
@@ -150,6 +151,51 @@ test('Draft 0: no planning call, a short plan of how it works, the compiler erro
     // The plan held, so it was written out for the owner to read and went into the task's commit.
     assert.match(readFileSync(join(d.workspace, 'docs/screens.md'), 'utf8'), /^# 화면설계서\n[\s\S]*## 시나리오\n\n### 같이 사는 사람: `first`/);
     assert.match(task.summary ?? '', /Assumed three sample photos/);
+  } finally {
+    await d.cleanup();
+  }
+});
+
+test('a build is held to its scenarios: what the walk found goes back as it was found, and the work is accepted when they are walked', async () => {
+  const smoke: SmokeRunner = { run: async (): Promise<SmokeOutcome> => ({ passed: true, routes: ['/'], issues: [], detail: '1 route loaded without errors', durationMs: 5 }) };
+  const walks: string[][] = [];
+  const finding = 'Scenario "second" (같이 사는 사람) follows "first", and its last screen shows none of what that person saved (looked for "설거지"). What one person adds has to reach the other\'s screen. The screen said: "오늘 적은 집안일이 없어요"';
+  const scenarios: ScenarioRunnerLike = {
+    run: async (_project, spec): Promise<ScenarioOutcome> => {
+      walks.push(spec.scenarios.map((scenario) => `${scenario.id}:${scenario.steps.map((step) => step.id).join('>')}`));
+      const problems = walks.length === 1 ? [finding] : [];
+      return { passed: problems.length === 0, scenarios: 2, walked: problems.length === 0 ? 2 : 1, problems, detail: problems.length === 0 ? '2 scenarios walked to the end as new people' : '1 of 2 scenarios walked to the end; 1 finding', durationMs: 9 };
+    },
+  };
+  const model = scripted([
+    [use('tu_0', 'write_file', { path: 'docs/screens.json', content: JSON.stringify(SHORT_PLAN) }), use('tu_1', 'write_file', { path: 'tsconfig.json', content: '{ "compilerOptions": { "strict": true } }\n' }), use('tu_2', 'bash', { command: INSTALL_TSC }), use('tu_3', 'write_file', { path: 'src/App.tsx', content: 'export const rows: string[] = [];\n' })],
+    [say('The ledger is up.')],
+    [use('tu_4', 'write_file', { path: 'src/App.tsx', content: 'export const rows: string[] = ["shared"];\n' })],
+    [say('The second person now sees the first one\'s entries.')],
+  ]);
+  const d = await testDaemon({}, { anthropic: model.sdk, smoke, scenarios });
+  await d.daemon.start();
+  const { studio, events } = d.daemon;
+  d.daemon.evals.measureDraft = async () => null;
+  try {
+    const project = studio.createProject(OWNER, { name: 'Chores', slug: 'chores-app', template: 'mobile-expo' });
+    const submitted = await studio.submitTask(OWNER, { projectId: project.id, kind: 'build', prompt: '같이 사는 사람들이 집안일을 적는 앱', track: 'fast' }, 'desktop');
+    await finished(studio, submitted.id);
+    const task = studio.getTask(submitted.id);
+    const trace = events.history({ taskId: task.id }, 0, 1000);
+    assert.equal(task.state, 'succeeded', `${task.error}\n${trace.map((e) => JSON.stringify(e.body)).join('\n').slice(0, 4000)}`);
+
+    // The walk comes after the build compiles and loads, and is given the plan as the workspace has it.
+    assert.deepEqual(bodies(trace, 'gate.result').map((g) => `${g.gate}:${g.passed}`), ['compiler:true', 'smoke:true', 'scenarios:false', 'compiler:true', 'smoke:true', 'scenarios:true']);
+    assert.deepEqual(walks, [['first:sign-up>log', 'second:sign-up>see'], ['first:sign-up>log', 'second:sign-up>see']]);
+    const [failed, passed] = bodies(trace, 'gate.result').filter((g) => g.gate === 'scenarios');
+    assert.equal(failed!.name, 'first second');
+    assert.match(failed!.detail, /The studio walked the plan's scenarios on the running build as new people: 1 of 2 reached the end\.\n- Scenario "second"/);
+    assert.equal(passed!.detail, '2 scenarios walked to the end as new people');
+
+    // What was found goes back to the engine whole, fenced as what a page said.
+    const repair = String((model.sent[2] as Anthropic.Beta.MessageCreateParams).messages.at(-1)!.content);
+    assert.match(repair, /Check "scenarios" failed:\n<untrusted-data id="[0-9a-f]{24}" source="browser-page" check="scenarios">\nThe studio walked the plan's scenarios on the running build as new people: 1 of 2 reached the end\.\n- Scenario "second" \(같이 사는 사람\) follows "first", and its last screen shows none of what that person saved \(looked for "설거지"\)/);
   } finally {
     await d.cleanup();
   }

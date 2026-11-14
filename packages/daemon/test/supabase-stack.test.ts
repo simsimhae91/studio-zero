@@ -44,7 +44,7 @@ test('a project\'s stack: set up once, started with the studio\'s own engine con
       apiUrl: 'http://127.0.0.1:21459',
       apiUrlFromSandbox: 'http://host.docker.internal:21459',
       publishableKey: 'sb_publishable_abc',
-      secretKey: 'sb_secret_xyz',
+      adminKeys: ['sb_secret_xyz', 'service.jwt'],
       dbUrl: 'postgresql://postgres:postgres@127.0.0.1:20253/postgres',
       mailUrl: 'http://127.0.0.1:32392',
     });
@@ -85,7 +85,7 @@ test('a stack that cannot be had says why, in words an owner can act on', async 
     await assert.rejects(missing.start({ id: 'p5' }), /the Supabase command line was not found: install it/);
     // Older releases name the keys differently; the publishable and secret keys are read from either.
     const older = readStarted(JSON.stringify({ id: 'a', env: { API_URL: 'http://127.0.0.1:54321', DB_URL: 'postgresql://x', ANON_KEY: 'anon', SERVICE_ROLE_KEY: 'service' } }));
-    assert.deepEqual([older.publishableKey, older.secretKey, older.mailUrl, older.apiUrlFromSandbox], ['anon', 'service', null, 'http://host.docker.internal:54321']);
+    assert.deepEqual([older.publishableKey, older.adminKeys, older.mailUrl, older.apiUrlFromSandbox], ['anon', ['service'], null, 'http://host.docker.internal:54321']);
     assert.throws(() => readStarted(JSON.stringify({ id: 'a', env: { API_URL: 'http://127.0.0.1:1' } })), /did not give its address and keys/);
   } finally {
     rmSync(home, { recursive: true, force: true });

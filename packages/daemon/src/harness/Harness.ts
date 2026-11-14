@@ -14,6 +14,7 @@ import type { SmokeRunner } from '../qa/SmokeTester.ts';
 import type { OrbStackManager } from '../sandbox/OrbStackManager.ts';
 import { ANCHOR_FILE, AnchorTableShape, anchorTableJson, readAnchorTable, renderAnchorTable, type AnchorRead, type AnchorTable } from '../scratch/AnchorTable.ts';
 import { DIRECTIONS_FILE, directionThemeFile, readDirections, renderDirection, type Direction, type DirectionId, type DirectionsRead } from '../scratch/Directions.ts';
+import { renderScenarioFeedback, type ScenarioRunnerLike } from '../qa/ScenarioRunner.ts';
 import { variantOf } from '../arms/kit.ts';
 import { SCREEN_DOC_FILE, SCREEN_SPEC_FILE, readScreenSpec, renderScreenSpec, screenSpecMarkdown, type FlowTask, type ScreenSpecRead } from '../scratch/ScreenSpec.ts';
 import { untrusted, type UntrustedSource } from '../trust/dataBlock.ts';
@@ -146,6 +147,7 @@ export class Harness {
   readonly #evals: EvalRunner;
   readonly #compiler: CompilerGate;
   readonly #smoke: SmokeRunner;
+  readonly #scenarios: ScenarioRunnerLike | null;
   readonly #lessons: LessonBook;
   readonly #reflection: ReflectionAgent;
   readonly #refkit: RefKit;
@@ -169,6 +171,8 @@ export class Harness {
     evals: EvalRunner;
     compiler: CompilerGate;
     smoke: SmokeRunner;
+    /** Walks the plan's scenarios on the running build. Without one, a build is not held to them. */
+    scenarios?: ScenarioRunnerLike | null;
     lessons: LessonBook;
     reflection: ReflectionAgent;
     refkit: RefKit;
@@ -191,6 +195,7 @@ export class Harness {
     this.#evals = deps.evals;
     this.#compiler = deps.compiler;
     this.#smoke = deps.smoke;
+    this.#scenarios = deps.scenarios ?? null;
     this.#lessons = deps.lessons;
     this.#reflection = deps.reflection;
     this.#refkit = deps.refkit;
@@ -748,13 +753,30 @@ export class Harness {
     // The owner's switch for browser-backed checks is the visual eval: with it off, nothing here starts a browser.
     const browser = this.#evals.usesBrowser(project.id);
     let served = false;
+    const notWalked: string[] = [];
     if (browser) {
       try {
         const smoke = await this.#smoke.run(project, { extraRoutes: plan?.auditRoutes, signal });
         served = smoke.passed;
         this.#events.emit(scope, { type: 'gate.result', gate: 'smoke', name: smoke.routes.join(' '), passed: smoke.passed, exitCode: null, durationMs: smoke.durationMs, detail: excerpt(smoke.detail, 2000) });
         if (!smoke.passed) return { failures: [{ name: 'smoke', source: 'browser-page', detail: smoke.detail }], unverified: [], waitingOn: null };
-        record.flow = await this.#walkApp(project, task, signal);
+        // It runs. Does it work? The plan's scenarios are walked as people who sign up, and the build is held to them.
+        const planned = run.spec?.works && this.#scenarios ? await this.#readSpec(project, run.spec) : null;
+        if (planned?.ok && planned.spec.scenarios.length > 0 && this.#scenarios) {
+          try {
+            const walked = await this.#scenarios.run(project, planned.spec, { signal });
+            this.#events.emit(scope, { type: 'gate.result', gate: 'scenarios', name: planned.spec.scenarios.map((scenario) => scenario.id).join(' '), passed: walked.passed, exitCode: null, durationMs: walked.durationMs, detail: walked.passed ? walked.detail : excerpt(renderScenarioFeedback(walked), 3000) });
+            if (!walked.passed) return { failures: [{ name: 'scenarios', source: 'browser-page', detail: renderScenarioFeedback(walked) }], unverified: [], waitingOn: null };
+          } catch (err) {
+            if (signal.aborted) throw err;
+            // The backend or the browser not answering is the studio's problem. It is said, and the work is not vouched for.
+            this.#log.warn({ taskId: task.id, err: errorMessage(err) }, 'the scenarios could not be walked');
+            this.#events.emit(scope, { type: 'notice', level: 'warn', message: `The scenarios were not walked: ${errorMessage(err)}` });
+            notWalked.push(`scenarios: not walked (${errorMessage(err)}), so that the product works is not vouched for`);
+          }
+        }
+        // The bare core-flow walk opens the product signed out: where people sign in, the scenarios above are that walk.
+        if (!(planned?.ok && planned.spec.entry !== null)) record.flow = await this.#walkApp(project, task, signal);
         // A draft is held to nothing past this point, and is still looked at once: measured at the size it
         // is first met at, with no reviewer, for the owner to see. A look that cannot be had is said and no more.
         if (task.track === 'fast') {
@@ -784,7 +806,7 @@ export class Harness {
     const waiting = failures.length === 0 ? outcomes.find((o) => o.waitable) : undefined;
     return {
       failures,
-      unverified: outcomes.filter((o) => o.unverified).map((o) => `${o.eval.name}: the design review did not run (${o.audit?.vision.reason ?? 'no reason recorded'}), so the design is not vouched for`),
+      unverified: [...notWalked, ...outcomes.filter((o) => o.unverified).map((o) => `${o.eval.name}: the design review did not run (${o.audit?.vision.reason ?? 'no reason recorded'}), so the design is not vouched for`)],
       waitingOn: waiting ? (waiting.audit?.vision.reason ?? 'every design reviewer is at its usage limit') : null,
     };
   }

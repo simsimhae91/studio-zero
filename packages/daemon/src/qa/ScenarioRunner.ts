@@ -1,0 +1,376 @@
+import { randomBytes } from 'node:crypto';
+import type { Browser, BrowserContextOptions, Page } from 'playwright-core';
+import type { Project, ScreenSpec } from '@studio-zero/protocol';
+import type { ProjectArms } from '../arms/ProjectArms.ts';
+import type { StackInfo } from '../arms/SupabaseStack.ts';
+import type { Config } from '../config.ts';
+import { ensureDevServer } from '../harness/devServer.ts';
+import { readProjectFile } from '../harness/projectFile.ts';
+import type { OrbStackManager } from '../sandbox/OrbStackManager.ts';
+import { SIGN_IN, SIGN_UP } from '../scratch/ScreenSpec.ts';
+import { excerpt } from '../util/core.ts';
+import { DONE_ATTR, STEP_ATTR, walkFlow } from './FlowWalker.ts';
+import type { QaBrowser } from './QaBrowser.ts';
+
+/**
+ * The gate that tells a product that works from a picture of one.
+ *
+ * The first real build looked like the design the owner chose and ran on fixtures. Nothing the studio checked
+ * could tell: the compiler compiled it, the smoke gate loaded it, the audit measured how it looked. This walks
+ * the scenarios of the screen plan on the running build, as people the studio makes up for the run, and holds
+ * the build to the five things the owner said a working prototype is:
+ *
+ * 1. a person signs up and signs in: each scenario starts with a new person signing up on the screen, the
+ *    backend is asked whether that person now exists, and one of them signs in again on a browser that has
+ *    never seen them;
+ * 2. what was entered is still there after a reload and after the backend restarts;
+ * 3. a stranger with an account, and a visitor without one, read none of what those people made in a table the
+ *    plan says is its owner's or its members', and no key that passes the policies is in the workspace;
+ * 4. in a product people share, a scenario that follows another's ends with what the other person made on its
+ *    screen;
+ * 5. every scenario is walked to its last step.
+ *
+ * Nothing here is a judgement. Every finding is something that was done, what was looked for, and what was there.
+ */
+
+export interface ScenarioOutcome {
+  passed: boolean;
+  /** How many scenarios the plan has, and how many were walked to their end. */
+  scenarios: number;
+  walked: number;
+  /** What was found, each as a sentence the builder can act on. Empty when the product works. */
+  problems: string[];
+  /** One line for the receipt. */
+  detail: string;
+  durationMs: number;
+}
+
+export interface ScenarioRunnerLike {
+  run(project: Project, spec: ScreenSpec, opts?: { signal?: AbortSignal }): Promise<ScenarioOutcome>;
+}
+
+/** How long a press on a running app is waited on: a sign-up wakes a service that was asleep. */
+const PATIENCE_MS = 8000;
+const TABLE_NAME = /^[a-z][a-z0-9_]{0,62}$/;
+/** A value worth looking for on another person's screen: something a person typed, not an id, a time or a number. */
+const TELLING = /^(?![0-9a-f]{8}-[0-9a-f]{4}-)(?!\d{4}-\d{2}-\d{2})(?!https?:\/\/)(?=.*[^\d\s.,:+-]).{2,60}$/s;
+
+type Row = Record<string, unknown>;
+type Tables = Map<string, Row[]>;
+
+const canonical = (row: Row): string => JSON.stringify(Object.keys(row).sort().map((key) => [key, row[key]]));
+const keyOf = (row: Row): string => (row.id !== undefined && row.id !== null ? `id:${String(row.id)}` : canonical(row));
+const plural = (n: number, one: string, many = `${one}s`): string => `${n} ${n === 1 ? one : many}`;
+
+/** The rows that are in `after` and were not in `before`, table by table: what was made or changed in between. */
+function madeBetween(before: Tables, after: Tables): Tables {
+  const made: Tables = new Map();
+  for (const [table, rows] of after) {
+    const had = new Set((before.get(table) ?? []).map(canonical));
+    const fresh = rows.filter((row) => !had.has(canonical(row)));
+    if (fresh.length > 0) made.set(table, fresh);
+  }
+  return made;
+}
+
+/** What a person typed into the rows they made, as it would read on a screen. */
+function tellingValues(made: Tables, not: readonly string[]): string[] {
+  const values = new Set<string>();
+  for (const rows of made.values()) {
+    for (const row of rows) {
+      for (const value of Object.values(row)) if (typeof value === 'string' && TELLING.test(value.trim()) && !not.some((own) => value.includes(own))) values.add(value.trim());
+    }
+  }
+  return [...values].slice(0, 12);
+}
+
+/** The backend as the runner uses it: past every policy through the database, and as anyone at all through the API. */
+export class Backend {
+  readonly #info: StackInfo;
+  readonly #sql: (script: string) => Promise<{ exitCode: number; stdout: string; stderr: string }>;
+
+  constructor(info: StackInfo, sql: (script: string) => Promise<{ exitCode: number; stdout: string; stderr: string }>) {
+    this.#info = info;
+    this.#sql = sql;
+  }
+
+  async #lines(script: string): Promise<string[]> {
+    const res = await this.#sql(script);
+    if (res.exitCode !== 0) throw new Error(`the project's database did not answer: ${res.stderr.trim().slice(0, 300)}`);
+    return res.stdout.split('\n').filter((line) => line.trim() !== '');
+  }
+
+  /** Every table of `public` with all its rows (a prototype's worth: the first two thousand of each). */
+  async tables(): Promise<Tables> {
+    const names = (await this.#lines("select c.relname from pg_class c join pg_namespace n on n.oid = c.relnamespace where n.nspname = 'public' and c.relkind in ('r', 'p') order by 1;\n")).filter((name) => TABLE_NAME.test(name));
+    const tables: Tables = new Map(names.map((name) => [name, []]));
+    if (names.length === 0) return tables;
+    const lines = await this.#lines(names.map((name) => `select '${name}' || E'\\t' || coalesce(jsonb_agg(to_jsonb(t)), '[]'::jsonb)::text from (select * from public."${name}" limit 2000) t;`).join('\n'));
+    for (const line of lines) {
+      const tab = line.indexOf('\t');
+      const name = line.slice(0, tab);
+      try {
+        const rows: unknown = JSON.parse(line.slice(tab + 1));
+        if (tables.has(name) && Array.isArray(rows)) tables.set(name, rows as Row[]);
+      } catch {
+        // A row that is not JSON is not compared.
+      }
+    }
+    return tables;
+  }
+
+  /** Whether signing up made a person in the backend. The address is the runner's own and holds nothing to quote. */
+  async hasUser(email: string): Promise<boolean> {
+    return (await this.#lines(`select count(*) from auth.users where email = '${email}';\n`))[0]?.trim() === '1';
+  }
+
+  async #auth(path: string, email: string, password: string): Promise<string | null> {
+    const res = await fetch(`${this.#info.apiUrl}${path}`, { method: 'POST', headers: { apikey: this.#info.publishableKey, 'content-type': 'application/json' }, body: JSON.stringify({ email, password }), signal: AbortSignal.timeout(20_000) }).catch(() => null);
+    const body = res && res.ok ? ((await res.json().catch(() => null)) as { access_token?: unknown } | null) : null;
+    return typeof body?.access_token === 'string' ? body.access_token : null;
+  }
+
+  /** A person nobody has been: an account made through the API, as any stranger could make one. */
+  stranger(email: string, password: string): Promise<string | null> {
+    return this.#auth('/auth/v1/signup', email, password);
+  }
+
+  signIn(email: string, password: string): Promise<string | null> {
+    return this.#auth('/auth/v1/token?grant_type=password', email, password);
+  }
+
+  /** The rows of a table as someone reads them through the API: with a person's token, or as a visitor with none. A refusal reads as nothing. */
+  async readAs(table: string, token: string | null): Promise<Row[]> {
+    const res = await fetch(`${this.#info.apiUrl}/rest/v1/${table}?select=*&limit=2000`, { headers: { apikey: this.#info.publishableKey, ...(token ? { authorization: `Bearer ${token}` } : {}) }, signal: AbortSignal.timeout(20_000) }).catch(() => null);
+    const rows: unknown = res && res.ok ? await res.json().catch(() => null) : null;
+    return Array.isArray(rows) ? (rows as Row[]) : [];
+  }
+
+  /** Takes the people made for one walk out again, with whatever hangs on them. Best effort: a row that holds one of them back keeps them. */
+  async forget(run: string): Promise<void> {
+    await this.#sql(`delete from auth.users where email like 'sz-%-${run}@example.com';\n`).catch(() => undefined);
+  }
+
+  get adminKeys(): readonly string[] {
+    return this.#info.adminKeys;
+  }
+
+  get apiOrigin(): string {
+    return new URL(this.#info.apiUrl).origin;
+  }
+}
+
+/** Why a step stopped, in the words the flow walk uses, addressed to whoever marked the page. */
+const stoppedBecause = (id: string, stopped: string | null, atStep: number | null, presses: number): string =>
+  stopped === 'step-missing'
+    ? `no visible control carries ${STEP_ATTR}="${id}:${atStep ?? 1}"${(atStep ?? 1) > 1 ? ' after the press before it' : ''}`
+    : stopped === 'covered'
+      ? `the control marked ${STEP_ATTR}="${id}:${atStep}" lies under another element and cannot be pressed`
+      : stopped === 'already-done'
+        ? `[${DONE_ATTR}="${id}"] was on screen before anything was pressed, so there was nothing to carry out`
+        : `${presses === 0 ? 'nothing was pressed' : `${plural(presses, 'marked control')} ${presses === 1 ? 'was' : 'were'} pressed`} and nothing carrying ${DONE_ATTR}="${id}" came on screen`;
+
+/** A person made up for one walk. The address says which walk, so its people can be found and taken out again. */
+const person = (name: string, run: string): { email: string; password: string } => ({ email: `sz-${name}-${run}@example.com`, password: `Sz-${randomBytes(9).toString('base64url')}` });
+
+export interface ScenarioWalk {
+  /** How many scenarios were walked to their end, reload included. */
+  walked: number;
+  problems: string[];
+}
+
+/**
+ * Walks a plan's scenarios on a product that is already being served at `base`, in a browser that is already
+ * open, and then puts what the scenarios' people made to the rest of the contract. Apart from the class below
+ * so that it can be run against a real browser and a real backend without a sandbox.
+ *
+ * `backend` is null for a product nobody signs in to: its scenarios are walked as a visitor and that is all.
+ * `restart` takes the backend down and brings it back. `run` names the walk (see `walkFlow`).
+ */
+export async function walkScenarios(deps: { browser: Browser; base: string; phone: BrowserContextOptions | null; spec: ScreenSpec; backend: Backend | null; restart: () => Promise<void>; run: string; signal?: AbortSignal }): Promise<ScenarioWalk> {
+  const { browser, base, spec, backend, run } = deps;
+  const touch = deps.phone !== null;
+  const problems: string[] = [];
+  const people = new Map<string, { email: string; password: string }>();
+  const made = new Map<string, Tables>();
+  let walked = 0;
+
+  const stranger = person('stranger', run);
+  const strangerToken = backend ? await backend.stranger(stranger.email, stranger.password) : null;
+  if (backend && strangerToken === null) return { walked: 0, problems: ['The studio could not make an account through the backend\'s own sign-up (email and password). The scenarios are walked as people who sign up that way: leave it switched on.'] };
+
+  const open = async (): Promise<{ page: Page; refused: string[]; close: () => Promise<void> }> => {
+    const context = await browser.newContext({ ...(deps.phone ?? { viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 }), serviceWorkers: 'block' });
+    const page = await context.newPage();
+    // What the backend refused is the most useful thing a builder can be told about a step that did not finish.
+    const refused: string[] = [];
+    page.on('response', (res) => {
+      if (res.status() < 400 || !backend || !res.url().startsWith(backend.apiOrigin)) return;
+      void res.text().then((body) => refused.push(`${res.status()} ${res.request().method()} ${new URL(res.url()).pathname}: ${excerpt(body.replace(/\s+/g, ' '), 240)}`), () => undefined);
+    });
+    await page.goto(`${base}/`, { waitUntil: 'networkidle', timeout: 45_000 }).catch(() => undefined);
+    return { page, refused, close: () => context.close().catch(() => undefined) };
+  };
+  const showing = async (page: Page, id: string, forMs: number): Promise<boolean> => page.locator(`[${DONE_ATTR}="${id}"]`).first().waitFor({ state: 'visible', timeout: forMs }).then(() => true, () => false);
+  const onScreen = async (page: Page): Promise<string> => page.evaluate(() => document.body.innerText).then((text) => String(text), () => '');
+  const said = (text: string, refused: readonly string[]): string => `${text.trim() === '' ? ' The screen was empty.' : ` The screen said: "${excerpt(text.replace(/\s+/g, ' ').trim(), 300)}"`}${refused.length > 0 ? ` The backend refused: ${refused.slice(-3).join(' | ')}` : ''}`;
+
+  let before: Tables = backend ? await backend.tables() : new Map();
+  for (const scenario of spec.scenarios) {
+    if (deps.signal?.aborted) throw deps.signal.reason;
+    const who = person(scenario.id, run);
+    const role = spec.roles.find((r) => r.id === scenario.role)?.name ?? scenario.role;
+    const at = `Scenario "${scenario.id}" (${role})`;
+    const { page, refused, close } = await open();
+    try {
+      let through = true;
+      for (const [i, step] of scenario.steps.entries()) {
+        const walk = (await walkFlow(page, [{ id: step.id, goal: step.does, outcome: step.outcome }], { touch, patienceMs: PATIENCE_MS, identity: who, run })).tasks[0];
+        // A step may be something the person only sees. Signing up is never that.
+        const reached = walk?.reached === true || (i > 0 && walk?.stopped === 'already-done');
+        if (!reached) {
+          problems.push(`${at}, step ${i + 1} "${step.id}" (${step.does.trim()}): ${stoppedBecause(step.id, walk?.stopped ?? 'step-missing', walk?.stoppedAtStep ?? null, walk?.presses ?? 0)}. Expected afterwards: ${step.outcome.trim()}.${said(await onScreen(page), refused)}`);
+          through = false;
+          break;
+        }
+        if (step.id === SIGN_UP && backend && !(await backend.hasUser(who.email))) {
+          problems.push(`${at}, step 1 "${SIGN_UP}": the screen showed its outcome, and the backend has no user with the address the studio typed into the email field (${who.email}). Signing up has to make the person in the backend (supabase.auth.signUp), with the field's own value.${said(await onScreen(page), refused)}`);
+          through = false;
+          break;
+        }
+      }
+      if (!through) continue;
+      const last = scenario.steps.at(-1)!;
+      await page.reload({ waitUntil: 'networkidle', timeout: 45_000 }).catch(() => undefined);
+      if (!(await showing(page, last.id, PATIENCE_MS))) {
+        problems.push(`${at}: after a reload, nothing carrying ${DONE_ATTR}="${last.id}" is on screen (${last.outcome.trim()}). What a step leaves has to be read back from the backend, and the session has to survive a reload.${said(await onScreen(page), refused)}`);
+        continue;
+      }
+      const text = await onScreen(page);
+      const now = backend ? await backend.tables() : before;
+      const madeHere = madeBetween(before, now);
+      made.set(scenario.id, madeHere);
+      before = now;
+      const saves = scenario.steps.filter((step) => step.id !== SIGN_UP && step.saves && step.saves.trim() !== '');
+      if (backend && saves.length > 0 && madeHere.size === 0) {
+        problems.push(`${at}: its steps say they save (${saves.map((step) => `"${step.id}": ${step.saves!.trim()}`).join('; ')}), and no row of any table in the backend was made or changed while it was walked. What the screen showed did not come from the backend.`);
+        continue;
+      }
+      const follows = scenario.after ? made.get(scenario.after) : undefined;
+      if (scenario.after && follows) {
+        const looked = tellingValues(follows, [...people.values()].map((p) => p.email));
+        if (looked.length > 0 && !looked.some((value) => text.includes(value))) {
+          problems.push(`${at} follows "${scenario.after}", and its last screen shows none of what that person saved (looked for ${looked.slice(0, 4).map((value) => `"${value}"`).join(', ')}). What one person adds has to reach the other's screen.${said(text, refused)}`);
+          continue;
+        }
+      }
+      people.set(scenario.id, who);
+      walked += 1;
+    } finally {
+      await close();
+    }
+  }
+  if (!backend || problems.length > 0 || walked === 0) return { walked, problems };
+
+  // The backend goes down and comes back: every row is still there, and a person can sign in again on a browser that has never seen them.
+  const kept = await backend.tables();
+  await deps.restart();
+  const back = await backend.tables();
+  for (const [table, rows] of kept) {
+    const now = back.get(table)?.length ?? 0;
+    if (now !== rows.length) problems.push(`After the backend was stopped and started again, table ${table} has ${plural(now, 'row')} where it had ${rows.length}.`);
+  }
+  const [firstId, first] = [...people.entries()][0]!;
+  const again = await open();
+  try {
+    const walk = (await walkFlow(again.page, [{ id: SIGN_IN, goal: 'sign in again', outcome: 'signed in' }], { touch, patienceMs: PATIENCE_MS, identity: first, run })).tasks[0];
+    if (walk?.reached !== true) {
+      problems.push(`Signing in again: the person who signed up in scenario "${firstId}" opened the product on a fresh browser, and ${stoppedBecause(SIGN_IN, walk?.stopped ?? 'step-missing', walk?.stoppedAtStep ?? null, walk?.presses ?? 0)}. From the signed-out screen the sign-in controls are marked ${STEP_ATTR}="${SIGN_IN}:1", ":2", ... (a link to the sign-in screen may be the first), and ${DONE_ATTR}="${SIGN_IN}" is on something only a signed-in person sees.${said(await onScreen(again.page), again.refused)}`);
+    }
+  } finally {
+    await again.close();
+  }
+
+  // As a stranger with an account, and as a visitor without one: what the scenarios' people made is not theirs to read.
+  const all: Tables = new Map();
+  for (const tables of made.values()) for (const [table, rows] of tables) all.set(table, [...(all.get(table) ?? []), ...rows]);
+  for (const table of back.keys()) {
+    const declared = spec.data.find((row) => row.table === table)?.readers;
+    if (declared === undefined) problems.push(`Table ${table} is in the database and not in the plan's "data". Say what a row of it is and who may read it; until then it is checked as its owner's alone.`);
+    const mine = new Set((all.get(table) ?? []).map(keyOf));
+    if (mine.size === 0) continue;
+    const leaked = async (token: string | null): Promise<number> => (await backend.readAs(table, token)).filter((row) => mine.has(keyOf(row))).length;
+    const policy = declared === undefined ? 'not in the plan, so its owner\'s alone' : `"${declared}" may read it`;
+    if (declared !== 'signed-in' && declared !== 'anyone') {
+      const n = await leaked(strangerToken);
+      if (n > 0) problems.push(`Table ${table} (${policy}): a stranger who had only signed up read ${plural(n, 'row')} that the scenarios' people made. Its select policy lets any signed-in person through; write it against who the row belongs to.`);
+    }
+    if (declared !== 'anyone') {
+      const n = await leaked(null);
+      if (n > 0) problems.push(`Table ${table} (${policy}): a visitor who was not signed in read ${plural(n, 'row')} that the scenarios' people made. Take the grant or the policy for "anon" off it.`);
+    }
+  }
+  return { walked, problems };
+}
+
+export class ScenarioRunner implements ScenarioRunnerLike {
+  readonly #config: Config;
+  readonly #sandboxes: OrbStackManager;
+  readonly #browser: QaBrowser;
+  readonly #arms: Pick<ProjectArms, 'has' | 'ensure' | 'rest' | 'sql'>;
+
+  constructor(deps: { config: Config; sandboxes: OrbStackManager; browser: QaBrowser; arms: Pick<ProjectArms, 'has' | 'ensure' | 'rest' | 'sql'> }) {
+    this.#config = deps.config;
+    this.#sandboxes = deps.sandboxes;
+    this.#browser = deps.browser;
+    this.#arms = deps.arms;
+  }
+
+  async run(project: Project, spec: ScreenSpec, opts: { signal?: AbortSignal } = {}): Promise<ScenarioOutcome> {
+    const started = Date.now();
+    const total = spec.scenarios.length;
+    const finish = (walked: number, problems: string[]): ScenarioOutcome => ({
+      passed: problems.length === 0,
+      scenarios: total,
+      walked,
+      problems,
+      detail: problems.length === 0 ? `${plural(total, 'scenario')} walked to the end as new people${spec.entry !== null ? '; their data outlived a reload and a restart and was closed to a stranger' : ''}` : `${walked} of ${plural(total, 'scenario')} walked to the end; ${plural(problems.length, 'finding')}`,
+      durationMs: Date.now() - started,
+    });
+    if (spec.entry !== null && !this.#arms.has(project)) {
+      return finish(0, ['The plan says people sign in, and the project has no backend: apply_schema was never called. Write the schema in supabase/migrations, apply it, and sign people up through the client in .studio-zero/arms-kit.']);
+    }
+    const backend = spec.entry !== null ? new Backend((await this.#arms.ensure(project))!.info, (script) => this.#arms.sql(project, script)) : null;
+
+    const file = await readProjectFile(this.#sandboxes, project, this.#config);
+    const server = await ensureDevServer(this.#sandboxes, project, file, { reuse: true });
+    if (!server.ready) return finish(0, [`The dev server (\`${file.dev.command}\`) did not answer on port ${file.dev.port}. Its log:\n${excerpt(server.log, 2000)}`]);
+
+    const run = randomBytes(4).toString('hex');
+    const restart = async (): Promise<void> => {
+      await this.#arms.rest(project);
+      await this.#arms.ensure(project);
+    };
+    try {
+      const result = await this.#browser.use(project, opts.signal, ({ browser, host, devices }) =>
+        walkScenarios({ browser, base: `http://${host}:${file.dev.port}`, phone: project.template === 'mobile-expo' ? devices['iPhone 15 Pro']! : null, spec, backend, restart, run, ...(opts.signal ? { signal: opts.signal } : {}) }),
+      );
+      const problems = [...result.problems];
+      if (backend) {
+        // A key that passes every policy has no way into the sandbox. This looks anyway: one would undo all of the above.
+        const found = await this.#sandboxes.exec(project, `grep -rIlF ${backend.adminKeys.map((key) => `-e '${key.replaceAll("'", '')}'`).join(' ')} --exclude-dir=node_modules --exclude-dir=.git . 2>/dev/null | head -5; true`, { timeoutSec: 60 });
+        const files = found.stdout.split('\n').map((line) => line.trim()).filter(Boolean);
+        if (files.length > 0) problems.push(`A key that passes every policy is in the workspace (${files.join(', ')}). Remove it: nothing the product ships may hold it, and the product never needs it.`);
+      }
+      return finish(result.walked, problems);
+    } finally {
+      // The project's database is the owner's to look at, and is not left filling with one walk's people after another.
+      await backend?.forget(run);
+    }
+  }
+}
+
+/** The findings as they go back to the engine. */
+export function renderScenarioFeedback(outcome: Pick<ScenarioOutcome, 'problems' | 'scenarios' | 'walked'>): string {
+  return [`The studio walked the plan's scenarios on the running build as new people: ${outcome.walked} of ${outcome.scenarios} reached the end.`, ...outcome.problems.map((problem) => `- ${problem}`)].join('\n');
+}

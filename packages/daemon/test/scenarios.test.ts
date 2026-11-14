@@ -1,0 +1,199 @@
+// The walk that tells a product that works from a picture of one, against the real things: a browser, a small
+// product served to it, and a Supabase stack. Opt-in like the other tests that need the container engine.
+import assert from 'node:assert/strict';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
+import { test } from 'node:test';
+import { chromium } from 'playwright-core';
+import { ScreenSpec, type Project } from '@studio-zero/protocol';
+import { ProjectArms } from '../src/arms/ProjectArms.ts';
+import { SupabaseStack } from '../src/arms/SupabaseStack.ts';
+import { Backend, renderScenarioFeedback, walkScenarios } from '../src/qa/ScenarioRunner.ts';
+import { resolveDockerBin } from '../src/sandbox/dockerBin.ts';
+import type { OrbStackManager } from '../src/sandbox/OrbStackManager.ts';
+import { checkScreenSpec, checkWorks } from '../src/scratch/ScreenSpec.ts';
+import { runCommand } from '../src/util/run.ts';
+import { sampleProject } from './helpers.ts';
+
+/** A club's shared ledger, as small as a product with two kinds of people can be. */
+const PLAN = ScreenSpec.parse({
+  coreMoment: '총무가 영수증을 올리면 회원이 자기 화면에서 본다.',
+  screens: [
+    { id: 'A-01', name: '가입과 로그인', purpose: '이메일과 비밀번호로 들어온다.', entry: ['로그인하지 않고 열 때'], elements: [], states: [], exceptions: [] },
+    { id: 'H-01', name: '장부', purpose: '모임의 지출을 올리고 본다.', entry: ['A-01'], elements: [], states: [], exceptions: [] },
+  ],
+  tasks: [{ id: 'post', goal: '지출을 올린다', outcome: '장부에 줄이 생긴다', screen: 'H-01' }],
+  events: [],
+  roles: [{ id: 'treasurer', name: '총무', does: '모임을 만들고 지출을 올린다.' }, { id: 'member', name: '회원', does: '코드로 들어와 지출을 본다.' }],
+  entry: { signUp: 'A-01', signIn: 'A-01', signOut: '첫 버전에는 없다. 브라우저를 닫으면 된다고 알려 준다.', sessionEnded: '다음 요청에서 가입과 로그인 화면으로 돌아간다.', forgot: '첫 버전에는 없다. 새로 가입하라고 알려 준다.', leave: '첫 버전에는 없다. 총무에게 말하라고 알려 준다.' },
+  scenarios: [
+    { id: 'treasurer', role: 'treasurer', steps: [
+      { id: 'sign-up', screen: 'A-01', does: '가입한다', saves: 'auth 사용자', outcome: '장부 화면이 보인다' },
+      { id: 'open-club', screen: 'H-01', does: '코드를 정해 모임을 만든다', saves: 'clubs 행과 members 행', outcome: '모임 이름이 보인다' },
+      { id: 'post', screen: 'H-01', does: '지출을 올린다', saves: 'entries 행', outcome: '장부에 줄이 생긴다' },
+    ] },
+    { id: 'member', role: 'member', after: 'treasurer', steps: [
+      { id: 'sign-up', screen: 'A-01', does: '가입한다', saves: 'auth 사용자', outcome: '장부 화면이 보인다' },
+      { id: 'join', screen: 'H-01', does: '총무가 정한 코드로 들어간다', saves: 'members 행', outcome: '모임 이름이 보인다' },
+      { id: 'see', screen: 'H-01', does: '장부를 본다', saves: null, outcome: '총무가 올린 줄이 보인다' },
+    ] },
+  ],
+  data: [{ table: 'clubs', holds: '모임 하나', readers: 'members' }, { table: 'members', holds: '모임에 속한 한 사람', readers: 'members' }, { table: 'entries', holds: '지출 한 건', readers: 'members' }],
+});
+
+const SCHEMA = `create table public.clubs (id bigint generated always as identity primary key, code text unique not null, owner uuid not null default auth.uid() references auth.users (id) on delete cascade);
+create table public.members (club_id bigint not null references public.clubs (id) on delete cascade, user_id uuid not null default auth.uid() references auth.users (id) on delete cascade, primary key (club_id, user_id));
+create table public.entries (id bigint generated always as identity primary key, club_id bigint not null references public.clubs (id) on delete cascade, author uuid not null default auth.uid() references auth.users (id) on delete cascade, memo text not null);
+alter table public.clubs enable row level security;
+alter table public.members enable row level security;
+alter table public.entries enable row level security;
+create schema private;
+create function private.is_member(club bigint) returns boolean language sql security definer set search_path = '' stable as $$ select exists (select 1 from public.members m where m.club_id = club and m.user_id = (select auth.uid())) $$;
+grant usage on schema private to authenticated;
+grant execute on function private.is_member(bigint) to authenticated;
+create policy "members see their club" on public.clubs for select to authenticated using (owner = (select auth.uid()) or private.is_member(id));
+create policy "a person opens a club" on public.clubs for insert to authenticated with check (owner = (select auth.uid()));
+create policy "members see each other" on public.members for select to authenticated using (private.is_member(club_id));
+create policy "the owner joins their club" on public.members for insert to authenticated with check (user_id = (select auth.uid()) and exists (select 1 from public.clubs c where c.id = club_id and c.owner = (select auth.uid())));
+create policy "members read the ledger" on public.entries for select to authenticated using (private.is_member(club_id));
+create policy "members post to the ledger" on public.entries for insert to authenticated with check (author = (select auth.uid()) and private.is_member(club_id));
+create function public.join_club(code text) returns bigint language plpgsql security definer set search_path = '' as $$
+declare found bigint;
+begin
+  select c.id into found from public.clubs c where c.code = join_club.code;
+  if found is null then raise exception 'no club has that code'; end if;
+  insert into public.members (club_id, user_id) values (found, (select auth.uid())) on conflict do nothing;
+  return found;
+end $$;
+revoke execute on function public.join_club(text) from public, anon;
+grant execute on function public.join_club(text) to authenticated;
+grant select, insert on public.clubs, public.members, public.entries to authenticated;`;
+
+/**
+ * The product, in one page, speaking to the backend the way a client library does. `mode` makes it one of the
+ * things a build can be while looking the same: `real`; `fake`, whose sign-up never reaches the backend; and
+ * `memory`, which keeps what a person posts in the page and nowhere else.
+ */
+const page = (api: string, key: string, mode: string): string => `<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>장부</title>
+<style>body{font:16px system-ui;margin:24px}input,button{font:inherit;padding:10px 14px;margin:4px 0;display:block;min-height:44px}button:active{transform:scale(.97);background:#ddd}</style></head>
+<body><div id="app"></div><script>
+const API=${JSON.stringify(api)},KEY=${JSON.stringify(key)},MODE=${JSON.stringify(mode)};
+let session=JSON.parse(localStorage.getItem('session')||'null'),signingIn=false,club=null,entries=[],error='';const memory=[];
+const call=async(path,init={})=>{const res=await fetch(API+path,{...init,headers:{apikey:KEY,'content-type':'application/json',...(session&&session.access_token!=='fake'?{authorization:'Bearer '+session.access_token}:{}),...(init.headers||{})}});const body=await res.json().catch(()=>null);if(!res.ok)throw new Error((body&&(body.msg||body.message))||String(res.status));return body;};
+const load=async()=>{if(!session||MODE==='fake')return;const clubs=await call('/rest/v1/clubs?select=id,code&order=id.desc&limit=1');club=clubs[0]||null;entries=club?(MODE==='memory'?memory:await call('/rest/v1/entries?select=id,memo&club_id=eq.'+club.id+'&order=id')):[];};
+const val=(id)=>document.getElementById(id).value.trim();
+const act=(fn)=>async()=>{try{error='';await fn();await load();}catch(e){error=String(e.message||e);}render();};
+function render(){const app=document.getElementById('app');
+ if(!session){const id=signingIn?'sign-in':'sign-up',n=signingIn?2:1;
+  app.innerHTML='<h1>'+(signingIn?'로그인':'가입')+'</h1><input id="email" type="email" autocomplete="email" data-step="'+id+':'+n+'" placeholder="이메일"><input id="password" type="password" data-step="'+id+':'+(n+1)+'" placeholder="비밀번호"><button id="go" data-step="'+id+':'+(n+2)+'">'+(signingIn?'로그인':'가입하기')+'</button>'+(signingIn?'':'<button id="other" data-step="sign-in:1">이미 계정이 있어요</button>')+'<p>'+error+'</p>';
+  document.getElementById('go').onclick=act(async()=>{const body={email:val('email'),password:val('password')};session=MODE==='fake'&&!signingIn?{access_token:'fake',user:{email:body.email}}:await call(signingIn?'/auth/v1/token?grant_type=password':'/auth/v1/signup',{method:'POST',body:JSON.stringify(body)});localStorage.setItem('session',JSON.stringify(session));});
+  const other=document.getElementById('other');if(other)other.onclick=()=>{signingIn=true;render();};return;}
+ let html='<header data-done="sign-up"><b data-done="sign-in">내 장부</b> '+session.user.email+'</header><p>'+error+'</p>';
+ if(!club)html+='<input id="new-code" data-step="open-club:1" data-sample="RUN-{run}" placeholder="새 모임 코드"><button id="make" data-step="open-club:2">모임 만들기</button><input id="join-code" data-step="join:1" data-sample="RUN-{run}" placeholder="받은 코드"><button id="join" data-step="join:2">코드로 들어가기</button>';
+ else html+='<h2 data-done="open-club"><span data-done="join">모임 '+club.code+'</span></h2><input id="memo" data-step="post:1" data-sample="물·간식" placeholder="무엇에 썼나요"><button id="add" data-step="post:2">올리기</button><ul>'+entries.map((e)=>'<li data-done="post"><span data-done="see">'+e.memo+'</span></li>').join('')+'</ul>'+(entries.length?'':'<p>아직 올린 지출이 없어요</p>');
+ app.innerHTML=html;
+ const on=(id,fn)=>{const el=document.getElementById(id);if(el)el.onclick=act(fn);};
+ on('make',async()=>{const made=await call('/rest/v1/clubs',{method:'POST',headers:{Prefer:'return=representation'},body:JSON.stringify({code:val('new-code')})});await call('/rest/v1/members',{method:'POST',body:JSON.stringify({club_id:made[0].id})});});
+ on('join',async()=>{await call('/rest/v1/rpc/join_club',{method:'POST',body:JSON.stringify({code:val('join-code')})});});
+ on('add',async()=>{if(MODE==='memory')memory.push({id:memory.length+1,memo:val('memo')});else await call('/rest/v1/entries',{method:'POST',body:JSON.stringify({club_id:club.id,memo:val('memo')})});});}
+load().catch((e)=>{error=String(e.message||e);}).then(render);
+</script></body></html>`;
+
+test('the plan this walk uses holds as a plan for a product that works', () => {
+  assert.deepEqual(checkScreenSpec(PLAN, { draft: true }), []);
+  assert.deepEqual(checkWorks(PLAN), []);
+});
+
+test('a real walk: a product that works passes; one that fakes its sign-up, forgets on reload, or lets a stranger read is told exactly that', { skip: process.env.SZ_TEST_ENGINE !== '1' && 'set SZ_TEST_ENGINE=1 to run (needs OrbStack, the Supabase command line and Chrome)' }, async () => {
+  const home = mkdtempSync(join(tmpdir(), 'sz-walk-home-'));
+  const workspace = mkdtempSync(join(tmpdir(), 'sz-walk-ws-'));
+  mkdirSync(join(home, 'docker'), { recursive: true });
+  writeFileSync(join(home, 'docker', 'config.json'), '{}\n');
+  mkdirSync(join(workspace, '.git/info'), { recursive: true });
+  const socket = join(process.env.HOME ?? '', '.orbstack/run/docker.sock');
+  const stack = new SupabaseStack({ home, run: runCommand, engineEndpoint: async () => (existsSync(socket) ? `unix://${socket}` : 'unix:///var/run/docker.sock'), dockerBin: resolveDockerBin('docker') });
+  const put = (path: string, content: string): void => {
+    mkdirSync(dirname(join(workspace, path)), { recursive: true });
+    writeFileSync(join(workspace, path), content);
+  };
+  const sandboxes = {
+    exec: async (_project: Project, script: string) => runCommand('bash', ['-c', script], { cwd: workspace }),
+    readFile: async (_project: Project, path: string) => ({ content: readFileSync(join(workspace, path), 'utf8'), truncated: false }),
+    writeFile: async (_project: Project, path: string, content: string | Uint8Array) => put(path, String(content)),
+  } as unknown as OrbStackManager;
+  const arms = new ProjectArms({ stack, sandboxes });
+  const project: Project = { ...sampleProject('walk-real'), id: 'prj_walk_real_test', template: 'web-vite-react' };
+
+  let mode = 'real';
+  let api = '';
+  let key = '';
+  const server = createServer((_req, res) => res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' }).end(page(api, key, mode)));
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  const browser = await chromium.launch({ channel: 'chrome', headless: true });
+  try {
+    put('supabase/migrations/0001_ledger.sql', SCHEMA);
+    const applied = await arms.applySchema(project);
+    assert.equal(applied.ok, true, applied.text);
+    const info = (await arms.ensure(project))!.info;
+    api = info.apiUrl;
+    key = info.publishableKey;
+    const backend = new Backend(info, (script) => arms.sql(project, script));
+    // The API learns of new tables a moment after the schema commits.
+    for (let i = 0; i < 30 && (await fetch(`${api}/rest/v1/clubs?select=id`, { headers: { apikey: key } })).status === 404; i++) await new Promise((resolve) => setTimeout(resolve, 500));
+    let restarts = 0;
+    const walk = (run: string) => walkScenarios({ browser, base, phone: null, spec: PLAN, backend, run, restart: async () => { restarts += 1; await arms.rest(project); await arms.ensure(project); } });
+    const users = async (run: string): Promise<string> => (await arms.sql(project, `select count(*) from auth.users where email like 'sz-%-${run}@example.com';\n`)).stdout.trim();
+
+    // --- a product that works: both scenarios to the end, a restart survived, a second sign-in, nothing leaked
+    const good = await walk('aaaa1111');
+    assert.deepEqual(good, { walked: 2, problems: [] }, renderScenarioFeedback({ ...good, scenarios: 2 }));
+    assert.equal(restarts, 1);
+    assert.equal(await users('aaaa1111'), '3', 'the treasurer, the member and the stranger all signed up for real');
+    // The second person typed the code the first one picked, and both carried this walk's name.
+    assert.equal((await arms.sql(project, "select code from public.clubs order by id desc limit 1;\n")).stdout.trim(), 'RUN-aaaa1111');
+    await backend.forget('aaaa1111');
+    assert.equal(await users('aaaa1111'), '0', 'the walk\'s people are taken out again');
+    assert.equal((await arms.sql(project, 'select count(*) from public.entries;\n')).stdout.trim(), '0', 'and what hung on them went with them');
+
+    // --- the same screens with a sign-up that never reaches the backend
+    mode = 'fake';
+    const fake = await walk('bbbb2222');
+    assert.equal(fake.walked, 0);
+    assert.match(fake.problems[0]!, /^Scenario "treasurer" \(총무\), step 1 "sign-up": the screen showed its outcome, and the backend has no user with the address the studio typed into the email field \(sz-treasurer-bbbb2222@example\.com\)/);
+    assert.equal(restarts, 1, 'what comes after is not looked at until the scenarios are walked');
+    await backend.forget('bbbb2222');
+
+    // --- and with what a person posts kept in the page: it is gone after a reload
+    mode = 'memory';
+    const memory = await walk('cccc3333');
+    assert.match(memory.problems.join('\n'), /Scenario "treasurer" \(총무\): after a reload, nothing carrying data-done="post" is on screen \(장부에 줄이 생긴다\)[\s\S]*The screen said: "내 장부 sz-treasurer-cccc3333@example\.com 모임 RUN-cccc3333[\s\S]*아직 올린 지출이 없어요/);
+    await backend.forget('cccc3333');
+
+    // --- the product is right and a policy is not: any signed-in person may read the ledger
+    mode = 'real';
+    put('supabase/migrations/0002_open.sql', 'create policy "anyone signed in reads the ledger" on public.entries for select to authenticated using (true);');
+    assert.equal((await arms.applySchema(project)).ok, true, 'a policy that is too wide is still a policy: only a person who is not meant to read can show it');
+    const open = await walk('dddd4444');
+    assert.equal(open.walked, 2);
+    assert.deepEqual(open.problems, ['Table entries ("members" may read it): a stranger who had only signed up read 1 row that the scenarios\' people made. Its select policy lets any signed-in person through; write it against who the row belongs to.']);
+    await backend.forget('dddd4444');
+
+    // --- a step whose control is not there says which, with what the screen said and what the backend refused
+    put('supabase/migrations/0003_closed.sql', 'drop policy "a person opens a club" on public.clubs;');
+    assert.equal((await arms.applySchema(project)).ok, true);
+    const refused = await walk('eeee5555');
+    assert.equal(refused.walked, 0);
+    assert.match(refused.problems[0]!, /^Scenario "treasurer" \(총무\), step 2 "open-club" \(코드를 정해 모임을 만든다\): 2 marked controls were pressed and nothing carrying data-done="open-club" came on screen\. Expected afterwards: 모임 이름이 보인다\. The screen said: "내 장부 sz-treasurer-eeee5555@example\.com new row violates row-level security policy for table "clubs" 모임 만들기 코드로 들어가기" The backend refused: 403 POST \/rest\/v1\/clubs: \{"code":"42501"[^|]*row-level security/);
+    await backend.forget('eeee5555');
+  } finally {
+    await browser.close().catch(() => undefined);
+    await new Promise((resolve) => server.close(resolve));
+    await arms.forget(project).catch(() => undefined);
+    rmSync(home, { recursive: true, force: true });
+    rmSync(workspace, { recursive: true, force: true });
+  }
+});
