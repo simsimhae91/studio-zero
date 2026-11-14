@@ -69,7 +69,11 @@ Signing in with Kakao or Google is offered beside email and password, never inst
 providers the kit's `logins` lists (the studio's own developer apps, shared by its prototypes; none listed
 means email only): `supabase.auth.signInWithOAuth({ provider: 'kakao', options: { redirectTo: window.location.origin } })`.
 The person leaves for the provider and comes back signed in; `onAuthStateChange` tells the product. When the
-product ships it registers developer apps of its own; the code does not change.
+product ships it registers developer apps of its own; the code does not change, and the steps are written down:
+https://simsimhae91.github.io/legendary-octo-fishstick/guides/studio-zero/shipping-login-apps.html
+If `logins` is empty and the owner asks for Kakao or Google sign-in, do not build a button that cannot work:
+tell them the studio's shared developer apps are registered once, by them, and point them to
+https://simsimhae91.github.io/legendary-octo-fishstick/guides/studio-zero/shared-login-apps.html
 
 Each provider's button says which provider it is: `data-login="kakao"` (React Native: `dataSet={{ login: 'kakao' }}`).
 The studio presses it and reads the request the product makes of its backend: the provider has to be the

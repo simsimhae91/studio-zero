@@ -15,6 +15,7 @@ const USAGE = `sz — Studio Zero command line
   sz merge <project-slug> <branch>
   sz kirby <project-slug> <https://github.com/owner/repo>
   sz vault list | sz vault set <credential-id> | sz vault rm <credential-id>   (set reads the secret from stdin)
+                                                                             Kakao and Google sign-in: login/{kakao,google}/client-{id,secret} (how to get them: docs/guides/studio-zero/shared-login-apps.html)
   sz token                                                                   print the client token, to pair another machine
 
 Environment: SZ_URL (default ws://127.0.0.1:${DEFAULT_DAEMON_PORT}/v1/ws), SZ_TOKEN (default: read from the Keychain)`;
