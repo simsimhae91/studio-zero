@@ -257,12 +257,38 @@ const tideSpec: ScreenSpec = {
       exceptions: ['환불은 음수 지출로 적는다.', '한 사람이 빠진 지출은 나머지 사람끼리만 나눈다.'],
     },
     { id: 'S-02', name: '지출 고치기', purpose: '지출 한 건의 금액과 나눌 사람을 고친다.', entry: ['S-01'], elements: [{ name: '금액', rule: '원 단위 정수. 0은 받지 않는다.', goesTo: null }], states: [], exceptions: [] },
+    { id: 'S-00', name: '들어오기', purpose: '이메일로 가입하거나 로그인해 자기 모임으로 들어간다.', entry: ['앱 실행', '초대 링크'], elements: [{ name: '시작하기', rule: '이메일과 비밀번호를 받는다. 초대 링크로 왔으면 그 모임에 바로 들어간다.', goesTo: 'S-01' }], states: [], exceptions: [] },
   ],
   tasks: [
     { id: 'settle', goal: '서준에게 184,000원을 보냈다고 표시한다', outcome: '그 줄이 보낸 것으로 바뀐다', screen: 'S-01' },
     { id: 'undo', goal: '잘못 누른 표시를 되돌린다', outcome: '그 줄이 다시 보낼 것으로 돌아온다', screen: 'S-01' },
   ],
   events: [{ name: 'settlement_marked', when: '보냈어요를 누를 때', measures: '달마다 정산을 끝낸 모임의 비율' }],
+  // What makes it a plan for a product that works: who uses it, how they get in, what they do, what is kept.
+  roles: [{ id: 'member', name: '모임 구성원', does: '지출을 적고, 줄 돈을 보내고, 보냈다고 표시한다.' }],
+  entry: {
+    signUp: 'S-00',
+    signIn: 'S-00',
+    signOut: '설정에서 로그아웃하면 들어오기 화면으로 돌아간다.',
+    sessionEnded: '세션이 끝나면 보던 달을 기억해 두고 들어오기 화면으로 보낸다.',
+    forgot: '가입한 이메일로 비밀번호를 다시 정하는 링크를 보낸다.',
+    leave: '모임에서 나가면 적은 지출은 남고, 정산이 끝난 달부터 이름이 빠진다.',
+  },
+  noAccounts: null,
+  scenarios: [
+    {
+      id: 'settle-up',
+      role: 'member',
+      steps: [
+        { id: 'settle-up:1', screen: 'S-00', does: '이메일과 비밀번호로 가입한다', saves: 'members', outcome: '이번 달 정산 화면이 열린다' },
+        { id: 'settle-up:2', screen: 'S-01', does: '서준에게 보낼 184,000원 줄에서 보냈어요를 누른다', saves: 'settlements', outcome: '그 줄이 보낸 것으로 바뀐다' },
+      ],
+    },
+  ],
+  data: [
+    { table: 'expenses', holds: '지출 한 건: 금액, 낸 사람, 나눌 사람, 날짜', readers: 'members' },
+    { table: 'settlements', holds: '보냈다고 표시한 기록과 그 시각', readers: 'members' },
+  ],
 };
 const tideFiles: Record<string, string> = {
   'docs/screens.json': JSON.stringify(tideSpec, null, 2),
