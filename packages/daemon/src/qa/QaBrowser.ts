@@ -31,9 +31,13 @@ export class QaBrowser {
   readonly #attached = new Map<string, number>();
   #idleTimer: NodeJS.Timeout | null = null;
 
-  constructor(deps: { config: Config; sandboxes: OrbStackManager }) {
+  /** The ports on this machine a project's pages call (its backend's), which the browser's container must be able to reach. */
+  readonly #hostPorts: (project: Project) => Promise<number[]>;
+
+  constructor(deps: { config: Config; sandboxes: OrbStackManager; hostPorts?: (project: Project) => Promise<number[]> }) {
     this.#config = deps.config;
     this.#sandboxes = deps.sandboxes;
+    this.#hostPorts = deps.hostPorts ?? (async () => []);
   }
 
   async use<T>(project: Project, signal: AbortSignal | undefined, fn: (session: QaSession) => Promise<T>): Promise<T> {
@@ -49,6 +53,7 @@ export class QaBrowser {
       let browser: Browser | null = null;
       try {
         const host = await this.#sandboxes.attachQaBrowser(project);
+        for (const port of await this.#hostPorts(project)) await this.#sandboxes.forwardQaBrowser(port);
         browser = await this.#connect(chromium, endpoint, signal);
         return await fn({ browser, host, devices });
       } finally {

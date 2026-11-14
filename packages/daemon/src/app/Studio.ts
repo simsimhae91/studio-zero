@@ -78,6 +78,7 @@ import { Secret, errorMessage, excerpt, newId, type Clock, type Logger } from '.
 import { shq } from '../util/run.ts';
 import { CredentialIds, type KeychainVault } from '../vault/KeychainVault.ts';
 import { ConflictError, NotFoundError, UnavailableError } from './errors.ts';
+import type { ProjectArms } from '../arms/ProjectArms.ts';
 import type { ExternalApis } from './ExternalApis.ts';
 import type { ProjectNamer } from './ProjectNamer.ts';
 import type { QuotaTracker } from './QuotaTracker.ts';
@@ -122,6 +123,7 @@ export interface StudioDeps {
   quota: QuotaTracker;
   selfHosting: SelfHosting;
   external: ExternalApis;
+  arms: Pick<ProjectArms, 'rest' | 'forget'>;
   advisors: Record<AdvisorId, Advisor>;
   relayStates: () => ResultOf<'system.status'>['relays'];
   clock: Clock;
@@ -277,6 +279,8 @@ export class Studio implements PromotionHost {
     await this.settle();
     // The project's keys for outside APIs go with it: nothing is left in the Keychain under its name.
     await this.#d.external.forgetProject(project);
+    // Its backend goes too, with every user and row in it: they were the project's, and nothing else points at them.
+    await this.#d.arms.forget(project);
     await this.#d.sandboxes.destroy(project, { deleteWorkspace });
     this.#d.store.deleteProject(projectId);
     await rm(join(this.#d.config.artifactsDir, projectId), { recursive: true, force: true });
@@ -422,6 +426,8 @@ export class Studio implements PromotionHost {
       this.#assertIdle(projectId, `${op} the sandbox`);
       await this.#d.pty.closeProject(projectId);
     }
+    // A stopped sandbox's backend is stopped with it: its data and its address are kept, and it is back in a second or two.
+    if (op === 'stop') await this.#d.arms.rest(project);
     const info = op === 'start' ? await this.#provision(project) : op === 'stop' ? await this.#d.sandboxes.stop(project) : await this.#d.sandboxes.recreate(project);
     this.#d.events.emit({ projectId, taskId: null }, { type: 'sandbox.state', state: info.state });
     return info;

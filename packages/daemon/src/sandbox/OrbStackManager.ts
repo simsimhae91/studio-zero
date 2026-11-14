@@ -30,6 +30,9 @@ import {
 const SANDBOX_USER = '1000:1000';
 const QA_BROWSER = 'sz-qa-browser';
 const QA_BROWSER_PORT = 3000;
+/** Run by Node inside the QA browser's container: listens on a port of its own loopback and pipes each connection to that port on the host. */
+const QA_FORWARDER =
+  'const net=require("net");const port=Number(process.argv[1]);net.createServer((c)=>{const u=net.connect(port,"host.docker.internal");c.pipe(u);u.pipe(c);const end=()=>{c.destroy();u.destroy();};c.on("error",end);u.on("error",end);c.on("close",end);u.on("close",end);}).on("error",()=>process.exit(0)).listen(port,"127.0.0.1");';
 
 /** The sandbox image: the base plus the package manager the project templates and the coding prompt assume. */
 const sandboxDockerfile = (base: string): string => `FROM ${base}
@@ -504,6 +507,21 @@ export class OrbStackManager {
     const found = await this.#docker(['container', 'inspect', '--format', `{{with index .NetworkSettings.Networks "${names.network}"}}{{.IPAddress}}{{end}}`, names.container], { timeoutMs: 15_000 });
     const address = found.stdout.trim();
     return found.exitCode === 0 && isIPv4(address) ? address : names.container;
+  }
+
+  /**
+   * Makes `127.0.0.1:<port>` inside the QA browser's container lead to the same port on this machine.
+   *
+   * A product's page calls its backend at the address that was built into it, `127.0.0.1:<port>`, which is
+   * right in the owner's browser and means the container itself in this one. So the container is given a
+   * listener on that port that passes every connection out to the host: the page under audit is then the page
+   * the owner sees, calling the same address. It carries any TCP, so realtime's WebSocket goes through too. A
+   * second listener on a port finds it taken and leaves; all of them end with the container.
+   */
+  async forwardQaBrowser(port: number): Promise<void> {
+    if (!Number.isInteger(port) || port < 1024 || port > 65535) throw new SandboxError(`cannot forward port ${port}`);
+    const res = await this.#docker(['exec', '--detach', QA_BROWSER, 'node', '-e', QA_FORWARDER, String(port)], { timeoutMs: 20_000 });
+    if (res.exitCode !== 0) throw new SandboxError('could not open a way from the QA browser to the project\'s backend', lastLine(res.stderr));
   }
 
   async detachQaBrowser(project: Project): Promise<void> {

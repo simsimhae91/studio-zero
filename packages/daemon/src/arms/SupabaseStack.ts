@@ -1,4 +1,4 @@
-import { accessSync, constants, existsSync, mkdirSync, statSync } from 'node:fs';
+import { accessSync, constants, existsSync, mkdirSync, rmSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { z } from 'zod';
@@ -81,6 +81,7 @@ export interface SupabaseStackDeps {
   engineEndpoint: () => Promise<string>;
   /** The docker client, so that its directory is on the command line's PATH. */
   dockerBin: string;
+  /** The command line, used as given. Default: looked for on PATH and where Homebrew puts it. */
   supabaseBin?: string;
 }
 
@@ -97,7 +98,7 @@ export class SupabaseStack {
     this.#run = deps.run;
     this.#engineEndpoint = deps.engineEndpoint;
     this.#dockerBin = deps.dockerBin;
-    this.#bin = resolveSupabaseBin(deps.supabaseBin);
+    this.#bin = deps.supabaseBin ?? resolveSupabaseBin();
   }
 
   /** Where a project's stack is described. Outside any git repository, on purpose: inside one, the branch would be part of the stack's identity. */
@@ -155,7 +156,7 @@ export class SupabaseStack {
    */
   async start(project: Pick<Project, 'id'>): Promise<StackInfo> {
     await this.#check(project);
-    if (!existsSync(join(this.dir(project), 'supabase', 'config.toml'))) {
+    if (!this.has(project)) {
       // With the stack mode on, `init` writes a configuration with no fixed ports, which is what lets two projects run at once.
       const init = await this.#cli(project, ['init', '--yes'], 60_000);
       if (init.exitCode !== 0) throw new StackError('the project\'s backend could not be set up', lastLines(init.stderr || init.stdout));
@@ -165,18 +166,41 @@ export class SupabaseStack {
     return readStarted(res.stdout);
   }
 
+  /** Whether this project has a backend: its stack has been set up on this machine. */
+  has(project: Pick<Project, 'id'>): boolean {
+    return existsSync(join(this.dir(project), 'supabase', 'config.toml'));
+  }
+
+  /**
+   * Runs a script in the stack's database as the role a migration runs as, all of it or none of it: one
+   * transaction, stopped at the first error. The script is the studio's own; whatever a project wrote is inside
+   * it as data (see `schema.ts`), because this is `psql` and `psql` obeys backslash commands it reads.
+   *
+   * It goes in through the database's own container, so the daemon needs no Postgres client of its own. The
+   * command line names that container after the folder the stack is described in, which is the project's id.
+   */
+  async sql(project: Pick<Project, 'id'>, script: string): Promise<RunResult> {
+    const env = await this.#env();
+    const listed = await this.#run(this.#dockerBin, ['ps', '--filter', `name=^supabase-${project.id}-database-`, '--format', '{{.Names}}'], { env, timeoutMs: 20_000 });
+    const db = listed.stdout.split('\n').map((name) => name.trim()).find((name) => name !== '');
+    if (!db) throw new StackError('the project\'s database is not running', lastLines(listed.stderr));
+    return this.#run(this.#dockerBin, ['exec', '-i', db, 'psql', '-U', 'postgres', '-X', '-q', '-At', '-v', 'ON_ERROR_STOP=1', '--single-transaction'], { env, stdin: script, timeoutMs: 180_000 });
+  }
+
   /** Takes the stack down and keeps its data and its ports. Nothing to do, and no error, when it is not up. */
   async stop(project: Pick<Project, 'id'>): Promise<void> {
-    if (!existsSync(join(this.dir(project), 'supabase', 'config.toml'))) return;
+    if (!this.has(project)) return;
     const res = await this.#cli(project, ['stop'], 120_000);
     if (res.exitCode !== 0) throw new StackError('the project\'s backend did not stop', lastLines(res.stderr || res.stdout));
   }
 
   /** Deletes the stack and everything in it. For a project that is being removed: there is no way back from this. */
   async destroy(project: Pick<Project, 'id'>): Promise<void> {
-    if (!existsSync(join(this.dir(project), 'supabase', 'config.toml'))) return;
+    if (!this.has(project)) return;
     const res = await this.#cli(project, ['stack', 'destroy', '--yes'], 180_000);
     if (res.exitCode !== 0) throw new StackError('the project\'s backend could not be deleted', lastLines(res.stderr || res.stdout));
+    // With its description gone the project no longer has a backend, and a later one starts from nothing.
+    rmSync(this.dir(project), { recursive: true, force: true });
   }
 }
 

@@ -7,6 +7,9 @@ import { ApprovalDeniedError, PolicyDeniedError, type PolicyEngine } from '../po
 import { SandboxError, type OrbStackManager } from '../sandbox/OrbStackManager.ts';
 import { untrusted, type UntrustedSource } from '../trust/dataBlock.ts';
 import { errorMessage, excerpt, newId } from '../util/core.ts';
+import type { ProjectArms } from '../arms/ProjectArms.ts';
+import { MIGRATIONS_DIR, SEED_FILE } from '../arms/schema.ts';
+import { ARMS_KIT_DIR, ENV_FILE } from '../arms/kit.ts';
 import type { ImageDesk } from '../qa/ImageDesk.ts';
 import { MOCKUP_DIR, MOCKUP_FILES, renderMockupCheck, type MockupRenderer } from '../qa/MockupRenderer.ts';
 import { WEB_GUIDANCE_VERSION } from './houseBar.ts';
@@ -55,6 +58,7 @@ export class Toolbox {
   readonly #sandboxes: OrbStackManager;
   #images: Pick<ImageDesk, 'make'> | null = null;
   #mockups: Pick<MockupRenderer, 'check'> | null = null;
+  #arms: Pick<ProjectArms, 'applySchema'> | null = null;
   readonly #policy: PolicyEngine;
   readonly #events: EventLog;
   readonly #mcp: McpRegistry;
@@ -111,7 +115,8 @@ export class Toolbox {
 
   /** Whether a tool can change the workspace. Read-only turns do not need a checkpoint. */
   mutates(name: string): boolean {
-    return name === 'bash' || name === 'write_file' || name === 'edit_file' || name === 'set_theme' || name === 'generate_image';
+    // The first schema a project applies brings the backend's kit into the workspace.
+    return name === 'bash' || name === 'write_file' || name === 'edit_file' || name === 'set_theme' || name === 'generate_image' || name === 'apply_schema';
   }
 
   /**
@@ -133,6 +138,11 @@ export class Toolbox {
   }
 
   /** The mock-up renderer is built after the engines too. */
+  /** A project's backend. Its schema is applied on the host, where the database's address and keys stay. */
+  useArms(arms: Pick<ProjectArms, 'applySchema'>): void {
+    this.#arms = arms;
+  }
+
   useMockups(mockups: Pick<MockupRenderer, 'check'>): void {
     this.#mockups = mockups;
   }
@@ -142,6 +152,7 @@ export class Toolbox {
     const events = this.#events;
     const images = (): Pick<ImageDesk, 'make'> | null => this.#images;
     const mockups = (): Pick<MockupRenderer, 'check'> | null => this.#mockups;
+    const arms = (): Pick<ProjectArms, 'applySchema'> | null => this.#arms;
     const mcp = this.#mcp;
     return [
       define({
@@ -205,6 +216,20 @@ export class Toolbox {
           const theme = chosenTheme(input);
           await writeProjectTheme(sandboxes, ctx.project, theme);
           return { text: theme.report, ok: true, exitCode: null };
+        },
+      }),
+      define({
+        name: 'apply_schema',
+        description:
+          `Give the product its backend and bring its database up to date. The studio runs this project's own Supabase beside the sandbox: sign-up and sign-in, Postgres, file storage, realtime. Write the schema as SQL files in ${MIGRATIONS_DIR}/ (0001_<what>.sql, 0002_...: applied in name order, each once, so change what is already in with a new file and never by editing an old one) and demo rows in ${SEED_FILE} (applied again whenever it changes: write every insert "on conflict do nothing"). Then call this. The first call starts the backend, writes its address and publishable key into ${ENV_FILE} under the names your framework reads, and puts a client in ${ARMS_KIT_DIR} with a README.md of the rules. Everything is applied in one transaction and refused as a whole, leaving the database as it was, when a statement fails, when a table in public has no row level security or no policy, or when a view there is not made with (security_invoker = true): the publishable key ships to every browser, so the policies are all that keeps one user's rows from another. Grant each table to the roles that may use it (authenticated, and anon only for what a visitor may see). There is no admin key and no database address in this sandbox, and none is needed.`,
+        schema: z.object({}),
+        action: (_input, project) => ({ kind: 'sandbox.exec', projectId: project.id, command: 'apply_schema' }),
+        summarize: () => `${MIGRATIONS_DIR}, ${SEED_FILE}`,
+        run: async (_input, ctx) => {
+          const backend = arms();
+          if (!backend) return { text: 'The studio cannot run a backend here.', ok: false, exitCode: null };
+          const result = await backend.applySchema(ctx.project);
+          return { text: result.text, ok: result.ok, exitCode: null };
         },
       }),
       define({

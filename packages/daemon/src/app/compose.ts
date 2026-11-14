@@ -47,6 +47,7 @@ import { SlackRelay, type SocketLike } from '../relay/SlackRelay.ts';
 import { TelegramApi } from '../relay/telegramApi.ts';
 import { TelegramRelay } from '../relay/TelegramRelay.ts';
 import { openAiTranscriber } from '../relay/transcribe.ts';
+import { resolveDockerBin } from '../sandbox/dockerBin.ts';
 import { OrbStackManager } from '../sandbox/OrbStackManager.ts';
 import { PtyManager, type PtyOpen } from '../sandbox/PtyManager.ts';
 import { SandboxFileService } from '../sandbox/SandboxFileService.ts';
@@ -56,8 +57,10 @@ import { createHandlers } from '../server/handlers.ts';
 import { OwnerConfig } from './OwnerConfig.ts';
 import { CaffeinateManager, type PowerSpawner } from '../util/CaffeinateManager.ts';
 import { Secret, errorMessage, systemClock, type Clock } from '../util/core.ts';
-import type { CommandRunner } from '../util/run.ts';
+import { runCommand, type CommandRunner } from '../util/run.ts';
 import { CredentialIds, KeychainVault } from '../vault/KeychainVault.ts';
+import { ProjectArms } from '../arms/ProjectArms.ts';
+import { SupabaseStack } from '../arms/SupabaseStack.ts';
 import { ExternalApis } from './ExternalApis.ts';
 import { ProjectNamer } from './ProjectNamer.ts';
 import { QuotaTracker } from './QuotaTracker.ts';
@@ -121,6 +124,7 @@ export interface Daemon {
   knowledge: KnowledgeService;
   steering: SteeringQueue;
   provisioner: WorkspaceProvisioner;
+  arms: ProjectArms;
   claude: ClaudeClient;
   router: ModelRouter;
   vision: QaVisionBridge;
@@ -156,7 +160,12 @@ export async function createDaemon(config: Config, log: PinoLogger, overrides: D
   const selfHosting = new SelfHosting({ config, store, events, policy, sandboxes, run: overrides.run, log: log.child({ mod: 'selfhost' }) });
   // Outside APIs a project's own code calls: keys in the Keychain, stand-ins in the workspace, the swap in the gateway.
   const external = new ExternalApis({ config, store, vault, policy, clock });
-  const provisioner = new WorkspaceProvisioner(sandboxes, selfHosting, external);
+  // A project's own backend: a Supabase stack beside its sandbox, started by the studio and reached by the
+  // project through an address and a publishable key only.
+  // As in the sandbox manager: with a runner handed in (a test), the commands are called by their bare names.
+  const armsBins = overrides.run ? { dockerBin: config.runtime.dockerBin, supabaseBin: 'supabase' } : { dockerBin: resolveDockerBin(config.runtime.dockerBin) };
+  const arms = new ProjectArms({ stack: new SupabaseStack({ home: config.home, run: overrides.run ?? runCommand, engineEndpoint: () => sandboxes.engineEndpoint(), ...armsBins }), sandboxes });
+  const provisioner = new WorkspaceProvisioner(sandboxes, selfHosting, external, arms);
   const bridgeSessions = new BridgeSessions(clock);
   // What each subscription was seen to do: every call through a vendor CLI reports its outcome here.
   const quota = new QuotaTracker({ store, events, clock });
@@ -166,6 +175,7 @@ export async function createDaemon(config: Config, log: PinoLogger, overrides: D
   const mcp = new McpRegistry({ store, vault, policy, clock, connect: overrides.mcpConnect });
   mcp.seed();
   const toolbox = new Toolbox({ sandboxes, policy, events, mcp });
+  toolbox.useArms(arms);
   const steering = new SteeringQueue();
   const calibration = new ConfidenceCalibration(store, clock);
 
@@ -178,7 +188,7 @@ export async function createDaemon(config: Config, log: PinoLogger, overrides: D
   toolbox.useImages(new ImageDesk({ sandboxes, events, claude, maker: overrides.images?.maker === undefined ? codex : overrides.images.maker, convert: overrides.images?.convert ?? sipsConvert(), clock }));
 
   // One browser container serves both the smoke load and the visual audit.
-  const qaBrowser = new QaBrowser({ config, sandboxes });
+  const qaBrowser = new QaBrowser({ config, sandboxes, hostPorts: (project) => arms.hostPorts(project) });
   // The design reviewer travels the same two ways as the rest of the daemon's thinking: API key, or subscription CLI.
   // One desk carries every question put to a reviewer: the design review's, and a task's two cross-checks.
   const desk = new ReviewDesk({ claude, vendors: { codex, antigravity, cursor } });
@@ -243,7 +253,7 @@ export async function createDaemon(config: Config, log: PinoLogger, overrides: D
   const power: CaffeinateManager = new CaffeinateManager({ log: log.child({ mod: 'power' }), spawn: overrides.powerSpawn, platform: overrides.platform, onChange: (mode) => studio.announcePower(mode) });
   // "Gemini" is reached through Antigravity's CLI, the Google agent this daemon already knows how to confine.
   const advisors = { codex, gemini: antigravity };
-  const studio: Studio = new Studio({ config, store, events, policy, sandboxes, provisioner, queue, vault, claude, router, auditor, evals, lessons, kirby, scratch, knowledge, calibration, steering, mcp, files, mockups, pty, namer, ledger, power, quota, selfHosting, external, advisors, relayStates, clock, log: log.child({ mod: 'studio' }), version: VERSION });
+  const studio: Studio = new Studio({ config, store, events, policy, sandboxes, provisioner, arms, queue, vault, claude, router, auditor, evals, lessons, kirby, scratch, knowledge, calibration, steering, mcp, files, mockups, pty, namer, ledger, power, quota, selfHosting, external, advisors, relayStates, clock, log: log.child({ mod: 'studio' }), version: VERSION });
 
   // The token every owner client presents. Created on first boot and kept in the Keychain, where the desktop
   // client on this Mac reads it directly; a second machine is paired by copying it once (`sz token`).
@@ -318,6 +328,7 @@ export async function createDaemon(config: Config, log: PinoLogger, overrides: D
     knowledge,
     steering,
     provisioner,
+    arms,
     claude,
     router,
     vision,

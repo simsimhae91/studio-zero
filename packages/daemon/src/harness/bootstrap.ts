@@ -2,6 +2,7 @@ import { THEME_GENERATOR, themeGeneratorOf } from '@studio-zero/design';
 import { THEME_SEED_FILE, placeholderTheme, regeneratedTheme, writeProjectTheme } from './themeSeed.ts';
 import type { Project, SandboxInfo } from '@studio-zero/protocol';
 import { EXTERNAL_ENV_FILE, type ExternalApis } from '../app/ExternalApis.ts';
+import type { ProjectArms } from '../arms/ProjectArms.ts';
 import type { OrbStackManager } from '../sandbox/OrbStackManager.ts';
 import { KeyedMutex } from '../util/core.ts';
 import { AX_DIR, AX_ENTRY, kitFiles } from './axKit.ts';
@@ -16,7 +17,8 @@ import type { SelfHosting } from './SelfHosting.ts';
  * same palette), the runtime description the harness reads, and the AX kit, so an AI feature the project grows
  * gets the same interaction model the studio has instead of a chat box. A mobile project also gets the mobile
  * kit: the frame, the entry point and the controls a phone screen is made of, so its first screen is composed
- * from an app's parts and not improvised from bare views.
+ * from an app's parts and not improvised from bare views. A project that has a backend of its own (`ProjectArms`)
+ * has it started here, with its address in the workspace.
  *
  * Each file set is checked on the branch that is checked out. The harness calls this again once a task's branch
  * exists, so a kit introduced after a project was created reaches the branch the engine is about to work on.
@@ -36,11 +38,13 @@ export class WorkspaceProvisioner {
   readonly #locks = new KeyedMutex();
   readonly #core: Pick<SelfHosting, 'sync'> | null;
   readonly #external: Pick<ExternalApis, 'envFile'> | null;
+  readonly #arms: Pick<ProjectArms, 'ensure'> | null;
 
-  constructor(sandboxes: OrbStackManager, core: Pick<SelfHosting, 'sync'> | null = null, external: Pick<ExternalApis, 'envFile'> | null = null) {
+  constructor(sandboxes: OrbStackManager, core: Pick<SelfHosting, 'sync'> | null = null, external: Pick<ExternalApis, 'envFile'> | null = null, arms: Pick<ProjectArms, 'ensure'> | null = null) {
     this.#sandboxes = sandboxes;
     this.#core = core;
     this.#external = external;
+    this.#arms = arms;
   }
 
   ensure(project: Project): Promise<SandboxInfo> {
@@ -95,6 +99,11 @@ export class WorkspaceProvisioner {
           added.push('outside API stand-ins (now none)');
         }
       }
+      // A project that has a backend gets it running whenever its sandbox is: a task or a preview that finds
+      // sign-in dead is looking at a broken product, not at the code. A branch made before the backend's kit
+      // gets the kit here.
+      const backend = await this.#arms?.ensure(project);
+      if (backend) added.push(...backend.added);
       if (added.length > 0) {
         const list = added.length === 1 ? added[0] : `${added.slice(0, -1).join(', ')} and ${added.at(-1)}`;
         await this.#sandboxes.commitAll(project, has.has('theme') ? `chore: add the Studio Zero ${list}` : `chore: add Studio Zero ${list}`);
