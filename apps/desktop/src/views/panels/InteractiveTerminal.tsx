@@ -63,7 +63,7 @@ type Phase = 'starting' | 'open' | 'ended' | 'failed';
 export function InteractiveTerminal({ project, visible }: { project: Project; visible: boolean }) {
   const { backend } = useStudio();
   const prefs = usePrefs();
-  const host = useRef<HTMLDivElement>(null);
+  const host = useRef<HTMLElement>(null);
   const term = useRef<Terminal | null>(null);
   const fit = useRef<FitAddon | null>(null);
   const handle = useRef<TerminalHandle | null>(null);
@@ -202,8 +202,8 @@ export function InteractiveTerminal({ project, visible }: { project: Project; vi
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border py-1 pl-2 pr-1">
         <div className="flex flex-wrap items-center gap-1" role="group" aria-label="자주 쓰는 명령">
           {QUICK.map((q) => (
-            <button key={q.label} type="button" disabled={phase !== 'open'} onClick={() => send(q.send)} className="min-h-9 pointer-coarse:min-h-11 rounded-md border border-border px-3 font-mono text-sm text-fg hover:bg-sunken disabled:opacity-60">
-              {q.label}
+            <button key={q.label} type="button" disabled={phase !== 'open'} onClick={() => send(q.send)} className="min-h-9 pointer-coarse:min-h-11 rounded-md border border-border px-3 text-sm text-fg hover:bg-sunken disabled:opacity-60">
+              <code>{q.label}</code>
             </button>
           ))}
         </div>
@@ -220,7 +220,8 @@ export function InteractiveTerminal({ project, visible }: { project: Project; vi
       {error ? <Problem>{error}</Problem> : null}
       {/* The terminal sizes itself in whole character cells, which can overshoot the pane by a pixel or two: clip it here. */}
       <div className="min-h-0 min-w-0 flex-1 overflow-hidden bg-bg px-3 py-2">
-        <div ref={host} className="h-full" role="application" aria-label={`${project.name} 샌드박스 터미널`} />
+        {/* What a terminal shows is a program's output: the element for that, which is also what lets its type be a code face. */}
+        <samp ref={host} className="block h-full" role="application" aria-label={`${project.name} 샌드박스 터미널`} />
       </div>
     </div>
   );

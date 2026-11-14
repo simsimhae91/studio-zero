@@ -1153,7 +1153,7 @@ function DesignDecision({ task, mockups, onFile, onBuild }: { task: Task; mockup
           <button type="button" onClick={() => (spec ? setReading(true) : onFile(SCREEN_SPEC_FILE))} className="flex min-h-9 pointer-coarse:min-h-11 w-full items-center gap-3 rounded-md px-2 text-left text-sm hover:bg-sunken">
             <FileText className="size-4 shrink-0 text-fg-muted" aria-hidden />
             <span className="font-medium">화면 명세{spec ? ` (화면 ${spec.screens.length}개, 핵심 흐름 ${spec.tasks.length}단계)` : ''}</span>
-            <span className="break-all font-mono text-fg-muted">{SCREEN_SPEC_FILE}</span>
+            <code className="break-all text-fg-muted">{SCREEN_SPEC_FILE}</code>
           </button>
         </li>
         {DESIGN_DOCS.map((doc) => (
@@ -1161,7 +1161,7 @@ function DesignDecision({ task, mockups, onFile, onBuild }: { task: Task; mockup
             <button type="button" onClick={() => onFile(doc.path)} className="flex min-h-9 pointer-coarse:min-h-11 w-full items-center gap-3 rounded-md px-2 text-left text-sm hover:bg-sunken">
               <FileText className="size-4 shrink-0 text-fg-muted" aria-hidden />
               <span className="font-medium">{doc.label}</span>
-              <span className="break-all font-mono text-fg-muted">{doc.path}</span>
+              <code className="break-all text-fg-muted">{doc.path}</code>
             </button>
           </li>
         ))}

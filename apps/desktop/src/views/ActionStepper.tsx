@@ -44,7 +44,14 @@ function StepRow({ step, onAudit }: { step: Step; onAudit: () => void }) {
         <Mark state={step.state} />
         <span className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-3">
           <span className={`text-sm font-medium ${step.state === 'failed' ? 'text-danger' : 'text-fg'}`}>{step.title}</span>
-          {step.detail && !prose ? <span className={`line-clamp-1 min-w-0 break-all text-sm text-fg-muted ${WORDED.has(step.kind) ? '' : 'font-mono'}`}>{step.detail}</span> : null}
+          {/* A command or a path is code and is set as code; a detail in words is a sentence. */}
+          {step.detail && !prose ? (
+            WORDED.has(step.kind) ? (
+              <span className="line-clamp-1 min-w-0 break-all text-sm text-fg-muted">{step.detail}</span>
+            ) : (
+              <code className="line-clamp-1 min-w-0 break-all text-sm text-fg-muted">{step.detail}</code>
+            )
+          ) : null}
         </span>
         {expandable ? <ChevronDown className={`size-4 shrink-0 text-fg-muted ${open ? 'rotate-180' : ''}`} aria-hidden /> : null}
       </button>
@@ -61,7 +68,11 @@ function StepRow({ step, onAudit }: { step: Step; onAudit: () => void }) {
               {step.lines.map((line, i) => (
                 <li key={i} className="flex max-w-none flex-col gap-1">
                   <span className="flex flex-wrap items-baseline justify-between gap-x-4">
-                    <span className={`min-w-0 break-words ${line.mono ? 'font-mono text-sm' : 'text-base'} ${line.tone === 'bad' ? 'text-danger' : 'text-fg'}`}>{line.text}</span>
+                    {line.mono ? (
+                      <code className={`min-w-0 break-words text-sm ${line.tone === 'bad' ? 'text-danger' : 'text-fg'}`}>{line.text}</code>
+                    ) : (
+                      <span className={`min-w-0 break-words text-base ${line.tone === 'bad' ? 'text-danger' : 'text-fg'}`}>{line.text}</span>
+                    )}
                     {line.meta ? <span className={`shrink-0 text-sm ${line.tone === 'bad' ? 'font-medium text-danger' : line.tone === 'warn' ? 'font-medium text-warning' : line.tone === 'good' ? 'text-success' : 'text-fg-muted'}`}>{line.meta}</span> : null}
                   </span>
                   {/* Sandbox and page output is untrusted: it is only ever a text node. */}

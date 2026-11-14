@@ -137,8 +137,10 @@ export function Changes({ task, comments, onComments, onDone }: { task: Task; co
           <p className="text-base text-fg-muted">
             파일 {files.length}개, +{additions} −{deletions}. 줄 번호를 끌어서 고르면 그 줄에 코멘트를 답니다.
           </p>
-          <p className="break-all font-mono text-sm text-fg-muted">
-            {diff.data.base}...{diff.data.branch}
+          <p className="break-all text-sm text-fg-muted">
+            <code>
+              {diff.data.base}...{diff.data.branch}
+            </code>
           </p>
         </div>
         {diff.data.truncated ? <p className="border-l-4 border-warning pl-3 text-base">변경이 커서 앞부분만 보입니다. 나머지는 브랜치에서 직접 읽어 주세요.</p> : null}
@@ -147,7 +149,7 @@ export function Changes({ task, comments, onComments, onDone }: { task: Task; co
             <li key={file.path} className="max-w-none">
               <button type="button" onClick={() => jump(file, i)} className="flex min-h-9 pointer-coarse:min-h-11 w-full items-center gap-3 rounded-md px-2 text-left text-sm hover:bg-sunken">
                 <span className="w-16 shrink-0 text-fg-muted">{statusText[file.status]}</span>
-                <span className="min-w-0 flex-1 break-all font-mono">{file.path}</span>
+                <code className="min-w-0 flex-1 break-all">{file.path}</code>
                 <Counts file={file} />
               </button>
             </li>
@@ -160,8 +162,12 @@ export function Changes({ task, comments, onComments, onDone }: { task: Task; co
           <button type="button" aria-expanded={isOpen(file)} onClick={() => toggle(file.path)} className="flex min-h-11 w-full items-center gap-3 border-b border-border px-3 py-2 text-left hover:bg-sunken">
             {isOpen(file) ? <ChevronDown className="size-4 shrink-0 text-fg-muted" aria-hidden /> : <ChevronRight className="size-4 shrink-0 text-fg-muted" aria-hidden />}
             <span className="flex min-w-0 flex-1 flex-col">
-              <span className="break-all font-mono text-sm font-medium">{file.path}</span>
-              {file.oldPath ? <span className="break-all font-mono text-xs text-fg-muted">{file.oldPath}에서 옮김</span> : null}
+              <code className="break-all text-sm font-medium">{file.path}</code>
+              {file.oldPath ? (
+                <span className="break-all text-xs text-fg-muted">
+                  <code>{file.oldPath}</code>에서 옮김
+                </span>
+              ) : null}
             </span>
             <Counts file={file} />
           </button>
@@ -208,7 +214,7 @@ export function Changes({ task, comments, onComments, onDone }: { task: Task; co
 
 function Counts({ file }: { file: DiffFile }) {
   return (
-    <span className="shrink-0 font-mono text-sm">
+    <span className="shrink-0 text-sm tabular-nums">
       <span className="text-success">+{file.additions}</span> <span className="text-danger">−{file.deletions}</span>
     </span>
   );
@@ -322,7 +328,9 @@ function Hunk({ path, index, hunk, colored, picked, number }: { path: string; in
   return (
     <div className="code-view diff-hunk">
       <p className="diff-head">
-        @@ −{hunk.oldStart},{hunk.oldLines} +{hunk.newStart},{hunk.newLines} @@
+        <code>
+          @@ −{hunk.oldStart},{hunk.oldLines} +{hunk.newStart},{hunk.newLines} @@
+        </code>
       </p>
       {groups.map((group, g) => (group.change ? <div key={g} className="diff-block">{group.rows}</div> : group.rows))}
     </div>
@@ -381,8 +389,8 @@ function CommentList({ comments, onRemove }: { comments: readonly ReviewComment[
             <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
               <span className="font-semibold">{reviewLabelText[c.label]}</span>
               {c.blocking ? <Status tone="bad">차단</Status> : null}
-              <span className="break-all font-mono text-fg-muted">
-                {c.path} {range(c.startLine, c.endLine)} ({sideText[c.side]})
+              <span className="break-all text-fg-muted">
+                <code>{c.path}</code> {range(c.startLine, c.endLine)} ({sideText[c.side]})
               </span>
             </p>
             <p className="whitespace-pre-wrap break-words text-base">{c.body}</p>

@@ -209,8 +209,8 @@ function Proof({ report, onRun, running, runError, onTaskStarted }: { report: Au
             {routes.length > 1 ? (
               <div role="radiogroup" aria-label="캡처한 경로" className="flex flex-wrap gap-1">
                 {routes.map((route) => (
-                  <button key={route} type="button" role="radio" aria-checked={view.route === route} onClick={() => setView({ ...view, route, fold: 0 })} className={`min-h-11 min-w-11 break-all rounded-md px-3 font-mono text-sm ${view.route === route ? 'bg-sunken text-fg' : 'text-fg-muted'}`}>
-                    {route}
+                  <button key={route} type="button" role="radio" aria-checked={view.route === route} onClick={() => setView({ ...view, route, fold: 0 })} className={`min-h-11 min-w-11 break-all rounded-md px-3 text-sm ${view.route === route ? 'bg-sunken text-fg' : 'text-fg-muted'}`}>
+                    <code>{route}</code>
                   </button>
                 ))}
               </div>
@@ -250,7 +250,12 @@ function Verdict({ report }: { report: AuditReport }) {
           <Status tone="warn">디자인 미보증</Status>
           {measured}
         </div>
-        {report.vision.reason ? <p className="break-words font-mono text-sm text-fg-muted">{report.vision.reason}</p> : null}
+        {/* What a reviewer's command line said when it refused: a program's output, set as one. */}
+        {report.vision.reason ? (
+          <p className="break-words text-sm text-fg-muted">
+            <samp>{report.vision.reason}</samp>
+          </p>
+        ) : null}
       </header>
     );
   }

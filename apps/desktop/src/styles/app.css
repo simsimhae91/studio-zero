@@ -435,6 +435,9 @@ body {
   text-align: end;
   color: var(--color-fg-muted);
   user-select: none;
+  /* Figures, not code: the product's face with digits of one width, so the numbers still line up. */
+  font-family: var(--font-sans);
+  font-variant-numeric: tabular-nums;
 }
 button.diff-num:hover,
 button.diff-num[aria-pressed="true"] {
@@ -443,7 +446,7 @@ button.diff-num[aria-pressed="true"] {
 }
 .diff-code {
   min-inline-size: 0;
-  padding-inline-end: 0.5rem;
+  padding-inline: 0.5rem;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
@@ -452,14 +455,28 @@ button.diff-num[aria-pressed="true"] {
   inline-size: 2ch;
   user-select: none;
 }
-.diff-row[data-kind="add"] {
-  background: color-mix(in oklch, var(--color-success) 12%, transparent);
+/* A changed line is marked where its number is and by a bar at the code's edge, not by a wash under the code. The
+   code's colours are solved for the surface they sit on; with a tint under them the client's own audit measured
+   them at 5.9:1 to 6.7:1, under the 7:1 every text here owes. The same goes for the lines picked for a comment. */
+.diff-row[data-kind="add"] > .diff-num {
+  background: color-mix(in oklch, var(--color-success) 22%, transparent);
+  color: var(--color-fg);
 }
-.diff-row[data-kind="del"] {
-  background: color-mix(in oklch, var(--color-danger) 10%, transparent);
+.diff-row[data-kind="del"] > .diff-num {
+  background: color-mix(in oklch, var(--color-danger) 20%, transparent);
+  color: var(--color-fg);
 }
-.diff-row[data-picked] {
-  background: color-mix(in oklch, var(--color-accent) 18%, transparent);
+.diff-row[data-kind="add"] > .diff-code {
+  box-shadow: inset 3px 0 0 var(--color-success);
+}
+.diff-row[data-kind="del"] > .diff-code {
+  box-shadow: inset 3px 0 0 var(--color-danger);
+}
+.diff-row[data-picked] > .diff-num {
+  background: color-mix(in oklch, var(--color-accent) 30%, transparent);
+  color: var(--color-fg);
+}
+.diff-row[data-picked] > .diff-code {
   box-shadow: inset 3px 0 0 var(--color-accent);
 }
 @container (min-width: 900px) {

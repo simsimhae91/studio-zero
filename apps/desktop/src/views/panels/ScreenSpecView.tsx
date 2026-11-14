@@ -50,12 +50,12 @@ export function ScreenSpecView({ spec }: { spec: ScreenSpec }) {
         <ol className="flex flex-col">
           {spec.tasks.map((task, i) => (
             <li key={task.id} className="flex max-w-none items-baseline gap-3 border-t border-border py-2 text-base">
-              <span className="w-6 shrink-0 font-mono text-sm text-fg-muted">{i + 1}</span>
+              <span className="w-6 shrink-0 text-sm tabular-nums text-fg-muted">{i + 1}</span>
               <span className="min-w-0 flex-1">
                 <span className="font-medium">{task.goal}</span>
                 <span className="text-fg-muted"> → {task.outcome}</span>
               </span>
-              <span className="shrink-0 font-mono text-sm text-fg-muted">{task.screen}</span>
+              <code className="shrink-0 text-sm text-fg-muted">{task.screen}</code>
             </li>
           ))}
         </ol>
@@ -64,7 +64,7 @@ export function ScreenSpecView({ spec }: { spec: ScreenSpec }) {
       {spec.screens.map((screen) => (
         <section key={screen.id} className="flex flex-col gap-3">
           <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-            <span className="font-mono text-sm font-semibold text-accent">{screen.id}</span>
+            <code className="text-sm font-semibold text-accent">{screen.id}</code>
             <h3 className="text-lg font-semibold">{screen.name}</h3>
             {screen.later ? <span className="text-sm text-fg-muted">첫 버전 이후</span> : null}
           </div>
@@ -84,10 +84,10 @@ export function ScreenSpecView({ spec }: { spec: ScreenSpec }) {
             <tbody>
               {screen.elements.map((element, i) => (
                 <tr key={i}>
-                  <td className={`${cell} font-mono text-fg-muted`}>{i + 1}</td>
+                  <td className={`${cell} tabular-nums text-fg-muted`}>{i + 1}</td>
                   <td className={`${cell} font-medium`}>{element.name}</td>
                   <td className={cell}>{element.rule}</td>
-                  <td className={`${cell} font-mono text-fg-muted`}>{element.goesTo ?? ''}</td>
+                  <td className={`${cell} text-fg-muted`}>{element.goesTo ? <code>{element.goesTo}</code> : ''}</td>
                 </tr>
               ))}
             </tbody>
@@ -130,7 +130,9 @@ export function ScreenSpecView({ spec }: { spec: ScreenSpec }) {
             <tbody>
               {spec.events.map((event) => (
                 <tr key={event.name}>
-                  <td className={`${cell} font-mono`}>{event.name}</td>
+                  <td className={cell}>
+                    <code>{event.name}</code>
+                  </td>
                   <td className={cell}>{event.when}</td>
                   <td className={cell}>{event.measures}</td>
                 </tr>

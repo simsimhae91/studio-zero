@@ -272,7 +272,7 @@ function FileViewer({ project, path, onClose, onDirty }: { project: Project; pat
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       <div className="flex flex-wrap items-center justify-between gap-x-4 border-b border-border py-1 pl-4 pr-1">
         <div className="flex min-w-0 flex-col py-1">
-          <span className="break-all font-mono text-sm font-medium">{path}</span>
+          <code className="break-all text-sm font-medium">{path}</code>
           {file.data ? (
             <span className="text-xs text-fg-muted">
               {bytes(file.data.size)}
@@ -340,10 +340,10 @@ function FileViewer({ project, path, onClose, onDirty }: { project: Project; pat
           <div role="presentation" className={`code-view grid grid-cols-[auto_minmax(0,1fr)] py-4 text-fg ${wrapFiles ? '' : 'min-w-max'}`}>
             {lines.map((line, i) => (
               <Fragment key={i}>
-                <span aria-hidden className="sticky left-0 select-none border-r border-border bg-bg px-3 text-right text-fg-muted">
+                <span aria-hidden className="sticky left-0 select-none border-r border-border bg-bg px-3 text-right font-sans tabular-nums text-fg-muted">
                   {i + 1}
                 </span>
-                <span className={`px-4 ${wrapFiles ? 'whitespace-pre-wrap [overflow-wrap:anywhere]' : 'whitespace-pre'}`}>{line.length > 0 ? render(line) : '\n'}</span>
+                <code className={`px-4 ${wrapFiles ? 'whitespace-pre-wrap [overflow-wrap:anywhere]' : 'whitespace-pre'}`}>{line.length > 0 ? render(line) : '\n'}</code>
               </Fragment>
             ))}
           </div>
