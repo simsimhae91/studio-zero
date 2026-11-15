@@ -144,7 +144,7 @@ export class EvalRunner {
       case 'visual': {
         const file = await readProjectFile(this.#sandboxes, project, this.#config);
         const routes = [...new Set([...spec.routes, ...file.routes, ...(opts.extraRoutes ?? [])])].slice(0, 8);
-        const server = await ensureDevServer(this.#sandboxes, project, file, { reuse: opts.devServerRunning === true });
+        const server = await ensureDevServer(this.#sandboxes, project, file, { reuse: opts.devServerRunning === true, current: true });
         if (!server.ready) {
           return { eval: ev, passed: false, audit: null, detail: `The dev server (\`${file.dev.command}\`) did not answer on port ${file.dev.port} within 90s.\n${excerpt(server.log, 4000)}` };
         }

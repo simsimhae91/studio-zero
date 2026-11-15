@@ -322,6 +322,7 @@ test('one walk a project at a time: a second walk of the same project waits, and
       together--;
       throw new Error('no project file in this test');
     },
+    exec: async () => ({ exitCode: 0, stdout: '', stderr: '', truncated: false, timedOut: false, durationMs: 1 }),
     waitForHttp: async () => false,
     startProcess: async () => undefined,
     processLog: async () => 'nothing listens',

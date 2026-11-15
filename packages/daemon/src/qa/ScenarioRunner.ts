@@ -563,7 +563,8 @@ export class ScenarioRunner implements ScenarioRunnerLike {
     const backend = spec.entry !== null ? new Backend((await this.#arms.ensure(project))!.info, (script) => this.#arms.sql(project, script)) : null;
 
     const file = await readProjectFile(this.#sandboxes, project, this.#config);
-    const server = await ensureDevServer(this.#sandboxes, project, file, { reuse: true });
+    // Walked on the code as it is now: a server that was up before the workspace last changed is restarted.
+    const server = await ensureDevServer(this.#sandboxes, project, file, { reuse: true, current: true });
     if (!server.ready) return finish(0, [`The dev server (\`${file.dev.command}\`) did not answer on port ${file.dev.port}. Its log:\n${excerpt(server.log, 2000)}`]);
 
     const run = randomBytes(4).toString('hex');

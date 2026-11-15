@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { CORE_PROJECT_ID, type ProjectWalks, type TaskKind } from '@studio-zero/protocol';
 import { Store } from '../src/db/Store.ts';
+import { ensureDevServer } from '../src/harness/devServer.ts';
 import { OrbStackManager, sandboxNames, type Place } from '../src/sandbox/OrbStackManager.ts';
 import { testConfig } from '../src/config.ts';
 import { dockerArgs, localDocker, sampleProject, tempDir } from './helpers.ts';
@@ -161,4 +162,48 @@ test('a slot is a second container of the project: its own volume, the project\'
     home.cleanup();
     ws.cleanup();
   }
+});
+
+// ------------------------------------------------------------------ a dev server that does not follow its files
+
+test('whoever judges by what the dev server serves gets the code as it is: a server that was up before the workspace changed is restarted', async () => {
+  // Every sandbox sets CI=1, and Metro under it serves the bundle it first built until it is restarted. The
+  // first quick fixes on a real product were walked on such a server and passed against the code they replaced.
+  const project = sampleProject('duel');
+  const file = { dev: { command: 'pnpm expo start --web --port 8081', port: 8081 }, routes: ['/'], states: [] };
+  const box = { workspace: 'hash-of-A', startedOn: '', answering: false, starts: 0 };
+  const sandboxes = {
+    exec: async (_project: unknown, script: string) => {
+      const out = script.startsWith('git ls-files') ? box.workspace : script.startsWith('cat ') ? box.startedOn : ((box.startedOn = /printf %s '?([^' ]*)'? >/.exec(script)?.[1] ?? box.startedOn), '');
+      return { exitCode: 0, stdout: out, stderr: '', truncated: false, timedOut: false, durationMs: 1 };
+    },
+    waitForHttp: async () => box.answering,
+    startProcess: async () => {
+      box.starts++;
+      box.answering = true;
+    },
+    processLog: async () => '',
+  };
+  const ensure = (opts: { reuse: boolean; current?: boolean }) => ensureDevServer(sandboxes as never, project, file as never, opts);
+  // Nothing answers: started, and the workspace it was started on is noted.
+  assert.deepEqual([await ensure({ reuse: true, current: true }), box.starts, box.startedOn], [{ ready: true, log: '' }, 1, 'hash-of-A']);
+  // The same workspace: left running.
+  await ensure({ reuse: true, current: true });
+  assert.equal(box.starts, 1);
+  // The workspace changed under it (an engine wrote a file, a branch was checked out): restarted, and noted again.
+  box.workspace = 'hash-of-B';
+  await ensure({ reuse: true, current: true });
+  assert.deepEqual([box.starts, box.startedOn], [2, 'hash-of-B']);
+  // The owner's preview does not ask: a task's walk may be standing on that server.
+  box.workspace = 'hash-of-C';
+  await ensure({ reuse: true });
+  assert.equal(box.starts, 2);
+  // A workspace that cannot be stamped is never "the same as before", and a server nobody noted is not trusted.
+  box.workspace = '';
+  await ensure({ reuse: true, current: true });
+  assert.equal(box.starts, 3);
+  // Without reuse it is restarted whatever the workspace says, as the smoke gate has always done.
+  box.workspace = 'hash-of-C';
+  await ensure({ reuse: false });
+  assert.deepEqual([box.starts, box.startedOn], [4, 'hash-of-C']);
 });

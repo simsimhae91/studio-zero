@@ -9,6 +9,8 @@ import { isLight, type PlanVersionRow, type Store } from '../db/Store.ts';
 import type { EventLog } from '../events/EventLog.ts';
 import { pngBlock, textBlock, type ClaudeClient } from '../llm/ClaudeClient.ts';
 import type { EnginePick, ModelRouter } from '../llm/ModelRouter.ts';
+import { ensureDevServer } from './devServer.ts';
+import { readProjectFile } from './projectFile.ts';
 import { ApprovalDeniedError, WORKSPACE_DIR, type PolicyEngine } from '../policy/PolicyEngine.ts';
 import { flowTotals } from '../qa/FlowWalker.ts';
 import { MOCKUP_DIR, type MockupMeasurement, type MockupRenderer } from '../qa/MockupRenderer.ts';
@@ -629,6 +631,7 @@ export class Harness {
             task = this.#store.updateTask(task.id, { landedCommit: landing.commit });
             this.#events.emit(scope, { type: 'task.landed', commit: landing.commit, into: INTEGRATION_BRANCH });
             this.#rememberEdit(home.id, editing, landing.commit);
+            void this.#refreshMain(home);
             // On main, and not clean: what the changed screens are still found breaking is the owner's to know.
             if (editing.left.length > 0) {
               this.#events.emit(scope, { type: 'notice', level: 'warn', message: `main에 들어갔지만, 고친 화면에서 잰 결함 ${editing.left.length}건이 그대로 남아 있습니다:\n${editing.left.map((line) => `- ${line}`).join('\n')}` });
@@ -1528,6 +1531,23 @@ export class Harness {
     if (walked.problems.length > 0) parts.push(`걷다가 걸린 것 ${walked.problems.length}건:\n${walked.problems.map((problem) => `- ${excerpt(problem.replace(/\s+/g, ' '), 400)}`).join('\n')}`);
     parts.push(heavy.length > 0 ? `화면에서 잰 사소하지 않은 결함 ${heavy.length}건:\n${heavy.map((line) => `- ${line}`).join('\n')}` : '화면에서 잰 사소하지 않은 결함은 없습니다.');
     return excerpt(parts.join('\n\n'), 6000);
+  }
+
+  /**
+   * After a landing moved the project's own working files: if a dev server is running there (the owner's
+   * preview of main) and no heavy task is at work in that workspace, it is brought to the code as it now is. A
+   * server that does not watch its files would go on showing main as it was. Best effort, and nobody waits for it.
+   */
+  async #refreshMain(home: Project): Promise<void> {
+    try {
+      const active = new Set(['running', 'awaiting_approval', 'awaiting_plan_review']);
+      if (this.#store.listTasks(home.id, 40).some((other) => active.has(other.state) && !isLight(other, this.#slots?.perProject ?? 0))) return;
+      const file = await readProjectFile(this.#sandboxes, home, this.#config);
+      if (!(await this.#sandboxes.waitForHttp(home, file.dev.port, '/', 1))) return;
+      await ensureDevServer(this.#sandboxes, home, file, { reuse: true, current: true });
+    } catch (err) {
+      this.#log.warn({ projectId: home.id, err: errorMessage(err) }, 'the preview of main could not be brought to what landed');
+    }
   }
 
   /** The commit a workspace stands on, or null when it cannot say. */
