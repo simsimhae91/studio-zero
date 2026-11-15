@@ -4,13 +4,18 @@ import { basename, dirname, join, resolve } from 'node:path';
 import { CONTRACTS_DIR, EVIDENCE_DIR, ClaimStatus, Contract, Lane, ShownBy, openContracts, owed, readContract, renderContract, writeContract } from './contract.ts';
 import { writeEvidencePage } from './evidence.ts';
 import { EyesError, installApp, restSimulator, runFlow, screenText, screenshot, spareSimulator } from './ios.ts';
-import { SIZES, lookAtWeb, renderLook, type Size } from './web.ts';
+import { SIZES, lookAtWeb, renderLook, renderWalk, walkWeb, type Size } from './web.ts';
 
 const USAGE = `sz-eyes: launch what was built, look at it, operate it, and put what was seen on one page
 
   sz-eyes web look <url> [--size phone|tablet|desktop] [--dark] [--wait <text or selector>] [--out <folder>] [--name <n>] [--house] [--json]
         open a page in a headless Chrome of its own and say what is on it: the words, what can be pressed, what it
         logged, and what was measured (text that can be read, controls that can be pressed, nothing cut off)
+
+  sz-eyes web do <url> --step "<step>"... [--size ...] [--out <folder>] [--name <n>] [--json]
+        do things on a page as a person would and keep a picture of what each led to. Steps: tap:<words>,
+        type:<field>=<text>, press:<key>, wait:<words>, gone:<words>, see:<words>, shot:<name>, go:<path>.
+        Stops at the first step that cannot be done and says why; ends with a look at where it arrived
 
   sz-eyes ios spare [--type "iPhone 17"]                 the eyes' own simulator, made and booted with no window; prints its id
   sz-eyes ios install <udid> <path.app> --bundle-id <id> [--metro <port>]
@@ -64,6 +69,17 @@ async function main(argv: string[]): Promise<number> {
     const look = await lookAtWeb(url, { size, dark: a.has('--dark'), house: a.has('--house'), ...(a.one('--wait') ? { waitFor: a.one('--wait')! } : {}), ...(a.one('--out') ? { out: resolve(a.one('--out')!) } : {}), ...(a.one('--name') ? { name: a.one('--name')! } : {}) });
     out(a.has('--json') ? JSON.stringify(look, null, 2) : renderLook(look));
     return 0;
+  }
+  if (area === 'web' && command === 'do') {
+    const a = parse(rest, ['--dark', '--house', '--json']);
+    const url = a.words[0];
+    const steps = a.all('--step');
+    if (!url || steps.length === 0) throw new EyesError('sz-eyes web do <url> --step "tap:<words>" --step "type:<field>=<text>" ... [--out <folder>]');
+    const size = (a.one('--size') ?? 'phone') as Size;
+    if (!(size in SIZES)) throw new EyesError(`--size is one of ${Object.keys(SIZES).join(', ')}`);
+    const walk = await walkWeb(url, steps, { size, dark: a.has('--dark'), house: a.has('--house'), ...(a.one('--wait') ? { waitFor: a.one('--wait')! } : {}), ...(a.one('--out') ? { out: resolve(a.one('--out')!) } : {}), ...(a.one('--name') ? { name: a.one('--name')! } : {}) });
+    out(a.has('--json') ? JSON.stringify(walk, null, 2) : renderWalk(walk, steps.length));
+    return walk.passed ? 0 : 1;
   }
   if (area === 'ios') {
     const a = parse(rest, ['--video', '--erase']);

@@ -162,3 +162,130 @@ export function renderLook(look: Look): string {
   ];
   return lines.filter(Boolean).join('\n');
 }
+
+// ------------------------------------------------------------------ hands
+
+/**
+ * One thing done on a page, written the way a person would say it:
+ *
+ *   tap:<words on it, or a selector>        press what carries those words (a button, a link, a tab)
+ *   type:<field>=<text>                     type into the field named by its label, placeholder or selector
+ *   press:<key>                             a key: Enter, Escape, Tab
+ *   wait:<words or a selector>              until it is on screen
+ *   gone:<words or a selector>              until it is no longer on screen
+ *   see:<words>                             it must be on screen now, or the walk stops here
+ *   shot:<name>                             keep a picture of the screen as it is now
+ *   go:<path or url>                        open another address
+ */
+export type Step = string;
+
+export interface StepResult {
+  step: Step;
+  ok: boolean;
+  /** Why it did not happen, in a line. */
+  why: string | null;
+  screenshot: string | null;
+}
+
+export interface Walk {
+  url: string;
+  size: Size;
+  passed: boolean;
+  steps: StepResult[];
+  /** The screen as the walk left it. */
+  end: Look;
+}
+
+/**
+ * A picture of the screen once it has stopped moving: taken again until two in a row are the same, for two
+ * seconds at most. A press changes what is on screen a moment later, and a counter caught half-way up is a
+ * picture of nothing the product ever shows (the first walk kept "9 / 100점" beside the words "지금 10점").
+ */
+async function settled(page: Page): Promise<Buffer> {
+  let last = await page.screenshot({ type: 'png' });
+  for (let i = 0; i < 8; i++) {
+    await page.waitForTimeout(250);
+    const now = await page.screenshot({ type: 'png' });
+    if (now.equals(last)) return now;
+    last = now;
+  }
+  return last;
+}
+
+const isSelector = (target: string): boolean => /^[.#[]|^data-|>>|^css=|^text=/.test(target);
+
+/** What a person would point at with these words: the control named so, else whatever shows them. */
+function pointAt(page: Page, target: string): ReturnType<Page['locator']> {
+  if (isSelector(target)) return page.locator(target).first();
+  return page
+    .getByRole('button', { name: target })
+    .or(page.getByRole('link', { name: target }))
+    .or(page.getByRole('tab', { name: target }))
+    .or(page.getByRole('checkbox', { name: target }))
+    .or(page.getByText(target, { exact: false }))
+    .first();
+}
+
+function field(page: Page, target: string): ReturnType<Page['locator']> {
+  if (isSelector(target)) return page.locator(target).first();
+  return page.getByLabel(target).or(page.getByPlaceholder(target)).or(page.getByRole('textbox', { name: target })).first();
+}
+
+/**
+ * Does things on a page in order, as a person would, and keeps a picture after every step that changes the
+ * screen. Stops at the first step that cannot be done and says why: a walk that stops is a finding, not an
+ * error. Ends with a look at the screen it arrived on.
+ */
+export async function walkWeb(url: string, steps: readonly Step[], opts: LookOptions & { stepTimeoutMs?: number } = {}): Promise<Walk> {
+  const size = opts.size ?? 'phone';
+  const browser = opts.browser ?? (await openBrowser());
+  const results: StepResult[] = [];
+  const patience = opts.stepTimeoutMs ?? 10_000;
+  let n = 0;
+  try {
+    const end = await lookAtWeb(url, {
+      ...opts,
+      browser,
+      name: `${opts.name ?? 'walk'}-end`,
+      before: async (page) => {
+        for (const step of steps) {
+          const at = step.indexOf(':');
+          const [verb, rest] = at === -1 ? [step, ''] : [step.slice(0, at), step.slice(at + 1)];
+          let why: string | null = null;
+          try {
+            if (verb === 'tap') await pointAt(page, rest).click({ timeout: patience });
+            else if (verb === 'type') {
+              const eq = rest.indexOf('=');
+              if (eq === -1) throw new Error('a type step is type:<field>=<text>');
+              await field(page, rest.slice(0, eq)).fill(rest.slice(eq + 1), { timeout: patience });
+            } else if (verb === 'press') await page.keyboard.press(rest);
+            else if (verb === 'wait') await pointAt(page, rest).waitFor({ state: 'visible', timeout: patience });
+            else if (verb === 'gone') await pointAt(page, rest).waitFor({ state: 'hidden', timeout: patience });
+            else if (verb === 'see') {
+              if (!(await pointAt(page, rest).isVisible().catch(() => false))) throw new Error(`"${rest}" is not on screen`);
+            } else if (verb === 'go') await page.goto(new URL(rest, page.url()).toString(), { waitUntil: 'load', timeout: 30_000 });
+            else if (verb !== 'shot') throw new Error(`no such step: ${verb}. Steps are tap, type, press, wait, gone, see, shot, go`);
+          } catch (err) {
+            why = (err instanceof Error ? err.message : String(err)).split('\n')[0]!.slice(0, 240);
+          }
+          let screenshot: string | null = null;
+          if (opts.out && (verb === 'shot' || why !== null || verb === 'tap' || verb === 'go')) {
+            mkdirSync(opts.out, { recursive: true });
+            screenshot = join(opts.out, `${opts.name ?? 'walk'}-${String(++n).padStart(2, '0')}-${verb === 'shot' ? rest.replace(/[^\w가-힣-]+/g, '-').slice(0, 40) : verb}${why ? '-stopped' : ''}.png`);
+            writeFileSync(screenshot, await settled(page));
+          }
+          results.push({ step, ok: why === null, why, screenshot });
+          if (why !== null) break;
+        }
+      },
+    });
+    return { url, size, passed: results.length === steps.length && results.every((r) => r.ok), steps: results, end };
+  } finally {
+    if (!opts.browser) await browser.close();
+  }
+}
+
+export function renderWalk(walk: Walk, total: number): string {
+  const lines = walk.steps.map((r, i) => `${String(i + 1).padStart(2)}. ${r.ok ? 'ok     ' : 'STOPPED'} ${r.step}${r.why ? `\n      ${r.why}` : ''}${r.screenshot ? `\n      ${r.screenshot}` : ''}`);
+  return [`${walk.passed ? 'WALKED TO THE END' : 'STOPPED'}: ${walk.steps.filter((r) => r.ok).length} of ${total} steps done`, ...lines, '', 'where it ended:', renderLook(walk.end)].join('\n');
+}
