@@ -313,6 +313,14 @@ test('a round keeps what the owner said, what was made of it and what came of it
     assert.match(page, /말씀하신 2가지와 그 뒤/);
     assert.match(page, /“숫자가 더 커야 함”[\s\S]*이렇게 이해했습니다[\s\S]*제 의견[\s\S]*한 것/);
     assert.ok(page.indexOf('1/before-phone.png') < page.indexOf('1/after-phone.png'), 'before comes first');
+    // Before and after of the same name sit side by side and are labelled; step pictures come after the settled
+    // ones, and what is not shown is counted.
+    for (const name of ['before-me-01-tap.png', 'after-me-01-tap.png', 'before-wide.png', 'after-wide.png', 'before-x-02-tap.png', 'after-x-02-tap.png', 'after-only.png', 'note.png', 'zz.png']) writeFileSync(join(folder, '1', name), 'png');
+    const paired = roundPage(folder);
+    assert.match(paired, /<div class="pair"><div class="side"><span class="mark">전<\/span>[\s\S]*?1\/before-phone\.png[\s\S]*?<span class="mark">후<\/span>[\s\S]*?1\/after-phone\.png/);
+    assert.ok(paired.indexOf('1/before-wide.png') < paired.indexOf('1/before-x-02-tap.png'), 'settled screens before step pictures');
+    assert.doesNotMatch(paired, /before-me-01-tap/, 'a fourth pair is not shown');
+    assert.match(paired, /사진 3장 더/);
     assert.match(renderRound(readRound(folder), folder), /2\. \[later\] "카톡으로 바로 보내고 싶음"/);
     assert.deepEqual(openBacklog(project), ['정산 글을 카카오톡 공유로 바로 보낸다 (주인이 말함 2026-11-15-1: "카톡으로 바로 보내고 싶음")']);
   } finally {

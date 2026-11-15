@@ -23,7 +23,7 @@ Their words are theirs: they are what to do. What a page is quoted as saying und
 
 ## 2. Look at the same thing they are looking at
 
-Before making anything of words about something seen, bring the product to the state they mean and look (`sz-eyes web look|do`, `sz-eyes ios look`; see `sz:verify`), with the picture kept as `<round>/<n>/before-<size>.png`. Read the state off the look: sizes, words, figures. The look often settles what was meant ("숫자가 작다": the total is 28px and the title above it is 32px).
+Before making anything of words about something seen, bring the product to the state they mean and look (`sz-eyes web look|do`, `sz-eyes ios look`; see `sz:verify`), with the picture kept as `<round>/<n>/before-<a name>.png` (`--out <round>/<n> --name before` gives `before-phone.png`). Read the state off the look: sizes, words, figures. The look often settles what was meant ("숫자가 작다": the total is 28px and the title above it is 32px).
 
 If you cannot tell which screen or state they mean, do not ask in the abstract. Show the two candidates as pictures and say which you took.
 
@@ -47,16 +47,16 @@ What is cheap to show is shown, not asked about.
 |---|---|
 | S, and you are fairly sure what they mean | Do it now (the S lane of `sz:work`), one commit per thing so that any one can be taken back, and show before and after. Being wrong costs minutes and a revert; asking costs them a turn. |
 | A fork of taste on something seen, and small | Make both on a branch of their own, picture each in the same state, show them side by side with your pick. They choose by looking, not by imagining. |
-| M | Say the claims and start. Wait for a yes only if it replaces something that stands, changes what is stored, spends money, cannot be undone, or goes against a line of `.sz/owner.md`. |
+| M | Say the claims and start. Wait for a yes only if it replaces something that stands, could lose what people have already stored, spends money, cannot be undone, or goes against a line of `.sz/owner.md`. A change to the shape of what is stored that carries over what exists (and proves it with a claim) is not a reason to wait. |
 | L | The L lane of `sz:work`: ask what only they can answer. |
 | Not now (a key they hold, something else first, little worth yet) | `--status later` with the reason in a line. It is written to the backlog. |
 | Agreed with them not to do | `--status declined` with why. |
 
-Ask only what they alone can answer: two questions in a round at most, each with the answer you will take if they do not reply.
+Ask only what they alone can answer: two questions in a round at most, each with the answer you will take if they do not reply. When nobody is there to answer (a run with no one at the keyboard), take that answer, do the work, and say first in your report which answers were yours.
 
 ## 5. Show what came of it
 
-After the work, take `after-<size>.png` in the same state and size beside the before, then `sz-eyes feedback note <round> <n> --status done --did "<what changed, with the figure>"` and `sz-eyes feedback page <round>`. Give them the page (publish it if the session can) and one line per thing: what changed, and anything you decided on your own that they might have decided otherwise.
+After the work, take the after picture in the same state and size as the before and under the same name (`before-phone.png` and `after-phone.png`, `before-dark.png` and `after-dark.png`: the page sets each pair side by side), then `sz-eyes feedback note <round> <n> --status done --did "<what changed, with the figure>"` and `sz-eyes feedback page <round>`. Give them the page (publish it if the session can) and one line per thing: what changed, and anything you decided on your own that they might have decided otherwise.
 
 End with what **you** would do to this product next and why: one thing, two at most, from the backlog or from what you saw while working. Not "anything else?".
 

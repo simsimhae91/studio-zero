@@ -131,14 +131,30 @@ export function renderRound(round: Round, folder: string): string {
 export function roundPage(folder: string): string {
   const round = readRound(folder);
   const count = (status: Status): number => round.items.filter((item) => item.status === status).length;
-  const pictures = (n: number): string[] => {
+  /**
+   * The pictures of an item, as the owner compares them: each `before-<x>` beside the `after-<x>` of the same
+   * name, the settled screens (no step number in the name) first. Three pairs at most and two that have no
+   * partner; how many more there are is said, with where they are.
+   */
+  const pictures = (n: number): string => {
     const dir = join(folder, String(n));
-    if (!existsSync(dir)) return [];
-    const rank = (name: string): number => (name.startsWith('before') ? 0 : name.startsWith('after') ? 2 : 1);
-    return readdirSync(dir)
-      .filter((name) => ['.png', '.jpg', '.jpeg', '.webp'].includes(extname(name).toLowerCase()))
-      .sort((a, b) => rank(a) - rank(b) || a.localeCompare(b))
-      .map((name) => join(String(n), name));
+    if (!existsSync(dir)) return '';
+    const names = readdirSync(dir).filter((name) => ['.png', '.jpg', '.jpeg', '.webp'].includes(extname(name).toLowerCase())).sort();
+    const rest = (name: string, lead: string): string => name.slice(lead.length);
+    const befores = names.filter((name) => name.startsWith('before'));
+    const afters = names.filter((name) => name.startsWith('after'));
+    const step = (name: string): number => (/-\d\d-/.test(name) ? 1 : 0);
+    const pairs = befores
+      .filter((name) => afters.includes(`after${rest(name, 'before')}`))
+      .sort((a, b) => step(a) - step(b) || a.length - b.length || a.localeCompare(b))
+      .map((name) => [name, `after${rest(name, 'before')}`] as const);
+    const paired = new Set(pairs.flat());
+    const alone = names.filter((name) => !paired.has(name)).sort((a, b) => step(a) - step(b) || Number(a.startsWith('before')) - Number(b.startsWith('before')) || a.localeCompare(b));
+    const side = (name: string, label: string): string => `<div class="side"><span class="mark">${label}</span>${inlinePicture(folder, join(String(n), name))}</div>`;
+    const labelOf = (name: string): string => (name.startsWith('before') ? '전' : name.startsWith('after') ? '후' : '화면');
+    const shown = [...pairs.slice(0, 3).map(([before, after]) => `<div class="pair">${side(before, '전')}${side(after, '후')}</div>`), ...(alone.length > 0 ? [`<div class="pair">${alone.slice(0, 2).map((name) => side(name, labelOf(name))).join('')}</div>`] : [])];
+    const more = names.length - Math.min(pairs.length, 3) * 2 - Math.min(alone.length, 2);
+    return `${shown.join('')}${more > 0 ? `<p class="how">사진 ${more}장 더: <code>${esc(join(folder, String(n)))}</code></p>` : ''}`;
   };
   const items = round.items
     .map((item) => {
@@ -149,7 +165,7 @@ export function roundPage(folder: string): string {
   ${item.understood ? `<p class="note"><b>이렇게 이해했습니다</b> ${esc(item.understood)}</p>` : ''}
   ${item.opinion ? `<p class="note"><b>제 의견</b> ${esc(item.opinion)}</p>` : ''}
   ${item.did ? `<p class="note"><b>${item.status === 'done' ? '한 것' : item.status === 'declined' ? '하지 않은 까닭' : '지금 상태'}</b> ${esc(item.did)}</p>` : ''}
-  ${shots.length > 0 ? `<div class="shots">${shots.map((path) => inlinePicture(folder, path)).join('')}</div>` : item.picture ? `<div class="shots">${inlinePicture(folder, item.picture)}</div>` : ''}
+  ${shots !== '' ? shots : item.picture ? `<div class="shots">${inlinePicture(folder, item.picture)}</div>` : ''}
 </section>`;
     })
     .join('\n');

@@ -38,6 +38,8 @@ code { background: var(--code); border-radius: 4px; padding: 1px 5px; font: 13px
 figure { margin: 0; display: flex; flex-direction: column; gap: 4px; max-width: 100% }
 img { max-width: 100%; max-height: 520px; border: 1px solid var(--line); border-radius: 8px; background: var(--code) }
 figcaption { color: var(--muted); font-size: 12px; overflow-wrap: anywhere }
+.pair { display: grid; grid-template-columns: repeat(2, minmax(0, 320px)); gap: 12px; align-items: start }
+.side { display: flex; flex-direction: column; gap: 4px; min-width: 0 }
 ul { margin: 0; padding-left: 20px }
 main > section:not(.claim) { display: flex; flex-direction: column; gap: 12px }
 `;
