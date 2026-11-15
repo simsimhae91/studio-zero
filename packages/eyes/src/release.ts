@@ -10,7 +10,8 @@ import { fingerprints } from './fingerprint.ts';
  *
  * Each line is here because of a way releases made by agents have gone wrong in the field: a build that works
  * on the developer's machine and not as built for production; an admin key in the script a browser downloads;
- * a database anyone can read; a migration that lost what people had stored; a release nobody could take back;
+ * a database anyone can read; a migration that lost what people had stored (most often a column renamed where
+ * one should have been added); a release nobody could take back;
  * a deploy that "succeeded" while the old version, or an error page, kept answering.
  */
 
@@ -42,6 +43,8 @@ export interface Gate {
   kept: string | null;
   /** Files that hold the server's secrets, whose values are looked for in what a browser downloads. */
   env: string[];
+  /** The migration files (.sql) that changed since the previous release. */
+  migrations: string[];
 }
 
 const leaks = (url: string, g: Gate): string => `command:sz-eyes web leaks ${url}${g.env.map((file) => ` --env ${file}`).join('')}`;
@@ -52,6 +55,13 @@ const LINES: Line[] = [
   { id: 'rc-secrets', half: 'before', says: () => '후보에서 브라우저가 내려받는 것 안에 서버의 비밀(관리자 키, 결제 비밀 키)이 없다', shown: (g) => leaks(g.candidate!, g) },
   { id: 'rc-strangers', half: 'before', says: () => '남이 넣은 것은 보이지 않는다: 다른 사람도, 로그인하지 않은 사람도 읽거나 고치지 못한다', shown: (g) => g.strangers },
   { id: 'rc-data', half: 'before', says: () => '지금 살아 있는 데이터의 사본으로 새 버전이 뜨고, 사람들이 넣어 둔 것이 그대로 보인다', shown: (g) => g.data, skipped: first },
+  {
+    id: 'rc-shape',
+    half: 'before',
+    says: () => '저장 모양을 바꾸는 것 가운데 넣어 둔 것을 잃거나 앞 버전을 깨는 것이 없다',
+    shown: (g) => `command:sz-eyes migrations look --since ${g.previous} --until ${g.commit}`,
+    skipped: (g) => first(g) ?? (g.migrations.length === 0 ? '이전 출하 뒤로 바뀐 마이그레이션 파일(.sql)이 없다' : null),
+  },
   { id: 'rc-backup', half: 'before', says: () => '데이터의 사본을 뜰 수 있고, 그 사본에서 되살려지는 것을 봤다', shown: (g) => g.backup },
   { id: 'rc-back', half: 'before', says: () => '되돌리는 길이 적혀 있고, 후보에서 한 번 해 봤다', shown: (g) => g.wayBack },
   { id: 'live-same', half: 'after', says: (g) => `사람들이 닿는 주소에서 답하는 것이 이 버전(${g.commit.slice(0, 7)})이다`, shown: (g) => `command:sz-eyes web live ${g.url} --commit ${g.commit}` },

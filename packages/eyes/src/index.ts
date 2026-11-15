@@ -7,6 +7,7 @@ export * from './fingerprint.ts';
 export * from './ios.ts';
 export * from './leaks.ts';
 export * from './live.ts';
+export * from './migrations.ts';
 export * from './port.ts';
 export * from './release.ts';
 export * from './review.ts';

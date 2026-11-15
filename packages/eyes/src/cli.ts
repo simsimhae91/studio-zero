@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 import { BACKLOG_FILE, addToBacklog, doneInBacklog, leftBy, openBacklog } from './backlog.ts';
 import { CONTRACTS_DIR, EVIDENCE_DIR, ClaimStatus, Contract, Lane, ShownBy, openContracts, owed, readContract, renderContract, writeContract } from './contract.ts';
@@ -11,6 +11,7 @@ import { Status, addSaid, latestRound, newRound, noteSaid, readRound, renderRoun
 import { EyesError, installApp, restSimulator, runFlow, screenText, screenshot, spareSimulator } from './ios.ts';
 import { downloadsOf, filesOf, leakReport, renderLeaks } from './leaks.ts';
 import { lookAtLive, renderLive } from './live.ts';
+import { DANGEROUS, classify, renderMigrations } from './migrations.ts';
 import { freePort } from './port.ts';
 import { GATE_LINES, lastRelease, releaseContract, releases, renderReleases, type Gate } from './release.ts';
 import { reviewWeb } from './review.ts';
@@ -103,6 +104,11 @@ const USAGE = `sz-eyes: launch what was built, look at it, operate it, and put w
   sz-eyes release check --place <name> [--dir <project>]  a look at what is live now: the live- lines of the last release there, as a new contract
   sz-eyes release back <id> --note "<what was put back and what answers now>" [--dir <project>]   the release was taken back
   sz-eyes release list [--dir <project>]                 what was released where, and what should be answering now
+
+  sz-eyes migrations look [<file.sql>...] [--since <commit>] [--until <commit>] [--json] [--dir <project>]
+        read migration files (the ones given, or the .sql files that changed between two commits) and say which
+        statements can lose or break what people stored: a drop, a rename, a type change, a required column
+        with no default, a rule added to a table that has rows, row security turned off. Exits 1 when there is one
 
   sz-eyes docker <args>...                               the container engine on this machine, reached without touching the owner's settings
   sz-eyes supabase <args>...                             the Supabase stack that runs on this machine for this project (never a hosted one)
@@ -220,6 +226,23 @@ async function main(argv: string[]): Promise<number> {
     out(a.has('--json') ? JSON.stringify(look, null, 2) : renderLive(look));
     return look.problems.length > 0 ? 1 : 0;
   }
+  if (area === 'migrations' && command === 'look') {
+    const a = parse(rest, ['--json']);
+    const project = resolve(a.one('--dir') ?? '.');
+    const until = a.one('--until') ?? null;
+    let files: { file: string; sql: string }[];
+    if (a.words.length > 0) files = a.words.map((file) => ({ file, sql: readFileSync(resolve(project, file), 'utf8') }));
+    else {
+      const since = a.one('--since');
+      if (!since) throw new EyesError('sz-eyes migrations look <file.sql>...   or   sz-eyes migrations look --since <commit> [--until <commit>]');
+      const names = spawnSync('git', ['-C', project, 'diff', '--name-only', '--diff-filter=AMR', since, until ?? 'HEAD', '--', '*.sql'], { encoding: 'utf8' });
+      if (names.status !== 0) throw new EyesError(`the migration files that changed since ${since} could not be listed: ${(names.stderr ?? '').trim().split('\n')[0]}`);
+      files = names.stdout.split('\n').filter(Boolean).map((file) => ({ file, sql: until ? spawnSync('git', ['-C', project, 'show', `${until}:${file}`], { encoding: 'utf8' }).stdout : readFileSync(join(project, file), 'utf8') }));
+    }
+    const steps = classify(files);
+    out(a.has('--json') ? JSON.stringify(steps, null, 2) : renderMigrations(steps, files.map((f) => f.file)));
+    return steps.some((step) => DANGEROUS.includes(step.kind)) ? 1 : 0;
+  }
   if (area === 'docker' || area === 'supabase') {
     const args = argv.slice(1);
     const tool = findTool(area);
@@ -295,7 +318,9 @@ async function main(argv: string[]): Promise<number> {
       const dirty = git('status', '--porcelain', '--', '.', ':(exclude).sz').text.split('\n').filter((line) => line.trim() !== '');
       if (dirty.length > 0) throw new EyesError(`there are changes that are in no commit (${dirty.slice(0, 5).map((line) => line.slice(3)).join(', ')}${dirty.length > 5 ? ', ...' : ''}). What goes out is a commit: commit them or put them aside, or what answers will not be ${commit.text.slice(0, 7)}.`);
       const without = new Map(a.all('--without').map((text) => [text.slice(0, Math.max(0, text.indexOf('|'))).trim() || text.trim(), text.includes('|') ? text.slice(text.indexOf('|') + 1) : ''] as const));
-      const g: Gate = { place, url, commit: commit.text, previous: a.one('--previous') ?? lastRelease(project, place)?.release!.commit ?? null, candidate, check: a.one('--check') ?? null, strangers: a.one('--strangers') ?? null, data: a.one('--data') ?? null, backup: a.one('--backup') ?? null, wayBack: a.one('--way-back') ?? null, walk: a.one('--walk') ?? null, errors: a.one('--errors') ?? null, kept: a.one('--kept') ?? null, env: a.all('--env') };
+      const previous = a.one('--previous') ?? lastRelease(project, place)?.release!.commit ?? null;
+      const migrations = previous === null ? [] : git('diff', '--name-only', '--diff-filter=AMR', previous, commit.text, '--', '*.sql').text.split('\n').filter((line) => line.trim() !== '');
+      const g: Gate = { place, url, commit: commit.text, previous, migrations, candidate, check: a.one('--check') ?? null, strangers: a.one('--strangers') ?? null, data: a.one('--data') ?? null, backup: a.one('--backup') ?? null, wayBack: a.one('--way-back') ?? null, walk: a.one('--walk') ?? null, errors: a.one('--errors') ?? null, kept: a.one('--kept') ?? null, env: a.all('--env') };
       try {
         contract = releaseContract(project, idFree(`release-${releases(project).filter((c) => c.release!.candidate !== null).length + 1}`), g, { without, claims: extraClaims, frozen, now });
       } catch (err) {

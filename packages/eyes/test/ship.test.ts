@@ -12,6 +12,7 @@ import { readContract, CONTRACTS_DIR } from '../src/contract.ts';
 import { engineEnv, hostedSupabaseCall } from '../src/engine.ts';
 import { downloadsOf, filesOf, findLeaks, leakReport, renderLeaks, secretsFromEnv } from '../src/leaks.ts';
 import { lookAtLive, renderLive, sameCommit, versionsIn } from '../src/live.ts';
+import { classify, renderMigrations, statements } from '../src/migrations.ts';
 import { GATE_LINES, gate, type Gate } from '../src/release.ts';
 import { marksOf, renderStrangers, strangers } from '../src/strangers.ts';
 import { closeBrowser, openBrowser } from '../src/web.ts';
@@ -165,7 +166,7 @@ test('a service says which version it is, and what answers is compared with what
   }
 });
 
-const GATE: Gate = { place: 'fly', url: 'https://enbbang.example', commit: '955a9ea1c0ffee', previous: 'b36523e000', candidate: 'http://127.0.0.1:4000', check: 'SZ_URL=http://127.0.0.1:4000 npm run check', strangers: 'flow:flows/strangers.sh', data: 'bash scripts/rehearse.sh', backup: 'npm run backup', wayBack: 'fly deploy --image registry.fly.io/enbbang:b36523e', walk: 'flow:flows/live-walk.sh', errors: 'bash scripts/errors-since.sh', kept: 'bash scripts/counts.sh', env: ['.env.production'] };
+const GATE: Gate = { place: 'fly', url: 'https://enbbang.example', commit: '955a9ea1c0ffee', previous: 'b36523e000', candidate: 'http://127.0.0.1:4000', check: 'SZ_URL=http://127.0.0.1:4000 npm run check', strangers: 'flow:flows/strangers.sh', data: 'bash scripts/rehearse.sh', backup: 'npm run backup', wayBack: 'fly deploy --image registry.fly.io/enbbang:b36523e', walk: 'flow:flows/live-walk.sh', errors: 'bash scripts/errors-since.sh', kept: 'bash scripts/counts.sh', env: ['.env.production'], migrations: ['migrations/0002_shared.sql'] };
 
 test('the release gate is the same lines every time: each is shown or waived with a reason, never left out', () => {
   const full = gate(GATE, new Map());
@@ -184,7 +185,10 @@ test('the release gate is the same lines every time: each is shown or waived wit
   assert.match(noAccounts.waived[0]!, /^rc-strangers \(남이 넣은 것은.*\): 계정이 없다/);
   // A first release has no live data to carry over, and says so itself.
   const firstTime = gate({ ...GATE, previous: null, data: null, kept: null }, new Map());
-  assert.deepEqual(firstTime.waived.map((line) => line.split(' ')[0]), ['rc-data', 'live-kept']);
+  assert.deepEqual(firstTime.waived.map((line) => line.split(' ')[0]), ['rc-data', 'rc-shape', 'live-kept']);
+  // A release that changes no migration file has no change of shape to read.
+  assert.match(gate({ ...GATE, migrations: [] }, new Map()).waived.join('\n'), /^rc-shape .*바뀐 마이그레이션 파일\(\.sql\)이 없다/);
+  assert.equal(full.claims.find((c) => c.id === 'rc-shape')!.shownBy.ref, 'sz-eyes migrations look --since b36523e000 --until 955a9ea1c0ffee');
   assert.match(firstTime.waived[0]!, /첫 출하/);
   // A look at what is already live: only the second half.
   assert.deepEqual(gate({ ...GATE, candidate: null }, new Map()).claims.map((c) => c.id), ['live-same', 'live-walk', 'live-secrets', 'live-quiet', 'live-kept']);
@@ -223,7 +227,7 @@ test('from the command line: a release goes out from closed work and a commit, i
     assert.equal(first.release!.commit, v1, 'the whole name of the commit is kept');
     assert.equal(first.release!.previous, null);
     assert.deepEqual(first.claims.map((c) => c.id), ['rc-stands', 'rc-secrets', 'rc-backup', 'rc-back', 'live-same', 'live-walk', 'live-secrets', 'live-quiet']);
-    assert.equal(first.notDoing.length, 3, 'no accounts, and a first release has no live data');
+    assert.equal(first.notDoing.length, 4, 'no accounts, and a first release has no live data and no change of shape');
     assert.ok(first.frozenAt !== null && first.frozenPrints['flows/live-walk.sh']);
     // One release at a time to a place, and it owes its lines like any contract.
     assert.match(eyes(project, 'release', 'new', '--commit', 'HEAD', ...common).text, /release-1 is still open for stage/);
@@ -244,7 +248,9 @@ test('from the command line: a release goes out from closed work and a commit, i
     const v2 = git('rev-parse', 'HEAD');
     assert.match(eyes(project, 'release', 'new', '--commit', v2, ...common).text, /rc-data[\s\S]*--data[\s\S]*live-kept[\s\S]*--kept/);
     assert.equal(eyes(project, 'release', 'new', '--commit', v2, ...common, '--data', 'bash scripts/rehearse.sh', '--kept', 'bash scripts/counts.sh').code, 0);
-    assert.equal(readContract(join(project, CONTRACTS_DIR, 'release-2.json')).release!.previous, v1);
+    const second = readContract(join(project, CONTRACTS_DIR, 'release-2.json'));
+    assert.equal(second.release!.previous, v1);
+    assert.match(second.notDoing.join('\n'), /rc-shape .*바뀐 마이그레이션 파일/, 'v2 changed no migration file');
     // It failed on what is live and was taken back: what should answer is the first again.
     eyes(project, 'contract', 'claim', 'release-2', 'live-walk', '--status', 'refuted', '--note', '만들기를 눌러도 모임이 생기지 않는다');
     assert.match(eyes(project, 'release', 'back', 'release-2', '--note', 'short').text, /release back <id> --note/);
@@ -439,5 +445,74 @@ test('what one person stored is asked for again as nobody and as a second person
     await closeBrowser(browser);
     tight.server.close();
     loose.server.close();
+  }
+});
+
+test('a change to the shape of what is stored is read for what it can lose or break, and a rule on a new table is not one', () => {
+  const sql = `-- 0002: share expenses; do not drop table anything; here
+create table if not exists public.shares (id integer primary key, expense_id integer not null, member_id integer not null);
+create unique index shares_once on public.shares (expense_id, member_id);
+alter table shares add constraint shares_member foreign key (member_id) references members (id);
+alter table expenses add column shared_by text; /* nullable: fine */
+alter table expenses add column note text not null default '';
+insert into settings (key, value) values ('greeting', 'drop table members; truncate');
+create function tidy() returns void as $$ begin delete from scratch; end $$ language plpgsql;
+
+alter table expenses add column kind text not null;
+alter table members rename column name to display_name;
+ALTER TABLE "expenses"
+  DROP COLUMN memo;
+alter table expenses alter column amount type integer;
+alter table members alter column email set not null;
+alter table members add constraint members_email unique (email);
+create unique index members_name on members (name);
+alter table members disable row level security;
+drop policy "own rows" on members;
+delete from sent;
+delete from sent where group_id = 1;
+alter table members alter column nick drop default;
+drop table old_groups;`;
+  assert.equal(statements('select 1; -- a; b\nselect \'x;y\'; /* c; d */ select $f$ a; b $f$;').length, 3, 'a semicolon in a comment, in quotes or in a function body ends nothing');
+  const steps = classify([{ file: 'migrations/0002.sql', sql }]);
+  const of = (kind: string): string[] => steps.filter((s) => s.kind === kind).map((s) => `${s.line}: ${s.statement.slice(0, 44)}`);
+  assert.deepEqual(of('loses'), ['12: ALTER TABLE "expenses" DROP COLUMN memo', '20: delete from sent', '23: drop table old_groups']);
+  assert.deepEqual(of('breaks'), ['11: alter table members rename column name to di', '14: alter table expenses alter column amount typ']);
+  assert.deepEqual(of('can-fail').map((line) => line.split(':')[0]), ['10', '15', '16', '17'], 'a required column with no default, and rules added to tables that have rows');
+  assert.deepEqual(of('opens').map((line) => line.split(':')[0]), ['18', '19'], 'row security turned off, and a policy removed');
+  assert.deepEqual(steps.filter((s) => s.kind === 'opens').map((s) => s.statement.slice(0, 20)), ['alter table members ', 'drop policy "own row']);
+  // On the table the same files create, a rule cannot fail on stored rows; text in quotes and bodies is data.
+  assert.deepEqual(steps.slice(0, 7).map((s) => s.kind), ['adds', 'adds', 'adds', 'adds', 'adds', 'data', 'adds']);
+  assert.equal(steps.find((s) => s.line === 21)!.kind, 'data', 'deleting some rows is a change of rows');
+  assert.equal(steps.find((s) => s.line === 22)!.kind, 'other', 'dropping a default loses nothing');
+  const said = renderMigrations(steps, ['migrations/0002.sql']);
+  assert.match(said, /11 STATEMENT\(S\) THAT DO NOT GO OUT WITHOUT THE OWNER'S YES[\s\S]*migrations\/0002\.sql:11 \[breaks\] renames a table or a column/);
+  assert.match(renderMigrations(classify([{ file: 'a.sql', sql: 'create table t (id integer primary key, name text not null unique);' }]), ['a.sql']), /nothing in them drops, renames, narrows or opens/);
+
+  // From the command line, by the files that changed between two commits.
+  const project = mkdtempSync(join(tmpdir(), 'eyes-shape-'));
+  const git = (...args: string[]): string => spawnSync('git', ['-C', project, '-c', 'user.name=t', '-c', 'user.email=t@t', ...args], { encoding: 'utf8' }).stdout.trim();
+  try {
+    git('init', '-q');
+    mkdirSync(join(project, 'migrations'));
+    writeFileSync(join(project, 'migrations/0001_init.sql'), 'create table members (id integer primary key, name text not null);\n');
+    git('add', '-A');
+    git('commit', '-qm', 'v1');
+    const v1 = git('rev-parse', 'HEAD');
+    writeFileSync(join(project, 'migrations/0002_nick.sql'), 'alter table members add column nick text;\n');
+    git('add', '-A');
+    git('commit', '-qm', 'v2');
+    const v2 = git('rev-parse', 'HEAD');
+    writeFileSync(join(project, 'migrations/0003_rename.sql'), 'alter table members rename column nick to nickname;\n');
+    git('add', '-A');
+    git('commit', '-qm', 'v3');
+    const safe = eyes(project, 'migrations', 'look', '--since', v1, '--until', v2);
+    assert.equal(safe.code, 0, safe.text);
+    assert.match(safe.text, /1 migration file\(s\), 1 statement\(s\): 1 add/);
+    const renamed = eyes(project, 'migrations', 'look', '--since', v2);
+    assert.equal(renamed.code, 1);
+    assert.match(renamed.text, /migrations\/0003_rename\.sql:1 \[breaks\]/);
+    assert.equal(eyes(project, 'migrations', 'look', 'migrations/0001_init.sql').code, 0);
+  } finally {
+    rmSync(project, { recursive: true, force: true });
   }
 });

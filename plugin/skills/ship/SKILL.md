@@ -50,7 +50,7 @@ Write the place into the map as you go.
 
 ## What is stored changes shape
 
-Putting back the previous version does not put back the data. So a change of shape is made in steps that each work with the version before and the version after: add (new column, new table, both versions run), move what is there, switch the code, and only in a later release, with the owner's yes, drop what is no longer used. A migration that drops, renames, narrows a type, or makes a column required without a default is the dangerous kind: say so before it runs. Every migration is rehearsed on a copy of live data (`rc-data`), never first on the data itself.
+Putting back the previous version does not put back the data. So a change of shape is made in steps that each work with the version before and the version after: add (new column, new table, both versions run), move what is there, switch the code, and only in a later release, with the owner's yes, drop what is no longer used. A migration that drops, renames, narrows a type, makes a column required without a default, adds a rule to a table that has rows, or turns row security off is the dangerous kind. `sz-eyes migrations look --since <the commit that is live>` reads the migration files that changed and names each such statement; the gate's `rc-shape` line runs it for every release that changes one. A statement it names goes out only with the owner's yes to exactly that, in their words, written into the release (`--without "rc-shape|<what they said>"`). Every migration is rehearsed on a copy of live data (`rc-data`), never first on the data itself.
 
 ## Looking at what is live
 
