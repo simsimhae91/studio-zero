@@ -1,5 +1,5 @@
 ---
-name: sz-work
+name: work
 description: Use for any request to build, change or fix something in a project (a feature, a bug, a screen, a whole product). Sizes the work, agrees what "done" means as a contract before building, has it proven on the running product by an agent that did not build it, and hands the owner one page of evidence.
 ---
 
@@ -7,7 +7,7 @@ description: Use for any request to build, change or fix something in a project 
 
 Process costs time and tokens, and a harness can cost twenty times what the same model costs alone. It is worth that only where the model alone would not reliably get it right. So the first decision of every request is how much it deserves.
 
-If the project has no `.sz/map.md`, onboard first (`sz-onboard`). Read the map and the last lines of `.sz/progress.md` before anything else.
+If the project has no `.sz/map.md`, onboard first (`sz:onboard`). Read the map and the last lines of `.sz/progress.md` before anything else.
 
 ## 1. Size it (the lane)
 
@@ -16,14 +16,14 @@ Decide in a few seconds, from the request and the map. Say the lane and why in o
 | Lane | When | What happens |
 |---|---|---|
 | **S** | A few files. No new screen, no new API, no schema, no money, nothing irreversible. | Do it. Run the nearest check. If a screen changed, show it before and after. No contract file. |
-| **M** | One feature, or a bug whose cause is not yet known. | A contract of 3 to 7 claims, frozen. Build. One verification by `sz-verifier`. An evidence page. |
+| **M** | One feature, or a bug whose cause is not yet known. | A contract of 3 to 7 claims, frozen. Build. One verification by `sz:verifier`. An evidence page. |
 | **L** | Several features, a new product, or anything touching data, auth, payment or what cannot be undone. | Ask the owner first. A spec and milestones. Each milestone is an M. Progress is written down as it goes. |
 
 When in doubt between two lanes, take the smaller one and say what would make you move up. Move up when you find the work is bigger than it looked; never quietly.
 
 ## 2. S: do it and show it
 
-Make the change the way the project makes such changes. Run the type check or the nearest test. If anything a person sees changed, take a look before and after (`sz-eyes web look` / `sz-eyes ios look`, see `sz-verify`) and put both pictures in front of the owner. Report in three lines: what changed, what was run and what it said, what was not checked. Done.
+Make the change the way the project makes such changes. Run the type check or the nearest test. If anything a person sees changed, take a look before and after (`sz-eyes web look` / `sz-eyes ios look`, see `sz:verify`) and put both pictures in front of the owner. Report in three lines: what changed, what was run and what it said, what was not checked. Done.
 
 ## 3. M: contract, build, proof
 
@@ -43,7 +43,7 @@ Prefer checks the project already has (its e2e flows, its tests) over new ones. 
 
 **Build.** Follow the project's own rules (the map lists them). Run its checks as you go.
 
-**Have it proven.** Start the `sz-verifier` agent with the contract id and nothing of your own opinion: not "it works", not what you tested. It operates the product and records a verdict for each claim. If a claim is refuted, fix the product and send it back for that claim; twice at most, then report what stands.
+**Have it proven.** Start the `sz:verifier` agent with the contract id and nothing of your own opinion: not "it works", not what you tested. It operates the product and records a verdict for each claim. If a claim is refuted, fix the product and send it back for that claim; twice at most, then report what stands.
 
 **Evidence:** `sz-eyes evidence <id> --took "<time and tokens if known>"` writes `.sz/evidence/<id>/report.html`. Show the owner the path and the verdict in one line each, and what is unchecked. Then `sz-eyes contract close <id>` and add a line to `.sz/progress.md`.
 
@@ -53,7 +53,7 @@ Prefer checks the project already has (its e2e flows, its tests) over new ones. 
 
 **Plan:** write `.sz/spec.md`: what the product is, its features in the order they will be built, and for each milestone the claims that will make it done. Each milestone must leave the product working.
 
-**Build milestone by milestone**, each as an M (contract, freeze, build, `sz-verifier`, evidence). After each: commit, add a line to `.sz/progress.md` (what is done, what was decided and why, what is next), and tell the owner in two lines. A later session must be able to continue from the spec and the progress file alone.
+**Build milestone by milestone**, each as an M (contract, freeze, build, `sz:verifier`, evidence). After each: commit, add a line to `.sz/progress.md` (what is done, what was decided and why, what is next), and tell the owner in two lines. A later session must be able to continue from the spec and the progress file alone.
 
 ## Always
 

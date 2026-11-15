@@ -18,5 +18,5 @@ if (event.stop_hook_active) process.exit(0);
 const eyes = join(dirname(fileURLToPath(import.meta.url)), '..', 'bin', 'sz-eyes');
 const status = spawnSync(eyes, ['contract', 'status', '--dir', event.cwd ?? process.cwd()], { encoding: 'utf8', timeout: 20_000 });
 if (status.status !== 1) process.exit(0);
-process.stderr.write(`Before you stop: ${status.stdout.trim()}\n\nEither have each of these shown on the running product (the sz-verifier agent records the verdict), or stop and tell the owner exactly which claims are not proven and why. Do not call the work done.\n`);
+process.stderr.write(`Before you stop: ${status.stdout.trim()}\n\nEither have each of these shown on the running product (the sz:verifier agent records the verdict), or stop and tell the owner exactly which claims are not proven and why. Do not call the work done.\n`);
 process.exit(2);

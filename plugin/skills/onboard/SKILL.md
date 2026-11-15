@@ -1,5 +1,5 @@
 ---
-name: sz-onboard
+name: onboard
 description: Use when starting work in a project that has no .sz/map.md yet, or when the user asks to continue, take over, or get to know an existing project. Reads the project and writes its map so that any later session can pick it up. Changes no product code.
 ---
 

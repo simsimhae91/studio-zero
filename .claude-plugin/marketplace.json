@@ -1,0 +1,11 @@
+{
+  "name": "studio-zero",
+  "owner": { "name": "Studio Zero" },
+  "plugins": [
+    {
+      "name": "sz",
+      "source": "./plugin",
+      "description": "Work agreed as a contract sized to the task, proven on the running product by an agent that did not build it, and handed over as one page of evidence."
+    }
+  ]
+}
