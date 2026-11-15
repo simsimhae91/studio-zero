@@ -654,3 +654,28 @@ window.__game = { state: () => ({ x: Math.round(s.x), score: s.score, started: s
     server.close();
   }
 });
+
+test('each thing the owner says is told which way of working fits it, and a project with no map is told where to start', () => {
+  const route = (prompt: string, cwd: string): string => spawnSync(process.execPath, [join(HERE, '../../../plugin/hooks/route.mjs')], { encoding: 'utf8', input: JSON.stringify({ prompt, cwd }) }).stdout;
+  const project = mkdtempSync(join(tmpdir(), 'eyes-route-'));
+  try {
+    // The owner's first real use: a project nobody had mapped, a plain request, and no skill of the plugin loaded.
+    assert.match(route('인원수에 0을 넣으면 Infinity원이 나오는데 고쳐줘', project), /^sz: this project has no map yet[\s\S]*sz:onboard skill first[\s\S]*then the sz:work skill[\s\S]*sz:feedback[\s\S]*sz:tend[\s\S]*sz:ship/);
+    mkdirSync(join(project, '.sz'));
+    writeFileSync(join(project, '.sz/map.md'), '# 지도\n');
+    const mapped = route('숫자가 좀 작은 느낌이에요', project);
+    assert.match(mapped, /^sz: if this asks to build, change or fix something in the product, load the sz:work skill first/);
+    assert.doesNotMatch(mapped, /onboard/);
+    // A command of the tool itself and a word of assent ask for nothing new.
+    for (const said of ['/clear', '', 'ㅇㅋ', '계속']) assert.equal(route(said, project), '', said);
+    assert.equal(spawnSync(process.execPath, [join(HERE, '../../../plugin/hooks/route.mjs')], { encoding: 'utf8', input: 'not json' }).status, 0);
+    // A session that starts in a project with no .sz folder is told the harness is here.
+    const start = (cwd: string): string => spawnSync('sh', [join(HERE, '../../../plugin/hooks/session-start.sh')], { encoding: 'utf8', cwd, env: { ...process.env, CLAUDE_PLUGIN_ROOT: join(HERE, '../../../plugin') } }).stdout;
+    const bare = mkdtempSync(join(tmpdir(), 'eyes-bare-'));
+    assert.match(start(bare), /The sz harness is loaded in this session[\s\S]*sz:onboard[\s\S]*sz:work/);
+    assert.match(start(project), /This project has a Studio Zero map at \.sz\/map\.md/);
+    rmSync(bare, { recursive: true, force: true });
+  } finally {
+    rmSync(project, { recursive: true, force: true });
+  }
+});
