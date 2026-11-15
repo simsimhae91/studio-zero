@@ -1,9 +1,13 @@
 #!/usr/bin/env node
 import { existsSync, mkdirSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
+import { BACKLOG_FILE, addToBacklog, leftBy, openBacklog } from './backlog.ts';
 import { CONTRACTS_DIR, EVIDENCE_DIR, ClaimStatus, Contract, Lane, ShownBy, openContracts, owed, readContract, renderContract, writeContract } from './contract.ts';
 import { writeEvidencePage } from './evidence.ts';
+import { Status, addSaid, latestRound, newRound, noteSaid, readRound, renderRound, writeRoundPage } from './feedback.ts';
 import { EyesError, installApp, restSimulator, runFlow, screenText, screenshot, spareSimulator } from './ios.ts';
+import { reviewWeb } from './review.ts';
+import { Shown, brokenDuring, keptFor, recordShown, renderStanding, stampClosed, standing, standingSummary } from './standing.ts';
 import { SIZES, lookAtWeb, renderLook, renderWalk, walkWeb, type Size } from './web.ts';
 
 const USAGE = `sz-eyes: launch what was built, look at it, operate it, and put what was seen on one page
@@ -17,6 +21,11 @@ const USAGE = `sz-eyes: launch what was built, look at it, operate it, and put w
         type:<field>=<text>, press:<key>, wait:<words>, gone:<words>, see:<words>, shot:<name>, go:<path>.
         Stops at the first step that cannot be done and says why; ends with a look at where it arrived
 
+  sz-eyes web review <url> [--size phone|tablet|desktop] [--dark] [--round <folder>] [--dir <project>]
+        open the running product in a window for the owner: they use it as usual, press 말하기, point at what
+        they mean and say it. Ends when they press 끝내기 or close the window, and prints what they said, with
+        what each was about and a picture of that moment. Run it in the background and wait for it to end
+
   sz-eyes ios spare [--type "iPhone 17"]                 the eyes' own simulator, made and booted with no window; prints its id
   sz-eyes ios install <udid> <path.app> --bundle-id <id> [--metro <port>]
         put a built app on it, fresh (a React Native debug build is told which packager to load from)
@@ -25,16 +34,35 @@ const USAGE = `sz-eyes: launch what was built, look at it, operate it, and put w
   sz-eyes ios look <udid> [--out <folder>] [--name <n>]  a screenshot, and the words and ids on the screen
   sz-eyes ios rest <udid> [--erase]                      shut it down (and wipe it)
 
-  sz-eyes contract new <id> --lane S|M|L --request <text> [--target web]... --claim "<id>|<what will be true>|<kind>:<ref>"... [--not "<text>"]... [--risk "<text>"]... [--dir <project>]
+  sz-eyes contract new <id> --lane S|M|L --request <text> [--target web]... --claim "<id>|<what will be true>|<kind>:<ref>"... [--not "<text>"]... [--risk "<text>"]... [--supersedes "<contract>/<claim>|<why>"]... [--dir <project>]
+        --supersedes names a standing claim of earlier work that this work deliberately replaces, and why
   sz-eyes contract freeze <id> [--frozen <path>]... [--dir <project>]
   sz-eyes contract claim <id> <claim-id> --status proven|refuted|unchecked [--evidence <file under the evidence folder>]... [--note <text>] [--dir <project>]
   sz-eyes contract amend <id> --file <a frozen file> --why "<text>" [--dir <project>]
         record that a frozen check was corrected after the freeze (the arbiter's, never the builder's)
+  sz-eyes contract supersede <id> <contract>/<claim> --why "<text>" [--dir <project>]
+        after the fact: an earlier claim turned out to be replaced by what this contract was asked (the arbiter's)
   sz-eyes contract notice <id> "<what was noticed that no claim covers>" [--evidence <file>]... [--dir <project>]
   sz-eyes contract show <id> [--dir <project>]           the contract as the owner reads it
   sz-eyes contract status [--dir <project>]              what open contracts still owe; exits 1 when anything is owed
   sz-eyes contract close <id> [--dir <project>]
   sz-eyes evidence <id> [--summary <text>] [--took <text>] [--dir <project>]   writes ${EVIDENCE_DIR}/<id>/report.html
+
+  sz-eyes standing [--summary|--json] [--dir <project>]
+        every claim earlier work proved and the product still has to keep true, with how each is shown, when it
+        was last shown to hold, and which of its check files changed since; exits 1 when one is recorded broken
+  sz-eyes standing record <contract>/<claim> --status holds|broken|unchecked --note "<what was run and what it showed>" [--during <contract being worked on>] [--dir <project>]
+
+  sz-eyes feedback new "<the owner's words>" [--round <folder>] [--dir <project>]
+        write down something the owner said in the session (not by pointing); starts a round unless one is given
+  sz-eyes feedback show [<round folder>] [--dir <project>]            what was said in a round (the latest by default)
+  sz-eyes feedback note <round folder> <n> [--understood "<text>"] [--opinion "<text>"] [--status asked|doing|done|later|declined] [--did "<text>"] [--dir <project>]
+        what was understood by it, what you think of it, and what came of it; "later" also writes it to the backlog
+  sz-eyes feedback page [<round folder>] [--dir <project>]
+        the page the owner reads after a round: each thing said, with the pictures in <round>/<n>/ (before-*, after-*)
+
+  sz-eyes backlog [--dir <project>]                      what is written down as known and not done (${BACKLOG_FILE})
+  sz-eyes backlog add "<one line, in the owner's language>" [--from "<where it came from>"] [--dir <project>]
 `;
 
 /** `--flag value` pairs and bare words, in order. A flag given twice is a list. */
@@ -56,6 +84,15 @@ function parse(argv: string[], booleans: string[]): { words: string[]; flags: Ma
 const out = (text: string): void => void process.stdout.write(`${text}\n`);
 const contractFile = (project: string, id: string): string => join(project, CONTRACTS_DIR, `${id}.json`);
 const evidenceFolder = (project: string, id: string): string => join(project, EVIDENCE_DIR, id);
+
+/** `<contract>/<claim>|<why>`: a standing claim that a piece of work replaces, and the reason the owner reads. */
+function supersedeOf(project: string, key: string, why: string): { contract: string; claim: string; why: string } {
+  const stands = standing(project).stands;
+  const found = stands.find((s) => s.key === key.trim());
+  if (!found) throw new EyesError(`"${key.trim()}" is not a standing claim, so there is nothing to replace. Standing: ${stands.map((s) => s.key).join(', ') || '(none)'}`);
+  if (why.trim().length < 8) throw new EyesError(`say why ${found.key} should no longer be true: what the owner asked that changes it`);
+  return { contract: found.contract, claim: found.claim.id, why: why.trim() };
+}
 
 async function main(argv: string[]): Promise<number> {
   const [area, command, ...rest] = argv;
@@ -83,6 +120,62 @@ async function main(argv: string[]): Promise<number> {
     const walk = await walkWeb(url, steps, { size, dark: a.has('--dark'), house: a.has('--house'), ...(a.one('--wait') ? { waitFor: a.one('--wait')! } : {}), ...(a.one('--out') ? { out: resolve(a.one('--out')!) } : {}), ...(a.one('--name') ? { name: a.one('--name')! } : {}) });
     out(a.has('--json') ? JSON.stringify(walk, null, 2) : renderWalk(walk, steps.length));
     return walk.passed ? 0 : 1;
+  }
+  if (area === 'web' && command === 'review') {
+    const a = parse(rest, ['--dark']);
+    const url = a.words[0];
+    if (!url) throw new EyesError('which page: sz-eyes web review <url>');
+    const size = (a.one('--size') ?? 'phone') as Size;
+    if (!(size in SIZES)) throw new EyesError(`--size is one of ${Object.keys(SIZES).join(', ')}`);
+    const project = resolve(a.one('--dir') ?? '.');
+    const folder = a.one('--round') ? resolve(a.one('--round')!) : newRound(project, new Date().toISOString());
+    out(`a window is open on ${url} for the owner: they press 말하기, point at what they mean and say it; this ends when they press 끝내기 or close the window. Round: ${folder}`);
+    const round = await reviewWeb(url, folder, { size, dark: a.has('--dark') }).catch((err: unknown) => {
+      throw new EyesError(`the window could not be opened on ${url}: ${err instanceof Error ? err.message.split('\n')[0] : String(err)}`);
+    });
+    out(`\n${renderRound(round, folder)}`);
+    return 0;
+  }
+  if (area === 'feedback') {
+    const a = parse(rest, []);
+    const project = resolve(a.one('--dir') ?? '.');
+    const now = new Date().toISOString();
+    if (command === 'new') {
+      const said = a.words.join(' ').trim();
+      if (said === '') throw new EyesError('sz-eyes feedback new "<the owner\'s words>" [--round <folder>]');
+      const folder = a.one('--round') ? resolve(a.one('--round')!) : newRound(project, now);
+      const item = addSaid(folder, { said, at: now });
+      out(`${folder}\nitem ${item.n}. Pictures of it go in ${join(folder, String(item.n))}/ (before-<size>.png, after-<size>.png)`);
+      return 0;
+    }
+    const given = command === 'note' ? a.words[0] : a.words[0];
+    const folder = given ? resolve(given) : latestRound(project);
+    if (!folder || !existsSync(join(folder, 'items.json'))) throw new EyesError(given ? `${given} is not a round of feedback (it has no items.json)` : 'no round of feedback has been started in this project');
+    if (command === 'show') {
+      out(renderRound(readRound(folder), folder));
+      return 0;
+    }
+    if (command === 'page') {
+      out(writeRoundPage(folder));
+      return 0;
+    }
+    if (command === 'note') {
+      const n = Number(a.words[1]);
+      if (!given || !Number.isInteger(n)) throw new EyesError('sz-eyes feedback note <round folder> <n> [--understood ..] [--opinion ..] [--status ..] [--did ..]');
+      const patch = {
+        ...(a.one('--understood') ? { understood: a.one('--understood')! } : {}),
+        ...(a.one('--opinion') ? { opinion: a.one('--opinion')! } : {}),
+        ...(a.one('--did') ? { did: a.one('--did')! } : {}),
+        ...(a.one('--status') ? { status: Status.parse(a.one('--status')) } : {}),
+      };
+      try {
+        const item = noteSaid(project, folder, n, patch);
+        out(`${n}: ${item.status}`);
+      } catch (err) {
+        throw new EyesError(err instanceof Error ? err.message : String(err));
+      }
+      return 0;
+    }
   }
   if (area === 'ios') {
     const a = parse(rest, ['--video', '--erase']);
@@ -126,11 +219,57 @@ async function main(argv: string[]): Promise<number> {
       return 0;
     }
   }
+  if (area === 'standing') {
+    const a = parse(command === 'record' ? rest : argv.slice(1), ['--summary', '--json']);
+    const project = resolve(a.one('--dir') ?? '.');
+    if (command === 'record') {
+      const key = a.words[0];
+      const note = (a.one('--note') ?? '').trim();
+      const during = a.one('--during') ?? null;
+      if (!key) throw new EyesError('sz-eyes standing record <contract>/<claim> --status holds|broken|unchecked --note "<what was run and what it showed>" [--during <contract>]');
+      if (note.length < 8) throw new EyesError('say what was run or looked at and what it showed: --note "<...>"');
+      if (during !== null && !existsSync(contractFile(project, during))) throw new EyesError(`--during ${during}: no such contract`);
+      const status = Shown.shape.status.parse(a.one('--status'));
+      try {
+        recordShown(project, key, { status, note, during, at: new Date().toISOString() });
+      } catch (err) {
+        throw new EyesError(err instanceof Error ? err.message : String(err));
+      }
+      out(`${key}: ${status}`);
+      return 0;
+    }
+    if (a.has('--summary')) {
+      const line = standingSummary(project);
+      if (line) out(line);
+      return 0;
+    }
+    if (a.has('--json')) {
+      out(JSON.stringify(standing(project), null, 2));
+      return 0;
+    }
+    out(renderStanding(project));
+    return standing(project).stands.some((s) => s.last?.status === 'broken') ? 1 : 0;
+  }
+  if (area === 'backlog') {
+    const a = parse(command === 'add' ? rest : argv.slice(1), []);
+    const project = resolve(a.one('--dir') ?? '.');
+    if (command === 'add') {
+      const text = a.words.join(' ').trim();
+      if (text === '') throw new EyesError('sz-eyes backlog add "<one line>" [--from "<where it came from>"]');
+      out(addToBacklog(project, [{ text, from: a.one('--from') ?? '' }]) > 0 ? `added to ${BACKLOG_FILE}` : 'already there');
+      return 0;
+    }
+    const open = openBacklog(project);
+    out(open.length === 0 ? 'nothing is written down as left to do' : `${open.length} open in ${BACKLOG_FILE}:\n${open.map((line, i) => `  ${i + 1}. ${line}`).join('\n')}`);
+    return 0;
+  }
   if (area === 'contract' || area === 'evidence') {
     const a = parse(area === 'evidence' ? [command ?? '', ...rest] : rest, []);
     const project = resolve(a.one('--dir') ?? '.');
     if (area === 'contract' && command === 'status') {
-      const open = openContracts(project).map(({ contract }) => ({ contract, owes: owed(contract) })).filter((c) => c.owes.length > 0);
+      // What a piece of work owes is its own claims, and whatever stood before it that it broke.
+      const broke = (id: string): string[] => brokenDuring(project, id).map((s) => `${s.key}: stood before this work and is broken now: ${s.claim.says}${s.last?.note ? ` (${s.last.note})` : ''}`);
+      const open = openContracts(project).map(({ contract }) => ({ contract, owes: [...owed(contract), ...broke(contract.id)] })).filter((c) => c.owes.length > 0);
       if (open.length === 0) {
         out('nothing is owed: every open contract is frozen and has no claim left unshown or shown false');
         return 0;
@@ -148,7 +287,11 @@ async function main(argv: string[]): Promise<number> {
         const at = how.indexOf(':');
         return { id: claimId, says, shownBy: ShownBy.parse({ kind: how.slice(0, at), ref: how.slice(at + 1).trim() }) };
       });
-      const contract = Contract.parse({ id, request: a.one('--request') ?? '', lane: Lane.parse(a.one('--lane') ?? 'M'), targets: a.all('--target'), claims, notDoing: a.all('--not'), risks: a.all('--risk'), createdAt: new Date().toISOString() });
+      const supersedes = a.all('--supersedes').map((text) => {
+        const bar = text.indexOf('|');
+        return supersedeOf(project, bar < 0 ? text : text.slice(0, bar), bar < 0 ? '' : text.slice(bar + 1));
+      });
+      const contract = Contract.parse({ id, request: a.one('--request') ?? '', lane: Lane.parse(a.one('--lane') ?? 'M'), targets: a.all('--target'), claims, notDoing: a.all('--not'), risks: a.all('--risk'), supersedes, createdAt: new Date().toISOString() });
       writeContract(file, contract);
       out(`${file}\n\n${renderContract(contract)}`);
       return 0;
@@ -157,7 +300,7 @@ async function main(argv: string[]): Promise<number> {
     if (area === 'evidence') {
       const folder = evidenceFolder(project, id);
       mkdirSync(folder, { recursive: true });
-      out(writeEvidencePage(contract, folder, join(folder, 'report.html'), { ...(a.one('--summary') ? { summary: a.one('--summary')! } : {}), ...(a.one('--took') ? { took: a.one('--took')! } : {}) }));
+      out(writeEvidencePage(contract, folder, join(folder, 'report.html'), { kept: keptFor(project, contract), ...(a.one('--summary') ? { summary: a.one('--summary')! } : {}), ...(a.one('--took') ? { took: a.one('--took')! } : {}) }));
       return 0;
     }
     if (command === 'show') {
@@ -193,6 +336,14 @@ async function main(argv: string[]): Promise<number> {
       out(`amended: ${target}`);
       return 0;
     }
+    if (command === 'supersede') {
+      if (contract.closedAt !== null) throw new EyesError(`${id} is closed: a closed contract replaces nothing more`);
+      const replaced = supersedeOf(project, a.words[1] ?? '', a.one('--why') ?? '');
+      if (replaced.contract === id) throw new EyesError('a contract does not replace its own claim');
+      writeContract(file, { ...contract, supersedes: [...contract.supersedes, replaced] });
+      out(`${replaced.contract}/${replaced.claim} no longer stands: replaced by ${id}`);
+      return 0;
+    }
     if (command === 'notice') {
       const text = a.words.slice(1).join(' ').trim();
       if (text === '') throw new EyesError('sz-eyes contract notice <id> "<what was noticed>" [--evidence <file>]');
@@ -205,8 +356,15 @@ async function main(argv: string[]): Promise<number> {
     if (command === 'close') {
       const owes = owed(contract);
       if (owes.length > 0) throw new EyesError(`contract ${id} still owes:\n${owes.map((line) => `  - ${line}`).join('\n')}`);
-      writeContract(file, { ...contract, closedAt: new Date().toISOString() });
-      out(`closed: ${id}`);
+      const broke = brokenDuring(project, id);
+      if (broke.length > 0) throw new EyesError(`contract ${id} is not closed while what stood before it is broken:\n${broke.map((s) => `  - ${s.key}: ${s.claim.says}${s.last?.note ? ` (${s.last.note})` : ''}`).join('\n')}\nFix the product so each holds again (then \`sz-eyes standing record <key> --status holds\`), or, if what was asked has changed, the arbiter records which claim this work replaces.`);
+      const at = new Date().toISOString();
+      const closed = { ...contract, closedAt: at };
+      writeContract(file, closed);
+      // From here its proven claims stand, and what it left is written where the next work is picked from.
+      stampClosed(project, closed, at);
+      const left = addToBacklog(project, leftBy(closed));
+      out(`closed: ${id}${left > 0 ? ` (${left} line(s) added to ${BACKLOG_FILE})` : ''}`);
       return 0;
     }
   }

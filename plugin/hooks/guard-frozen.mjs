@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 // Before a file is edited: a contract that is frozen, and the flows and tests it points at, are not the
-// builder's to change. They are the oracle the work is proven against. Exit 2 refuses the edit and tells why.
+// builder's to change. They are the oracle the work is proven against. And after the work is closed, a flow or
+// test that a claim was proven by stays the product's promise: the product is changed so that it keeps passing,
+// until a later contract says that claim is replaced. Exit 2 refuses the edit and tells why.
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 
@@ -21,21 +23,49 @@ if (typeof file !== 'string' || !existsSync(dir)) process.exit(0);
 const target = relative(project, resolve(project, file));
 if (target.startsWith('..')) process.exit(0);
 
-for (const name of readdirSync(dir).filter((entry) => entry.endsWith('.json'))) {
-  let contract;
-  try {
-    contract = JSON.parse(readFileSync(join(dir, name), 'utf8'));
-  } catch {
-    continue;
-  }
-  if (contract.closedAt || !contract.frozenAt) continue;
+const refuse = (why) => {
+  process.stderr.write(`${why}\n`);
+  process.exit(2);
+};
+if (target === join('.sz', 'standing.json')) refuse('.sz/standing.json is the record of when each standing claim was last shown to hold: it is written by `sz-eyes standing record`, by whoever looked, not by hand.');
+
+const contracts = readdirSync(dir)
+  .filter((entry) => entry.endsWith('.json'))
+  .flatMap((name) => {
+    try {
+      return [{ name, contract: JSON.parse(readFileSync(join(dir, name), 'utf8')) }];
+    } catch {
+      return [];
+    }
+  });
+const replaced = new Set(contracts.flatMap(({ contract }) => (contract.supersedes ?? []).map((s) => `${s.contract}/${s.claim}`)));
+const under = (path) => target === path || target.startsWith(`${path.replace(/\/$/, '')}/`);
+
+for (const { name, contract } of contracts) {
+  if (!contract.frozenAt) continue;
   if (target === join('.sz', 'contracts', name)) {
-    process.stderr.write(`Contract ${contract.id} is frozen: it is not edited by hand. A verdict is recorded with \`sz-eyes contract claim\`, by whoever verified it. If a check it names is wrong about how it checks, the sz:arbiter agent settles that; if a claim is wrong about what was asked, stop and tell the owner.\n`);
-    process.exit(2);
+    refuse(
+      contract.closedAt
+        ? `Contract ${contract.id} is closed: it is the record of what was agreed and shown, and is not edited. A claim of it that should no longer be true is replaced by a new contract (\`sz-eyes contract new ... --supersedes "${contract.id}/<claim>|<why>"\`).`
+        : `Contract ${contract.id} is frozen: it is not edited by hand. A verdict is recorded with \`sz-eyes contract claim\`, by whoever verified it. If a check it names is wrong about how it checks, the sz:arbiter agent settles that; if a claim is wrong about what was asked, stop and tell the owner.`,
+    );
   }
-  if ((contract.frozen ?? []).some((path) => target === path || target.startsWith(`${path.replace(/\/$/, '')}/`))) {
-    process.stderr.write(`${target} is frozen by contract ${contract.id}: it is what the work is proven against, so whoever builds does not change it. Make the product pass it. If the check itself is wrong (not the product), do not work around it: have the sz:arbiter agent look at it, with the file and exactly what is wrong.\n`);
-    process.exit(2);
+  const frozen = (contract.frozen ?? []).filter(under);
+  if (frozen.length === 0) continue;
+  if (!contract.closedAt) {
+    refuse(`${target} is frozen by contract ${contract.id}: it is what the work is proven against, so whoever builds does not change it. Make the product pass it. If the check itself is wrong (not the product), do not work around it: have the sz:arbiter agent look at it, with the file and exactly what is wrong.`);
+  }
+  // Closed: only what a flow or test claim names is kept from the builder, and only while that claim stands.
+  // Helpers and lists of checks that later work has to add to are watched (sz-eyes standing says when they
+  // change), not locked.
+  const keeps = (contract.claims ?? []).filter(
+    (claim) => claim.status === 'proven' && ['flow', 'test'].includes(claim.shownBy?.kind) && frozen.some((path) => String(claim.shownBy?.ref ?? '').includes(path.replace(/\/$/, ''))) && !replaced.has(`${contract.id}/${claim.id}`),
+  );
+  if (keeps.length > 0) {
+    const keys = keeps.map((claim) => `${contract.id}/${claim.id}`).join(', ');
+    refuse(
+      `${target} is how ${keys} was proven, and that still stands ("${keeps[0].says}"). Change the product so that it keeps passing; the check is not changed to fit the product. If the check is wrong about how it checks (it names something that a deliberate change renamed), the sz:arbiter agent corrects it. If what the owner now asks means the claim should no longer be true, say so in the new contract before it is frozen (\`--supersedes "${contract.id}/${keeps[0].id}|<why>"\`): then this file is yours to rewrite.`,
+    );
   }
 }
 process.exit(0);
