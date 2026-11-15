@@ -15,7 +15,7 @@ import { PolicyDeniedError, type PolicyEngine } from '../../policy/PolicyEngine.
 import { excerpt, type Clock } from '../../util/core.ts';
 import type { Toolbox } from '../Toolbox.ts';
 import { runCommand, type CommandRunner } from '../../util/run.ts';
-import { EngineError, type Engine, type EngineResult, type EngineRun, type EngineSession } from './Engine.ts';
+import { EngineError, RoundTimedOut, type Engine, type EngineResult, type EngineRun, type EngineSession } from './Engine.ts';
 
 /** Who is told how each call through a subscription went (see `QuotaTracker`). */
 export interface SubscriptionWatch {
@@ -338,6 +338,31 @@ const antigravity: VendorAdapter = {
 /** What one screenshot costs a vision model, roughly, for a protocol that does not report usage. */
 const IMAGE_TOKEN_ESTIMATE = 1500;
 
+/** How long one round of a vendor's CLI may take, and how many times a round stopped there is started again to go on. */
+const ROUND_MS = 60 * 60 * 1000;
+const ROUND_CONTINUATIONS = 2;
+/** A lapsed login of the owner's is said again no sooner than this. */
+const LAPSED_LOGIN_QUIET_MS = 12 * 60 * 60 * 1000;
+
+/** What an engine is told when it is started again after a round the studio stopped at its time limit. */
+export const roundContinues = (minutes: number): string =>
+  `Your previous round on this request was stopped by the studio at its limit of ${minutes} minutes for one round, before you had finished. Nothing is lost: every change you made is in the workspace as you left it. Do not start over and do not redo what is done. Look at what is there first (git status, git diff, the files you were writing), finish what is missing, and stop when the request below is done. Work in the order that leaves the product working if you are stopped again. The request, again:`;
+
+/**
+ * The logins of the owner's own connections that a CLI said it could not renew, read off its stderr. Checked
+ * against codex-cli 0.153.4 ("failed to refresh OAuth tokens for server notion: ... invalid_grant: OAuth grant
+ * revoked"). A server's name is taken only when it is a plain word, since it ends up in a command line shown
+ * to the owner.
+ */
+export function lapsedLogins(stderr: string): { server: string; why: string }[] {
+  const found = new Map<string, string>();
+  for (const match of stderr.matchAll(/failed to refresh OAuth tokens for server ([A-Za-z0-9][A-Za-z0-9_.-]{0,60}): ([^\n]*)/g)) {
+    const why = /revoked/i.test(match[2]!) ? 'OAuth 승인이 취소됨' : /invalid_grant|rejected|expired/i.test(match[2]!) ? '갱신 토큰이 거절됨' : '토큰을 갱신하지 못함';
+    if (!found.has(match[1]!)) found.set(match[1]!, why);
+  }
+  return [...found].map(([server, why]) => ({ server, why }));
+}
+
 const adapters: Record<BridgeEngineId, VendorAdapter> = { 'claude-code': claudeCode, codex, cursor, antigravity };
 const settingsKey: Record<BridgeEngineId, 'claudeCode' | 'codex' | 'cursor' | 'antigravity'> = { 'claude-code': 'claudeCode', codex: 'codex', cursor: 'cursor', antigravity: 'antigravity' };
 
@@ -467,11 +492,22 @@ export class CliBridgeEngine implements Engine {
         if (steer.length > 0) this.#events.emit(scope, { type: 'steer.delivered', count: steer.length });
         const prompt = [this.#adapter.systemInPrompt ? system : '', previous ? `Your previous round ended with:\n${previous}` : '', userContent, steer.length > 0 ? steeringNote(steer) : ''].filter(Boolean).join('\n\n');
         let parsed: Parsed;
-        try {
-          parsed = await this.#round(inv, prompt, 60 * 60 * 1000, run.signal);
-        } catch (err) {
-          if (run.signal.aborted) return { finalText: previous, stopped: 'cancelled' };
-          throw err;
+        // A round that runs into the time one round may take is not thrown away with an hour of work in the
+        // workspace: the engine is started again and told to go on from what is there, a bounded number of
+        // times. (A build from a full design, on a slower model, was stopped at the hour with 212 tool calls
+        // made, and the task was failed with a line of the CLI's stderr about something else: 2026-11-15.)
+        for (let stopped = 0, said = prompt; ; ) {
+          try {
+            parsed = await this.#round(inv, said, ROUND_MS, run.signal, scope);
+            break;
+          } catch (err) {
+            if (run.signal.aborted) return { finalText: previous, stopped: 'cancelled' };
+            if (!(err instanceof RoundTimedOut)) throw err;
+            if (stopped >= ROUND_CONTINUATIONS) throw new EngineError(`${this.id} was stopped ${stopped + 1} times running at the studio's limit of ${err.minutes} minutes for one round and had still not finished its turn. What it changed is in the workspace, committed on the task's branch.`);
+            stopped += 1;
+            this.#events.emit(scope, { type: 'notice', level: 'warn', message: `${this.id}가 한 라운드 ${err.minutes}분 제한에 닿아 멈췄습니다. 한 일은 작업 공간에 그대로 있고, 거기서 이어서 진행합니다 (${stopped}/${ROUND_CONTINUATIONS}).` });
+            said = [this.#adapter.systemInPrompt ? system : '', roundContinues(err.minutes), userContent, steer.length > 0 ? steeringNote(steer) : ''].filter(Boolean).join('\n\n');
+          }
         }
         const model = `${this.id}:${inv.model}`;
         const usage = { inputTokens: parsed.inputTokens, outputTokens: parsed.outputTokens, cachedTokens: parsed.cachedTokens ?? 0, usdMicros: 0 }; // subscription-billed
@@ -578,9 +614,9 @@ export class CliBridgeEngine implements Engine {
   }
 
   /** One round, with its outcome noted for the subscription it ran on: an answer, or a refusal for a usage limit. */
-  async #round(inv: Invocation, prompt: string, timeoutMs: number, signal: AbortSignal | undefined): Promise<Parsed> {
+  async #round(inv: Invocation, prompt: string, timeoutMs: number, signal: AbortSignal | undefined, scope: { projectId: string | null; taskId: string | null } = { projectId: null, taskId: null }): Promise<Parsed> {
     try {
-      const parsed = await this.#launch(inv, prompt, timeoutMs, signal);
+      const parsed = await this.#launch(inv, prompt, timeoutMs, signal, scope);
       this.#quota?.answered(this.id);
       return parsed;
     } catch (err) {
@@ -590,7 +626,7 @@ export class CliBridgeEngine implements Engine {
   }
 
   /** Starts the CLI once with `prompt` and reads its answer. The confinement is the adapter's, whoever is asking. */
-  async #launch(inv: Invocation, prompt: string, timeoutMs: number, signal: AbortSignal | undefined): Promise<Parsed> {
+  async #launch(inv: Invocation, prompt: string, timeoutMs: number, signal: AbortSignal | undefined, scope: { projectId: string | null; taskId: string | null } = { projectId: null, taskId: null }): Promise<Parsed> {
     const launch = await this.#adapter.launch(inv, prompt);
     // A jailed CLI gets the scratch folder as its temp directory too: it is one of the few places it may write.
     const profile = launch.jail ? jailProfile(inv.scratch, launch.jail) : null;
@@ -611,8 +647,31 @@ export class CliBridgeEngine implements Engine {
       return { text: answer.text, inputTokens: Math.ceil(prompt.length / 4) + images.length * IMAGE_TOKEN_ESTIMATE, outputTokens: Math.ceil(answer.text.length / 4) };
     }
     const res = await this.#run(command.file, command.args, { stdin: launch.stdin, cwd: inv.scratch, env, timeoutMs, maxOutputBytes: 32 * 1024 * 1024, signal });
+    this.#lapsedLogins(res.stderr, scope);
+    // Stopped by this daemon's own clock, which is not something the CLI said: its stderr is not the reason.
+    if (res.timedOut) throw new RoundTimedOut(this.id, Math.round(timeoutMs / 60_000));
     if (res.exitCode !== 0) throw new EngineError(`${this.id} exited ${res.exitCode}: ${excerpt(res.stderr || res.stdout, 600)}`);
     return this.#adapter.parse(res.stdout, inv);
+  }
+
+  /**
+   * The owner's own connections of a vendor's CLI (a Notion server it logs in to with OAuth) come along into a
+   * round whether the studio wants them or not, and the CLI says on stderr when one's login can no longer be
+   * renewed. That harms no task: the round goes on without the connection. It is the one place the studio
+   * hears of it, so the owner is told, once in a while and on their phone, with the command that renews it.
+   */
+  #lapsedLogins(stderr: string, scope: { projectId: string | null; taskId: string | null }): void {
+    try {
+      for (const lapsed of lapsedLogins(stderr)) {
+        const key = `engine.login-lapsed:${this.id}:${lapsed.server}`;
+        const last = Number(this.#store.kvGet(key) ?? 0);
+        if (this.#clock() - last < LAPSED_LOGIN_QUIET_MS) continue;
+        this.#store.kvSet(key, String(this.#clock()));
+        this.#events.emit(scope, { type: 'notice', level: 'warn', attention: true, message: `${this.id}에 연결된 "${lapsed.server}"의 로그인이 만료됐습니다 (${lapsed.why}). 스튜디오의 작업에는 지장이 없습니다. 다시 쓰려면 터미널에서: ${this.#bin} mcp login ${lapsed.server}` });
+      }
+    } catch {
+      // Telling the owner about a login is never worth a round.
+    }
   }
 }
 

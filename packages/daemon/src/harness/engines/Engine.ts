@@ -54,3 +54,16 @@ export class EngineError extends Error {
     this.name = 'EngineError';
   }
 }
+
+/**
+ * A round the studio itself stopped: the vendor's CLI was still at work when the time one round may take ran
+ * out. Not a failure of the CLI and not a word from the vendor: what it changed until then is in the workspace.
+ */
+export class RoundTimedOut extends EngineError {
+  readonly minutes: number;
+  constructor(engine: string, minutes: number) {
+    super(`${engine} was stopped by the studio at its limit of ${minutes} minutes for one round, before it had finished its turn`);
+    this.name = 'RoundTimedOut';
+    this.minutes = minutes;
+  }
+}

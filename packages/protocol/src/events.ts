@@ -214,7 +214,11 @@ export const EventBody = z.discriminatedUnion('type', [
   /** A finished task on the studio's own repository was copied out to this Mac's checkout as a feature branch. Nothing is merged by this. */
   z.object({ type: z.literal('selfhost.exported'), branch: z.string(), base: z.string(), files: z.number().int(), insertions: z.number().int(), deletions: z.number().int() }),
   z.object({ type: z.literal('selfhost.merged'), branch: z.string(), into: z.string(), commit: z.string() }),
-  z.object({ type: z.literal('notice'), level: z.enum(['info', 'warn', 'error']), message: z.string() }),
+  /**
+   * Something said to the owner that is not a step of a task. `attention`: it asks something of them (a login
+   * of theirs has lapsed) without anything having failed, so it reaches their phone as an error does.
+   */
+  z.object({ type: z.literal('notice'), level: z.enum(['info', 'warn', 'error']), message: z.string(), attention: z.boolean().optional() }),
 ]);
 export type EventBody = z.infer<typeof EventBody>;
 export type EventType = EventBody['type'];

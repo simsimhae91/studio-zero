@@ -343,6 +343,8 @@ export class RelayCore {
         return;
       case 'notice':
         if (body.level === 'error') this.#broadcast({ lines: [[`⚠️ ${body.message.slice(0, 600)}`]], priority: 'high' });
+        // Nothing failed, and the owner is asked for something (a login of theirs has lapsed): said, not shouted.
+        else if (body.attention === true) this.#broadcast({ lines: [[body.message.slice(0, 600)]] });
         return;
       default:
         return;

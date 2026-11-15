@@ -241,21 +241,23 @@ test('after a push to main a full check is queued once, for a product that has a
     const unplanned = await r.git('push', 'studio', 'main');
     assert.equal(unplanned.exitCode, 0, unplanned.stderr);
     assert.equal(checks(), 0, 'a product with no plan has nothing to walk');
-    // The owner pushes a plan: from this push on, main can be walked, and is.
+    // Nothing takes tasks off the queue from here on: what is asserted is what a push queues, not how a check runs.
+    await r.d.daemon.queue.stop();
+    // The owner pushes a plan: from this push on, main can be walked, and a check is queued for it.
     mkdirSync(join(r.clone, 'docs'), { recursive: true });
     await r.commit('docs/screens.json', JSON.stringify(PLAN), 'docs: the screen plan');
     const planned = await r.git('push', 'studio', 'main');
     assert.equal(planned.exitCode, 0, planned.stderr);
     assert.match(planned.stderr, /전체 점검을 걸었습니다/);
     assert.equal(checks(), 1);
+    const waiting = store.listTasks(r.project.id, 100).find((task) => task.kind === 'check')!;
+    assert.deepEqual([waiting.state, waiting.origin], ['queued', 'system']);
     // One that is already waiting is the one a second push gets.
-    for (const task of store.listTasks(r.project.id, 100)) if (task.kind === 'check') store.updateTask(task.id, { state: 'cancelled', finishedAt: 2 });
-    store.insertTask({ id: 'tsk_waiting', projectId: r.project.id, kind: 'check', prompt: 'x', origin: 'desktop', budgetTokens: 1000, branch: null, createdAt: 3 });
     await r.commit('NOTES.md', 'two\n', 'docs: two');
     const second = await r.git('push', 'studio', 'main');
     assert.equal(second.exitCode, 0, second.stderr);
-    assert.match(second.stderr, /전체 점검이 이미 줄 서 있습니다 \(tsk_waiting\)/);
-    assert.equal(checks(), 2);
+    assert.ok(second.stderr.includes(`전체 점검이 이미 줄 서 있습니다 (${waiting.id})`), second.stderr);
+    assert.equal(checks(), 1);
   } finally {
     await r.cleanup();
   }
