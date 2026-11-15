@@ -2,7 +2,7 @@
 // mirrors it, and a clone of that repository pushed from with the git on this machine. The hook is the one the
 // daemon writes, and it runs the studio's own command line against the test daemon.
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { CORE_PROJECT_ID, type Project } from '@studio-zero/protocol';
@@ -52,6 +52,19 @@ async function rig(config: Parameters<typeof testDaemon>[0] = {}): Promise<Rig> 
   };
   return { d, project, gate: repo.path!, clone, git, inside, commit, cleanup: async () => { await d.cleanup(); where.cleanup(); } };
 }
+
+/** A plan that holds, of a product nobody signs in to. */
+const PLAN = {
+  coreMoment: '오늘 쓴 돈을 적는다.',
+  screens: [{ id: 'H-01', name: '장부', purpose: '쓴 돈을 적고 본다', entry: ['앱을 연다'], elements: [], states: [], exceptions: [] }],
+  tasks: [{ id: 'log', goal: '쓴 돈을 적는다', outcome: '적은 줄이 보인다', screen: 'H-01' }],
+  events: [],
+  roles: [{ id: 'keeper', name: '적는 사람', does: '쓴 돈을 적는다' }],
+  entry: null,
+  noAccounts: '적은 것은 이 기기에만 둔다.',
+  scenarios: [{ id: 'log-one', role: 'keeper', after: null, steps: [{ id: 'log', screen: 'H-01', does: '금액을 적는다', saves: null, outcome: '적은 줄이 보인다' }] }],
+  data: [],
+};
 
 const refs = async (repo: string): Promise<string[]> => (await runCommand('git', ['-C', repo, 'for-each-ref', '--format=%(refname)'], { env: { ...process.env, ...QUIET } })).stdout.trim().split('\n').filter(Boolean).sort();
 
@@ -228,18 +241,20 @@ test('after a push to main a full check is queued once, for a product that has a
     const unplanned = await r.git('push', 'studio', 'main');
     assert.equal(unplanned.exitCode, 0, unplanned.stderr);
     assert.equal(checks(), 0, 'a product with no plan has nothing to walk');
-    // It has been walked in full before: it has a plan.
-    store.putWalks(r.project.id, { trails: {}, ledger: {}, commit: null, updatedAt: 1 });
-    store.insertTask({ id: 'tsk_waiting', projectId: r.project.id, kind: 'check', prompt: 'x', origin: 'desktop', budgetTokens: 1000, branch: null, createdAt: 1 });
+    // The owner pushes a plan: from this push on, main can be walked, and is.
+    mkdirSync(join(r.clone, 'docs'), { recursive: true });
+    await r.commit('docs/screens.json', JSON.stringify(PLAN), 'docs: the screen plan');
+    const planned = await r.git('push', 'studio', 'main');
+    assert.equal(planned.exitCode, 0, planned.stderr);
+    assert.match(planned.stderr, /전체 점검을 걸었습니다/);
+    assert.equal(checks(), 1);
+    // One that is already waiting is the one a second push gets.
+    for (const task of store.listTasks(r.project.id, 100)) if (task.kind === 'check') store.updateTask(task.id, { state: 'cancelled', finishedAt: 2 });
+    store.insertTask({ id: 'tsk_waiting', projectId: r.project.id, kind: 'check', prompt: 'x', origin: 'desktop', budgetTokens: 1000, branch: null, createdAt: 3 });
     await r.commit('NOTES.md', 'two\n', 'docs: two');
     const second = await r.git('push', 'studio', 'main');
     assert.equal(second.exitCode, 0, second.stderr);
     assert.match(second.stderr, /전체 점검이 이미 줄 서 있습니다 \(tsk_waiting\)/);
-    assert.equal(checks(), 1);
-    store.updateTask('tsk_waiting', { state: 'cancelled', finishedAt: 2 });
-    await r.commit('NOTES.md', 'three\n', 'docs: three');
-    const third = await r.git('push', 'studio', 'main');
-    assert.match(third.stderr, /전체 점검을 걸었습니다/);
     assert.equal(checks(), 2);
   } finally {
     await r.cleanup();

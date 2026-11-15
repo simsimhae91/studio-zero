@@ -152,11 +152,19 @@ test('a build on an adopted project runs on the fast track, and what is the hous
     const { studio } = d.daemon;
     const { project } = await studio.adoptProject(OWNER, { path: mine.dir, name: 'Cre Deal', slug: 'cre-deal' });
     assert.deepEqual([project.slug, project.name], ['cre-deal', 'Cre Deal']);
+    // Not fitted: nothing here can run it, so nothing but the fit is taken.
+    for (const kind of ['build', 'inline_edit', 'check', 'refactor'] as const) await assert.rejects(studio.submitTask(OWNER, { projectId: project.id, kind, prompt: 'add a screen' }, 'desktop'), /걷기 계획이 없어/, kind);
+    const fit = await studio.submitTask(OWNER, { projectId: project.id, kind: 'adopt', prompt: 'fit it' }, 'desktop');
+    assert.deepEqual([fit.kind, fit.track], ['adopt', 'fast']);
+    // Fitted (its main holds a plan): a build is taken, and runs on the fast track whatever was asked.
+    await d.daemon.sandboxes.writeFile(project, 'docs/screens.json', JSON.stringify(FIT_PLAN));
+    await d.daemon.sandboxes.commitAll(project, 'chore: the plan');
     const build = await studio.submitTask(OWNER, { projectId: project.id, kind: 'build', prompt: 'add a screen', track: 'full' }, 'desktop');
     assert.equal(build.track, 'fast', 'the full track is the house\'s design gates');
     assert.equal(build.reviewPlan, false);
-    const fit = await studio.submitTask(OWNER, { projectId: project.id, kind: 'adopt', prompt: 'fit it' }, 'desktop');
-    assert.deepEqual([fit.kind, fit.track], ['adopt', 'fast']);
+    // A branch that has no plan is not something to start from.
+    await d.daemon.sandboxes.exec(project, 'git branch -q bare HEAD~1', { cwd: '/workspace' });
+    await assert.rejects(studio.submitTask(OWNER, { projectId: project.id, kind: 'build', prompt: 'x', baseBranch: 'bare' }, 'desktop'), /아직 bare에 걷기 계획이 없어/);
     await assert.rejects(studio.submitTask(OWNER, { projectId: project.id, kind: 'ideate', prompt: 'design it' }, 'desktop'), /들여온 제품에는/);
     await assert.rejects(studio.runRoadmap(OWNER, project.id), /로드맵을 두지 않습니다/);
     // And fitting is not something a product the studio built needs.
@@ -304,7 +312,16 @@ test('a fit is told what a fit is, its walk writes the project\'s first trails a
     for (let i = 0; i < 100 && !(await gate.branches(project)).some((b) => b.name === branch); i++) await sleep(50);
     assert.equal((await mine.git('fetch', '-q', 'studio')).exitCode, 0);
     assert.equal((await mine.git('show', `studio/${branch}:CLAUDE.md`)).stdout, '@AGENTS.md\n');
+    // Until the owner merges that branch, main is as it came: nothing to walk it by yet.
+    assert.equal((await studio.repoStatus(project.id)).planned, false);
+    await assert.rejects(studio.submitTask(OWNER, { projectId: project.id, kind: 'inline_edit', prompt: '버튼 글자' }, 'desktop'), /그 브랜치를 main에 합친 뒤에/);
+    await studio.merge(OWNER, project.id, branch);
     assert.equal((await studio.repoStatus(project.id)).planned, true);
+    // And the merge is at the gate for the owner to pull.
+    const merged = (await sandboxes.exec(project, 'git rev-parse main', { cwd: '/workspace' })).stdout.trim();
+    for (let i = 0; i < 100 && (await gate.branches(project)).find((b) => b.name === 'main')?.commit !== merged; i++) await sleep(50);
+    assert.equal((await mine.git('pull', '-q', '--ff-only', 'studio', 'main')).exitCode, 0);
+    assert.equal((await mine.git('rev-parse', 'HEAD')).stdout.trim(), merged);
   } finally {
     await d.cleanup();
     mine.cleanup();

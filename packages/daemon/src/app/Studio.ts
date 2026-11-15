@@ -498,6 +498,15 @@ export class Studio implements PromotionHost {
     const adopted = isAdopted(this.getProject(p.projectId));
     if (p.kind === 'adopt' && !adopted) throw new ConflictError('맞추기는 들여온 프로젝트의 작업입니다. 스튜디오가 지은 프로젝트는 처음부터 맞게 지어집니다.');
     if (p.kind === 'ideate' && adopted) throw new ConflictError('들여온 제품에는 처음부터 기획하는 디자인 작업을 두지 않습니다. 바꿀 것은 만들기나 빠른 수정으로 내세요.');
+    // A product that was brought in and has not been fitted cannot be run, walked or measured here: a task on
+    // it would be judged by a dev server that does not start. What it stands on (main, or the branch it is
+    // asked to start from) has to hold a plan first; the fit is the task that writes one.
+    if (adopted && p.kind !== 'adopt') {
+      const project = this.getProject(p.projectId);
+      const base = p.baseBranch ?? INTEGRATION_BRANCH;
+      const fitted = await this.#inSandbox(project, () => this.#plannedAt(project, base)).catch(() => false);
+      if (!fitted) throw new ConflictError(`이 제품은 아직 ${base}에 걷기 계획이 없어 스튜디오가 돌리고 검사할 수 없습니다. 먼저 맞추고(sz fit ${project.slug}), 그 브랜치를 main에 합친 뒤에 내세요.`);
+    }
     assertPick(p, this.#d.router);
     // A reference is refused here, before the task exists, so a mistyped address is not found out mid-build.
     const references = (p.references ?? []).map((raw) => {
@@ -931,14 +940,32 @@ export class Studio implements PromotionHost {
 
   // ------------------------------------------------------------ repository
 
-  /** Whether a project has a screen plan with scenarios: whether it can be walked at all. A stopped sandbox is not started to find out. */
-  async #planned(project: Project): Promise<boolean> {
-    if (this.#d.store.getWalks(project.id)) return true;
+  /**
+   * Whether a branch of a project holds a screen plan with scenarios: whether what stands on it can be walked at
+   * all. Read from the branch itself, whatever the workspace has checked out. Throws when the sandbox is not up.
+   */
+  async #plannedAt(project: Project, branch: string): Promise<boolean> {
+    assertBranchName(branch);
+    const file = rootOf(project) === '' ? SCREEN_SPEC_FILE : `${rootOf(project)}/${SCREEN_SPEC_FILE}`;
+    const shown = await this.#d.sandboxes.exec(project, `git show '${branch}:${file}' 2>/dev/null | head -c 1048576`, { cwd: WORKSPACE_DIR, timeoutSec: 20, maxOutputBytes: 1100 * 1024 });
+    if (shown.exitCode !== 0 || shown.stdout.trim() === '') return false;
     try {
-      const read = readScreenSpec(JSON.parse((await this.#d.sandboxes.readFile(project, SCREEN_SPEC_FILE, 1024 * 1024)).content), { works: true, draft: true });
+      const read = readScreenSpec(JSON.parse(shown.stdout), { works: true, draft: true, wide: true });
       return read.ok && read.spec.scenarios.length > 0;
     } catch {
       return false;
+    }
+  }
+
+  /**
+   * Whether a project's main can be walked. A stopped sandbox is not started to find out: it is then answered
+   * from whether the project has ever been walked in full.
+   */
+  async #planned(project: Project): Promise<boolean> {
+    try {
+      return await this.#plannedAt(project, INTEGRATION_BRANCH);
+    } catch {
+      return this.#d.store.getWalks(project.id) !== null;
     }
   }
 
