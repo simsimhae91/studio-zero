@@ -28,6 +28,8 @@ const USAGE = `sz-eyes: launch what was built, look at it, operate it, and put w
   sz-eyes contract new <id> --lane S|M|L --request <text> [--target web]... --claim "<id>|<what will be true>|<kind>:<ref>"... [--not "<text>"]... [--risk "<text>"]... [--dir <project>]
   sz-eyes contract freeze <id> [--frozen <path>]... [--dir <project>]
   sz-eyes contract claim <id> <claim-id> --status proven|refuted|unchecked [--evidence <file under the evidence folder>]... [--note <text>] [--dir <project>]
+  sz-eyes contract amend <id> --file <a frozen file> --why "<text>" [--dir <project>]
+        record that a frozen check was corrected after the freeze (the arbiter's, never the builder's)
   sz-eyes contract notice <id> "<what was noticed that no claim covers>" [--evidence <file>]... [--dir <project>]
   sz-eyes contract show <id> [--dir <project>]           the contract as the owner reads it
   sz-eyes contract status [--dir <project>]              what open contracts still owe; exits 1 when anything is owed
@@ -180,6 +182,15 @@ async function main(argv: string[]): Promise<number> {
       Object.assign(claim, { status, evidence: [...new Set([...claim.evidence, ...a.all('--evidence')])], note: a.one('--note') ?? claim.note });
       writeContract(file, contract);
       out(`${claimId}: ${status}`);
+      return 0;
+    }
+    if (command === 'amend') {
+      const target = a.one('--file');
+      const why = a.one('--why') ?? '';
+      if (!target || why.trim().length < 12) throw new EyesError('sz-eyes contract amend <id> --file <a frozen file> --why "<what was wrong about how it checked, and what was changed>"');
+      if (!contract.frozen.includes(target)) throw new EyesError(`${target} is not a file contract ${id} froze. Frozen: ${contract.frozen.join(', ') || '(none)'}`);
+      writeContract(file, { ...contract, amendments: [...contract.amendments, { file: target, why: why.trim(), at: new Date().toISOString() }] });
+      out(`amended: ${target}`);
       return 0;
     }
     if (command === 'notice') {

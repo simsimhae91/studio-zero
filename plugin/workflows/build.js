@@ -48,6 +48,10 @@ const PLAN = {
           claims: { type: 'array', items: CLAIM },
           notDoing: { type: 'array', items: { type: 'string' } },
           risks: { type: 'array', items: { type: 'string' } },
+          state: { type: 'string', enum: ['todo', 'built', 'closed'], description: 'todo unless this run continues an earlier one: built = its code and frozen contract exist and it has not been verified to the end; closed = its contract is closed' },
+          contractId: { type: 'string', description: 'for a milestone that is built or closed: the id of its contract' },
+          launch: { type: 'string', description: 'for a milestone that is built: the exact command that starts the product and where it is seen' },
+          disputes: { type: 'array', description: 'for a milestone that is built: frozen checks an earlier run found to be wrong about how they check', items: { type: 'object', properties: { file: { type: 'string' }, problem: { type: 'string' } }, required: ['file', 'problem'] } },
         },
         required: ['id', 'title', 'builds', 'claims'],
       },
@@ -61,7 +65,12 @@ const BUILT = {
     contractId: { type: 'string' },
     summary: { type: 'string', description: 'what was built, in three sentences at most' },
     launch: { type: 'string', description: 'the exact command that starts the product now, and the address or app it is seen at' },
-    blocked: { type: 'string', description: 'empty unless the milestone could not be built: then what stopped it' },
+    blocked: { type: 'string', description: 'empty unless the milestone could not be built at all: then what stopped it' },
+    disputes: {
+      type: 'array',
+      description: 'frozen checks you found to be wrong about how they check (not the product being wrong): each with the file and exactly what is wrong. Empty when there are none.',
+      items: { type: 'object', properties: { file: { type: 'string' }, problem: { type: 'string' } }, required: ['file', 'problem'] },
+    },
   },
   required: ['contractId', 'summary', 'launch'],
 }
@@ -91,6 +100,8 @@ ${request}
 
 ${answers ? `What the owner answered when asked beforehand:\n${answers}` : 'The owner was not asked anything beforehand. Where the request leaves something open that only they could say (who it is for, how it should feel, accounts, keys, money), take the conservative answer and list it under "decided".'}
 
+If \`.sz/spec.md\` already exists, this run continues an earlier one that stopped: do not plan again and do not rewrite the spec. Read it, the contracts under \`.sz/contracts/\` (\`sz-eyes contract status\`, \`sz-eyes contract show <id>\`), \`.sz/progress.md\` and \`git log\`, and return the same milestones with their claims as the contracts and the spec have them, each with its "state": "closed" (its contract is closed), "built" (its contract is frozen and its code is committed, and it was not verified to the end: give "contractId", "launch", and under "disputes" any frozen check the earlier run reported as wrong about how it checks) or "todo". Write no code. Otherwise:
+
 Write \`.sz/spec.md\` in the owner's language: what the product is and for whom, the one thing it must do well, its features in the order they will be built, how it is launched and looked at, and what is deliberately not built. Then cut the work into ${Math.min(maxMilestones, 6)} milestones at most:
 - The first milestone is the thinnest slice that runs end to end and can be launched and looked at: one real thing a person can do, saved or computed for real. Not scaffolding alone.
 - Every milestone leaves the product working. A later milestone never depends on something a milestone before it left broken.
@@ -114,7 +125,12 @@ for (let i = 0; i < milestones.length; i++) {
   const before = done.map((d) => `- ${d.title}: ${d.refuted.length === 0 ? 'proven' : `left with ${d.refuted.length} claim(s) refuted`}`).join('\n') || '(this is the first)'
   const claims = m.claims.map((c) => `- ${c.id} | ${c.says} | ${c.kind}:${c.ref}`).join('\n')
 
-  const built = await agent(
+  if (m.state === 'closed') {
+    done.push({ id: m.id, title: m.title, contractId: m.contractId || m.id, proven: m.claims.map((c) => c.id), refuted: [], unchecked: [], noticed: [], report: null, earlier: true })
+    log(`${m.title}: closed in an earlier run`)
+    continue
+  }
+  const built = m.state === 'built' && m.contractId && m.launch ? { contractId: m.contractId, summary: 'built in an earlier run', launch: m.launch, disputes: m.disputes || [] } : await agent(
     `You are building milestone ${i + 1} of ${milestones.length} of a product, with nobody watching. ${GROUND} ${TOOLS}
 
 Milestone "${m.title}" (${m.id}): ${m.builds}
@@ -129,7 +145,7 @@ ${m.risks && m.risks.length > 0 ? `Risks named when it was planned: ${m.risks.jo
 Do this, in order:
 1. Record the contract: \`sz-eyes contract new ${m.id} --lane M --request "<the milestone in a sentence, in the owner's language>" --target <web|ios|...> --claim "<id>|<says>|<kind>:<ref>" ...\` with exactly the claims above, plus \`--not\` and \`--risk\` for the lines above.
 2. Write the oracle first: every flow or test file a claim points at, in the project's own format, before the code it checks. They must fail now for the right reason.
-3. Freeze it: \`sz-eyes contract freeze ${m.id} --frozen <each of those files>\`. From here you edit neither the contract nor those files. If a claim turns out to be wrong about what was asked, do not bend it: build what you can and say so in "blocked".
+3. Run each of those files once before freezing, to see that it runs and fails for the right reason (the product is not there yet), not for a mistake in the file. Then freeze: \`sz-eyes contract freeze ${m.id} --frozen <each of those files>\`. From here you edit neither the contract nor those files. If you later find that a frozen file is itself wrong about how it checks (a quoting error, a selector that names nothing), do not work around it and do not stop: finish the build, and list it under "disputes" with the file and exactly what is wrong; someone who did not build this will settle it. If a claim is wrong about what was asked, build what you can and say so in "blocked".
 4. Build the milestone. For anything a person looks at, load \`sz:taste\` first. Run the project's checks (type check, tests) as you go and leave them passing.
 5. Make sure the product starts with one command and say exactly which, and where it is seen. If this milestone changed how it is launched, correct \`.sz/map.md\`.
 6. Commit the work on the current branch with a message that says what the milestone built.
@@ -141,6 +157,16 @@ Do not judge your own claims and do not record verdicts: someone who did not bui
     stopped = `milestone "${m.title}" could not be built: ${built ? built.blocked : 'the builder did not answer'}`
     log(stopped)
     break
+  }
+
+  // A frozen check the builder says is itself wrong goes to someone who neither built nor judges: the arbiter
+  // corrects how it checks, never what it checks, and writes the correction into the contract. (The first real
+  // run stopped here for good: a check its builder had written with a quoting error could be fixed by nobody.)
+  for (const dispute of built.disputes || []) {
+    await agent(
+      `Settle a dispute about a frozen check of contract \`${built.contractId}\` in the project in the current folder. The file: \`${dispute.file}\`. What the builder says is wrong with it: ${dispute.problem}. The product is launched like this: ${built.launch}. Decide whether the check, the product or the claim is wrong, correct the check only if it is wrong about how it checks, record it with \`sz-eyes contract amend\`, and return what you decided.`,
+      { label: `arbiter:${m.id}`, phase: 'Build', agentType: 'sz:arbiter', schema: { type: 'object', properties: { which: { type: 'string', enum: ['check', 'product', 'claim'] }, changed: { type: 'string' }, now: { type: 'string' } }, required: ['which', 'now'] } },
+    )
   }
 
   const verify = (only) =>

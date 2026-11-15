@@ -65,6 +65,11 @@ export const Contract = z.object({
    * a number that does not add up. Nobody asked, and the owner would want to know.
    */
   noticed: z.array(z.object({ text: z.string().max(600), evidence: z.array(z.string().max(300)).max(6).default([]) })).max(30).default([]),
+  /**
+   * Corrections made to a frozen check after the freeze, each by someone who neither built the work nor judges
+   * it: which file, and why the check was wrong about how to check (never about what it checks).
+   */
+  amendments: z.array(z.object({ file: z.string().max(300), why: z.string().max(800), at: z.string() })).max(20).default([]),
   /** Set when the work is closed: by whom, and with what left. */
   closedAt: z.string().nullable().default(null),
 });
@@ -118,6 +123,7 @@ export function renderContract(contract: Contract): string {
     list('끝났을 때 참인 것', contract.claims.map((claim) => `- [${MARK[claim.status]}] **${claim.id}** ${claim.says}\n  - 보이는 방법: ${claim.shownBy.kind} \`${claim.shownBy.ref}\`${claim.note ? `\n  - ${claim.note}` : ''}`)),
     ...(contract.notDoing.length > 0 ? [list('하지 않는 것', contract.notDoing.map((line) => `- ${line}`))] : []),
     ...(contract.risks.length > 0 ? [list('위험', contract.risks.map((line) => `- ${line}`))] : []),
+    ...(contract.amendments.length > 0 ? [list('얼린 뒤 고친 검사', contract.amendments.map((a) => `- \`${a.file}\`: ${a.why}`))] : []),
     contract.frozenAt ? `얼린 때: ${contract.frozenAt}${contract.frozen.length > 0 ? ` (만드는 쪽이 못 고치는 파일: ${contract.frozen.join(', ')})` : ''}` : '아직 얼리지 않았습니다.',
   ];
   return `${blocks.join('\n\n')}\n`;

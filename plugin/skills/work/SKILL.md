@@ -50,6 +50,8 @@ Prefer checks the project already has (its e2e flows, its tests) over new ones. 
 
 **Build.** Follow the project's own rules (the map lists them). Run its checks as you go.
 
+**If a frozen check is itself wrong** (a quoting error, a selector that names nothing: it fails for a reason that is not the product), do not edit it and do not work around it. Start the `sz:arbiter` agent with the contract id, the file and exactly what is wrong. It decides whether the check or the product is wrong, corrects only how the check checks, and records the correction in the contract. Then carry on.
+
 **Have it proven.** Start the `sz:verifier` agent with the contract id and nothing of your own opinion: not "it works", not what you tested. It operates the product and records a verdict for each claim. If a claim is refuted, fix the product and send it back for that claim; twice at most, then report what stands.
 
 **Evidence:** `sz-eyes evidence <id> --took "<time and tokens if known>"` writes `.sz/evidence/<id>/report.html`. Show the owner the path and the verdict in one line each, and what is unchecked. Then `sz-eyes contract close <id>` and add a line to `.sz/progress.md`.
@@ -62,7 +64,7 @@ Prefer checks the project already has (its e2e flows, its tests) over new ones. 
 
 **Build milestone by milestone**, each as an M (contract, freeze, build, `sz:verifier`, evidence). After each: commit, add a line to `.sz/progress.md` (what is done, what was decided and why, what is next), and tell the owner in two lines. A later session must be able to continue from the spec and the progress file alone.
 
-**Unattended, to the end:** when the owner has answered and asks for it to run without them (or says to use a workflow), start the saved workflow `sz:build` with the Workflow tool, `args: { request: "<their words>", answers: "<what they answered, or the conservative answers you took, marked as yours>" }`. It writes the spec, then builds, verifies, fixes and closes one milestone at a time, and stops rather than build on a milestone that is known to be broken. Tell the owner it will use many agents before you start it. When it returns, report milestone by milestone: proven, refuted, unchecked, where each evidence page is, and where it stopped if it did.
+**Unattended, to the end:** when the owner has answered and asks for it to run without them (or says to use a workflow), start the saved workflow `sz:build` with the Workflow tool, `args: { request: "<their words>", answers: "<what they answered, or the conservative answers you took, marked as yours>" }`. It writes the spec, then builds, verifies, fixes and closes one milestone at a time, and stops rather than build on a milestone that is known to be broken. Started again in a project whose `.sz/spec.md` exists, it continues from where the files say the work stands instead of planning again. Tell the owner it will use many agents before you start it. When it returns, report milestone by milestone: proven, refuted, unchecked, where each evidence page is, and where it stopped if it did.
 
 ## Always
 

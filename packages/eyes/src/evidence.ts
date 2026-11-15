@@ -70,6 +70,7 @@ main > section:not(.claim) { display: flex; flex-direction: column; gap: 12px }
   ${extra.summary ? `<p class="note">${esc(extra.summary)}</p>` : ''}
   ${claims}
   ${contract.noticed.length > 0 ? `<section><h2>계약에 없지만 눈에 띈 것</h2>${contract.noticed.map((item) => `<div class="claim"><p class="note">${esc(item.text)}</p>${item.evidence.length > 0 ? `<div class="shots">${item.evidence.map(picture).join('')}</div>` : ''}</div>`).join('')}</section>` : ''}
+  ${contract.amendments.length > 0 ? `<section><h2>얼린 뒤 고친 검사</h2><ul>${contract.amendments.map((a) => `<li><code>${esc(a.file)}</code> ${esc(a.why)}</li>`).join('')}</ul></section>` : ''}
   ${left.length > 0 ? `<section><h2>남은 것</h2><ul>${left.map((claim) => `<li>${LABEL[claim.status]}: ${esc(claim.says)}${claim.note ? ` (${esc(claim.note)})` : ''}</li>`).join('')}</ul></section>` : ''}
   ${contract.notDoing.length > 0 ? `<section><h2>하지 않은 것</h2><ul>${contract.notDoing.map((line) => `<li>${esc(line)}</li>`).join('')}</ul></section>` : ''}
 </main>
