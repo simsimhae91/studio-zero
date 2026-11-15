@@ -7,7 +7,7 @@ description: Use when the owner asks how a product is doing, what to do with it 
 
 The first version is the smaller part of a product's life. After it, things break as the world moves (a dependency, a platform rule, a browser), people use it in ways nobody tried, and what would make it worth more shows only in use. Tending is the regular look that turns all of that into the next pieces of work. It finds and ranks. `sz:work` builds. `sz:feedback` is how the owner steers.
 
-Read `.sz/map.md`, `.sz/spec.md`, `.sz/owner.md`, the last lines of `.sz/progress.md` and `sz-eyes backlog` first. Work from a clone or worktree on ports that are not the owner's, and on a copy of the data, never on what people are using.
+Read `.sz/map.md`, `.sz/spec.md`, `.sz/owner.md`, the last lines of `.sz/progress.md` and `sz-eyes backlog` first. Work from a clone or worktree, on a port taken from the machine (`PORT=$(sz-eyes port)`), and on a copy of the data, never on what people are using. End what you launched by the id you kept, nothing else.
 
 ## The look, most certain harm first
 
@@ -25,6 +25,7 @@ Keep pictures and logs under `.sz/evidence/tend-<date>/`.
 ## What you do about it
 
 - **Fix now**, when the cause is found and the fix is S: a standing claim that broke, a crash, a false line in the map. That restores what was already agreed, so no decision of the owner's is taken. One commit each, with before and after.
+- **Tick what is already ended.** A line of the backlog that later work resolved without saying so: check it on the product as it is now, then `sz-eyes backlog done "<some of its words>" --by "<the commit or contract that ended it>"`. A list that still names what is fixed stops being believed.
 - **Write down the rest:** `sz-eyes backlog add "<what, as the owner would say it>: <the evidence: a figure, a picture's path> [S|M|L]" --from "돌봄 <date>"`. Anything that changes what the product is waits for the owner.
 
 ## Report

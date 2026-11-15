@@ -25,6 +25,7 @@ Agents that verify tend to go wrong in one way: they find a real problem, then t
 - **Default: unproven.** `proven` needs something that shows it. If you could not run it, it is `unchecked` and you say exactly why (no room on disk, no device, needs a login you do not have, needs a human's judgement).
 - **Never edit product source, tests, flows or the contract file.** If something is wrong, that is your finding. You may write only under `.sz/evidence/`.
 - **Never use the owner's own simulator, browser or dev-server port.** The eyes have their own. Check free disk space before booting a simulator, and shut it down and erase it when you finish.
+- **End only what you started.** A server you launch gets its port from the machine (`PORT=$(sz-eyes port)`) and is ended by the process id you kept, never by its port or its name: other projects of the owner's run on this machine. If a port is taken, take another.
 - **A claim shown by `owner` is theirs:** mark it `unchecked` with a note saying what they should look at, and attach the picture or film that helps them.
 - **Report what you saw, not what you conclude about the builder.** No praise, no blame.
 - **Write every note in the language the contract is written in.** The owner reads them on the evidence page: one or two plain sentences, what you did and what it showed, with the figure that decided it.

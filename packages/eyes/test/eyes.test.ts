@@ -8,7 +8,8 @@ import { test } from 'node:test';
 import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { addToBacklog, leftBy, openBacklog } from '../src/backlog.ts';
+import { addToBacklog, doneInBacklog, leftBy, openBacklog } from '../src/backlog.ts';
+import { freePort } from '../src/port.ts';
 import { Contract, openContracts, owed, renderContract, writeContract, CONTRACTS_DIR } from '../src/contract.ts';
 import { createServer } from 'node:http';
 import { addSaid, newRound, noteSaid, readRound, renderRound, roundPage } from '../src/feedback.ts';
@@ -410,4 +411,89 @@ test('a folder frozen for one flow does not lock what later work adds beside it,
   } finally {
     rmSync(project, { recursive: true, force: true });
   }
+});
+
+test('a line of the backlog is ticked by its words, with what ended it', () => {
+  const project = mkdtempSync(join(tmpdir(), 'eyes-backlog-done-'));
+  try {
+    addToBacklog(project, [{ text: '서버가 실패를 남기지 않는다 [S]', from: '돌봄 2026-11-15' }, { text: '데이터 백업이 없다', from: '돌봄 2026-11-15' }]);
+    assert.equal(doneInBacklog(project, '백업이  없다', 'm6-care 51763ad'), '데이터 백업이 없다 (돌봄 2026-11-15)');
+    assert.match(readFileSync(join(project, '.sz/backlog.md'), 'utf8'), /^- \[x\] 데이터 백업이 없다 \(돌봄 2026-11-15\) — 끝남: m6-care 51763ad$/m);
+    assert.deepEqual(openBacklog(project), ['서버가 실패를 남기지 않는다 [S] (돌봄 2026-11-15)']);
+    assert.throws(() => doneInBacklog(project, '백업이 없다', 'again'), /no open line/, 'a ticked line is not ticked twice');
+    addToBacklog(project, [{ text: '서버가 느리다', from: '' }]);
+    assert.throws(() => doneInBacklog(project, '서버가', 'x'), /2 open lines[\s\S]*실패를 남기지[\s\S]*느리다/, 'words that fit two lines tick neither');
+    assert.throws(() => doneInBacklog(project, '느리다', '  '), /what ended it/);
+    assert.equal(openBacklog(project).length, 2);
+    // From the command line, as the one closing a piece of work uses it.
+    assert.match(eyes(project, 'backlog', 'done', '서버가 느리다', '--by', 'a1b2c3d').text, /ticked: 서버가 느리다/);
+    assert.equal(eyes(project, 'backlog', 'done', '없는 줄', '--by', 'x').code, 1);
+    assert.equal(openBacklog(project).length, 1);
+  } finally {
+    rmSync(project, { recursive: true, force: true });
+  }
+});
+
+const others = (command: string): { code: number | null; text: string } => {
+  const run = spawnSync(process.execPath, [join(HERE, '../../../plugin/hooks/guard-others.mjs')], { encoding: 'utf8', input: JSON.stringify({ cwd: tmpdir(), tool_name: 'Bash', tool_input: { command } }) });
+  return { code: run.status, text: run.stderr };
+};
+
+test('a command ends only what this work started: never whatever holds a port, or everything of a name', () => {
+  // What the first long run did: its own server could not take the port, and it ended the one that had it.
+  const incident = 'T=$(mktemp -d) && P=8817 && PORT=$P node server.mjs >$T/log 2>&1 & sleep 1; curl -s http://127.0.0.1:$P/healthz\nkill %1 2>/dev/null; pkill -f "PORT=8817" ; lsof -ti tcp:$P | xargs kill 2>/dev/null; rm -rf $T';
+  const refused = others(incident);
+  assert.equal(refused.code, 2);
+  assert.match(refused.text, /did not start/);
+  assert.match(refused.text, /sz-eyes port/);
+  for (const command of [
+    'lsof -ti:3000 | xargs kill -9',
+    'lsof -t -i tcp:8080 | xargs -r kill',
+    'kill -9 $(lsof -ti :5173)',
+    'kill "$(lsof -t -i:8081)"',
+    'kill `lsof -ti:8081`',
+    'PID=$(lsof -ti:3000); kill $PID',
+    'lsof -i :3000 | awk \'NR>1 {print $2}\' | xargs kill',
+    'pkill -f vite',
+    'sudo killall node',
+    'killall Simulator',
+    'npx kill-port 3000',
+    'fuser -k 3000/tcp',
+    'docker stop $(docker ps -q)',
+    'docker rm -f `docker ps -aq`',
+    'docker ps -q | xargs docker kill',
+    'docker system prune -af',
+    'xcrun simctl shutdown all',
+    'xcrun simctl erase all',
+    'bash -c "lsof -ti:3000 | xargs kill"',
+    'sh <<EOF\npkill node\nEOF',
+  ]) assert.equal(others(command).code, 2, command);
+  for (const command of [
+    'PORT=$(sz-eyes port) node server.mjs & pid=$!; sleep 1; curl -s localhost:$PORT/healthz; kill $pid',
+    'kill %1; kill 4242; kill -TERM "$pid"',
+    'lsof -nP -iTCP:8817 -sTCP:LISTEN',
+    'lsof -ti:3000',
+    'docker stop moim-db && docker rm moim-db',
+    'docker compose down',
+    'xcrun simctl shutdown 5F0C7A1E-0000-0000-0000-000000000000',
+    'git commit -m "$(cat <<\'EOF\'\nEnd the server by its pid, not with pkill or lsof | xargs kill\nEOF\n)"',
+    'git commit -m \'no more killall node\'',
+    'echo "pkill 대신 PID로 끈다" >> notes.md',
+    'grep -rn "pkill\\|killall" flows/',
+    'cat > .sz/map.md <<EOF\n끌 때는 띄운 PID만 끈다(lsof -ti | xargs kill 금지).\nEOF',
+    'npm run skill-check',
+  ]) assert.equal(others(command).code, 0, command);
+  // Not a shell command, or nothing to read: not this guard's business.
+  assert.equal(spawnSync(process.execPath, [join(HERE, '../../../plugin/hooks/guard-others.mjs')], { encoding: 'utf8', input: 'not json' }).status, 0);
+});
+
+test('a port is taken from the machine, not chosen', async () => {
+  const run = eyes(tmpdir(), 'port');
+  assert.equal(run.code, 0);
+  const port = Number(run.text.trim());
+  assert.ok(Number.isInteger(port) && port > 1023 && port < 65536, run.text);
+  assert.equal(await freePort() > 1023, true);
+  const server = createServer(() => {});
+  await new Promise<void>((done, fail) => server.once('error', fail).listen(port, '127.0.0.1', done));
+  server.close();
 });

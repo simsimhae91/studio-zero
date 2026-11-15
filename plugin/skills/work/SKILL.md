@@ -37,7 +37,7 @@ In this order, because a picture of "before" cannot be taken afterwards:
 3. Run the type check and the project's checks: all of them when the map says they are quick. A small change is where an old promise breaks unnoticed.
 4. Look again in the same state, same size, `--name after`, into the same folder. Read the state off the look (the words, the figure), not off the picture.
 
-Report in a few lines: the cause, what changed, what was run and what it said (the figures before and after), where the two pictures are, what was not checked, and anything you decided that the owner might have decided otherwise. What you noticed and did not do goes to the backlog (`sz-eyes backlog add "<it>" --from "<this change>"`). Add a line to `.sz/progress.md`. Done: no contract, no verifier.
+Report in a few lines: the cause, what changed, what was run and what it said (the figures before and after), where the two pictures are, what was not checked, and anything you decided that the owner might have decided otherwise. What you noticed and did not do goes to the backlog (`sz-eyes backlog add "<it>" --from "<this change>"`), and a line of the backlog that this change ended is ticked (`sz-eyes backlog done "<some of its words>" --by "<the commit>"`). Add a line to `.sz/progress.md`. Done: no contract, no verifier.
 
 ## 3. M: contract, build, proof
 
@@ -62,7 +62,7 @@ Prefer checks the project already has (its e2e flows, its tests) over new ones. 
 
 **Have it proven.** Start the `sz:verifier` agent with the contract id and nothing of your own opinion: not "it works", not what you tested. It operates the product and records a verdict for each claim, then shows again what stood before this work. If a claim is refuted or a standing one is found broken, fix the product and send it back for those; twice at most, then report what stands.
 
-**Evidence:** `sz-eyes evidence <id> --took "<time and tokens if known>"` writes `.sz/evidence/<id>/report.html`. Show the owner the path and the verdict in one line each, and what is unchecked. Then `sz-eyes contract close <id>` (it writes what the verifier noticed and what could not be checked to `.sz/backlog.md`, and from here its proven claims stand) and add a line to `.sz/progress.md`. If the change made a line of `.sz/map.md` or `.sz/spec.md` false, correct that line.
+**Evidence:** `sz-eyes evidence <id> --took "<time and tokens if known>"` writes `.sz/evidence/<id>/report.html`. Show the owner the path and the verdict in one line each, and what is unchecked. Then `sz-eyes contract close <id>` (it writes what the verifier noticed and what could not be checked to `.sz/backlog.md`, and from here its proven claims stand), tick each line of `sz-eyes backlog` that this work ended and a proven claim or a commit shows (`sz-eyes backlog done "<some of its words>" --by "<contract>/<claim>"`; a line half done stays open), and add a line to `.sz/progress.md`. If the change made a line of `.sz/map.md` or `.sz/spec.md` false, correct that line.
 
 ## 4. L: ask, plan, then milestones
 
@@ -82,5 +82,6 @@ A product is not finished when its first version is. What the owner says about i
 
 - The project's grain first: its stack, its structure, its design, its tests. Add nothing it does not use unless that is the request.
 - Never the owner's own simulator, browser profile, dev-server port or working tree for experiments: a worktree or a clone, the eyes' own simulator, a headless browser.
+- The machine is shared with the owner's other work. What you launch gets its port from the machine (`PORT=$(sz-eyes port)`), never a number you chose, and you check that it is yours that answers before you look at it. You end only what you started, by the id you kept (`pid=$!` ... `kill $pid`; a container or simulator by its own name): never whatever holds a port, never everything of a name. A port that is taken is somebody else's server; take another. The plugin refuses the commands that do otherwise.
 - Time and tokens are reported at each checkpoint, not enforced: the owner decides when to stop.
 - When you stop, say what is proven, what is refuted, what is unchecked. Never "done" for a claim nobody showed.

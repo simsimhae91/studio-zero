@@ -1,12 +1,13 @@
 #!/usr/bin/env node
 import { existsSync, mkdirSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
-import { BACKLOG_FILE, addToBacklog, leftBy, openBacklog } from './backlog.ts';
+import { BACKLOG_FILE, addToBacklog, doneInBacklog, leftBy, openBacklog } from './backlog.ts';
 import { CONTRACTS_DIR, EVIDENCE_DIR, ClaimStatus, Contract, Lane, ShownBy, openContracts, owed, readContract, renderContract, writeContract } from './contract.ts';
 import { writeEvidencePage } from './evidence.ts';
 import { changedSinceFrozen, fingerprint, fingerprints } from './fingerprint.ts';
 import { Status, addSaid, latestRound, newRound, noteSaid, readRound, renderRound, writeRoundPage } from './feedback.ts';
 import { EyesError, installApp, restSimulator, runFlow, screenText, screenshot, spareSimulator } from './ios.ts';
+import { freePort } from './port.ts';
 import { reviewWeb } from './review.ts';
 import { Shown, brokenDuring, keptFor, ledgerProblem, recordShown, renderStanding, stampClosed, standing, standingSummary } from './standing.ts';
 import { SIZES, lookAtWeb, renderLook, renderWalk, walkWeb, type Size } from './web.ts';
@@ -64,6 +65,11 @@ const USAGE = `sz-eyes: launch what was built, look at it, operate it, and put w
 
   sz-eyes backlog [--dir <project>]                      what is written down as known and not done (${BACKLOG_FILE})
   sz-eyes backlog add "<one line, in the owner's language>" [--from "<where it came from>"] [--dir <project>]
+  sz-eyes backlog done "<some words of the line>" --by "<the contract or commit that ended it>" [--dir <project>]
+
+  sz-eyes port                                           a port nothing listens on, from the machine: start what you
+        launch on it (PORT=$(sz-eyes port)), keep its process id ($!), and end it by that id. Never choose a
+        number, and never end whatever holds a port: other work of the owner's runs on this machine
 `;
 
 /** `--flag value` pairs and bare words, in order. A flag given twice is a list. */
@@ -273,9 +279,21 @@ async function main(argv: string[]): Promise<number> {
     out(renderStanding(project));
     return standing(project).stands.some((s) => s.last?.status === 'broken') ? 1 : 0;
   }
+  if (area === 'port') {
+    out(String(await freePort()));
+    return 0;
+  }
   if (area === 'backlog') {
-    const a = parse(command === 'add' ? rest : argv.slice(1), []);
+    const a = parse(command === 'add' || command === 'done' ? rest : argv.slice(1), []);
     const project = resolve(a.one('--dir') ?? '.');
+    if (command === 'done') {
+      try {
+        out(`ticked: ${doneInBacklog(project, a.words.join(' '), a.one('--by') ?? '')}`);
+      } catch (err) {
+        throw new EyesError(`${(err as Error).message}\nsz-eyes backlog done "<some words of the line>" --by "<the contract or commit that ended it>"`);
+      }
+      return 0;
+    }
     if (command === 'add') {
       const text = a.words.join(' ').trim();
       if (text === '') throw new EyesError('sz-eyes backlog add "<one line>" [--from "<where it came from>"]');

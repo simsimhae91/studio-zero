@@ -50,6 +50,26 @@ export function openBacklog(projectDir: string): string[] {
     .map((line) => line.replace(OPEN, ''));
 }
 
+/**
+ * Ticks the one open line that has these words and writes after it what ended it (a contract, a commit). Work
+ * that resolves something the list already names says so here: a list nobody ticks stops being believed.
+ */
+export function doneInBacklog(projectDir: string, words: string, by: string): string {
+  const file = join(projectDir, BACKLOG_FILE);
+  const want = oneLine(words);
+  const ended = oneLine(by);
+  if (want === '') throw new Error('say which line: some of its words');
+  if (ended === '') throw new Error('say what ended it: the contract or the commit');
+  const lines = existsSync(file) ? readFileSync(file, 'utf8').split('\n') : [];
+  const hits = lines.flatMap((line, at) => (OPEN.test(line) && oneLine(line.replace(OPEN, '')).includes(want) ? [{ at, text: oneLine(line.replace(OPEN, '')) }] : []));
+  if (hits.length === 0) throw new Error(`no open line of ${BACKLOG_FILE} has the words "${want}"`);
+  if (hits.length > 1) throw new Error(`${hits.length} open lines of ${BACKLOG_FILE} have the words "${want}": give more of the one you mean\n${hits.map((hit) => `  - ${hit.text}`).join('\n')}`);
+  const hit = hits[0]!;
+  lines[hit.at] = `- [x] ${hit.text} — 끝남: ${ended}`;
+  writeFileSync(file, lines.join('\n'));
+  return hit.text;
+}
+
 /** What closing a contract leaves for later: what was noticed outside it, and what nobody could show. */
 export function leftBy(contract: Contract): { text: string; from: string }[] {
   return [

@@ -18,7 +18,15 @@ A claim is unproven until something shows it. "The code looks right" shows nothi
 
 Everything is kept under the contract's evidence folder: `.sz/evidence/<contract id>/`. Give `--out` an absolute path under it.
 
-**Web** (a dev server or a deployed URL):
+**Web** (a dev server or a deployed URL). A server you start yourself gets its port from the machine and is ended by its own id, because other work of the owner's is listening on this machine too:
+
+```
+PORT=$(sz-eyes port) <the map's launch command> & pid=$!
+...look, operate...
+kill $pid
+```
+
+If the product cannot be told its port, say so as a finding and use the port the map names only when nothing is listening there (`lsof -nP -iTCP:<port> -sTCP:LISTEN` prints nothing). Never end what holds it. Before the first look, make sure it is this product that answers (its own words on the page), not another server on the same number.
 
 ```
 sz-eyes web look <url> [--size phone|tablet|desktop] [--dark] [--wait "<words>"] --out <folder> --name <state>
