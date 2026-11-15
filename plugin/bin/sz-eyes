@@ -1,0 +1,4 @@
+#!/bin/sh
+# The eyes' command line, from this checkout. A plugin's bin/ is on the shell's PATH while the plugin is enabled.
+here="$(cd "$(dirname "$0")/.." && pwd)"
+exec node "$here/../packages/eyes/src/cli.ts" "$@"
