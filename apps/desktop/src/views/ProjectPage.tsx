@@ -1,5 +1,5 @@
 import * as Tabs from '@radix-ui/react-tabs';
-import { Check, ChevronDown, ClipboardList, FileDiff, FileText, Film, FolderTree, GitFork, GitMerge, Globe, History as HistoryIcon, KeyRound, Lightbulb, Map as MapIcon, Maximize2, MessageCircleQuestion, Monitor, MoreHorizontal, Pencil, Plus, ReceiptText, RotateCw, ScanEye, Smartphone, Sparkles, Square, SquareTerminal, Star, Trash2, X, Power } from 'lucide-react';
+import { Check, ChevronDown, ClipboardList, FileDiff, FileText, Film, FolderTree, GitFork, GitMerge, Globe, History as HistoryIcon, KeyRound, Lightbulb, ListChecks, Map as MapIcon, Maximize2, MessageCircleQuestion, Monitor, MoreHorizontal, Pencil, Plus, Power, ReceiptText, RotateCw, ScanEye, Smartphone, Sparkles, Square, SquareTerminal, Star, Trash2, X } from 'lucide-react';
 import { Suspense, lazy, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { ReviewerPref, type AdvisorId, type Approval, type Project, type ReviewComment, type Session, type Task, type TaskKind, type TaskState, type TaskTrack } from '@studio-zero/protocol';
 import { Markdown } from '@studio-zero/ax/react';
@@ -36,12 +36,16 @@ type TabId = 'preview' | 'roadmap' | 'plan' | 'changes' | 'files' | 'terminal' |
 /** Addresses typed into the reference field: up to three, separated by spaces, commas or new lines. */
 const referencesOf = (text: string): string[] => text.split(/[\s,]+/).filter((part) => part !== '').slice(0, 3);
 type Pane = 'chat' | 'work';
-type Kind = Exclude<TaskKind, 'kirby_materialize' | 'ideate'>;
+type Kind = Exclude<TaskKind, 'kirby_materialize' | 'ideate' | 'check'>;
 
 const KINDS: readonly { id: Kind; label: string }[] = [
   { id: 'build', label: kindLabel.build },
   { id: 'refactor', label: kindLabel.refactor },
   { id: 'inline_edit', label: kindLabel.inline_edit },
+];
+const SEND_TO: readonly { id: 'steer' | 'aside'; label: string }[] = [
+  { id: 'steer', label: '도는 작업에 말하기' },
+  { id: 'aside', label: '따로 고치기' },
 ];
 const TRACKS: readonly { id: TaskTrack; label: string }[] = [
   { id: 'fast', label: '초안 먼저' },
@@ -115,6 +119,7 @@ function Workbench({ project, onOpen, onChanged }: { project: Project; onOpen: (
   const [focus, setFocus] = useState<string | null>(null);
   const [fork, setFork] = useState<string | null>(null);
   const [kind, setKind] = useState<Kind>('build');
+  const [aside, setAside] = useState(false);
   const [trackChoice, setTrackChoice] = useState<TaskTrack | null>(null);
   // The engine and model for the next task: the owner's standing choice, shared with the first page.
   const choice = useEngineChoice();
@@ -142,10 +147,15 @@ function Workbench({ project, onOpen, onChanged }: { project: Project; onOpen: (
   const list = useMemo(() => [...(tasks.data?.tasks ?? [])].sort((a, b) => a.createdAt - b.createdAt), [tasks.data]);
   const bySession = (id: string | null): Task[] => list.filter((t) => (sessionList.some((s) => s.id === t.sessionId) ? t.sessionId : null) === id);
   const inSession = bySession(session);
-  const active = inSession.findLast((t) => live(t.state)) ?? null;
-  const selected = inSession.find((t) => t.id === picked[key]) ?? active ?? inSession.at(-1) ?? null;
+  const latest = inSession.findLast((t) => live(t.state)) ?? null;
+  const selected = inSession.find((t) => t.id === picked[key]) ?? latest ?? inSession.at(-1) ?? null;
+  // A project can have more than one task at work (a build, and a quick fix beside it in a slot): what is said
+  // or stopped from here goes to the one in view, when that one is at work.
+  const active = selected && live(selected.state) ? selected : latest;
   // A task waiting on its plan is not at work: there is nothing to steer, the plan is answered in its own panel.
   const steering = active !== null && active.state !== 'queued' && active.state !== 'awaiting_plan_review';
+  // While a task is at work the field can also start a quick fix beside it, which waits for nothing (not on the studio's own repository, where tasks go one at a time).
+  const talking = steering && !(aside && !core);
   const busy = list.some((t) => t.state === 'running' || t.state === 'awaiting_approval' || t.state === 'awaiting_plan_review');
   // The plan a task is waiting with, or the plan of the task in view if it was one the owner asked to see.
   const planTask = list.findLast((t) => t.state === 'awaiting_plan_review') ?? (selected?.reviewPlan ? selected : null);
@@ -194,6 +204,12 @@ function Workbench({ project, onOpen, onChanged }: { project: Project; onOpen: (
     tasks.reload();
   });
   const cancel = useAction(() => backend.call('tasks.cancel', { taskId: active!.id }));
+  /** A full check: every scenario of main walked as it stands, with no engine. A task like any other, in a slot. */
+  const check = useAction(async () => {
+    const task = await backend.call('tasks.submit', { projectId: project.id, kind: 'check', prompt: '전체 점검', ...(session ? { sessionId: session } : {}) });
+    setPicked((prev) => ({ ...prev, [key]: task.id }));
+    tasks.reload();
+  });
   /** The same request again, as a new task: what a person does after a failure that was not the request's fault, or a cancel they regret. */
   const rerun = useAction(async (old: Task) => {
     if (old.kind === 'kirby_materialize') return;
@@ -274,7 +290,7 @@ function Workbench({ project, onOpen, onChanged }: { project: Project; onOpen: (
   /** Sends what was typed: a question for another model if it starts with /ask-, otherwise to the agent. */
   const send = async (text: string): Promise<boolean> => {
     const command = advisorCommand(text);
-    if (!command) return steering ? steer.run(text) : submit.run(text);
+    if (!command) return talking ? steer.run(text) : steering ? submit.run(text, { kind: 'inline_edit', track: 'fast' }) : submit.run(text);
     if (command.question === '') {
       setAskError(`/ask-${command.advisor} 뒤에 질문을 적어 주세요.`);
       return false;
@@ -506,15 +522,28 @@ function Workbench({ project, onOpen, onChanged }: { project: Project; onOpen: (
               })}
           </div>
           <Composer
-            key={steering ? 'steer' : 'submit'}
+            key={talking ? 'steer' : steering ? 'aside' : 'submit'}
             draft={{ value: drafts[key] ?? '', onChange: (value) => setDrafts((prev) => ({ ...prev, [key]: value })) }}
-            placeholder={steering ? '진행 중인 작업에 한마디' : fork ? '이 갈래에서 이어서 할 일' : '다음에 할 일'}
-            sendLabel={steering ? '작업에 전달' : '작업 시작'}
+            placeholder={talking ? '진행 중인 작업에 한마디' : steering ? '따로 고칠 것 하나' : fork ? '이 갈래에서 이어서 할 일' : '다음에 할 일'}
+            sendLabel={talking ? '작업에 전달' : steering ? '빠른 수정 시작' : '작업 시작'}
             onSend={send}
-            error={steer.error ?? submit.error ?? cancel.error ?? askError}
+            error={steer.error ?? submit.error ?? cancel.error ?? check.error ?? askError}
             above={
               steering ? (
-                <p className="px-3 pt-1 text-sm text-fg-muted">작업은 멈추지 않습니다. 보낸 말은 다음 차례에 함께 읽힙니다.</p>
+                <div className="flex flex-col gap-1 border-b border-border pb-2">
+                  {core ? null : (
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                      <Segmented compact label="보낼 곳" value={aside ? 'aside' : 'steer'} options={SEND_TO} onChange={(to) => setAside(to === 'aside')} />
+                      <button type="button" title="엔진 없이 main의 시나리오 전체를 걷고 화면을 잽니다" onClick={() => void check.run()} className={pickerClass}>
+                        <ListChecks className="size-4" aria-hidden />
+                        전체 점검
+                      </button>
+                    </div>
+                  )}
+                  <p className="px-1 text-sm text-fg-muted">
+                    {talking ? '작업은 멈추지 않습니다. 보낸 말은 다음 차례에 함께 읽힙니다.' : '도는 작업을 기다리지 않습니다. 고친 화면을 지나는 시나리오만 걷고, 통과하면 main에 바로 들어갑니다.'}
+                  </p>
+                </div>
               ) : (
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-border pb-2">
                   <Segmented compact label="작업 종류" value={kind} options={KINDS} onChange={setKind} />
@@ -865,7 +894,9 @@ function Passage({ task, items, pending, onShow, onCheckpoint, onFile, onBuild, 
   useEffect(() => setMerged(mergedInto(task.id)), [task.id]);
   // A milestone of the project's roadmap: the daemon wrote its request from the product map, and its first line names it.
   const milestone = task.milestone !== null && task.milestone !== undefined;
-  const requestMeta = [kindLabel[task.kind], milestone ? '로드맵의 마일스톤' : task.kind !== 'ideate' && task.track === 'fast' ? '초안' : null, milestone || task.origin === 'desktop' ? null : `${task.origin}에서`, stamp(task.createdAt)].filter(Boolean).join(' · ');
+  // A quick fix and a full check are always on the fast track: "draft" says nothing of them. Where they ran and what became of them does.
+  const light = task.kind === 'inline_edit' || task.kind === 'check';
+  const requestMeta = [kindLabel[task.kind], milestone ? '로드맵의 마일스톤' : !light && task.kind !== 'ideate' && task.track === 'fast' ? '초안' : null, task.slot ? `자리 ${task.slot}` : null, task.landedCommit ? `main에 들어감 ${task.landedCommit.slice(0, 7)}` : null, milestone || task.origin === 'desktop' ? null : `${task.origin}에서`, stamp(task.createdAt)].filter(Boolean).join(' · ');
 
   return (
     <article className="flex flex-col gap-3" aria-label={`작업: ${task.prompt.split('\n')[0]}`}>

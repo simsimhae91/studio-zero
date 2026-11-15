@@ -329,8 +329,13 @@ export function narrate(events: readonly EventEnvelope[]): Item[] {
         trailing = { kind: 'said', at: e.at, text: b.text };
         items.push(trailing);
         break;
+      case 'task.landed':
+        closeWork();
+        pushStep({ kind: 'check', state: 'done', title: `${b.into}에 들어감`, detail: `커밋 ${b.commit.slice(0, 7)}. 통과한 빠른 수정은 스튜디오가 바로 합칩니다.`, at: e.at, lines: [], notes: [], audit: null });
+        break;
       case 'gate.result': {
-        const line: StepLine = { text: gateLabel[b.gate], mono: false, tone: b.passed ? 'good' : 'bad', meta: `${b.passed ? '통과' : `실패${b.exitCode === null ? '' : `, 종료 코드 ${b.exitCode}`}`}, ${duration(b.durationMs)}`, output: b.passed ? '' : b.detail };
+        // What a small edit is walked for is the gate's whole point: said on the line, pass or not.
+        const line: StepLine = { text: b.gate === 'scope' && b.name ? `${gateLabel.scope}: ${b.name}` : gateLabel[b.gate], mono: false, tone: b.passed ? 'good' : 'bad', meta: `${b.passed ? '통과' : `실패${b.exitCode === null ? '' : `, 종료 코드 ${b.exitCode}`}`}, ${duration(b.durationMs)}`, output: b.passed ? '' : b.detail };
         if (verify) verify.lines.push(line);
         // Outside a verification round: the anchor table refused before any code (a pass is told by `anchor.committed`),
         // or the production build measured after the work was accepted.

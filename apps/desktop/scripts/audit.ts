@@ -110,6 +110,24 @@ const screens: { name: string; url: string; go: (page: Page, narrow: boolean) =>
     await page.getByText(/^수정본 완료/).waitFor();
   } },
   { name: 'project', url: '/?demo', go: openFromIndex('Ledger') },
+  // While a task is at work, the field can start a quick fix beside it instead of speaking to it.
+  { name: 'quick-fix-aside', url: '/?demo', go: async (page, narrow) => {
+    await openFromIndex('Ledger')(page, narrow);
+    await page.getByRole('radio', { name: '따로 고치기' }).click();
+    await page.getByPlaceholder('따로 고칠 것 하나').waitFor();
+  } },
+  // A quick fix that landed and a full check, as their cards tell them.
+  { name: 'quick-fix-landed', url: '/?demo', go: async (page, narrow) => {
+    await openFromIndex('Ledger')(page, narrow);
+    await page.getByRole('button', { name: /청구서 상세의 "결제 이력 보기" 버튼 글자가/ }).click();
+    await page.getByRole('article', { name: /^작업: 청구서 상세의 "결제 이력 보기"/ }).waitFor();
+  } },
+  { name: 'full-check', url: '/?demo', go: async (page, narrow) => {
+    await openFromIndex('Ledger')(page, narrow);
+    // The row of the past task (its request and its state), not the button in the field that starts a new one.
+    await page.getByRole('button', { name: /^전체 점검 .+/ }).first().click();
+    await page.getByRole('article', { name: '작업: 전체 점검' }).waitFor();
+  } },
   { name: 'project-steps', url: '/?demo', go: async (page, narrow) => {
     await openFromIndex('Ledger')(page, narrow);
     // Open the plan, a failed command and the verification round: the stepper with its detail showing.

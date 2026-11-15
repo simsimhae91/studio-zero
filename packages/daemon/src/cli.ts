@@ -12,6 +12,10 @@ const USAGE = `sz — Studio Zero command line
   sz task <project-slug> <build|refactor|inline_edit|ideate> [--draft] [--plan] [--from <branch>] <prompt...>
                                                                              submit and follow a task (--draft: the fast track; --plan: stop after planning until the plan
                                                                              is approved; --from: start from that branch, e.g. a failed task's)
+  sz edit <project-slug> [--from <branch>] <what to change...>                a small edit: made in a slot beside whatever else the project is doing, walked for the
+                                                                             screens it changes, and put on main by itself when it holds
+  sz check <project-slug>                                                    walk every scenario of the project's main as it stands, with no engine: what is found,
+                                                                             and the record small edits are checked by
   sz cancel <task-id>                                                        stop a task that is queued, running or waiting; its work stays on its branch
   sz plan <task-id>                                                          the plan a task is waiting with, and the other model's notes on it
   sz plan approve <task-id> | sz plan change <task-id> <what to change...>   approve it (the build starts), or send it back to be drafted again
@@ -101,6 +105,10 @@ function printEvent(e: EventEnvelope): void {
         return `usage ${b.model}: ${b.inputTokens} in / ${b.outputTokens} out`;
       case 'notice':
         return `${b.level}: ${b.message}`;
+      case 'gate.result':
+        return `gate ${b.gate} ${b.passed ? 'passed' : 'FAILED'}${b.name ? ` [${b.name}]` : ''}${b.detail ? `: ${b.detail.split('\n')[0]!.slice(0, 300)}` : ''}`;
+      case 'task.landed':
+        return `${b.into}에 들어감 ${b.commit.slice(0, 7)}`;
       case 'roadmap.changed':
         return `roadmap ${b.state}${b.milestone === null ? '' : `: milestone ${b.milestone + 1} "${b.name ?? ''}" ${b.milestoneState ?? ''}`}`;
       default:
@@ -199,6 +207,27 @@ async function main(argv: string[]): Promise<number> {
           for (const p of (await client.call('projects.list', {})).projects) process.stdout.write(`${p.slug.padEnd(24)} ${p.template.padEnd(16)} ${p.name}\n`);
         }
         return 0;
+      }
+      case 'edit':
+      case 'check': {
+        const project = await projectBySlug(client, args[0]);
+        const fromAt = args.indexOf('--from');
+        const from = command === 'edit' && fromAt >= 1 ? args[fromAt + 1] : undefined;
+        const what = args.slice(1).filter((_word, i) => i + 1 !== fromAt && i + 1 !== fromAt + 1).join(' ').trim();
+        if (command === 'edit' && what === '') throw new Error('say what to change: sz edit <project-slug> <what to change...>');
+        const task = await client.call('tasks.submit', { projectId: project.id, kind: command === 'edit' ? 'inline_edit' : 'check', prompt: command === 'edit' ? what : '전체 점검', ...(from ? { baseBranch: from } : {}) });
+        process.stdout.write(`task ${task.id}\n`);
+        const state = await new Promise<string>((resolve) => {
+          client.subscribe({ taskId: task.id }, (e) => {
+            // The engine's own steps are for `sz events`; here it is what was asked of the change and what became of it.
+            if (e.body.type !== 'tool.call' && e.body.type !== 'tool.result' && e.body.type !== 'usage' && e.body.type !== 'policy.decision') printEvent(e);
+            if (e.body.type === 'task.state' && ['succeeded', 'failed', 'cancelled'].includes(e.body.state)) resolve(e.body.state);
+          }, 0);
+        });
+        const done = await client.call('tasks.get', { taskId: task.id });
+        if (command === 'check' && done.summary) process.stdout.write(`\n${done.summary}\n`);
+        if (command === 'edit') process.stdout.write(state !== 'succeeded' ? `\n들어가지 못했습니다. 한 일은 브랜치 ${done.branch ?? `sz/${done.id}`}에 있습니다: sz edit ${project.slug} --from ${done.branch ?? `sz/${done.id}`} <이어서 할 것>\n` : done.landedCommit ? `\nmain에 들어갔습니다 (${done.landedCommit.slice(0, 7)}, 자리 ${done.slot ?? '?'}).\n` : '\n끝났고, main에 넣을 변경은 없었습니다.\n');
+        return state === 'succeeded' ? 0 : 1;
       }
       case 'task': {
         const project = await projectBySlug(client, args[0]);

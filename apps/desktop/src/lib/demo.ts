@@ -50,6 +50,16 @@ const tasks: Task[] = [
     spentTokens: 1_240_000, spentUsdMicros: 0, baseCheckpointId: null, summary: null, createdAt: min(-52), startedAt: min(-52), finishedAt: null,
   },
   {
+    // A full check: the studio's own walk of main, no engine. What it found is its summary.
+    ...baseTask, id: 'tsk_ledger_check', kind: 'check', engine: null, model: null, effort: null, track: 'fast', prompt: '전체 점검', state: 'succeeded', phase: null, branch: null, slot: 1, landedCommit: null,
+    spentTokens: 0, spentUsdMicros: 0, baseCheckpointId: null, summary: '시나리오 6개 가운데 6개를 끝까지 걸었습니다(104초). 화면 11장을 쟀습니다.\n\n화면에서 잰 사소하지 않은 결함 1건:\n- I-02 화면 (시나리오 pay) · 큰 결함 · type/broken-label: "결제 이력 보기" is broken onto 2 lines inside its control.', createdAt: min(-52), startedAt: min(-52), finishedAt: min(-50),
+  },
+  {
+    // A quick fix made in a slot while the build below was at work: walked for the one screen it changed, and put on main by the studio.
+    ...baseTask, id: 'tsk_ledger_fix', kind: 'inline_edit', engine: 'claude-code', model: 'opus', effort: 'low', track: 'fast', prompt: '청구서 상세의 "결제 이력 보기" 버튼 글자가 두 줄로 꺾입니다. 한 줄로 보이게 고쳐 주세요.', state: 'succeeded', phase: null, branch: 'sz/tsk_ledger_fix', slot: 1, landedCommit: '4f9c2a17b3d05e8861a7c0d2e9f4b6a1c3d5e7f9',
+    spentTokens: 61_200, spentUsdMicros: 0, baseCheckpointId: null, summary: '두 버튼을 위아래로 쌓아 글자가 한 줄에 들어가게 했습니다.', createdAt: min(-44), startedAt: min(-44), finishedAt: min(-42),
+  },
+  {
     ...baseTask, id: 'tsk_detail', kind: 'build', prompt: '청구서 상세 화면에 결제 이력을 추가해줘', state: 'awaiting_approval', phase: 'execute', branch: 'sz/tsk_detail',
     spentTokens: 2_004_300, spentUsdMicros: 9_120_000, baseCheckpointId: 'ckp_b', summary: null, createdAt: min(-18), startedAt: min(-18), finishedAt: null,
   },
@@ -218,7 +228,32 @@ const draftingBodies: EventBody[] = [
 function walked(id: string, presses: number, smallestTargetPx: number | null): FlowTaskWalk {
   return { id, reached: true, stopped: null, stoppedAtStep: null, presses, typed: 0, scrolls: 0, smallestTargetPx, answered: presses, responseMs: presses > 0 ? 320 : null };
 }
+/** The quick fix: what it was walked for, what the walk and the measuring said, and the commit it became on main. */
+const fixBodies: EventEnvelope['body'][] = [
+  { type: 'task.state', state: 'running', error: null },
+  { type: 'route.decided', taskKind: 'inline_edit', engine: 'claude-code', model: 'opus', effort: 'low', considered: [{ engine: 'claude-code', available: true, reason: '' }] },
+  { type: 'task.phase', phase: 'execute', round: 1 },
+  { type: 'tool.call', tool: 'edit_file', input: 'src/screens/InvoiceDetail.tsx', callId: 'call_fix_1' },
+  { type: 'tool.result', callId: 'call_fix_1', ok: true, exitCode: null, durationMs: 40, preview: '' },
+  { type: 'task.phase', phase: 'verify', round: 1 },
+  { type: 'gate.result', gate: 'compiler', name: 'npm run --silent typecheck', passed: true, exitCode: 0, durationMs: 2600, detail: '' },
+  { type: 'gate.result', gate: 'scope', name: '화면 1개 · 시나리오 1/6개', passed: true, exitCode: null, durationMs: 180, detail: '1 of 6 scenarios walked (pay) and one screen measured (I-02): src/screens/InvoiceDetail.tsx reaches screen I-02.' },
+  { type: 'gate.result', gate: 'scenarios', name: 'pay', passed: true, exitCode: null, durationMs: 19_400, detail: '1 scenario walked to the end as new people' },
+  { type: 'gate.result', gate: 'looks', name: '1 screens', passed: true, exitCode: null, durationMs: 0, detail: '1 screen the edit changed, measured as the walk stood on it: nothing above minor that is this edit\'s' },
+  { type: 'task.landed', commit: '4f9c2a17b3d05e8861a7c0d2e9f4b6a1c3d5e7f9', into: 'main' },
+  { type: 'task.state', state: 'succeeded', error: null },
+];
+const checkBodies: EventEnvelope['body'][] = [
+  { type: 'task.state', state: 'running', error: null },
+  { type: 'task.phase', phase: 'verify', round: 1 },
+  { type: 'gate.result', gate: 'scenarios', name: 'first second pay refund export settings', passed: true, exitCode: null, durationMs: 104_000, detail: '6 scenarios walked to the end as new people; their data outlived a reload and a restart and was closed to a stranger' },
+  { type: 'gate.result', gate: 'looks', name: '11 screens', passed: false, exitCode: null, durationMs: 0, detail: 'I-02 화면 (시나리오 pay) · 큰 결함 · type/broken-label: "결제 이력 보기" is broken onto 2 lines inside its control.' },
+  { type: 'task.state', state: 'succeeded', error: null },
+];
+
 const events: EventEnvelope[] = [
+  ...checkBodies.map((body, i): EventEnvelope => ({ seq: 1200 + i, at: min(-52) + i * 20_000, projectId: 'prj_ledger', taskId: 'tsk_ledger_check', body })),
+  ...fixBodies.map((body, i): EventEnvelope => ({ seq: 1300 + i, at: min(-44) + i * 9_000, projectId: 'prj_ledger', taskId: 'tsk_ledger_fix', body })),
   ...bodies.map((body, i): EventEnvelope => ({ seq: 100 + i, at: min(-18) + i * 35_000, projectId: 'prj_ledger', taskId: 'tsk_detail', body })),
   ...designBodies.map((body, i): EventEnvelope => ({ seq: 40 + i, at: min(-66) + i * 50_000, projectId: 'prj_tide', taskId: 'tsk_tide_design', body })),
   ...draftingBodies.map((body, i): EventEnvelope => ({ seq: 70 + i, at: min(-12) + i * 38_000, projectId: 'prj_pace', taskId: 'tsk_pace_design', body })),
