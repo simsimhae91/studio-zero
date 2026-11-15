@@ -14,7 +14,7 @@ if [ -f .sz/progress.md ]; then echo; echo "Last lines of .sz/progress.md:"; tai
 "${CLAUDE_PLUGIN_ROOT}/bin/sz-eyes" contract status 2>/dev/null | head -n 30 || true
 "${CLAUDE_PLUGIN_ROOT}/bin/sz-eyes" standing --summary 2>/dev/null || true
 if [ -f .sz/backlog.md ]; then
-  left=$(grep -c '^- \[ \] ' .sz/backlog.md || true)
+  left=$(grep -c '^[[:space:]]*- \[ \] ' .sz/backlog.md || true)
   [ "${left:-0}" -gt 0 ] && echo "${left} line(s) are written down as known and not done in .sz/backlog.md (sz-eyes backlog lists them)."
 fi
 exit 0

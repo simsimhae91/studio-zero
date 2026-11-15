@@ -59,6 +59,8 @@ export const Contract = z.object({
   /** Paths the builder may not change while this is open (the flows and tests the claims point at). */
   frozen: z.array(z.string().max(300)).max(60).default([]),
   frozenAt: z.string().nullable().default(null),
+  /** A fingerprint of each frozen path as it was at the freeze, or after the arbiter's last correction of it. */
+  frozenPrints: z.record(z.string(), z.string()).default({}),
   createdAt: z.string(),
   /**
    * What whoever verified noticed that no claim covers: an error the page logged, a control too small to press,
@@ -75,7 +77,7 @@ export const Contract = z.object({
    * names the contract and the claim, and says why, for the owner to read. Everything else that stood keeps
    * standing, and this work must keep it true.
    */
-  supersedes: z.array(z.object({ contract: z.string().max(61), claim: z.string().max(31), why: z.string().min(8).max(600) })).max(30).default([]),
+  supersedes: z.array(z.object({ contract: z.string().max(61), claim: z.string().max(31), why: z.string().min(8).max(600), at: z.string().nullable().default(null) })).max(30).default([]),
   /** Set when the work is closed: by whom, and with what left. */
   closedAt: z.string().nullable().default(null),
 });
@@ -122,6 +124,9 @@ export function owed(contract: Contract): string[] {
   return lines;
 }
 
+/** A promise retired after the contract was agreed: not part of what was agreed, so the owner is shown it as such. */
+export const addedLate = (contract: Contract, entry: { at: string | null }): boolean => contract.frozenAt !== null && entry.at !== null && entry.at > contract.frozenAt;
+
 const MARK: Record<ClaimStatus, string> = { proven: '증명됨', refuted: '반증됨', unproven: '아직', unchecked: '확인 못 함' };
 
 /** A contract as the owner reads it, in their language. */
@@ -132,7 +137,7 @@ export function renderContract(contract: Contract): string {
     [`요청: ${contract.request}`, ...(contract.targets.length > 0 ? [`대상: ${contract.targets.join(', ')}`] : [])].join('\n'),
     list('끝났을 때 참인 것', contract.claims.map((claim) => `- [${MARK[claim.status]}] **${claim.id}** ${claim.says}\n  - 보이는 방법: ${claim.shownBy.kind} \`${claim.shownBy.ref}\`${claim.note ? `\n  - ${claim.note}` : ''}`)),
     ...(contract.notDoing.length > 0 ? [list('하지 않는 것', contract.notDoing.map((line) => `- ${line}`))] : []),
-    ...(contract.supersedes.length > 0 ? [list('이 작업으로 물러나는 약속', contract.supersedes.map((s) => `- \`${s.contract}/${s.claim}\`: ${s.why}`))] : []),
+    ...(contract.supersedes.length > 0 ? [list('이 작업으로 물러나는 약속', contract.supersedes.map((s) => `- \`${s.contract}/${s.claim}\`: ${s.why}${addedLate(contract, s) ? ' (얼린 뒤에 적힘)' : ''}`))] : []),
     ...(contract.risks.length > 0 ? [list('위험', contract.risks.map((line) => `- ${line}`))] : []),
     ...(contract.amendments.length > 0 ? [list('얼린 뒤 고친 검사', contract.amendments.map((a) => `- \`${a.file}\`: ${a.why}`))] : []),
     contract.frozenAt ? `얼린 때: ${contract.frozenAt}${contract.frozen.length > 0 ? ` (만드는 쪽이 못 고치는 파일: ${contract.frozen.join(', ')})` : ''}` : '아직 얼리지 않았습니다.',

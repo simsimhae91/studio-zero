@@ -17,6 +17,7 @@ const HEAD = `# 남은 일
 `;
 
 const oneLine = (text: string): string => text.replace(/\s+/g, ' ').trim();
+const OPEN = /^\s*- \[ \] /;
 
 /** Adds lines that are not there yet (by their words). Says how many were added. */
 export function addToBacklog(projectDir: string, items: { text: string; from: string }[]): number {
@@ -25,7 +26,10 @@ export function addToBacklog(projectDir: string, items: { text: string; from: st
   let added = 0;
   for (const item of items) {
     const text = oneLine(item.text);
-    if (text === '' || body.includes(text)) continue;
+    // The same words on a line that is still open: already there. A line that was ticked does not stop the
+    // same thing being written again when it is seen again.
+    const open = body.split('\n').filter((line) => OPEN.test(line)).map((line) => line.replace(OPEN, ''));
+    if (text === '' || open.some((line) => line === text || line.startsWith(`${text} (`))) continue;
     body = `${body.replace(/\n*$/, '\n')}- [ ] ${text}${item.from ? ` (${oneLine(item.from)})` : ''}\n`;
     added++;
   }
@@ -42,8 +46,8 @@ export function openBacklog(projectDir: string): string[] {
   if (!existsSync(file)) return [];
   return readFileSync(file, 'utf8')
     .split('\n')
-    .filter((line) => /^\s*- \[ \] /.test(line))
-    .map((line) => line.replace(/^\s*- \[ \] /, ''));
+    .filter((line) => OPEN.test(line))
+    .map((line) => line.replace(OPEN, ''));
 }
 
 /** What closing a contract leaves for later: what was noticed outside it, and what nobody could show. */

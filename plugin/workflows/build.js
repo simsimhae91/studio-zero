@@ -87,15 +87,22 @@ const VERDICT = {
     refuted: { type: 'array', items: { type: 'object', properties: { id: { type: 'string' }, fact: { type: 'string', description: 'what happened instead, with the figure' } }, required: ['id', 'fact'] } },
     unchecked: { type: 'array', items: { type: 'object', properties: { id: { type: 'string' }, why: { type: 'string' } }, required: ['id', 'why'] } },
     broken: { type: 'array', description: 'claims of earlier work that stood before this one and do not hold now', items: { type: 'object', properties: { key: { type: 'string', description: '<contract>/<claim>' }, fact: { type: 'string', description: 'what happened instead, with the figure' } }, required: ['key', 'fact'] } },
-    stood: { type: 'number', description: 'how many claims of earlier work were shown again and hold' },
+    held: { type: 'array', items: { type: 'string' }, description: 'claims of earlier work (<contract>/<claim>) that were shown again in this look and hold' },
+    stood: { type: 'number', description: 'how many claims of earlier work hold after this look, counting those shown before' },
     noticed: { type: 'array', items: { type: 'string' }, description: 'what no claim covers and the owner would want to know' },
   },
   required: ['proven', 'refuted', 'unchecked'],
 }
 const CLOSED = {
   type: 'object',
-  properties: { report: { type: 'string', description: 'path of the evidence page' }, commit: { type: 'string' }, line: { type: 'string', description: 'the line added to .sz/progress.md' } },
-  required: ['report', 'line'],
+  properties: {
+    report: { type: 'string', description: 'path of the evidence page' },
+    closed: { type: 'boolean', description: 'true only if `sz-eyes contract close` was run and said "closed"; false if it refused or was not run' },
+    why: { type: 'string', description: 'when not closed: what the command said' },
+    commit: { type: 'string' },
+    line: { type: 'string', description: 'the line added to .sz/progress.md' },
+  },
+  required: ['report', 'closed', 'line'],
 }
 
 // ------------------------------------------------------------------ Plan
@@ -182,15 +189,22 @@ Do not judge your own claims and do not record verdicts: someone who did not bui
   // run stopped here for good: a check its builder had written with a quoting error could be fixed by nobody.)
   for (const dispute of built.disputes || []) {
     await agent(
-      `Settle a dispute about a frozen check of contract \`${built.contractId}\` in the project in the current folder. The file: \`${dispute.file}\`. What the builder says is wrong with it: ${dispute.problem}. The product is launched like this: ${built.launch}. Decide whether the check, the product or the claim is wrong, correct the check only if it is wrong about how it checks, record it with \`sz-eyes contract amend\`, and return what you decided.`,
-      { label: `arbiter:${m.id}`, phase: 'Build', agentType: 'sz:arbiter', schema: { type: 'object', properties: { which: { type: 'string', enum: ['check', 'product', 'claim'] }, changed: { type: 'string' }, now: { type: 'string' } }, required: ['which', 'now'] } },
+      `Settle a dispute about a frozen check, met while building contract \`${built.contractId}\` in the project in the current folder. The file: \`${dispute.file}\`. It was frozen by that contract or by an earlier one that is closed: the contracts under \`.sz/contracts/\` say which, and a correction is recorded on the contract that froze it. What the builder says is wrong with it: ${dispute.problem}. The product is launched like this: ${built.launch}. Decide which it is (the check, the product, the claim, or a claim that what the owner asked later has replaced), act as your instructions say for that case, and return what you decided.`,
+      { label: `arbiter:${m.id}`, phase: 'Build', agentType: 'sz:arbiter', schema: { type: 'object', properties: { which: { type: 'string', enum: ['check', 'product', 'claim', 'replaced'] }, changed: { type: 'string' }, now: { type: 'string' } }, required: ['which', 'now'] } },
     )
   }
 
-  const verify = (only) =>
+  const claimIds = new Set(m.claims.map((c) => c.id))
+  const record = `\`sz-eyes standing record <contract>/<claim> --status holds|broken|unchecked --during ${built.contractId} --note "<what was run and what it showed>"\``
+  // again: null for the first look, or what was shown false and has been worked on since.
+  const verify = (again) =>
     agent(
-      `Verify contract \`${built.contractId}\` of the project in the current folder. The product is launched like this: ${built.launch}. ${only ? `Only these need a verdict now (the rest stand): ${only.join(', ')}. They were shown false before and the product has been changed since: check them from the start, on the product as it is now. Then run what stood before once more, since a fix can break something else.` : 'Give every claim a verdict, then show again what stood before this work (`sz-eyes standing`) and record each with `sz-eyes standing record ... --during ' + built.contractId + '`.'} I am telling you nothing about whether any claim is true. Record each verdict with \`sz-eyes contract claim\`, record what you notice that no claim covers with \`sz-eyes contract notice\`, stop any server you start, and return the verdicts, with under "broken" every claim of earlier work that does not hold now.`,
-      { label: `verify:${m.id}${only ? ':again' : ''}`, phase: 'Verify', agentType: 'sz:verifier', schema: VERDICT },
+      `Verify contract \`${built.contractId}\` of the project in the current folder. The product is launched like this: ${built.launch}. ${
+        again
+          ? `This is a second look, after a fix. ${again.claims.length > 0 ? `These claims of the contract were shown false before: ${again.claims.join(', ')}. Check each from the start, on the product as it is now, and record it with \`sz-eyes contract claim\`. ` : ''}${again.standing.length > 0 ? `These promises of earlier work were found broken: ${again.standing.join(', ')}. Show each again and record it with ${record}. ` : ''}A fix can break a neighbour: run once more every flow, test and command of this contract's other claims and of what stood before (\`sz-eyes standing\`), and report whatever fails now (a claim of this contract under "refuted", recorded with \`sz-eyes contract claim\`; a promise of earlier work under "broken", recorded as above). Claims you did not look at again keep their verdict: leave them out.`
+          : `Give every claim a verdict and record each with \`sz-eyes contract claim\`. Then show again what stood before this work (\`sz-eyes standing\`) and record each with ${record}.`
+      } I am telling you nothing about whether any claim is true. Record what you notice that no claim covers with \`sz-eyes contract notice\`, stop any server you start, and return the verdicts: under "broken" every promise of earlier work that does not hold now, under "held" every one you showed again that holds.`,
+      { label: `verify:${m.id}${again ? ':again' : ''}`, phase: 'Verify', agentType: 'sz:verifier', schema: VERDICT },
     )
   let verdict = await verify(null)
   for (let round = 1; round <= 2 && verdict && verdict.refuted.length + (verdict.broken || []).length > 0; round++) {
@@ -207,16 +221,22 @@ ${broke ? `And these were true before this work and are not now (each is a promi
 Find the cause of each in the product and fix it there. Do not edit the contract, the flows or the tests it names, or those of earlier work, and do not record verdicts. Check that what was already true still is (run the project's checks). Commit the fix. If a claim cannot be made true without changing what was asked, change nothing for it and say why.`,
       { label: `fix:${m.id}:${round}`, phase: 'Build', schema: { type: 'object', properties: { fixed: { type: 'array', items: { type: 'string' } }, notFixed: { type: 'array', items: { type: 'string' } } }, required: ['fixed'] } },
     )
-    const again = await verify([...verdict.refuted.map((r) => r.id), ...(verdict.broken || []).map((b) => b.key)])
+    const again = await verify({ claims: verdict.refuted.map((r) => r.id), standing: (verdict.broken || []).map((b) => b.key) })
     if (!again) break
-    // Claims proven the first time stand; the ones looked at again take their new verdict.
-    const looked = new Set([...again.proven, ...again.refuted.map((r) => r.id), ...again.unchecked.map((u) => u.id)])
+    // A claim keeps its earlier verdict unless this look gave it a new one: what was shown false and was not
+    // looked at again is still false, and a promise found broken is mended only when it was shown to hold.
+    const proven = new Set(again.proven.filter((id) => claimIds.has(id)))
+    const refuted = new Set(again.refuted.map((r) => r.id))
+    const unchecked = new Set(again.unchecked.map((u) => u.id))
+    const looked = (id) => proven.has(id) || refuted.has(id) || unchecked.has(id)
+    const held = new Set(again.held || [])
+    const brokenNow = new Set((again.broken || []).map((b) => b.key))
     verdict = {
-      proven: [...verdict.proven.filter((id) => !looked.has(id)), ...again.proven],
-      refuted: again.refuted,
-      broken: again.broken || [],
+      proven: [...verdict.proven.filter((id) => !looked(id)), ...proven],
+      refuted: [...verdict.refuted.filter((r) => !looked(r.id)), ...again.refuted],
+      unchecked: [...verdict.unchecked.filter((u) => !looked(u.id)), ...again.unchecked],
+      broken: [...(verdict.broken || []).filter((b) => !held.has(b.key) && !brokenNow.has(b.key)), ...(again.broken || [])],
       stood: again.stood === undefined ? verdict.stood : again.stood,
-      unchecked: [...verdict.unchecked.filter((u) => !looked.has(u.id)), ...again.unchecked],
       noticed: [...(verdict.noticed || []), ...(again.noticed || [])],
     }
   }
@@ -241,7 +261,13 @@ Change no product code.`,
   done.push({ id: m.id, title: m.title, contractId: built.contractId, proven: verdict.proven, refuted: verdict.refuted, unchecked: verdict.unchecked, broken, stood: verdict.stood === undefined ? null : verdict.stood, replaced: m.supersedes || [], noticed: verdict.noticed || [], report: closed ? closed.report : null })
   log(`${m.title}: ${verdict.proven.length} proven, ${verdict.refuted.length} refuted, ${verdict.unchecked.length} unchecked${verdict.stood === undefined ? '' : `; of what stood before, ${verdict.stood} hold and ${broken.length} broke`}`)
 
-  // Nothing is built on a milestone that is known to be broken: the owner is told where it stands instead.
+  // Nothing is built on a milestone that is known to be broken: the owner is told where it stands instead. The
+  // contract's own word decides, not what the agents reported: a contract that would not close is not done.
+  if (verdict.refuted.length + broken.length === 0 && !(closed && closed.closed === true)) {
+    stopped = `milestone "${m.title}" was verified and its contract did not close: ${closed ? closed.why || 'sz-eyes contract close refused' : 'the closer did not answer'}`
+    log(stopped)
+    break
+  }
   if (verdict.refuted.length + broken.length > 0) {
     stopped = `milestone "${m.title}" still has ${verdict.refuted.length} claim(s) shown false and ${broken.length} promise(s) of earlier work broken after two fixes: ${[...verdict.refuted.map((r) => `${r.id} (${r.fact})`), ...broken.map((b) => `${b.key} (${b.fact})`)].join('; ')}`
     log(stopped)

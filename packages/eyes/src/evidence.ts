@@ -87,7 +87,7 @@ export function evidencePage(contract: Contract, folder: string, extra: { summar
 </section>`
       : ''
   }
-  ${kept && kept.retired.length > 0 ? `<section><h2>이 작업으로 물러난 약속</h2><ul>${kept.retired.map((item) => `<li>${esc(item.says)} <code>${esc(item.key)}</code><br>${esc(item.why)}</li>`).join('')}</ul></section>` : ''}
+  ${kept && kept.retired.length > 0 ? `<section><h2>이 작업으로 물러난 약속</h2><ul>${kept.retired.map((item) => `<li>${esc(item.says)} <code>${esc(item.key)}</code>${item.late ? ' <b>(계약을 얼린 뒤에 적힘)</b>' : ''}<br>${esc(item.why)}</li>`).join('')}</ul></section>` : ''}
   ${contract.noticed.length > 0 ? `<section><h2>계약에 없지만 눈에 띈 것</h2>${contract.noticed.map((item) => `<div class="claim"><p class="note">${esc(item.text)}</p>${item.evidence.length > 0 ? `<div class="shots">${item.evidence.map(picture).join('')}</div>` : ''}</div>`).join('')}</section>` : ''}
   ${contract.amendments.length > 0 ? `<section><h2>얼린 뒤 고친 검사</h2><ul>${contract.amendments.map((a) => `<li><code>${esc(a.file)}</code> ${esc(a.why)}</li>`).join('')}</ul></section>` : ''}
   ${left.length > 0 ? `<section><h2>남은 것</h2><ul>${left.map((claim) => `<li>${LABEL[claim.status]}: ${esc(claim.says)}${claim.note ? ` (${esc(claim.note)})` : ''}</li>`).join('')}</ul></section>` : ''}

@@ -4,10 +4,11 @@ import { basename, dirname, join, resolve } from 'node:path';
 import { BACKLOG_FILE, addToBacklog, leftBy, openBacklog } from './backlog.ts';
 import { CONTRACTS_DIR, EVIDENCE_DIR, ClaimStatus, Contract, Lane, ShownBy, openContracts, owed, readContract, renderContract, writeContract } from './contract.ts';
 import { writeEvidencePage } from './evidence.ts';
+import { changedSinceFrozen, fingerprint, fingerprints } from './fingerprint.ts';
 import { Status, addSaid, latestRound, newRound, noteSaid, readRound, renderRound, writeRoundPage } from './feedback.ts';
 import { EyesError, installApp, restSimulator, runFlow, screenText, screenshot, spareSimulator } from './ios.ts';
 import { reviewWeb } from './review.ts';
-import { Shown, brokenDuring, keptFor, recordShown, renderStanding, stampClosed, standing, standingSummary } from './standing.ts';
+import { Shown, brokenDuring, keptFor, ledgerProblem, recordShown, renderStanding, stampClosed, standing, standingSummary } from './standing.ts';
 import { SIZES, lookAtWeb, renderLook, renderWalk, walkWeb, type Size } from './web.ts';
 
 const USAGE = `sz-eyes: launch what was built, look at it, operate it, and put what was seen on one page
@@ -86,12 +87,26 @@ const contractFile = (project: string, id: string): string => join(project, CONT
 const evidenceFolder = (project: string, id: string): string => join(project, EVIDENCE_DIR, id);
 
 /** `<contract>/<claim>|<why>`: a standing claim that a piece of work replaces, and the reason the owner reads. */
-function supersedeOf(project: string, key: string, why: string): { contract: string; claim: string; why: string } {
+function supersedeOf(project: string, key: string, why: string): { contract: string; claim: string; why: string; at: string } {
   const stands = standing(project).stands;
   const found = stands.find((s) => s.key === key.trim());
   if (!found) throw new EyesError(`"${key.trim()}" is not a standing claim, so there is nothing to replace. Standing: ${stands.map((s) => s.key).join(', ') || '(none)'}`);
   if (why.trim().length < 8) throw new EyesError(`say why ${found.key} should no longer be true: what the owner asked that changes it`);
-  return { contract: found.contract, claim: found.claim.id, why: why.trim() };
+  return { contract: found.contract, claim: found.claim.id, why: why.trim(), at: new Date().toISOString() };
+}
+
+/** What an open contract owes beyond its own claims: what stood before it and it broke, and a frozen check changed behind the guard's back. */
+function alsoOwed(project: string, contract: Contract): string[] {
+  return [
+    ...brokenDuring(project, contract.id).map((s) => `${s.key}: stood before this work and is broken now: ${s.claim.says}${s.last?.note ? ` (${s.last.note})` : ''}`),
+    ...(contract.closedAt === null ? changedSinceFrozen(project, contract).map((path) => `${path}: changed since the contract was frozen, and no correction by the arbiter is recorded (\`git diff\` shows what; restore it, or have the sz:arbiter agent look at it)`) : []),
+  ];
+}
+
+/** Nothing is recorded or closed over a record of promises that cannot be read. */
+function needLedger(project: string): void {
+  const problem = ledgerProblem(project);
+  if (problem) throw new EyesError(problem);
 }
 
 async function main(argv: string[]): Promise<number> {
@@ -129,6 +144,7 @@ async function main(argv: string[]): Promise<number> {
     if (!(size in SIZES)) throw new EyesError(`--size is one of ${Object.keys(SIZES).join(', ')}`);
     const project = resolve(a.one('--dir') ?? '.');
     const folder = a.one('--round') ? resolve(a.one('--round')!) : newRound(project, new Date().toISOString());
+    if (!existsSync(join(folder, 'items.json'))) throw new EyesError(`${folder} is not a round of feedback (it has no items.json). Leave --round out to start one.`);
     out(`a window is open on ${url} for the owner: they press 말하기, point at what they mean and say it; this ends when they press 끝내기 or close the window. Round: ${folder}`);
     const round = await reviewWeb(url, folder, { size, dark: a.has('--dark') }).catch((err: unknown) => {
       throw new EyesError(`the window could not be opened on ${url}: ${err instanceof Error ? err.message.split('\n')[0] : String(err)}`);
@@ -144,6 +160,7 @@ async function main(argv: string[]): Promise<number> {
       const said = a.words.join(' ').trim();
       if (said === '') throw new EyesError('sz-eyes feedback new "<the owner\'s words>" [--round <folder>]');
       const folder = a.one('--round') ? resolve(a.one('--round')!) : newRound(project, now);
+      if (!existsSync(join(folder, 'items.json'))) throw new EyesError(`${folder} is not a round of feedback (it has no items.json). Leave --round out to start one.`);
       const item = addSaid(folder, { said, at: now });
       out(`${folder}\nitem ${item.n}. Pictures of it go in ${join(folder, String(item.n))}/ (before-<size>.png, after-<size>.png)`);
       return 0;
@@ -229,6 +246,7 @@ async function main(argv: string[]): Promise<number> {
       if (!key) throw new EyesError('sz-eyes standing record <contract>/<claim> --status holds|broken|unchecked --note "<what was run and what it showed>" [--during <contract>]');
       if (note.length < 8) throw new EyesError('say what was run or looked at and what it showed: --note "<...>"');
       if (during !== null && !existsSync(contractFile(project, during))) throw new EyesError(`--during ${during}: no such contract`);
+      needLedger(project);
       const status = Shown.shape.status.parse(a.one('--status'));
       try {
         recordShown(project, key, { status, note, during, at: new Date().toISOString() });
@@ -238,10 +256,15 @@ async function main(argv: string[]): Promise<number> {
       out(`${key}: ${status}`);
       return 0;
     }
+    const problem = ledgerProblem(project);
     if (a.has('--summary')) {
-      const line = standingSummary(project);
+      const line = problem ?? standingSummary(project);
       if (line) out(line);
       return 0;
+    }
+    if (problem) {
+      out(problem);
+      return 1;
     }
     if (a.has('--json')) {
       out(JSON.stringify(standing(project), null, 2));
@@ -267,12 +290,12 @@ async function main(argv: string[]): Promise<number> {
     const a = parse(area === 'evidence' ? [command ?? '', ...rest] : rest, []);
     const project = resolve(a.one('--dir') ?? '.');
     if (area === 'contract' && command === 'status') {
-      // What a piece of work owes is its own claims, and whatever stood before it that it broke.
-      const broke = (id: string): string[] => brokenDuring(project, id).map((s) => `${s.key}: stood before this work and is broken now: ${s.claim.says}${s.last?.note ? ` (${s.last.note})` : ''}`);
-      const open = openContracts(project).map(({ contract }) => ({ contract, owes: [...owed(contract), ...broke(contract.id)] })).filter((c) => c.owes.length > 0);
+      const open = openContracts(project).map(({ contract }) => ({ contract, owes: [...owed(contract), ...alsoOwed(project, contract)] })).filter((c) => c.owes.length > 0);
+      const problem = ledgerProblem(project);
+      if (problem) out(problem);
       if (open.length === 0) {
-        out('nothing is owed: every open contract is frozen and has no claim left unshown or shown false');
-        return 0;
+        if (!problem) out('nothing is owed: every open contract is frozen and has no claim left unshown or shown false');
+        return problem ? 1 : 0;
       }
       for (const { contract, owes } of open) out(`contract ${contract.id} (lane ${contract.lane}) still owes:\n${owes.map((line) => `  - ${line}`).join('\n')}`);
       return 1;
@@ -304,16 +327,23 @@ async function main(argv: string[]): Promise<number> {
       return 0;
     }
     if (command === 'show') {
-      out(renderContract(contract));
+      const changed = contract.closedAt === null ? changedSinceFrozen(project, contract) : [];
+      out(`${renderContract(contract)}${changed.length > 0 ? `\n얼린 뒤 바뀐 파일 (중재자의 수정 기록 없음): ${changed.join(', ')}\n` : ''}`);
       return 0;
     }
     if (command === 'freeze') {
       if (contract.frozenAt !== null) throw new EyesError(`${id} was frozen at ${contract.frozenAt}`);
-      writeContract(file, { ...contract, frozen: [...new Set([...contract.frozen, ...a.all('--frozen')])], frozenAt: new Date().toISOString() });
+      const frozen = [...new Set([...contract.frozen, ...a.all('--frozen')])];
+      const missing = frozen.filter((path) => !existsSync(join(project, path)));
+      if (missing.length > 0) throw new EyesError(`not there to freeze: ${missing.join(', ')}. Paths are relative to the project; write the flow or test first.`);
+      writeContract(file, { ...contract, frozen, frozenPrints: fingerprints(project, frozen), frozenAt: new Date().toISOString() });
       out(`frozen: ${id}. Whoever builds it does not edit ${file}${contract.frozen.length + a.all('--frozen').length > 0 ? ' or the files it names' : ''}.`);
       return 0;
     }
     if (command === 'claim') {
+      // A closed contract is the record of what was shown then. What is found of it later is a look at a
+      // standing claim, written where it cannot quietly take a promise off the list.
+      if (contract.closedAt !== null) throw new EyesError(`contract ${id} is closed: its verdicts are the record of what was shown then. What is found now is recorded with \`sz-eyes standing record ${id}/<claim> --status holds|broken|unchecked\`.`);
       const claimId = a.words[1];
       const claim = contract.claims.find((c) => c.id === claimId);
       if (!claim) throw new EyesError(`contract ${id} has no claim "${claimId ?? ''}". Its claims: ${contract.claims.map((c) => c.id).join(', ')}`);
@@ -332,7 +362,8 @@ async function main(argv: string[]): Promise<number> {
       const why = a.one('--why') ?? '';
       if (!target || why.trim().length < 12) throw new EyesError('sz-eyes contract amend <id> --file <a frozen file> --why "<what was wrong about how it checked, and what was changed>"');
       if (!contract.frozen.includes(target)) throw new EyesError(`${target} is not a file contract ${id} froze. Frozen: ${contract.frozen.join(', ') || '(none)'}`);
-      writeContract(file, { ...contract, amendments: [...contract.amendments, { file: target, why: why.trim(), at: new Date().toISOString() }] });
+      // The file as the arbiter left it is what the contract is now proven against.
+      writeContract(file, { ...contract, frozenPrints: { ...contract.frozenPrints, [target]: fingerprint(project, target) }, amendments: [...contract.amendments, { file: target, why: why.trim(), at: new Date().toISOString() }] });
       out(`amended: ${target}`);
       return 0;
     }
@@ -354,15 +385,18 @@ async function main(argv: string[]): Promise<number> {
       return 0;
     }
     if (command === 'close') {
+      if (contract.closedAt !== null) throw new EyesError(`contract ${id} was closed at ${contract.closedAt}`);
+      needLedger(project);
       const owes = owed(contract);
       if (owes.length > 0) throw new EyesError(`contract ${id} still owes:\n${owes.map((line) => `  - ${line}`).join('\n')}`);
-      const broke = brokenDuring(project, id);
-      if (broke.length > 0) throw new EyesError(`contract ${id} is not closed while what stood before it is broken:\n${broke.map((s) => `  - ${s.key}: ${s.claim.says}${s.last?.note ? ` (${s.last.note})` : ''}`).join('\n')}\nFix the product so each holds again (then \`sz-eyes standing record <key> --status holds\`), or, if what was asked has changed, the arbiter records which claim this work replaces.`);
+      const also = alsoOwed(project, contract);
+      if (also.length > 0) throw new EyesError(`contract ${id} is not closed yet:\n${also.map((line) => `  - ${line}`).join('\n')}\nWhat stood before and broke: fix the product so it holds again (then \`sz-eyes standing record <key> --status holds\`), or, if what was asked has changed, the arbiter records which claim this work replaces.`);
       const at = new Date().toISOString();
       const closed = { ...contract, closedAt: at };
-      writeContract(file, closed);
-      // From here its proven claims stand, and what it left is written where the next work is picked from.
+      // Its proven claims are stamped first: a contract is never left closed with nothing to say when its
+      // claims last held. From here they stand, and what it left is written where the next work is picked from.
       stampClosed(project, closed, at);
+      writeContract(file, closed);
       const left = addToBacklog(project, leftBy(closed));
       out(`closed: ${id}${left > 0 ? ` (${left} line(s) added to ${BACKLOG_FILE})` : ''}`);
       return 0;

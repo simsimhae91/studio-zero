@@ -1,8 +1,8 @@
-import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { z } from 'zod';
-import { SZ_DIR, allContracts, type Claim, type Contract } from './contract.ts';
+import { SZ_DIR, addedLate, allContracts, type Claim, type Contract } from './contract.ts';
+import { fingerprints } from './fingerprint.ts';
 
 /**
  * A product that lives is changed many times, and each change is made by someone who was not there for the ones
@@ -33,27 +33,35 @@ function readLedger(projectDir: string): Ledger {
   return Ledger.parse(JSON.parse(readFileSync(file, 'utf8')));
 }
 
+/**
+ * Why the record cannot be read, or null when it can. Two branches that each closed a contract leave a merge
+ * conflict in it; until it is repaired nobody can tell which promises hold, so nothing is recorded or closed
+ * over it, and a session is told instead of being left to think all is well.
+ */
+export function ledgerProblem(projectDir: string): string | null {
+  try {
+    readLedger(projectDir);
+    return null;
+  } catch (err) {
+    return `${STANDING_FILE} cannot be read (${err instanceof Error ? err.message.split('\n')[0] : String(err)}): until it is repaired nobody can tell which promises hold. If it is a merge conflict, keep the entries of both sides (for the same claim, the one with the later "at"), then run \`sz-eyes standing\`.`;
+  }
+}
+
+/** For reading only: a record that cannot be read is treated as empty, and `ledgerProblem` says why. */
+function ledgerOrEmpty(projectDir: string): Ledger {
+  try {
+    return readLedger(projectDir);
+  } catch {
+    return { shown: {} };
+  }
+}
+
 function writeLedger(projectDir: string, ledger: Ledger): void {
   const file = join(projectDir, STANDING_FILE);
   mkdirSync(dirname(file), { recursive: true });
   const sorted = Object.fromEntries(Object.entries(ledger.shown).sort(([a], [b]) => a.localeCompare(b)));
   writeFileSync(file, `${JSON.stringify(Ledger.parse({ shown: sorted }), null, 2)}\n`);
 }
-
-/** A short fingerprint of a file, or of everything under a folder; `gone` when it is not there. */
-function fingerprint(projectDir: string, path: string): string {
-  const root = join(projectDir, path);
-  if (!existsSync(root)) return 'gone';
-  const hash = createHash('sha256');
-  const add = (at: string, name: string): void => {
-    if (statSync(at).isDirectory()) for (const entry of readdirSync(at).sort()) add(join(at, entry), `${name}/${entry}`);
-    else hash.update(name).update('\0').update(readFileSync(at)).update('\0');
-  };
-  add(root, '');
-  return hash.digest('hex').slice(0, 16);
-}
-
-const fingerprints = (projectDir: string, paths: string[]): Record<string, string> => Object.fromEntries(paths.map((path) => [path, fingerprint(projectDir, path)]));
 
 export const keyOf = (contract: string, claim: string): string => `${contract}/${claim}`;
 
@@ -99,7 +107,7 @@ export interface Retired {
  */
 export function standing(projectDir: string): { stands: Standing[]; retired: Retired[] } {
   const all = allContracts(projectDir).map((entry) => entry.contract);
-  const ledger = readLedger(projectDir);
+  const ledger = ledgerOrEmpty(projectDir);
   const retiredBy = new Map<string, { by: string; why: string }>();
   for (const contract of all) if (contract.frozenAt !== null) for (const s of contract.supersedes) retiredBy.set(keyOf(s.contract, s.claim), { by: contract.id, why: s.why });
   const stands: Standing[] = [];
@@ -165,7 +173,7 @@ export interface Kept {
   broken: { key: string; says: string; note: string }[];
   /** Frozen files of earlier contracts that changed since they were last shown against. */
   changed: string[];
-  retired: { key: string; says: string; why: string }[];
+  retired: { key: string; says: string; why: string; late: boolean }[];
 }
 
 export function keptFor(projectDir: string, contract: Contract): Kept {
@@ -180,7 +188,7 @@ export function keptFor(projectDir: string, contract: Contract): Kept {
     notLooked: others.filter((s) => s.last?.during !== contract.id && s.last?.status !== 'broken').length,
     broken: broken.map((s) => ({ key: s.key, says: s.claim.says, note: s.last?.note ?? '' })),
     changed: [...new Set(others.flatMap((s) => s.changed ?? []))].sort(),
-    retired: retired.filter((r) => r.by === contract.id).map((r) => ({ key: r.key, says: r.says, why: r.why })),
+    retired: retired.filter((r) => r.by === contract.id).map((r) => ({ key: r.key, says: r.says, why: r.why, late: contract.supersedes.some((s) => keyOf(s.contract, s.claim) === r.key && addedLate(contract, s)) })),
   };
 }
 

@@ -27,7 +27,17 @@ const refuse = (why) => {
   process.stderr.write(`${why}\n`);
   process.exit(2);
 };
-if (target === join('.sz', 'standing.json')) refuse('.sz/standing.json is the record of when each standing claim was last shown to hold: it is written by `sz-eyes standing record`, by whoever looked, not by hand.');
+if (target === join('.sz', 'standing.json')) {
+  // By hand only to repair it: a file that cannot be read (a merge conflict) has to be mended somehow.
+  let readable = true;
+  try {
+    JSON.parse(readFileSync(join(project, target), 'utf8'));
+  } catch {
+    readable = existsSync(join(project, target)) ? false : true;
+  }
+  if (readable) refuse('.sz/standing.json is the record of when each standing claim was last shown to hold: it is written by `sz-eyes standing record`, by whoever looked, not by hand.');
+  process.exit(0);
+}
 
 const contracts = readdirSync(dir)
   .filter((entry) => entry.endsWith('.json'))
@@ -57,9 +67,19 @@ for (const { name, contract } of contracts) {
   }
   // Closed: only what a flow or test claim names is kept from the builder, and only while that claim stands.
   // Helpers and lists of checks that later work has to add to are watched (sz-eyes standing says when they
-  // change), not locked.
+  // change), not locked. A claim names this file when its words hold the file's own path, or hold a frozen
+  // folder as a whole (not a file inside it): a contract that froze `e2e/` for one flow in it does not lock
+  // the flows later work adds beside it.
+  const escaped = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const namesThis = (ref) => ref.includes(target) || frozen.some((path) => {
+    const folder = path.replace(/\/$/, '');
+    return folder !== target && new RegExp(`(^|[\\s"'=:(])${escaped(folder)}/?($|[\\s"')])`).test(ref);
+  });
+  // A claim that a draft says it replaces is unlocked on purpose: whoever writes the new contract rewrites the
+  // old check before freezing it. A draft that is never frozen shows up as owed, and the change to the file
+  // shows in `sz-eyes standing`.
   const keeps = (contract.claims ?? []).filter(
-    (claim) => claim.status === 'proven' && ['flow', 'test'].includes(claim.shownBy?.kind) && frozen.some((path) => String(claim.shownBy?.ref ?? '').includes(path.replace(/\/$/, ''))) && !replaced.has(`${contract.id}/${claim.id}`),
+    (claim) => claim.status === 'proven' && ['flow', 'test'].includes(claim.shownBy?.kind) && namesThis(String(claim.shownBy?.ref ?? '')) && !replaced.has(`${contract.id}/${claim.id}`),
   );
   if (keeps.length > 0) {
     const keys = keeps.map((claim) => `${contract.id}/${claim.id}`).join(', ');
