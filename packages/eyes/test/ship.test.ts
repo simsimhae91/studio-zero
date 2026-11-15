@@ -8,7 +8,7 @@ import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { readContract, CONTRACTS_DIR } from '../src/contract.ts';
+import { Contract, readContract, timeline, CONTRACTS_DIR } from '../src/contract.ts';
 import { walkElectron, renderAppWalk } from '../src/electron.ts';
 import { engineEnv, hostedSupabaseCall } from '../src/engine.ts';
 import { downloadsOf, filesOf, findLeaks, leakReport, renderLeaks, secretsFromEnv } from '../src/leaks.ts';
@@ -19,7 +19,8 @@ import { GATE_LINES, gate, type Gate } from '../src/release.ts';
 import { heldSecrets, hide, parseRun, runWithSecrets, setSecret, type SecretStore } from '../src/secrets.ts';
 import { marksOf, renderStrangers, strangers } from '../src/strangers.ts';
 import { latestTrial, ranked, readTrial, unfinished } from '../src/trial.ts';
-import { closeBrowser, openBrowser, renderWalk, walkWeb } from '../src/web.ts';
+import { closeBrowser, lookAtWeb, openBrowser, renderWalk, walkWeb } from '../src/web.ts';
+import { evidencePage } from '../src/evidence.ts';
 
 const HERE = fileURLToPath(new URL('.', import.meta.url));
 const eyes = (project: string, ...args: string[]): { code: number | null; text: string } => {
@@ -809,4 +810,59 @@ diff --git a/README.md b/README.md
 +Never run \`drop table groups\` by hand.
 `;
   assert.deepEqual(changesInCode(diff).map((c) => [c.file, c.line, c.kind]), [['lib/db.mjs', 11, 'adds'], ['lib/db.mjs', 12, 'loses'], ['lib/db.mjs', 33, 'loses']], 'what a document says, and words that only look like a statement, are not statements of the product');
+});
+
+test('where the time of a piece of work went is on its page: agreeing, building, proving, closing', () => {
+  const work = Contract.parse({
+    id: 'daily-goal',
+    request: '하루 목표를 바꿀 수 있게',
+    lane: 'M',
+    claims: [
+      { id: 'a', says: '설정에서 10으로 저장하면 바로 10잔 중 1잔', shownBy: { kind: 'flow', ref: 'checks/goal.sh' }, status: 'proven', at: '2026-11-15T14:14:00.000Z' },
+      { id: 'b', says: '앱을 다시 켜도 남는다', shownBy: { kind: 'test', ref: 'npm test' }, status: 'proven', at: '2026-11-15T14:19:00.000Z' },
+      { id: 'c', says: '보기 좋다', shownBy: { kind: 'owner', ref: '사진' } },
+    ],
+    createdAt: '2026-11-15T14:00:00.000Z',
+    frozenAt: '2026-11-15T14:02:00.000Z',
+    closedAt: '2026-11-15T14:20:00.000Z',
+  });
+  assert.deepEqual(timeline(work), { agreeing: 2, building: 12, proving: 5, closing: 1, all: 20 });
+  assert.match(evidencePage(work, tmpdir()), /모두 20분<\/span><span>무엇이 끝인지 정하기 2분<\/span><span>만들기 12분<\/span><span>증명 5분<\/span><span>닫기 1분/);
+  // Work recorded before verdicts were timed says nothing of its time, and its page is as it was.
+  const old = Contract.parse({ ...work, claims: work.claims.map((claim) => ({ ...claim, at: null })) });
+  assert.equal(timeline(old), null);
+  assert.doesNotMatch(evidencePage(old, tmpdir()), /모두 \d+분/);
+  // From the command line a verdict is stamped as it is given.
+  const project = mkdtempSync(join(tmpdir(), 'eyes-timed-'));
+  try {
+    assert.equal(eyes(project, 'contract', 'new', 'm1-split', '--lane', 'M', '--request', '나눠 낸다', '--claim', 'split|4만원씩|command:true').code, 0);
+    eyes(project, 'contract', 'freeze', 'm1-split');
+    eyes(project, 'contract', 'claim', 'm1-split', 'split', '--status', 'proven', '--note', '돌려서 봤다');
+    assert.match(readContract(join(project, CONTRACTS_DIR, 'm1-split.json')).claims[0]!.at ?? '', /^\d{4}-\d\d-\d\dT/);
+  } finally {
+    rmSync(project, { recursive: true, force: true });
+  }
+});
+
+test('a look does not wait half a minute for a page that never goes quiet', async (t) => {
+  // A page with a request that never ends (a stream, a long poll): loaded, and never quiet.
+  const hanging: ServerResponse[] = [];
+  const { server, url } = await serve((req, res) => {
+    if (req.url === '/stream') return void hanging.push(res.writeHead(200, { 'content-type': 'text/event-stream' }));
+    res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }).end('<!doctype html><html lang="ko"><title>알림</title><h1>새 소식</h1><script>new EventSource("/stream")</script></html>');
+  });
+  try {
+    const started = performance.now();
+    const look = await lookAtWeb(url).catch((err: unknown) => {
+      if (/Chromium distribution 'chrome' is not found|Executable doesn't exist|ProcessSingleton/.test(String(err))) return null;
+      throw err;
+    });
+    if (look === null) return t.skip('no Chrome on this machine');
+    const seconds = (performance.now() - started) / 1000;
+    assert.deepEqual(look.texts, ['새 소식']);
+    assert.ok(seconds < 12, `it took ${seconds.toFixed(1)}s: a look waits a few seconds for quiet, not thirty`);
+  } finally {
+    for (const res of hanging) res.end();
+    server.close();
+  }
 });

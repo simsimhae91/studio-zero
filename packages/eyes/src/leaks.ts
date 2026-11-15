@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import type { Browser } from 'playwright-core';
-import { closeBrowser, openBrowser } from './web.ts';
+import { closeBrowser, openBrowser, quiet } from './web.ts';
 
 /**
  * What a browser downloads is public: anyone can read every byte of it. A key that passes every guard (a
@@ -159,9 +159,8 @@ export async function downloadsOf(origin: string, paths: readonly string[] = ['/
     });
     const page = await context.newPage();
     for (const path of paths.length > 0 ? paths : ['/']) {
-      await page.goto(new URL(path, base).href, { waitUntil: 'networkidle', timeout: 30_000 }).catch(async () => {
-        await page.waitForLoadState('load', { timeout: 5_000 }).catch(() => undefined);
-      });
+      await page.goto(new URL(path, base).href, { waitUntil: 'load', timeout: 30_000 }).catch(() => undefined);
+      await quiet(page);
       await page.waitForTimeout(opts.settleMs ?? 400);
     }
     await Promise.all(pending);

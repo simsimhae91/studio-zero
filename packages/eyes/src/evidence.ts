@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, extname, join } from 'node:path';
-import type { Claim, Contract } from './contract.ts';
+import { timeline, type Claim, type Contract } from './contract.ts';
 import type { Kept } from './standing.ts';
 
 export const esc = (text: string): string => text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -57,6 +57,7 @@ export function evidencePage(contract: Contract, folder: string, extra: { summar
   const left = contract.claims.filter((claim) => claim.status !== 'proven');
   const kept = extra.kept ?? null;
   const release = contract.release;
+  const took = timeline(contract);
   const short = (sha: string): string => sha.slice(0, 7);
   const verdict = release?.takenBack ? '되돌렸습니다' : count('refuted') > 0 ? '반증된 것이 있습니다' : kept && kept.broken.length > 0 ? '전부터 지키던 것이 깨졌습니다' : count('unproven') > 0 ? '아직 보이지 않은 것이 있습니다' : count('unchecked') > 0 ? '보인 것은 전부 참이고, 확인하지 못한 것이 있습니다' : '전부 증명됐습니다';
   // What needs the owner first: what was shown false, then what nobody showed, then what could not be checked.
@@ -90,6 +91,7 @@ export function evidencePage(contract: Contract, folder: string, extra: { summar
   <h1>${esc(contract.request)}</h1>
   <p class="verdict">${verdict}</p>
   ${where}
+  ${took ? `<p class="counts"><span>모두 ${took.all}분</span><span>${release ? '준비' : '무엇이 끝인지 정하기'} ${took.agreeing}분</span><span>${release ? '후보 띄우기' : '만들기'} ${took.building}분</span><span>증명 ${took.proving}분</span>${took.closing === null ? '' : `<span>닫기 ${took.closing}분</span>`}</p>` : ''}
   <p class="counts"><span>증명 ${count('proven')}</span><span>반증 ${count('refuted')}</span><span>아직 ${count('unproven')}</span><span>확인 못 함 ${count('unchecked')}</span></p>
   ${extra.summary ? `<p class="note">${esc(extra.summary)}</p>` : ''}
   ${claims}

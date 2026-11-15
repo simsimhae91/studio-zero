@@ -69,6 +69,10 @@ export interface LookOptions {
 
 const READING_ORDER = (a: { y: number; x: number }, b: { y: number; x: number }): number => (Math.abs(a.y - b.y) > 6 ? a.y - b.y : a.x - b.x);
 
+/** How long a look waits for a loaded page to stop asking for things. */
+const QUIET_MS = 4_000;
+export const quiet = (page: Page, ms = QUIET_MS): Promise<void> => page.waitForLoadState('networkidle', { timeout: ms }).catch(() => undefined);
+
 /** Where a held clock starts: a fixed moment, so that a date a product shows is the same on every run. */
 const CLOCK_START = Date.UTC(2026, 0, 1, 0, 0, 0);
 
@@ -154,10 +158,11 @@ export async function lookAtWeb(url: string, opts: LookOptions = {}): Promise<Lo
     });
     const timeout = opts.timeoutMs ?? 30_000;
     if (opts.clock) await page.clock.install({ time: CLOCK_START });
-    await page.goto(url, { waitUntil: opts.clock ? 'load' : 'networkidle', timeout }).catch(async () => {
-      // A page that never goes quiet (a socket, a poll) is still a page: take it as it stands once it has loaded.
-      await page.waitForLoadState('load', { timeout: 5_000 }).catch(() => undefined);
-    });
+    await page.goto(url, { waitUntil: 'load', timeout }).catch(() => undefined);
+    // Then until the page has stopped asking for things, for a few seconds at most. A page that never goes
+    // quiet (a stream, a request that hangs) is still a page, and a look used to wait half a minute for it
+    // every time. What arrives later than this is named with `waitFor`.
+    if (!opts.clock) await quiet(page);
     if (opts.waitFor) {
       const target = /^[.#[]|^data-|>>/.test(opts.waitFor) ? page.locator(opts.waitFor) : page.getByText(opts.waitFor, { exact: false });
       await target.first().waitFor({ state: 'visible', timeout }).catch(() => undefined);

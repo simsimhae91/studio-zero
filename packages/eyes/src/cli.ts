@@ -371,7 +371,7 @@ async function main(argv: string[]): Promise<number> {
       const last = lastRelease(project, place);
       if (!last) throw new EyesError(`nothing released to ${place} stands, so there is nothing to look at again. Releases: ${renderReleases(project)}`);
       const kept = (id: string): boolean => id.startsWith('live-') && id !== 'live-kept';
-      contract = { ...last, id: idFree(`live-${now.slice(0, 10)}`), request: `${place}에 살아 있는 것 점검 (${last.release!.commit.slice(0, 7)}, ${last.id}로 내보낸 것)`, claims: last.claims.filter((claim) => kept(claim.id)).map((claim) => ({ ...claim, status: 'unproven', evidence: [], note: '' })), notDoing: last.notDoing.filter((line) => kept(line)), noticed: [], amendments: [], frozenAt: now, createdAt: now, closedAt: null, release: { ...last.release!, candidate: null, previous: null } };
+      contract = { ...last, id: idFree(`live-${now.slice(0, 10)}`), request: `${place}에 살아 있는 것 점검 (${last.release!.commit.slice(0, 7)}, ${last.id}로 내보낸 것)`, claims: last.claims.filter((claim) => kept(claim.id)).map((claim) => ({ ...claim, status: 'unproven', evidence: [], note: '', at: null })), notDoing: last.notDoing.filter((line) => kept(line)), noticed: [], amendments: [], frozenAt: now, createdAt: now, closedAt: null, release: { ...last.release!, candidate: null, previous: null } };
     } else if (command === 'new') {
       const url = a.one('--url');
       const given = a.one('--commit');
@@ -710,7 +710,7 @@ async function main(argv: string[]): Promise<number> {
       for (const path of a.all('--evidence')) if (!existsSync(join(folder, path))) throw new EyesError(`${join(folder, path)}: no such file. Evidence is a file under ${folder}`);
       // A claim is not called proven on someone's word: there is something to look at, or a command that said so.
       if (status === 'proven' && a.all('--evidence').length === 0 && !a.one('--note')) throw new EyesError('a claim is proven by something that shows it: give --evidence (a picture, a film, a log under the evidence folder) or a --note that says what was run and what it said');
-      Object.assign(claim, { status, evidence: [...new Set([...claim.evidence, ...a.all('--evidence')])], note: a.one('--note') ?? claim.note });
+      Object.assign(claim, { status, evidence: [...new Set([...claim.evidence, ...a.all('--evidence')])], note: a.one('--note') ?? claim.note, at: new Date().toISOString() });
       writeContract(file, contract);
       out(`${claimId}: ${status}`);
       return 0;

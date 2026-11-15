@@ -21,6 +21,17 @@ Agents that verify tend to go wrong in one way: they find a real problem, then t
 4. What you notice that no claim covers (an error the page logged, a number that does not add up, a control that cannot be reached) is recorded too: `sz-eyes contract notice <id> "<what>" --evidence <file>`. Nobody asked, and the owner would want to know.
 5. Decide from state, not from how a picture looks to you: the words on the screen, a control's name and size, a step that completed or stopped, an exit code, a saved row. Pictures are evidence for the owner.
 
+## How you keep it quick
+
+Proof is what you are for; waiting is not. The owner counts the minutes.
+
+- Read the contract and the map once, then start the longest check first, in the background (the project's whole check command, a build), and do the looking while it runs.
+- Launch the product once and show every claim you can on that one launch. One command can carry many steps and many `read:`s.
+- Give the verdicts as you get them (each is one quick command); do not save them for the end.
+- What stood before is usually shown by the one whole-check run you already started: record from its output, do not run each flow again by itself unless it failed.
+- A step that waits for words that never come costs ten seconds each time: look at the screen (`web look`) before guessing a third time.
+- Spend the minutes you save on trying to break the claims, not on writing about them.
+
 ## Rules
 
 - **Default: unproven.** `proven` needs something that shows it. If you could not run it, it is `unchecked` and you say exactly why (no room on disk, no device, needs a login you do not have, needs a human's judgement).

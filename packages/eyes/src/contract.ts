@@ -39,6 +39,8 @@ export const Claim = z.object({
   /** Files that show it, relative to the contract's evidence folder. */
   evidence: z.array(z.string().max(300)).max(24).default([]),
   note: z.string().max(1200).default(''),
+  /** When its verdict was last given. */
+  at: z.string().nullable().default(null),
 });
 export type Claim = z.infer<typeof Claim>;
 
@@ -146,6 +148,20 @@ export function owed(contract: Contract): string[] {
     if (claim.status === 'refuted') lines.push(`${claim.id}: shown to be false: ${claim.says}${claim.note ? ` (${claim.note})` : ''}`);
   }
   return lines;
+}
+
+const minutes = (from: string, to: string): number => Math.max(0, Math.round((Date.parse(to) - Date.parse(from)) / 60_000));
+
+/**
+ * Where the time of a piece of work went, in minutes: agreeing what done means, building, proving, closing.
+ * Time is a cost the owner weighs beside quality, and what is not measured is argued about. Null for work
+ * recorded before verdicts were timed.
+ */
+export function timeline(contract: Contract): { agreeing: number; building: number; proving: number; closing: number | null; all: number } | null {
+  const given = contract.claims.flatMap((claim) => (claim.at ? [claim.at] : [])).sort();
+  if (contract.frozenAt === null || given.length === 0) return null;
+  const [first, last] = [given[0]!, given.at(-1)!];
+  return { agreeing: minutes(contract.createdAt, contract.frozenAt), building: minutes(contract.frozenAt, first), proving: minutes(first, last), closing: contract.closedAt ? minutes(last, contract.closedAt) : null, all: minutes(contract.createdAt, contract.closedAt ?? last) };
 }
 
 /** A promise retired after the contract was agreed: not part of what was agreed, so the owner is shown it as such. */

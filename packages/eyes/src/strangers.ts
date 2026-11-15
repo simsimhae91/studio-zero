@@ -1,5 +1,5 @@
 import type { Browser, BrowserContext, Page } from 'playwright-core';
-import { SIZES, closeBrowser, doStep, openBrowser, type Step } from './web.ts';
+import { SIZES, closeBrowser, doStep, openBrowser, quiet, type Step } from './web.ts';
 
 /**
  * Can one person get at what another stored? The commonest serious fault of a product made by an agent is a
@@ -100,9 +100,8 @@ async function use(browser: Browser, origin: string, steps: readonly Step[], hea
   });
   const page: Page = await context.newPage();
   let stopped: string | null = null;
-  await page.goto(origin, { waitUntil: 'networkidle', timeout: 30_000 }).catch(async () => {
-    await page.waitForLoadState('load', { timeout: 5_000 }).catch(() => undefined);
-  });
+  await page.goto(origin, { waitUntil: 'load', timeout: 30_000 }).catch(() => undefined);
+  await quiet(page);
   for (const step of steps) {
     const why = await doStep(page, step, patience);
     if (why !== null) {
@@ -110,7 +109,7 @@ async function use(browser: Browser, origin: string, steps: readonly Step[], hea
       break;
     }
   }
-  await page.waitForLoadState('networkidle', { timeout: 5_000 }).catch(() => undefined);
+  await quiet(page);
   await page.waitForTimeout(400);
   await Promise.all(pending);
   return { asked, context, stopped };
