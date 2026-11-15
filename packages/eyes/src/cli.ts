@@ -12,7 +12,7 @@ import { Status, addSaid, latestRound, newRound, noteSaid, readRound, renderRoun
 import { EyesError, installApp, restSimulator, runFlow, screenText, screenshot, spareSimulator } from './ios.ts';
 import { downloadsOf, filesOf, leakReport, renderLeaks } from './leaks.ts';
 import { lookAtLive, renderLive } from './live.ts';
-import { DANGEROUS, classify, renderMigrations } from './migrations.ts';
+import { DANGEROUS, changesInCode, classify, renderMigrations } from './migrations.ts';
 import { findProducts, overviewPage, renderOverview, viewOf } from './overview.ts';
 import { freePort } from './port.ts';
 import { heldSecrets, ownersVault, parseRun, runWithSecrets, setSecret } from './secrets.ts';
@@ -277,7 +277,10 @@ async function main(argv: string[]): Promise<number> {
       if (names.status !== 0) throw new EyesError(`the migration files that changed since ${since} could not be listed: ${(names.stderr ?? '').trim().split('\n')[0]}`);
       files = names.stdout.split('\n').filter(Boolean).map((file) => ({ file, sql: until ? spawnSync('git', ['-C', project, 'show', `${until}:${file}`], { encoding: 'utf8' }).stdout : readFileSync(join(project, file), 'utf8') }));
     }
-    const steps = classify(files);
+    // Between two commits, what the code itself was given to say to the database is read as well.
+    const since = a.words.length === 0 ? a.one('--since') : undefined;
+    const written = since ? changesInCode(spawnSync('git', ['-C', project, 'diff', '-U0', since, until ?? 'HEAD'], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }).stdout ?? '') : [];
+    const steps = [...classify(files), ...written];
     out(a.has('--json') ? JSON.stringify(steps, null, 2) : renderMigrations(steps, files.map((f) => f.file)));
     return steps.some((step) => DANGEROUS.includes(step.kind)) ? 1 : 0;
   }
@@ -384,6 +387,9 @@ async function main(argv: string[]): Promise<number> {
       const without = new Map(a.all('--without').map((text) => [text.slice(0, Math.max(0, text.indexOf('|'))).trim() || text.trim(), text.includes('|') ? text.slice(text.indexOf('|') + 1) : ''] as const));
       const previous = a.one('--previous') ?? lastRelease(project, place)?.release!.commit ?? null;
       const migrations = previous === null ? [] : git('diff', '--name-only', '--diff-filter=AMR', previous, commit.text, '--', '*.sql').text.split('\n').filter((line) => line.trim() !== '');
+      // A product that changes the shape of its data from its own code has no .sql file to show for it.
+      const inCode = previous === null ? [] : changesInCode(spawnSync('git', ['-C', project, 'diff', '-U0', previous, commit.text], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }).stdout ?? '');
+      for (const file of new Set(inCode.map((change) => change.file))) if (!migrations.includes(file)) migrations.push(file);
       const g: Gate = { place, url, commit: commit.text, previous, migrations, versionAt: a.one('--version-at') ?? null, candidate, check: a.one('--check') ?? null, strangers: a.one('--strangers') ?? null, data: a.one('--data') ?? null, backup: a.one('--backup') ?? null, wayBack: a.one('--way-back') ?? null, walk: a.one('--walk') ?? null, errors: a.one('--errors') ?? null, kept: a.one('--kept') ?? null, env: a.all('--env') };
       try {
         contract = releaseContract(project, idFree(`release-${releases(project).filter((c) => c.release!.candidate !== null).length + 1}`), g, { without, claims: extraClaims, frozen, now });

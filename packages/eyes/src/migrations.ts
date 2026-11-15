@@ -119,11 +119,55 @@ export function classify(files: readonly { file: string; sql: string }[]): Chang
   });
 }
 
+const kindOf = (flat: string): { kind: Kind; what: string } => {
+  const rule = RULES.find((r) => r.pattern.test(flat) && !(r.unless?.test(flat) ?? false));
+  return { kind: rule?.kind ?? 'other', what: rule?.what ?? '' };
+};
+
+/** Where checks and their fixtures live: a statement there sets a scene, it does not change the product's data. */
+const NOT_PRODUCT = /(^|\/)(tests?|__tests__|e2e|flows|fixtures|spec|docs?)\/|\.(test|spec)\.[cm]?[jt]sx?$|\.md$|\.sql$/;
+const IN_TEXT = /\b(alter\s+table|create\s+(?:unique\s+)?(?:table|index)|drop\s+(?:table|column|index|policy|schema|database)|truncate\s+(?:table\s+)?\w|delete\s+from\s+\w)[^`'"\n;]*/gi;
+
+/**
+ * Statements that change the shape of what is stored, written inside the program's own text (a string handed
+ * to the database when it starts), read from the lines a diff adds. A product that keeps its migrations in code
+ * has no .sql file to read, and a line that renames a column there loses just as much.
+ */
+export function changesInCode(diff: string): Change[] {
+  const found: Change[] = [];
+  let file = '';
+  let line = 0;
+  for (const raw of diff.split('\n')) {
+    if (raw.startsWith('+++ ')) {
+      file = raw.slice(4).replace(/^b\//, '');
+      continue;
+    }
+    const hunk = /^@@ -\d+(?:,\d+)? \+(\d+)/.exec(raw);
+    if (hunk) {
+      line = Number(hunk[1]) - 1;
+      continue;
+    }
+    if (raw.startsWith('-') || raw.startsWith('\\')) continue;
+    line++;
+    if (!raw.startsWith('+') || file === '' || file === '/dev/null' || NOT_PRODUCT.test(file)) continue;
+    for (const match of raw.slice(1).matchAll(IN_TEXT)) {
+      const flat = match[0].replace(/\s+/g, ' ').trim().toLowerCase();
+      let { kind, what } = kindOf(flat);
+      // A statement whose text goes on over the next line (a `where` there) is not judged by its first line.
+      const closed = /[`'";]/.test(raw.slice(1).charAt(match.index + match[0].length));
+      if (kind === 'loses' && flat.startsWith('delete from') && !closed) [kind, what] = ['data', 'changes rows'];
+      found.push({ file, line, kind, what, statement: match[0].replace(/\s+/g, ' ').trim().slice(0, 140) });
+    }
+  }
+  return found;
+}
+
 export function renderMigrations(steps: readonly Change[], files: readonly string[]): string {
-  if (files.length === 0) return 'no migration file to read';
+  if (files.length === 0 && steps.length === 0) return 'no migration file changed, and no statement that changes the shape of what is stored was added to the code';
   const dangerous = steps.filter((step) => DANGEROUS.includes(step.kind));
   const count = (kind: Kind): number => steps.filter((step) => step.kind === kind).length;
-  const lines = [`${files.length} migration file(s), ${steps.length} statement(s): ${count('adds')} add, ${count('data')} change rows, ${count('other')} other, ${dangerous.length} that can lose or break what is stored`];
+  const inCode = steps.filter((step) => !files.includes(step.file)).length;
+  const lines = [`${files.length} migration file(s)${inCode > 0 ? ` and ${inCode} statement(s) written in the code` : ''}, ${steps.length} statement(s): ${count('adds')} add, ${count('data')} change rows, ${count('other')} other, ${dangerous.length} that can lose or break what is stored`];
   if (dangerous.length === 0) lines.push('nothing in them drops, renames, narrows or opens what people stored');
   else
     lines.push(

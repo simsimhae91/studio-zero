@@ -32,7 +32,7 @@ Everything is started on a port from the machine and ended by the id you kept (`
 
 - **Worker and D1.** `npx wrangler d1 migrations apply <binding> --local`, then `npx wrangler dev --ip 127.0.0.1 --port $(sz-eyes port) --var COMMIT:$(git rev-parse HEAD)`. State lives in `.wrangler/` of that folder (keep it out of git): every clone has a database of its own. Set `WRANGLER_SEND_METRICS=false` on every call. Migrations are numbered SQL files in `migrations/`; the same files are applied to the hosted database at a release. (Run here on 2026-11-15, wrangler 4.162: installs in ten seconds, answers in three.)
 - **Supabase.** `sz-eyes supabase start --runtime docker --exclude studio,analytics --output-format json` in the project folder prints the address and the keys; `sz-eyes supabase stop` keeps the data. The schema is the migrations in `supabase/migrations/`. This door opens only on the stack on this machine and refuses anything that names a hosted project. (Measured here: 49 s the first time, 1 to 3 s after; about 65 MiB at rest.)
-- **A container.** `sz-eyes docker build` and `sz-eyes docker run` with a named volume for the data and the port given by the machine. End it by the name you gave it.
+- **A container.** `sz-eyes docker build` and `sz-eyes docker run` with a named volume for the data and the port given by the machine. End it by the name you gave it. Build on the slim image of the runtime (`node:24-slim`, not `node:24`): the full one is 1.6 GB, which is minutes of every release to a host and gigabytes of the owner's disk.
 
 ## 4. Accounts
 

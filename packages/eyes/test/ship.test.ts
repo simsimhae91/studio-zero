@@ -13,7 +13,7 @@ import { walkElectron, renderAppWalk } from '../src/electron.ts';
 import { engineEnv, hostedSupabaseCall } from '../src/engine.ts';
 import { downloadsOf, filesOf, findLeaks, leakReport, renderLeaks, secretsFromEnv } from '../src/leaks.ts';
 import { lookAtLive, renderLive, sameCommit, versionsIn } from '../src/live.ts';
-import { classify, renderMigrations, statements } from '../src/migrations.ts';
+import { changesInCode, classify, renderMigrations, statements } from '../src/migrations.ts';
 import { findProducts, overviewPage, renderOverview, viewOf } from '../src/overview.ts';
 import { GATE_LINES, gate, type Gate } from '../src/release.ts';
 import { heldSecrets, hide, parseRun, runWithSecrets, setSecret, type SecretStore } from '../src/secrets.ts';
@@ -192,7 +192,7 @@ test('the release gate is the same lines every time: each is shown or waived wit
   const firstTime = gate({ ...GATE, previous: null, data: null, kept: null }, new Map());
   assert.deepEqual(firstTime.waived.map((line) => line.split(' ')[0]), ['rc-data', 'rc-shape', 'live-kept']);
   // A release that changes no migration file has no change of shape to read.
-  assert.match(gate({ ...GATE, migrations: [] }, new Map()).waived.join('\n'), /^rc-shape .*바뀐 마이그레이션 파일\(\.sql\)이 없다/);
+  assert.match(gate({ ...GATE, migrations: [] }, new Map()).waived.join('\n'), /^rc-shape .*저장 모양을 바꾸는 문장이 더해지지 않았다/);
   assert.equal(full.claims.find((c) => c.id === 'rc-shape')!.shownBy.ref, 'sz-eyes migrations look --since b36523e000 --until 955a9ea1c0ffee');
   assert.match(firstTime.waived[0]!, /첫 출하/);
   // A look at what is already live: only the second half.
@@ -255,7 +255,7 @@ test('from the command line: a release goes out from closed work and a commit, i
     assert.equal(eyes(project, 'release', 'new', '--commit', v2, ...common, '--data', 'bash scripts/rehearse.sh', '--kept', 'bash scripts/counts.sh').code, 0);
     const second = readContract(join(project, CONTRACTS_DIR, 'release-2.json'));
     assert.equal(second.release!.previous, v1);
-    assert.match(second.notDoing.join('\n'), /rc-shape .*바뀐 마이그레이션 파일/, 'v2 changed no migration file');
+    assert.match(second.notDoing.join('\n'), /rc-shape .*저장 모양을 바꾸는 문장이 더해지지 않았다/, 'v2 changed no migration file and added no such statement to the code');
     // It failed on what is live and was taken back: what should answer is the first again.
     eyes(project, 'contract', 'claim', 'release-2', 'live-walk', '--status', 'refuted', '--note', '만들기를 눌러도 모임이 생기지 않는다');
     assert.match(eyes(project, 'release', 'back', 'release-2', '--note', 'short').text, /release back <id> --note/);
@@ -517,6 +517,21 @@ drop table old_groups;`;
     assert.equal(renamed.code, 1);
     assert.match(renamed.text, /migrations\/0003_rename\.sql:1 \[breaks\]/);
     assert.equal(eyes(project, 'migrations', 'look', 'migrations/0001_init.sql').code, 0);
+    // A product that changes the shape of its data from its own code has no .sql file to show for it.
+    mkdirSync(join(project, 'lib'));
+    mkdirSync(join(project, 'test'));
+    writeFileSync(join(project, 'lib/db.mjs'), "export function open(db) {\n  db.exec('create table if not exists sent (id integer primary key)');\n  db.exec(`alter table members add column nick text`);\n}\n");
+    git('add', '-A');
+    git('commit', '-qm', 'v4');
+    const v4 = git('rev-parse', 'HEAD');
+    writeFileSync(join(project, 'lib/db.mjs'), "export function open(db) {\n  db.exec('create table if not exists sent (id integer primary key)');\n  db.exec(`alter table members add column nick text`);\n  db.exec('alter table members rename column nick to nickname');\n  db.exec(`delete from sent\n    where id > 100`);\n}\n");
+    writeFileSync(join(project, 'test/old-shape.test.mjs'), "db.exec('drop table members'); // a scene for a check, not the product\n");
+    git('add', '-A');
+    git('commit', '-qm', 'v5');
+    const coded = eyes(project, 'migrations', 'look', '--since', v4);
+    assert.equal(coded.code, 1, coded.text);
+    assert.match(coded.text, /0 migration file\(s\) and 2 statement\(s\) written in the code[\s\S]*1 STATEMENT\(S\)[\s\S]*lib\/db\.mjs:4 \[breaks\] renames a table or a column/);
+    assert.doesNotMatch(coded.text, /old-shape|deletes every row/, 'a check\'s own scene is not the product, and a delete whose where is on the next line is not judged by its first');
   } finally {
     rmSync(project, { recursive: true, force: true });
   }
@@ -774,4 +789,24 @@ test('a trial keeps who tried the product, what became of each, and what stands 
   } finally {
     rmSync(project, { recursive: true, force: true });
   }
+});
+
+test('statements written in the code are read from what a diff adds', () => {
+  const diff = `diff --git a/lib/db.mjs b/lib/db.mjs
+--- a/lib/db.mjs
++++ b/lib/db.mjs
+@@ -10,0 +11,3 @@ export function open(db) {
++  db.exec('alter table expenses add column shared_by text');
++  db.exec("ALTER TABLE expenses DROP COLUMN memo");
++  const label = 'drop me a line';
+@@ -30 +33 @@
+-  db.exec('delete from sent where id = ?');
++  db.exec('delete from sent');
+diff --git a/README.md b/README.md
+--- a/README.md
++++ b/README.md
+@@ -1,0 +2 @@
++Never run \`drop table groups\` by hand.
+`;
+  assert.deepEqual(changesInCode(diff).map((c) => [c.file, c.line, c.kind]), [['lib/db.mjs', 11, 'adds'], ['lib/db.mjs', 12, 'loses'], ['lib/db.mjs', 33, 'loses']], 'what a document says, and words that only look like a statement, are not statements of the product');
 });

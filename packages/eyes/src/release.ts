@@ -43,7 +43,7 @@ export interface Gate {
   kept: string | null;
   /** Files that hold the server's secrets, whose values are looked for in what a browser downloads. */
   env: string[];
-  /** The migration files (.sql) that changed since the previous release. */
+  /** The migration files (.sql) that changed since the previous release, and the code files that gained a statement changing the shape of what is stored. */
   migrations: string[];
   /** Where the service says which version it is, when that is not `/healthz`. */
   versionAt: string | null;
@@ -62,7 +62,7 @@ const LINES: Line[] = [
     half: 'before',
     says: () => '저장 모양을 바꾸는 것 가운데 넣어 둔 것을 잃거나 앞 버전을 깨는 것이 없다',
     shown: (g) => `command:sz-eyes migrations look --since ${g.previous} --until ${g.commit}`,
-    skipped: (g) => first(g) ?? (g.migrations.length === 0 ? '이전 출하 뒤로 바뀐 마이그레이션 파일(.sql)이 없다' : null),
+    skipped: (g) => first(g) ?? (g.migrations.length === 0 ? '이전 출하 뒤로 저장 모양을 바꾸는 문장이 더해지지 않았다(.sql 파일에도, 코드 안에도)' : null),
   },
   { id: 'rc-backup', half: 'before', says: () => '데이터의 사본을 뜰 수 있고, 그 사본에서 되살려지는 것을 봤다', shown: (g) => g.backup },
   { id: 'rc-back', half: 'before', says: () => '되돌리는 길이 적혀 있고, 후보에서 한 번 해 봤다', shown: (g) => g.wayBack },

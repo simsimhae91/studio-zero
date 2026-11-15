@@ -104,7 +104,10 @@ export async function lookAtLive(url: string, opts: { commit?: string; at?: stri
     if (!has(html, /<title>\s*[^<\s][^<]*<\/title>/i)) notices.push('the first page has no title: a tab and a shared link show the bare address');
     if (!has(html, /<meta[^>]+name=["']viewport["']/i)) notices.push('no viewport meta tag: on a phone the page is drawn at desktop width and shrunk');
     if (!has(html, /<html[^>]+lang=/i)) notices.push('the page does not say its language (html lang): screen readers guess, and browsers may offer to translate it');
-    if (!has(html, /<meta[^>]+property=["']og:title["']/i) || !has(html, /<meta[^>]+property=["']og:image["']/i)) notices.push('no og:title or og:image: a link shared in a messenger shows no title or picture');
+    const [ogTitle, ogImage] = [has(html, /<meta[^>]+property=["']og:title["']/i), has(html, /<meta[^>]+property=["']og:image["']/i)];
+    if (!ogTitle && !ogImage) notices.push('no og:title and no og:image: a link shared in a messenger shows neither a title nor a picture');
+    else if (!ogTitle) notices.push('no og:title: a link shared in a messenger shows no title of its own');
+    else if (!ogImage) notices.push('no og:image: a link shared in a messenger shows its title and no picture');
     if (has(html, /<meta[^>]+name=["']robots["'][^>]+noindex/i) || /noindex/i.test(first.headers.get('x-robots-tag') ?? '')) notices.push('the first page asks search engines not to list it (noindex)');
     if (!has(html, /<link[^>]+rel=["'][^"']*icon/i)) {
       const icon = await get(new URL('/favicon.ico', home).href);
