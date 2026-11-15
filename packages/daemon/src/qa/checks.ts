@@ -57,6 +57,39 @@ function adder(findings: Finding[], ctx: Pick<CheckContext, 'viewport' | 'route'
  * repeatable, costs no tokens and cannot be argued with. The vision model is only asked about what cannot be
  * measured (hierarchy, cadence, tone), and is told which defects were already found here.
  */
+/**
+ * The measurements that are about any product, whoever made it and with whatever design: text that can be
+ * read, controls that can be pressed, nothing cut off, covered or pushed off the side, a label on one line, a
+ * face that loaded, a screen that drew. The rest of what is measured here is the house's own bar (its type
+ * scale and grid, its faces, how a first screen is composed, what reads as generated) and says nothing true of
+ * a product that was built elsewhere and brought in.
+ */
+export const UNIVERSAL_RULES: ReadonlySet<string> = new Set([
+  'contrast/text',
+  'touch/target-size',
+  'responsive/clipped-text',
+  'responsive/horizontal-overflow',
+  'responsive/missing-viewport-meta',
+  'layout/overlapping-text',
+  'layout/under-float',
+  'layout/end-under-bar',
+  'type/broken-label',
+  'type/broken-figure',
+  'type/font-not-loaded',
+  'render/blank',
+]);
+
+/**
+ * What was measured on a screen, as it holds for a product that is not the house's: the universal rules only,
+ * and contrast at the level every product owes. The house solves its own pairs to AAA and holds its products
+ * to that; a pair that passes AA is no defect in anyone else's (it is kept, as minor, so it can still be read).
+ * The first product brought in (2026-11-15) was first written down as breaking 68 rules on 7 screens, most of
+ * them for being set in its own typeface and spaced on its own grid.
+ */
+export function forForeignProduct(findings: readonly Finding[]): Finding[] {
+  return findings.filter((finding) => UNIVERSAL_RULES.has(finding.rule)).map((finding) => (finding.rule === 'contrast/text' && finding.severity === 'major' ? { ...finding, severity: 'minor' as const } : finding));
+}
+
 export function runDomChecks(digest: PageDigest, ctx: CheckContext, c: DesignContract): Finding[] {
   const findings: Finding[] = [];
   const add = adder(findings, ctx);

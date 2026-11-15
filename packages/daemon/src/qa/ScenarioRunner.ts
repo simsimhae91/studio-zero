@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import type { Browser, BrowserContextOptions, Page } from 'playwright-core';
 import { contract } from '@studio-zero/design';
-import type { Finding, Project, ScreenSpec, Template, Trails, ViewportId } from '@studio-zero/protocol';
+import { isAdopted, type Finding, type Project, type ScreenSpec, type Template, type Trails, type ViewportId } from '@studio-zero/protocol';
 import type { ProjectArms } from '../arms/ProjectArms.ts';
 import type { StackInfo } from '../arms/SupabaseStack.ts';
 import type { Config } from '../config.ts';
@@ -10,7 +10,7 @@ import { readProjectFile } from '../harness/projectFile.ts';
 import type { OrbStackManager } from '../sandbox/OrbStackManager.ts';
 import { MAX_STEP_PRESSES, SIGN_IN, SIGN_UP } from '../scratch/ScreenSpec.ts';
 import { KeyedMutex, excerpt } from '../util/core.ts';
-import { runDomChecks } from './checks.ts';
+import { forForeignProduct, runDomChecks } from './checks.ts';
 import { PageDigest, collectDigest } from './collector.ts';
 import { colourShares } from './pixels.ts';
 import { DONE_ATTR, STEP_ATTR, walkFlow } from './FlowWalker.ts';
@@ -297,14 +297,15 @@ const shownScreen = (attr: string): string | null => {
  * visitor sees before signing in (`door`). What a screen is made of and its colour are asked of those, as the
  * audit asks them of a first screen; the tab bar is asked of the first and not of the door.
  */
-async function lookAt(browser: Browser, page: Page, at: { screen: string; scenario: string; viewport: ViewportId; width: number; scale: number; touch: boolean; template: Template; first: 'core' | 'door' | null }): Promise<ScreenLook> {
+async function lookAt(browser: Browser, page: Page, at: { screen: string; scenario: string; viewport: ViewportId; width: number; scale: number; touch: boolean; template: Template; first: 'core' | 'door' | null; foreign?: boolean }): Promise<ScreenLook> {
   const digest = PageDigest.safeParse(await page.evaluate(collectDigest, 600).catch(() => null));
   const png = await page.screenshot({ type: 'png' }).catch(() => null);
   const shares = at.first !== null && png && digest.success && digest.data.composition ? await colourShares(browser, png, { mask: digest.data.composition.mediaBoxes, scale: at.scale }).catch(() => null) : null;
   const findings = digest.success
     ? runDomChecks(digest.data, { viewport: at.viewport, viewportWidth: at.width, route: at.screen, touch: at.touch, scope: 'full', template: at.template, ...(at.first !== null ? { firstScreen: true, door: at.first === 'door' } : {}), ...(shares ? { shares } : {}) }, contract)
     : [];
-  return { screen: at.screen, scenario: at.scenario, findings, png };
+  // A product that was brought in is held to what is true of any product, not to the house's own bar.
+  return { screen: at.screen, scenario: at.scenario, findings: at.foreign ? forForeignProduct(findings) : findings, png };
 }
 
 /**
@@ -315,7 +316,7 @@ async function lookAt(browser: Browser, page: Page, at: { screen: string; scenar
  * `backend` is null for a product nobody signs in to: its scenarios are walked as a visitor and that is all.
  * `restart` takes the backend down and brings it back. `run` names the walk (see `walkFlow`).
  */
-export async function walkScenarios(deps: { browser: Browser; base: string; phone: BrowserContextOptions | null; spec: ScreenSpec; backend: Backend | null; restart: () => Promise<void>; run: string; signal?: AbortSignal; look?: { template: Template; only?: readonly string[] }; brief?: boolean }): Promise<ScenarioWalk> {
+export async function walkScenarios(deps: { browser: Browser; base: string; phone: BrowserContextOptions | null; spec: ScreenSpec; backend: Backend | null; restart: () => Promise<void>; run: string; signal?: AbortSignal; look?: { template: Template; only?: readonly string[]; foreign?: boolean }; brief?: boolean }): Promise<ScenarioWalk> {
   const { browser, base, spec, backend, run } = deps;
   const touch = deps.phone !== null;
   const problems: string[] = [];
@@ -412,7 +413,7 @@ export async function walkScenarios(deps: { browser: Browser; base: string; phon
       if (again && !another(screen, state)) return;
       looked.add(screen);
       states.set(screen, (states.get(screen) ?? new Set<string>()).add(state ?? ''));
-      const look = await lookAt(browser, page, { screen, scenario: scenario.id, ...size, touch, template: deps.look.template, first: again ? null : screen === core ? 'core' : door ? 'door' : null });
+      const look = await lookAt(browser, page, { screen, scenario: scenario.id, ...size, touch, template: deps.look.template, first: again ? null : screen === core ? 'core' : door ? 'door' : null, ...(deps.look.foreign ? { foreign: true } : {}) });
       const had = broken.get(screen) ?? new Set<string>();
       broken.set(screen, had);
       const fresh = again ? look.findings.filter((finding) => finding.severity !== 'minor' && !had.has(finding.rule)) : look.findings;
@@ -575,7 +576,7 @@ export class ScenarioRunner implements ScenarioRunnerLike {
     };
     try {
       const result = await this.#browser.use(project, opts.signal, ({ browser, host, devices }) =>
-        walkScenarios({ browser, base: `http://${host}:${file.dev.port}`, phone: project.template === 'mobile-expo' ? devices['iPhone 15 Pro']! : null, spec, backend, restart, run, ...(opts.signal ? { signal: opts.signal } : {}), ...(opts.look ? { look: { template: project.template === 'studio-core' ? 'web-vite-react' : project.template, ...(typeof opts.look === 'object' ? { only: opts.look.only } : {}) } } : {}), ...(opts.brief ? { brief: true } : {}) }),
+        walkScenarios({ browser, base: `http://${host}:${file.dev.port}`, phone: project.template === 'mobile-expo' ? devices['iPhone 15 Pro']! : null, spec, backend, restart, run, ...(opts.signal ? { signal: opts.signal } : {}), ...(opts.look ? { look: { template: project.template === 'studio-core' ? 'web-vite-react' : project.template, ...(typeof opts.look === 'object' ? { only: opts.look.only } : {}), ...(isAdopted(project) ? { foreign: true } : {}) } } : {}), ...(opts.brief ? { brief: true } : {}) }),
       );
       const problems = [...result.problems];
       if (backend && !opts.brief) {

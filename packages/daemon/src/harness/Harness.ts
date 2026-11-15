@@ -1187,7 +1187,8 @@ export class Harness {
         // is first met at, with no reviewer, for the owner to see. A look that cannot be had is said and no more.
         // (A milestone's screens were measured where its people stood, signed in: the door too. One more look at
         // the door as a visitor would say less, and say it as if it were the product's first screen.)
-        if (task.track === 'fast' && !run.building) {
+        // (Nor is a product that was brought in: that look is the house's audit, by the house's rules.)
+        if (task.track === 'fast' && !run.building && !isAdopted(project)) {
           try {
             record.audit = (await this.#evals.measureDraft(project, task.id, { signal })) ?? record.audit;
           } catch (err) {

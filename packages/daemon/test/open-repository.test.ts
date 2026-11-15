@@ -6,11 +6,12 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
-import type { Project, ScreenSpec } from '@studio-zero/protocol';
+import type { Finding, Project, ScreenSpec } from '@studio-zero/protocol';
 import { ConfigSchema, testConfig } from '../src/config.ts';
 import { Store } from '../src/db/Store.ts';
 import { migrate } from '../src/db/schema.ts';
 import { scopeOf } from '../src/product/scope.ts';
+import { UNIVERSAL_RULES, forForeignProduct } from '../src/qa/checks.ts';
 import { OrbStackManager, SandboxError, productDir, resolveInProject } from '../src/sandbox/OrbStackManager.ts';
 import { changedFilesScript, depsScript, fromProduct } from '../src/sandbox/scripts.ts';
 import { dockerArgs, localDocker, sampleProject, tempDir } from './helpers.ts';
@@ -173,4 +174,25 @@ test('a change outside the product folder is walked for in full', () => {
   // A document outside it is a document.
   assert.equal(scopeOf({ changed: ['../docs/plan.md'], spec: SPEC, reach, trails: null }).kind, 'none');
   assert.equal(scopeOf({ changed: ['src/a.tsx', '../docs/plan.md'], spec: SPEC, reach, trails: null }).kind, 'some');
+});
+
+test('a brought-in product is held to what is true of any product, not to the house\'s bar', () => {
+  const finding = (rule: string, severity: Finding['severity']): Finding => ({ rule, category: 'typography', severity, source: 'dom', viewport: 'iphone-15-pro', route: 'H-01', message: rule, selector: null, bbox: null, fix: '' }) as unknown as Finding;
+  const measured = [
+    finding('contrast/text', 'blocker'), // fails AA: nobody can read it
+    finding('contrast/text', 'major'), // passes AA, fails the house's AAA
+    finding('type/foreign-font', 'major'), // set in its own typeface
+    finding('type/off-scale', 'major'),
+    finding('spacing/off-grid', 'major'),
+    finding('slop/emoji-as-icon', 'major'),
+    finding('layout/no-tab-bar', 'major'),
+    finding('material/nothing-drawn', 'major'),
+    finding('type/broken-label', 'major'),
+    finding('responsive/horizontal-overflow', 'blocker'),
+    finding('touch/target-size', 'major'),
+  ];
+  const kept = forForeignProduct(measured).map((f) => `${f.rule}:${f.severity}`);
+  assert.deepEqual(kept, ['contrast/text:blocker', 'contrast/text:minor', 'type/broken-label:major', 'responsive/horizontal-overflow:blocker', 'touch/target-size:major']);
+  assert.equal(measured[1]!.severity, 'major', 'what was measured is not rewritten in place');
+  for (const rule of UNIVERSAL_RULES) assert.match(rule, /^[a-z]+\/[a-z-]+$/);
 });
