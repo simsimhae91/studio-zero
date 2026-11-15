@@ -8,6 +8,9 @@ import { shq } from '../util/run.ts';
 const GIT_ID = '-c user.name=studio-zero -c user.email=studio-zero@localhost';
 const BRANCH_PATTERN = /^(?!-)(?!.*\.\.)(?!.*\/\/)[A-Za-z0-9._\/-]{1,120}(?<![.\/])$/;
 
+/** The branch a project's finished work is on: what a task starts from and what a merge or a landing moves. */
+export const INTEGRATION_BRANCH = 'main';
+
 export function assertBranchName(branch: string): void {
   if (!BRANCH_PATTERN.test(branch) || branch.endsWith('.lock')) throw new Error(`invalid branch name: ${JSON.stringify(branch)}`);
 }
@@ -204,4 +207,128 @@ export function waitHttpScript(p: { url: string; timeoutSec: number }): string {
   sleep 0.5
 done
 exit 1`;
+}
+
+// ------------------------------------------------------------------ slots
+
+/**
+ * Brings a slot's workspace to the project's as it stands: a clone of it the first time, then every branch the
+ * project has, the integration branch checked out, and nothing left of whoever was here before (untracked files
+ * go; what git ignores, installed dependencies and the backend's address among it, stays). Prints the commit.
+ * `main` is where the slot sees the project's workspace, which it can only read.
+ */
+export function syncSlotScript(p: { workspace: string; main: string; into: string }): string {
+  assertBranchName(p.into);
+  return `set -eu
+cd ${shq(p.workspace)}
+if [ ! -d .git ]; then
+  git clone -q --no-hardlinks ${shq(p.main)} .
+fi
+git rebase --abort >/dev/null 2>&1 || true
+git merge --abort >/dev/null 2>&1 || true
+git checkout -q -f --detach
+git fetch -q --no-tags --force ${shq(p.main)} '+refs/heads/*:refs/heads/*'
+git checkout -q -f ${shq(p.into)}
+git reset -q --hard
+git clean -fdq
+git rev-parse HEAD`;
+}
+
+/**
+ * Puts a slot's installed dependencies where its lockfile says, and prints what it did: `none` (the project
+ * installs nothing), `kept` (the lockfile is the one they were installed for), `copied` (the project's own
+ * workspace has them installed for the same lockfile: copied from there, which on the sandbox's filesystem
+ * shares the blocks and takes seconds) or `installed`. The lockfile is known by its git blob id, kept in the
+ * slot's own `.git`.
+ */
+export function slotDepsScript(p: { workspace: string; main: string }): string {
+  return `set -eu
+cd ${shq(p.workspace)}
+lock=''
+for f in pnpm-lock.yaml package-lock.json yarn.lock bun.lockb; do if [ -f "$f" ]; then lock="$f"; break; fi; done
+if [ -z "$lock" ]; then echo none; exit 0; fi
+want=$(git hash-object "$lock")
+have=$(cat .git/sz-deps 2>/dev/null || true)
+if [ "$want" = "$have" ] && [ -d node_modules ]; then echo kept; exit 0; fi
+rm -rf node_modules
+if [ -d ${shq(`${p.main}/node_modules`)} ] && [ -f ${shq(p.main)}/"$lock" ] && [ "$(git hash-object ${shq(p.main)}/"$lock")" = "$want" ]; then
+  cp -a --reflink=auto ${shq(`${p.main}/node_modules`)} node_modules 2>/dev/null || cp -a ${shq(`${p.main}/node_modules`)} node_modules
+  did=copied
+else
+  mkdir -p /tmp/sz
+  case "$lock" in
+    pnpm-lock.yaml) cmd='pnpm install --frozen-lockfile --prefer-offline' ;;
+    package-lock.json) cmd='npm ci' ;;
+    yarn.lock) cmd='yarn install --frozen-lockfile' ;;
+    *) cmd='bun install --frozen-lockfile' ;;
+  esac
+  if ! $cmd >/tmp/sz/slot-install.log 2>&1; then tail -c 2000 /tmp/sz/slot-install.log >&2; exit 4; fi
+  did=installed
+fi
+printf %s "$want" > .git/sz-deps
+echo "$did"`;
+}
+
+/**
+ * In a slot: puts the checked-out branch on top of the project's integration branch as it is now. Prints
+ * `same <commit>` when the branch already stood on it, `moved <commit>` when it had to be moved. When the two
+ * changed the same lines nothing is moved, the files that collide are printed, and the exit code is 3.
+ */
+export function rebaseOntoScript(p: { workspace: string; main: string; into: string }): string {
+  assertBranchName(p.into);
+  return `set -eu
+cd ${shq(p.workspace)}
+git fetch -q --no-tags ${shq(p.main)} ${shq(`refs/heads/${p.into}`)}
+new=$(git rev-parse FETCH_HEAD)
+if git merge-base --is-ancestor "$new" HEAD; then echo "same $new"; exit 0; fi
+if git ${GIT_ID} rebase -q "$new" >/dev/null 2>&1; then echo "moved $new"; exit 0; fi
+git diff --name-only --diff-filter=U
+git rebase --abort >/dev/null 2>&1 || true
+exit 3`;
+}
+
+/**
+ * In a slot: what `branch` holds beyond `base`, as a git bundle in base64 on stdout. A slot cannot write to the
+ * project's workspace, so this is how its commits leave it. Exit code 7 when the branch holds nothing more.
+ */
+export function bundleOutScript(p: { workspace: string; base: string; branch: string }): string {
+  assertBranchName(p.branch);
+  return `set -eu
+cd ${shq(p.workspace)}
+mkdir -p /tmp/sz
+[ -n "$(git rev-list -n 1 ${shq(`${p.base}..${p.branch}`)})" ] || exit 7
+git bundle create -q /tmp/sz/slot-out.bundle ${shq(`${p.base}..${p.branch}`)}
+base64 < /tmp/sz/slot-out.bundle
+rm -f /tmp/sz/slot-out.bundle
+git rev-parse ${shq(p.branch)} >&2`;
+}
+
+/**
+ * In the project's own workspace: takes a bundle on stdin into `branch`. With `land`, the integration branch is
+ * then moved forward to `land.commit`, and only if it still is where the slot saw it (`land.old`): where the
+ * project's checkout stands on that branch its working files follow (a fast-forward, which refuses to write
+ * over a file changed and not committed: exit 8), and where it stands on another branch (a heavy task at work)
+ * only the ref moves and the checkout is not touched. Exit 6: the integration branch had moved.
+ */
+export function bundleInScript(p: { workspace: string; branch: string; land?: { into: string; commit: string; old: string } }): string {
+  assertBranchName(p.branch);
+  const fetch = `set -eu
+cd ${shq(p.workspace)}
+mkdir -p /tmp/sz
+cat > /tmp/sz/slot-in.bundle
+git -c fetch.fsckObjects=true fetch -q --no-tags --force /tmp/sz/slot-in.bundle ${shq(`refs/heads/${p.branch}:refs/heads/${p.branch}`)}
+rm -f /tmp/sz/slot-in.bundle`;
+  if (!p.land) return `${fetch}
+git rev-parse ${shq(`refs/heads/${p.branch}`)}`;
+  assertBranchName(p.land.into);
+  if (!/^[0-9a-f]{40}$/.test(p.land.commit) || !/^[0-9a-f]{40}$/.test(p.land.old)) throw new Error('a landing names two full commit ids');
+  return `${fetch}
+[ "$(git rev-parse ${shq(`refs/heads/${p.branch}`)})" = ${p.land.commit} ] || exit 5
+if [ "$(git symbolic-ref --quiet --short HEAD || true)" = ${shq(p.land.into)} ]; then
+  [ "$(git rev-parse HEAD)" = ${p.land.old} ] || exit 6
+  git merge -q --ff-only ${p.land.commit} >/dev/null 2>&1 || exit 8
+else
+  git update-ref ${shq(`refs/heads/${p.land.into}`)} ${p.land.commit} ${p.land.old} 2>/dev/null || exit 6
+fi
+git rev-parse ${shq(`refs/heads/${p.land.into}`)}`;
 }

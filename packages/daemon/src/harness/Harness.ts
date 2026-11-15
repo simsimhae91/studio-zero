@@ -1,4 +1,5 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { INTEGRATION_BRANCH } from '../sandbox/scripts.ts';
 import { join } from 'node:path';
 import { z } from 'zod';
 import { AcceptanceVerdict, Effort, ReviewerId, ReviewerPref, ScreenSpec as ScreenSpecShape, type AuditReport, type Phase, type Finding, type PlanFeedback, type ProductMap, type Project, type Task, type TaskState } from '@studio-zero/protocol';
@@ -40,7 +41,7 @@ import { PRODUCT_DOC_FILE, PRODUCT_MAP_FILE, renderProductMap } from '../product
 import type { SelfHosting } from './SelfHosting.ts';
 import { copyBlock } from './TextSlopAuditor.ts';
 
-export const INTEGRATION_BRANCH = 'main';
+export { INTEGRATION_BRANCH };
 const HOUR_MS = 60 * 60 * 1000;
 /** How many times one task may ask the owner for more tokens. */
 const MAX_BUDGET_EXTENSIONS = 2;
