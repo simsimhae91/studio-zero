@@ -56,13 +56,14 @@ export class EngineError extends Error {
 }
 
 /**
- * A round the studio itself stopped: the vendor's CLI was still at work when the time one round may take ran
- * out. Not a failure of the CLI and not a word from the vendor: what it changed until then is in the workspace.
+ * A call to a vendor's CLI that the studio itself stopped at a time it had set (a one-off question to an
+ * advisor, a picture). Not a failure of the CLI and not a word from the vendor: its stderr is not the reason.
+ * A task's round has no such time (see `CliBridgeEngine`).
  */
 export class RoundTimedOut extends EngineError {
   readonly minutes: number;
   constructor(engine: string, minutes: number) {
-    super(`${engine} was stopped by the studio at its limit of ${minutes} minutes for one round, before it had finished its turn`);
+    super(`${engine} was stopped by the studio after ${minutes} minutes, the time it had set for this call, before it had answered`);
     this.name = 'RoundTimedOut';
     this.minutes = minutes;
   }

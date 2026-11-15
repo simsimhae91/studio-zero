@@ -338,15 +338,12 @@ const antigravity: VendorAdapter = {
 /** What one screenshot costs a vision model, roughly, for a protocol that does not report usage. */
 const IMAGE_TOKEN_ESTIMATE = 1500;
 
-/** How long one round of a vendor's CLI may take, and how many times a round stopped there is started again to go on. */
-const ROUND_MS = 60 * 60 * 1000;
-const ROUND_CONTINUATIONS = 2;
+/** How long a task's tools answer its engine. Not a limit on the work: the session is closed when the task ends, and this only outlasts it. */
+const SESSION_MS = 7 * 24 * 60 * 60 * 1000;
+/** For a protocol client that must be given a time: the longest a timer can be set for, about three weeks. */
+const NO_CLOCK_MS = 2_000_000_000;
 /** A lapsed login of the owner's is said again no sooner than this. */
 const LAPSED_LOGIN_QUIET_MS = 12 * 60 * 60 * 1000;
-
-/** What an engine is told when it is started again after a round the studio stopped at its time limit. */
-export const roundContinues = (minutes: number): string =>
-  `Your previous round on this request was stopped by the studio at its limit of ${minutes} minutes for one round, before you had finished. Nothing is lost: every change you made is in the workspace as you left it. Do not start over and do not redo what is done. Look at what is there first (git status, git diff, the files you were writing), finish what is missing, and stop when the request below is done. Work in the order that leaves the product working if you are stopped again. The request, again:`;
 
 /**
  * The logins of the owner's own connections that a CLI said it could not renew, read off its stderr. Checked
@@ -459,7 +456,7 @@ export class CliBridgeEngine implements Engine {
     await chmod(scratch, 0o700);
     const ctx = { project: run.project, taskId: run.task.id, signal: run.signal, onWaiting: run.onWaiting, ...(run.lane === undefined ? {} : { lane: run.lane }) };
     const toolbox = this.#toolbox;
-    const token = this.#sessions.create({ definitions: () => toolbox.definitions(), call: (name, args) => toolbox.call(ctx, name, args) }, 6 * 60 * 60 * 1000);
+    const token = this.#sessions.create({ definitions: () => toolbox.definitions(), call: (name, args) => toolbox.call(ctx, name, args) }, SESSION_MS);
     const system = `${run.system}\n\n${this.#adapter.jailed ? 'Your own shell and file tools do not work in this session: they are confined to an empty folder and cannot run commands.' : 'You have no local tools in this session.'} Act on the project only through the "${MCP_SERVER}" MCP tools (bash, read_file, write_file, edit_file work inside the project sandbox at /workspace; find_tools and use_tool reach external services).`;
     const inv: Invocation = {
       bin: this.#bin,
@@ -492,22 +489,14 @@ export class CliBridgeEngine implements Engine {
         if (steer.length > 0) this.#events.emit(scope, { type: 'steer.delivered', count: steer.length });
         const prompt = [this.#adapter.systemInPrompt ? system : '', previous ? `Your previous round ended with:\n${previous}` : '', userContent, steer.length > 0 ? steeringNote(steer) : ''].filter(Boolean).join('\n\n');
         let parsed: Parsed;
-        // A round that runs into the time one round may take is not thrown away with an hour of work in the
-        // workspace: the engine is started again and told to go on from what is there, a bounded number of
-        // times. (A build from a full design, on a slower model, was stopped at the hour with 212 tool calls
-        // made, and the task was failed with a line of the CLI's stderr about something else: 2026-11-15.)
-        for (let stopped = 0, said = prompt; ; ) {
-          try {
-            parsed = await this.#round(inv, said, ROUND_MS, run.signal, scope);
-            break;
-          } catch (err) {
-            if (run.signal.aborted) return { finalText: previous, stopped: 'cancelled' };
-            if (!(err instanceof RoundTimedOut)) throw err;
-            if (stopped >= ROUND_CONTINUATIONS) throw new EngineError(`${this.id} was stopped ${stopped + 1} times running at the studio's limit of ${err.minutes} minutes for one round and had still not finished its turn. What it changed is in the workspace, committed on the task's branch.`);
-            stopped += 1;
-            this.#events.emit(scope, { type: 'notice', level: 'warn', message: `${this.id}가 한 라운드 ${err.minutes}분 제한에 닿아 멈췄습니다. 한 일은 작업 공간에 그대로 있고, 거기서 이어서 진행합니다 (${stopped}/${ROUND_CONTINUATIONS}).` });
-            said = [this.#adapter.systemInPrompt ? system : '', roundContinues(err.minutes), userContent, steer.length > 0 ? steeringNote(steer) : ''].filter(Boolean).join('\n\n');
-          }
+        // No clock is set on a task's round. The owner's word, 2026-11-15, after a build was stopped at an hour
+        // with 212 tool calls made: how long a round takes is the work's to say. A round that has to be stopped
+        // is stopped by the owner (the task is cancelled, and the CLI with it).
+        try {
+          parsed = await this.#round(inv, prompt, undefined, run.signal, scope);
+        } catch (err) {
+          if (run.signal.aborted) return { finalText: previous, stopped: 'cancelled' };
+          throw err;
         }
         const model = `${this.id}:${inv.model}`;
         const usage = { inputTokens: parsed.inputTokens, outputTokens: parsed.outputTokens, cachedTokens: parsed.cachedTokens ?? 0, usdMicros: 0 }; // subscription-billed
@@ -614,7 +603,7 @@ export class CliBridgeEngine implements Engine {
   }
 
   /** One round, with its outcome noted for the subscription it ran on: an answer, or a refusal for a usage limit. */
-  async #round(inv: Invocation, prompt: string, timeoutMs: number, signal: AbortSignal | undefined, scope: { projectId: string | null; taskId: string | null } = { projectId: null, taskId: null }): Promise<Parsed> {
+  async #round(inv: Invocation, prompt: string, timeoutMs: number | undefined, signal: AbortSignal | undefined, scope: { projectId: string | null; taskId: string | null } = { projectId: null, taskId: null }): Promise<Parsed> {
     try {
       const parsed = await this.#launch(inv, prompt, timeoutMs, signal, scope);
       this.#quota?.answered(this.id);
@@ -626,7 +615,7 @@ export class CliBridgeEngine implements Engine {
   }
 
   /** Starts the CLI once with `prompt` and reads its answer. The confinement is the adapter's, whoever is asking. */
-  async #launch(inv: Invocation, prompt: string, timeoutMs: number, signal: AbortSignal | undefined, scope: { projectId: string | null; taskId: string | null } = { projectId: null, taskId: null }): Promise<Parsed> {
+  async #launch(inv: Invocation, prompt: string, timeoutMs: number | undefined, signal: AbortSignal | undefined, scope: { projectId: string | null; taskId: string | null } = { projectId: null, taskId: null }): Promise<Parsed> {
     const launch = await this.#adapter.launch(inv, prompt);
     // A jailed CLI gets the scratch folder as its temp directory too: it is one of the few places it may write.
     const profile = launch.jail ? jailProfile(inv.scratch, launch.jail) : null;
@@ -640,16 +629,16 @@ export class CliBridgeEngine implements Engine {
     const command = confined(launch.file, launch.args);
     if (launch.acp) {
       const images = launch.acp.images ?? [];
-      const answer = await this.#acp({ file: command.file, args: command.args, env, cwd: inv.scratch, mcpServers: launch.acp.mcpServers, prompt, ...(images.length > 0 ? { images } : {}), ...(launch.acp.model === undefined ? {} : { model: launch.acp.model }), signal, timeoutMs });
+      const answer = await this.#acp({ file: command.file, args: command.args, env, cwd: inv.scratch, mcpServers: launch.acp.mcpServers, prompt, ...(images.length > 0 ? { images } : {}), ...(launch.acp.model === undefined ? {} : { model: launch.acp.model }), signal, timeoutMs: timeoutMs ?? NO_CLOCK_MS });
       // The protocol reports no token counts. Budgets still need a number, so one is estimated from the
       // text that crossed the wire (about four characters a token) and a flat figure per picture; what the
       // agent read through tools is not in it.
       return { text: answer.text, inputTokens: Math.ceil(prompt.length / 4) + images.length * IMAGE_TOKEN_ESTIMATE, outputTokens: Math.ceil(answer.text.length / 4) };
     }
-    const res = await this.#run(command.file, command.args, { stdin: launch.stdin, cwd: inv.scratch, env, timeoutMs, maxOutputBytes: 32 * 1024 * 1024, signal });
+    const res = await this.#run(command.file, command.args, { stdin: launch.stdin, cwd: inv.scratch, env, ...(timeoutMs === undefined ? {} : { timeoutMs }), maxOutputBytes: 32 * 1024 * 1024, signal });
     this.#lapsedLogins(res.stderr, scope);
     // Stopped by this daemon's own clock, which is not something the CLI said: its stderr is not the reason.
-    if (res.timedOut) throw new RoundTimedOut(this.id, Math.round(timeoutMs / 60_000));
+    if (res.timedOut) throw new RoundTimedOut(this.id, Math.round((timeoutMs ?? 0) / 60_000));
     if (res.exitCode !== 0) throw new EngineError(`${this.id} exited ${res.exitCode}: ${excerpt(res.stderr || res.stdout, 600)}`);
     return this.#adapter.parse(res.stdout, inv);
   }

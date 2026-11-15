@@ -1,12 +1,12 @@
-// A vendor CLI's round as the studio runs it: one that is stopped at the studio's own time limit is gone on
-// from, not failed with whatever the CLI last wrote to stderr; and a login of the owner's that the CLI says it
-// could not renew is told to the owner, once.
+// A vendor CLI's round as the studio runs it: no clock is set on it (how long a round takes is the work's to
+// say), and a login of the owner's that the CLI says it could not renew is told to the owner, once, and is never
+// taken for the reason a round ended.
 import assert from 'node:assert/strict';
 import { chmodSync, mkdtempSync, realpathSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { lapsedLogins, roundContinues } from '../src/harness/engines/CliBridgeEngine.ts';
+import { lapsedLogins } from '../src/harness/engines/CliBridgeEngine.ts';
 import { codingSystemPrompt } from '../src/harness/prompts.ts';
 import type { RunOptions, RunResult } from '../src/util/run.ts';
 import { sampleProject, testDaemon } from './helpers.ts';
@@ -50,49 +50,42 @@ async function rig(script: (n: number, opts: RunOptions) => Partial<RunResult> &
 }
 
 const TURN = '{"type":"turn.completed","usage":{"input_tokens":1200,"cached_input_tokens":200,"output_tokens":90}}\n';
-const stoppedAtTheLimit = { exitCode: 128, timedOut: true, stderr: NOTION };
 
-test('a round stopped at the time limit is gone on from, and the lapsed login it mentioned is told once and is not the reason', async () => {
-  const r = await rig((n) => (n === 1 ? stoppedAtTheLimit : { stdout: TURN, stderr: NOTION, say: 'MVP를 끝까지 지었습니다.' }));
+test('a task\'s round runs with no clock on it, and the lapsed login the CLI mentioned is told once', async () => {
+  const clocks: (number | undefined)[] = [];
+  const r = await rig((_n, opts) => (clocks.push(opts.timeoutMs), { stdout: TURN, stderr: NOTION, say: 'MVP를 끝까지 지었습니다.' }));
   try {
     assert.deepEqual(await r.session.send('Build the MVP as the design documents say.'), { finalText: 'MVP를 끝까지 지었습니다.', stopped: 'completed' });
-    assert.equal(r.rounds.length, 2);
-    assert.ok(!r.rounds[0]!.stdin.includes('stopped by the studio'));
-    assert.ok(r.rounds[1]!.stdin.includes(roundContinues(60)), 'told it was stopped and that its work is there');
-    assert.ok(r.rounds[1]!.stdin.includes('Build the MVP as the design documents say.'), 'and what it was asked, again');
-    const said = r.notices();
-    assert.equal(said.filter((n) => /60분 제한에 닿아 멈췄습니다.*이어서 진행합니다 \(1\/2\)/s.test(n.message)).length, 1);
-    const logins = said.filter((n) => n.attention);
-    assert.equal(logins.length, 1, 'the CLI said it twice; the owner hears it once');
-    assert.match(logins[0]!.message, /"notion"의 로그인이 만료됐습니다 \(OAuth 승인이 취소됨\)\. 스튜디오의 작업에는 지장이 없습니다\..*mcp login notion$/s);
-    // The next round is an ordinary one.
     assert.equal((await r.session.send('Now the tests.')).stopped, 'completed');
-    assert.ok(r.rounds[2]!.stdin.includes('Your previous round ended with:\nMVP를 끝까지 지었습니다.'));
-    assert.equal(r.notices().filter((n) => n.attention).length, 1);
+    assert.deepEqual(clocks, [undefined, undefined], 'nothing stops a round but the owner');
+    assert.ok(r.rounds[1]!.stdin.includes('Your previous round ended with:\nMVP를 끝까지 지었습니다.'));
+    const logins = r.notices().filter((n) => n.attention);
+    assert.equal(logins.length, 1, 'the CLI said it in both rounds; the owner hears it once');
+    assert.match(logins[0]!.message, /"notion"의 로그인이 만료됐습니다 \(OAuth 승인이 취소됨\)\. 스튜디오의 작업에는 지장이 없습니다\..*mcp login notion$/s);
   } finally {
     await r.cleanup();
   }
 });
 
-test('a round stopped at the limit time after time fails as that, not as what the CLI wrote to stderr', async () => {
-  const r = await rig(() => stoppedAtTheLimit);
-  try {
-    await assert.rejects(r.session.send('Build everything.'), (err: Error) => {
-      assert.match(err.message, /codex was stopped 3 times running at the studio's limit of 60 minutes for one round/);
-      assert.ok(!/notion|OAuth/i.test(err.message), err.message);
-      return true;
-    });
-    assert.equal(r.rounds.length, 3);
-  } finally {
-    await r.cleanup();
-  }
-});
-
-test('a CLI that exits on its own with an error still fails with what it said', async () => {
+test('a CLI that exits on its own with an error fails with what it said', async () => {
   const r = await rig(() => ({ exitCode: 2, stderr: 'error: unexpected argument\n' }));
   try {
     await assert.rejects(r.session.send('Build it.'), /codex exited 2: error: unexpected argument/);
     assert.equal(r.rounds.length, 1);
+  } finally {
+    await r.cleanup();
+  }
+});
+
+test('a one-off question that the studio stopped at its own time says so, not what the CLI wrote to stderr', async () => {
+  const r = await rig(() => ({ exitCode: 128, timedOut: true, stderr: NOTION }));
+  try {
+    const codex = (await r.d.daemon.router.route('build', { engine: 'codex' })).engine as unknown as { ask: (req: { system: string; question: string; timeoutMs?: number }) => Promise<unknown> };
+    await assert.rejects(codex.ask({ system: 's', question: 'q', timeoutMs: 120_000 }), (err: Error) => {
+      assert.match(err.message, /codex was stopped by the studio after 2 minutes, the time it had set for this call/);
+      assert.ok(!/notion|OAuth/i.test(err.message), err.message);
+      return true;
+    });
   } finally {
     await r.cleanup();
   }
