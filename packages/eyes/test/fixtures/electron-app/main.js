@@ -11,7 +11,7 @@ app.whenReady().then(() => {
   try { opened = JSON.parse(fs.readFileSync(kept, 'utf8')).opened; } catch {}
   fs.mkdirSync(app.getPath('userData'), { recursive: true });
   fs.writeFileSync(kept, JSON.stringify({ opened: opened + 1 }));
-  ipcMain.handle('where', () => ({ userData: app.getPath('userData'), port: process.env.PROBE_PORT || null, opened: opened + 1 }));
+  ipcMain.handle('where', () => ({ userData: app.getPath('userData'), port: process.env.PROBE_PORT || null, opened: opened + 1, day: new Date().toLocaleDateString('sv-SE') }));
   ipcMain.handle('mini', () => { const mini = new BrowserWindow({ width: 240, height: 160, frame: false, title: 'Mini' }); mini.loadURL('data:text/html;charset=utf-8,<title>Mini</title><button>닫기</button><p>작은 창</p>'); });
 });
 app.on('window-all-closed', () => app.quit());

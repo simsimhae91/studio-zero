@@ -73,6 +73,9 @@ const READING_ORDER = (a: { y: number; x: number }, b: { y: number; x: number })
 const QUIET_MS = 4_000;
 export const quiet = (page: Page, ms = QUIET_MS): Promise<void> => page.waitForLoadState('networkidle', { timeout: ms }).catch(() => undefined);
 
+/** How long `see` and `expect` let the screen catch up with what was just done before saying it is not so. */
+const GLANCE_MS = 2_000;
+
 /** Where a held clock starts: a fixed moment, so that a date a product shows is the same on every run. */
 const CLOCK_START = Date.UTC(2026, 0, 1, 0, 0, 0);
 
@@ -222,11 +225,11 @@ export function renderLook(look: Look): string {
  *   press:<key>                             a key: Enter, Escape, Tab
  *   wait:<words or a selector>              until it is on screen
  *   gone:<words or a selector>              until it is no longer on screen
- *   see:<words>                             it must be on screen now, or the walk stops here
+ *   see:<words>                             it must be on screen now (the screen gets two seconds to catch up with the last press), or the walk stops here
  *   shot:<name>                             keep a picture of the screen as it is now
  *   go:<path or url>                        open another address
  *   read:<name>=<expression>                keep what a JavaScript expression says in the page, under a name
- *   expect:<expression>                     it must be so now (the expression is true in the page), or the walk stops here
+ *   expect:<expression>                     it must be so now (the expression is true in the page; it too gets two seconds), or the walk stops here
  *   hold:<key>=<ms>                         hold a key down for that long
  *   run:<ms>                                let that much of the page's time pass (with the clock held: see `clock`)
  */
@@ -316,7 +319,12 @@ export async function doStep(page: Page, step: Step, patience = 10_000, more: { 
     else if (verb === 'wait') await pointAt(page, rest).waitFor({ state: 'visible', timeout: patience });
     else if (verb === 'gone') await pointAt(page, rest).waitFor({ state: 'hidden', timeout: patience });
     else if (verb === 'see') {
-      if (!(await pointAt(page, rest).isVisible().catch(() => false))) throw new Error(`"${rest}" is not on screen`);
+      // "Now" as a person means it: the screen is given a moment to catch up with the last press.
+      await pointAt(page, rest)
+        .waitFor({ state: 'visible', timeout: Math.min(GLANCE_MS, patience) })
+        .catch(() => {
+          throw new Error(`"${rest}" is not on screen`);
+        });
     } else if (verb === 'go') await page.goto(new URL(rest, page.url()).toString(), { waitUntil: 'load', timeout: 30_000 });
     else if (verb === 'run') await pass(Number(rest));
     else if (verb === 'hold') {
@@ -330,7 +338,12 @@ export async function doStep(page: Page, step: Step, patience = 10_000, more: { 
       const value: unknown = await page.evaluate(rest.slice(eq + 1));
       if (more.reads) more.reads[rest.slice(0, eq)] = value;
     } else if (verb === 'expect') {
-      const value: unknown = await page.evaluate(rest);
+      const until = Date.now() + Math.min(GLANCE_MS, patience);
+      let value: unknown = await page.evaluate(rest);
+      while (!value && Date.now() < until) {
+        await page.waitForTimeout(100);
+        value = await page.evaluate(rest);
+      }
       if (!value) throw new Error(`not so: ${rest} (it is ${JSON.stringify(value)})`);
     } else if (verb !== 'shot') throw new Error(`no such step: ${verb}. Steps are tap, type, press, hold, wait, gone, see, read, expect, run, shot, go`);
     return null;
@@ -362,10 +375,15 @@ export async function walkWeb(url: string, steps: readonly Step[], opts: LookOpt
           const [verb, rest] = at === -1 ? [step, ''] : [step.slice(0, at), step.slice(at + 1)];
           const why = await doStep(page, step, patience, { ...(opts.clock ? { clock: true } : {}), reads });
           let screenshot: string | null = null;
-          if (opts.out && (verb === 'shot' || why !== null || verb === 'tap' || verb === 'go' || verb === 'hold')) {
-            mkdirSync(opts.out, { recursive: true });
-            screenshot = join(opts.out, `${opts.name ?? 'walk'}-${String(++n).padStart(2, '0')}-${verb === 'shot' ? rest.replace(/[^\w가-힣-]+/g, '-').slice(0, 40) : verb}${why ? '-stopped' : ''}.png`);
-            writeFileSync(screenshot, await settled(page));
+          if (verb === 'shot' || why !== null || verb === 'tap' || verb === 'go' || verb === 'hold') {
+            // What an action sets going is let finish before the next step looks, whether or not a picture is
+            // kept: a `see` straight after a `tap` would otherwise read the screen as it was before the press.
+            const png = await settled(page);
+            if (opts.out) {
+              mkdirSync(opts.out, { recursive: true });
+              screenshot = join(opts.out, `${opts.name ?? 'walk'}-${String(++n).padStart(2, '0')}-${verb === 'shot' ? rest.replace(/[^\w가-힣-]+/g, '-').slice(0, 40) : verb}${why ? '-stopped' : ''}.png`);
+              writeFileSync(screenshot, png);
+            }
           }
           results.push({ step, ok: why === null, why, screenshot });
           if (why !== null) break;

@@ -26,12 +26,12 @@ Tell the owner the people in three lines and go on. They correct you if you have
 
 ## 2. The stage
 
-Each person gets a product of their own that nobody else has used: a copy of the data, a port from the machine, or for a desktop app its own data folder (`sz-eyes electron ... --data <trial folder>/<id>/data`, which also keeps what they did for the days that follow). Never the owner's own copy or data.
+Each person gets a product of their own that nobody else has used: a copy of the data, a port from the machine, or for a desktop app its own data folder (`sz-eyes electron ... --data <trial folder>/<id>/data`, which also keeps what they did for the days that follow). Never the owner's own copy or data. What you try yourself to work the commands out (a first launch, a fault you want to see again) is kept under the trial's folder as well (`<trial folder>/_stage/`), never in a folder elsewhere on the machine.
 
 Work out, and give each stand-in as exact commands:
 
 - **how the product is opened** as this person would meet it, starting where people start (the landing page, the shared link, the first launch);
-- **how a day passes.** Most of what decides whether someone pays happens on the second and the seventh day. Use the product's own way of moving its clock (a variable, a debug setting), or data put in place as it would be a week in. If the product has no way and time matters to it, that is the first finding, and the days after the first go untried;
+- **how a day passes.** Most of what decides whether someone pays happens on the second and the seventh day. A desktop app is started believing it is a later day, with nothing asked of the app: `sz-eyes electron ... --data <the person's folder> --days-later 1` (then 3, 7), which moves the clock of its main process and of every window. Closing it and opening it again is not a day passing: say `--days-later`, or the stand-in is shown the same day twice and reports what is not so. For anything else use the product's own way of moving its clock (a variable, a debug setting), or data put in place as it would be a week in. If the product has no way and time matters to it, that is the first finding, and the days after the first go untried;
 - **the moment it asks for money**, and a test payment if the product has one.
 
 ## 3. Let them use it

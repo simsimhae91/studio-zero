@@ -35,6 +35,11 @@ export interface ElectronOptions {
    * keep theirs.
    */
   data?: string;
+  /**
+   * How many days ahead of now the app believes it is (its main process and every window): the next morning,
+   * a week on. With `data` kept between runs, this is a person coming back on a later day. Time still runs.
+   */
+  daysLater?: number;
   /** Show its windows on the owner's screen, as a person sees them. For an app whose layout follows the screen. */
   onscreen?: boolean;
   /** The Electron to run it with, when it is not the one installed in the app's own folder. */
@@ -52,6 +57,8 @@ export interface AppLook extends Look {
   height: number;
   /** The last lines the app's main process wrote to its error stream. */
   mainLog: string[];
+  /** The day the app believed it was, when its clock was moved ahead. */
+  clock: string | null;
 }
 
 export interface AppWalk {
@@ -63,6 +70,27 @@ export interface AppWalk {
 }
 
 export class ElectronError extends Error {}
+
+/**
+ * Moves what `Date` answers by a fixed amount, in whatever runs it (the main process, a window). Everything else
+ * about time is left alone: timers run as they do, and a date built from numbers is that date.
+ */
+const shiftedClock = (ms: number): string => `(() => {
+  const Real = Date;
+  if (Real.__szShift !== undefined) return;
+  const shift = ${ms};
+  function Shifted(...args) {
+    if (!new.target) return new Real(Real.now() + shift).toString();
+    return Reflect.construct(Real, args.length === 0 ? [Real.now() + shift] : args, new.target);
+  }
+  Object.setPrototypeOf(Shifted, Real);
+  Shifted.prototype = Real.prototype;
+  Real.prototype.constructor = Shifted;
+  Shifted.now = () => Real.now() + shift;
+  Shifted.__szShift = shift;
+  globalThis.Date = Shifted;
+})();
+`;
 
 /** What is asked of a window to keep it off the owner's screen. (Electron's own types are not installed here.) */
 type Quietable = { setOpacity(opacity: number): void; setIgnoreMouseEvents(ignore: boolean): void };
@@ -119,10 +147,19 @@ async function open(folder: string, opts: ElectronOptions): Promise<{ app: Elect
   const data = kept ?? mkdtempSync(join(tmpdir(), 'sz-electron-'));
   const put = (value: string): string => value.split('{data}').join(data);
   const mainLog: string[] = [];
+  const shift = opts.daysLater ? Math.round(opts.daysLater * 86_400_000) : 0;
+  const first: string[] = [];
+  if (shift !== 0) {
+    // The main process loads it before any of the app's own code; the same text every time, so the file is kept.
+    // (As an argument: the driver takes NODE_OPTIONS out of the app's environment.)
+    const file = join(tmpdir(), `sz-clock-${shift}.cjs`);
+    writeFileSync(file, shiftedClock(shift));
+    first.push('-r', file);
+  }
   let app: ElectronApplication;
   try {
     // Occlusion is switched off: a window nobody can see would otherwise stop drawing.
-    app = await _electron.launch({ executablePath: bin, args: [folder, `--user-data-dir=${data}`, '--disable-features=MacWebContentsOcclusion,CalculateNativeWinOcclusion', ...(opts.args ?? []).map(put)], cwd: folder, env: { ...(process.env as Record<string, string>), ...Object.fromEntries(Object.entries(opts.env ?? {}).map(([name, value]) => [name, put(value)])) }, timeout: opts.timeoutMs ?? 30_000 });
+    app = await _electron.launch({ executablePath: bin, args: [...first, folder, `--user-data-dir=${data}`, '--disable-features=MacWebContentsOcclusion,CalculateNativeWinOcclusion', ...(opts.args ?? []).map(put)], cwd: folder, env: { ...(process.env as Record<string, string>), ...Object.fromEntries(Object.entries(opts.env ?? {}).map(([name, value]) => [name, put(value)])) }, timeout: opts.timeoutMs ?? 30_000 });
   } catch (err) {
     if (!kept) rmSync(data, { recursive: true, force: true });
     throw new ElectronError(`the app in ${folder} did not start: ${(err instanceof Error ? err.message : String(err)).split('\n')[0]!.slice(0, 300)}. Is it built (the map's build command), and does its package.json name its main file?`);
@@ -144,6 +181,20 @@ async function open(folder: string, opts: ElectronOptions): Promise<{ app: Elect
   if (says === null || !inside(says)) {
     await shut(app, data, !kept);
     throw new ElectronError(`the app keeps its data in ${says ?? '(it did not say)'}, not in the folder made for this run: it was closed at once. Point it at that folder by its own variable or switch: --env <NAME>={data} or --arg <switch>={data}.`);
+  }
+  if (shift !== 0) {
+    // Every window takes it before its page's own code runs. One that opened before this was said is loaded again,
+    // so that nothing on it was drawn by the real day.
+    await app.context().addInitScript({ content: shiftedClock(shift) });
+    for (const page of app.windows()) {
+      const moved = await page.evaluate(() => (Date as unknown as { __szShift?: number }).__szShift).catch(() => undefined);
+      if (moved !== shift) await page.reload().catch(() => undefined);
+    }
+    const main = await app.evaluate(() => (Date as unknown as { __szShift?: number }).__szShift).catch(() => undefined);
+    if (main !== shift) {
+      await shut(app, data, !kept);
+      throw new ElectronError('the clock of the app could not be moved: its main process did not take the change (a packaged app does not; start it from its folder). It was closed.');
+    }
   }
   if (!opts.onscreen) {
     await app
@@ -193,6 +244,7 @@ async function lookAt(app: ElectronApplication, page: Page, opts: ElectronOption
     windows: await Promise.all(app.windows().map((win) => win.title().catch(() => ''))),
     ...size,
     mainLog: mainLog.slice(-12),
+    clock: opts.daysLater ? await app.evaluate(() => new Date().toLocaleString('sv-SE')).catch(() => null) : null,
   };
 }
 
@@ -236,10 +288,15 @@ export async function walkElectron(folder: string, steps: readonly Step[], opts:
       } else if (verb === 'go') why = 'an app is not sent to an address: press what opens the screen you mean';
       else why = await doStep(page, step, patience, { reads });
       let screenshot: string | null = null;
-      if (opts.out && (verb === 'shot' || why !== null || verb === 'tap' || verb === 'window' || verb === 'hold')) {
-        mkdirSync(opts.out, { recursive: true });
-        screenshot = join(opts.out, `${opts.name ?? 'walk'}-${String(++n).padStart(2, '0')}-${verb === 'shot' ? rest.replace(/[^\w가-힣-]+/g, '-').slice(0, 40) : verb}${why ? '-stopped' : ''}.png`);
-        writeFileSync(screenshot, await settled(page).catch(() => Buffer.alloc(0)));
+      if (verb === 'shot' || why !== null || verb === 'tap' || verb === 'window' || verb === 'hold') {
+        // As in a web walk: what a press sets going (a message to the main process and back) is let finish
+        // before the next step looks, whether or not a picture is kept.
+        const png = await settled(page).catch(() => Buffer.alloc(0));
+        if (opts.out) {
+          mkdirSync(opts.out, { recursive: true });
+          screenshot = join(opts.out, `${opts.name ?? 'walk'}-${String(++n).padStart(2, '0')}-${verb === 'shot' ? rest.replace(/[^\w가-힣-]+/g, '-').slice(0, 40) : verb}${why ? '-stopped' : ''}.png`);
+          writeFileSync(screenshot, png);
+        }
       }
       results.push({ step, ok: why === null, why, screenshot });
       if (why !== null) break;
@@ -254,7 +311,7 @@ export async function walkElectron(folder: string, steps: readonly Step[], opts:
 export const lookAtElectron = async (folder: string, opts: ElectronOptions = {}): Promise<AppLook> => (await walkElectron(folder, [], opts)).end;
 
 export function renderAppLook(look: AppLook): string {
-  return [`windows open (${look.windows.length}): ${look.windows.map((title) => JSON.stringify(title)).join(', ')}; looked at one of ${look.width}x${look.height}`, renderLook(look), ...(look.mainLog.length > 0 ? [`its main process said:\n${look.mainLog.map((line) => `  ${line}`).join('\n')}`] : [])].join('\n');
+  return [...(look.clock ? [`the app was told it is ${look.clock}`] : []), `windows open (${look.windows.length}): ${look.windows.map((title) => JSON.stringify(title)).join(', ')}; looked at one of ${look.width}x${look.height}`, renderLook(look), ...(look.mainLog.length > 0 ? [`its main process said:\n${look.mainLog.map((line) => `  ${line}`).join('\n')}`] : [])].join('\n');
 }
 
 export function renderAppWalk(walk: AppWalk, total: number): string {

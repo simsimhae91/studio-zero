@@ -734,6 +734,14 @@ test('a desktop app built on Electron is started on data of its own, operated ac
     assert.equal((await walkElectron(app, ['see:42번째'], { executablePath: bin, data: kept })).passed, true, 'it starts from data in the shape an older run left');
     assert.ok(existsSync(join(kept, 'opened.json')), 'a folder that was given is not thrown away');
     await assert.rejects(walkElectron(app, [], { executablePath: bin, data: join(homedir(), 'Library/Application Support/sz-eyes-must-never-be-here') }), /where the owner's own apps keep their data/);
+    // A person coming back a week on: the same data, and the app (its main process and its window) believes
+    // it is seven days later. Nothing is asked of the app for this.
+    const weekOn = new Date(Date.now() + 7 * 86_400_000).toLocaleDateString('sv-SE');
+    const later = await walkElectron(app, ['see:43번째', `see:main ${weekOn}`, `see:page ${weekOn}`, 'expect:new Date(2020, 0, 1).getFullYear() === 2020 && typeof Date() === "string" && new Date() instanceof Date'], { executablePath: bin, data: kept, daysLater: 7 });
+    assert.equal(later.passed, true, renderAppWalk(later, 4));
+    assert.match(later.end.clock ?? '', new RegExp(`^${weekOn} `));
+    assert.match(renderAppWalk(later, 4), new RegExp(`the app was told it is ${weekOn}`));
+    assert.equal((await walkElectron(app, [`see:main ${new Date().toLocaleDateString('sv-SE')}`], { executablePath: bin, data: kept })).end.clock, null, 'and without it, today');
     // An app that sets its own data folder would open the owner's real data: it is not started until it is
     // pointed, by its own variable, at the folder made for the run.
     const own = join(HERE, 'fixtures/electron-app-own-data');

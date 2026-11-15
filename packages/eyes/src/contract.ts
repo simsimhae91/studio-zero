@@ -21,6 +21,9 @@ export type Lane = z.infer<typeof Lane>;
  * page). `test`: a test command. `look`: the screen itself, looked at in a named state. `command`: any command
  * whose exit says it. `owner`: nothing a machine can say (is it fun, does it sound right): left for the owner.
  */
+/** The day a moment falls on where the owner is: what a folder or a note is dated by, as they would date it. */
+export const localDay = (iso: string): string => new Date(iso).toLocaleDateString('sv-SE');
+
 export const ShownBy = z.object({ kind: z.enum(['flow', 'test', 'look', 'command', 'owner']), ref: z.string().max(600) });
 
 /**

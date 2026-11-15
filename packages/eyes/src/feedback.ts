@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 
 import { extname, join } from 'node:path';
 import { z } from 'zod';
 import { addToBacklog } from './backlog.ts';
-import { SZ_DIR } from './contract.ts';
+import { SZ_DIR, localDay } from './contract.ts';
 import { PAGE_STYLE, esc, inlinePicture } from './evidence.ts';
 
 /**
@@ -62,7 +62,7 @@ function writeRound(folder: string, round: Round): void {
 /** A new, empty round: `<date>-<n>` under the project's feedback folder. Returns its folder. */
 export function newRound(projectDir: string, now: string): string {
   const dir = join(projectDir, FEEDBACK_DIR);
-  const day = now.slice(0, 10);
+  const day = localDay(now);
   const taken = existsSync(dir) ? readdirSync(dir).filter((name) => name.startsWith(`${day}-`)).length : 0;
   let n = taken + 1;
   while (existsSync(join(dir, `${day}-${n}`))) n++;

@@ -14,6 +14,7 @@ import { Contract, openContracts, owed, renderContract, writeContract, CONTRACTS
 import { createServer } from 'node:http';
 import { addSaid, newRound, noteSaid, readRound, renderRound, roundPage } from '../src/feedback.ts';
 import { reviewWeb } from '../src/review.ts';
+import { walkWeb } from '../src/web.ts';
 import { brokenDuring, keptFor, recordShown, stampClosed, standing } from '../src/standing.ts';
 import { evidencePage } from '../src/evidence.ts';
 import { quarantineFlow } from '../src/ios.ts';
@@ -536,5 +537,29 @@ test('the owner’s verdict on what was left for them is taken in their words, a
     assert.doesNotMatch(eyes(project, 'overview', project).text, /주인의 판단을 기다리는 것/);
   } finally {
     rmSync(project, { recursive: true, force: true });
+  }
+});
+
+test('a look straight after a press sees what the press did, with no picture kept and no wait written', async () => {
+  // The screen changes a little after the press (a request, a message to another process): a step that reads
+  // it must not read it as it was before.
+  const server = createServer((_req, res) => {
+    res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+    res.end(`<!doctype html><title>물</title><p id="count">0잔</p><button onclick="setTimeout(()=>{document.querySelector('#count').textContent='1잔';window.n=1},600)">한 잔 더</button>`);
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const address = server.address();
+    const url = `http://127.0.0.1:${typeof address === 'object' && address ? address.port : 0}/`;
+    const seen = await walkWeb(url, ['tap:한 잔 더', 'see:1잔']);
+    assert.equal(seen.passed, true, seen.steps.map((s) => s.why).join(' '));
+    const expected = await walkWeb(url, ['tap:한 잔 더', 'expect:window.n === 1']);
+    assert.equal(expected.passed, true, expected.steps.map((s) => s.why).join(' '));
+    // What never comes is still said, after the moment given.
+    const never = await walkWeb(url, ['see:2잔']);
+    assert.equal(never.passed, false);
+    assert.match(never.steps[0]!.why ?? '', /"2잔" is not on screen/);
+  } finally {
+    server.close();
   }
 });

@@ -21,7 +21,7 @@ Go the whole way the person would, in order, as far as the product lets you:
 
 1. **Arriving.** Where they first meet it. What does it say it will do for me? Do I believe it? Would I go on?
 2. **The first use.** Getting from nothing to the one thing I came for. Count what stands in the way: screens, questions, things I must already know.
-3. **Coming back.** The next day, three days later, a week later, by the way of passing a day you were given. What is there for me now? Did it remember? Do I have a reason to open it again, or would I have forgotten it?
+3. **Coming back.** The next day, three days later, a week later, by the way of passing a day you were given (use exactly that: closing the product and opening it again is the same day). What is there for me now? Did it remember? Do I have a reason to open it again, or would I have forgotten it?
 4. **Being asked for money**, if it asks, or the place where it would. What do I have by now, what does paying add, and is that worth this price to me, compared with what I use today?
 5. **After paying**, if a test payment was set up for you: did I get what was promised, and can I stop?
 

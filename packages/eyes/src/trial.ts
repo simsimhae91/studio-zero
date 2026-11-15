@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { z } from 'zod';
-import { SZ_DIR } from './contract.ts';
+import { SZ_DIR, localDay } from './contract.ts';
 import { PAGE_STYLE, esc, inlinePicture } from './evidence.ts';
 
 /**
@@ -109,7 +109,7 @@ function writeTrial(folder: string, trial: Trial): void {
 export function newTrial(projectDir: string, at: string): string {
   const dir = join(projectDir, TRIALS_DIR);
   mkdirSync(dir, { recursive: true });
-  const day = at.slice(0, 10);
+  const day = localDay(at);
   const n = readdirSync(dir).filter((name) => name.startsWith(`${day}-`)).length + 1;
   const folder = join(dir, `${day}-${n}`);
   writeTrial(folder, { id: `${day}-${n}`, startedAt: at, personas: [], notes: [], verdicts: [], findings: [], ask: [] });

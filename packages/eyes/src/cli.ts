@@ -3,7 +3,7 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 import { BACKLOG_FILE, addToBacklog, doneInBacklog, leftBy, openBacklog } from './backlog.ts';
-import { CONTRACTS_DIR, EVIDENCE_DIR, ClaimStatus, Contract, Lane, ShownBy, openContracts, owed, readContract, renderContract, writeContract } from './contract.ts';
+import { CONTRACTS_DIR, EVIDENCE_DIR, ClaimStatus, Contract, Lane, ShownBy, localDay, openContracts, owed, readContract, renderContract, writeContract } from './contract.ts';
 import { ElectronError, renderAppLook, renderAppWalk, walkElectron } from './electron.ts';
 import { engineEnv, findTool, hostedSupabaseCall } from './engine.ts';
 import { writeEvidencePage } from './evidence.ts';
@@ -69,7 +69,9 @@ const USAGE = `sz-eyes: launch what was built, look at it, operate it, and put w
         opened and their own copy can stay open; its windows are invisible on their screen and take no click
         or key of theirs (--onscreen shows them, for an app whose layout follows the screen). --data <folder>
         keeps what it stores in a folder of yours instead of one thrown away: run twice on the same folder to
-        see what is there after the app is closed and opened again, or put a file there first to start from it
+        see what is there after the app is closed and opened again, or put a file there first to start from it.
+        --days-later <n> starts it believing it is n days from now (its main process and every window): with
+        the same --data, that is a person coming back the next morning or a week on
 
   sz-eyes ios spare [--type "iPhone 17"]                 the eyes' own simulator, made and booted with no window; prints its id
   sz-eyes ios install <udid> <path.app> --bundle-id <id> [--metro <port>]
@@ -387,7 +389,7 @@ async function main(argv: string[]): Promise<number> {
       const last = lastRelease(project, place);
       if (!last) throw new EyesError(`nothing released to ${place} stands, so there is nothing to look at again. Releases: ${renderReleases(project)}`);
       const kept = (id: string): boolean => id.startsWith('live-') && id !== 'live-kept';
-      contract = { ...last, id: idFree(`live-${now.slice(0, 10)}`), request: `${place}에 살아 있는 것 점검 (${last.release!.commit.slice(0, 7)}, ${last.id}로 내보낸 것)`, claims: last.claims.filter((claim) => kept(claim.id)).map((claim) => ({ ...claim, status: 'unproven', evidence: [], note: '', at: null })), notDoing: last.notDoing.filter((line) => kept(line)), noticed: [], amendments: [], frozenAt: now, createdAt: now, closedAt: null, release: { ...last.release!, candidate: null, previous: null } };
+      contract = { ...last, id: idFree(`live-${localDay(now)}`), request: `${place}에 살아 있는 것 점검 (${last.release!.commit.slice(0, 7)}, ${last.id}로 내보낸 것)`, claims: last.claims.filter((claim) => kept(claim.id)).map((claim) => ({ ...claim, status: 'unproven', evidence: [], note: '', at: null })), notDoing: last.notDoing.filter((line) => kept(line)), noticed: [], amendments: [], frozenAt: now, createdAt: now, closedAt: null, release: { ...last.release!, candidate: null, previous: null } };
     } else if (command === 'new') {
       const url = a.one('--url');
       const given = a.one('--commit');
@@ -424,7 +426,9 @@ async function main(argv: string[]): Promise<number> {
     const steps = a.all('--step');
     if (!folder || (command === 'do' && steps.length === 0)) throw new EyesError('sz-eyes electron look <app folder> [--window <words>]   or   sz-eyes electron do <app folder> --step "<step>"...');
     const env = Object.fromEntries(a.all('--env').map((pair) => [pair.slice(0, pair.indexOf('=')), pair.slice(pair.indexOf('=') + 1)]));
-    const walk = await walkElectron(resolve(folder), command === 'do' ? steps : [], { args: a.all('--arg'), env, onscreen: a.has('--onscreen'), house: a.has('--house'), ...(a.one('--window') ? { window: a.one('--window')! } : {}), ...(a.one('--out') ? { out: resolve(a.one('--out')!) } : {}), ...(a.one('--name') ? { name: a.one('--name')! } : {}), ...(a.one('--electron') ? { executablePath: resolve(a.one('--electron')!) } : {}), ...(a.one('--data') ? { data: resolve(a.one('--data')!) } : {}) }).catch((err: unknown) => {
+    const days = Number(a.one('--days-later') ?? 0);
+    if (!Number.isFinite(days)) throw new EyesError('--days-later <n>: a number of days (1, 7, 0.5)');
+    const walk = await walkElectron(resolve(folder), command === 'do' ? steps : [], { args: a.all('--arg'), env, onscreen: a.has('--onscreen'), house: a.has('--house'), ...(a.one('--window') ? { window: a.one('--window')! } : {}), ...(a.one('--out') ? { out: resolve(a.one('--out')!) } : {}), ...(a.one('--name') ? { name: a.one('--name')! } : {}), ...(a.one('--electron') ? { executablePath: resolve(a.one('--electron')!) } : {}), ...(a.one('--data') ? { data: resolve(a.one('--data')!) } : {}), ...(days !== 0 ? { daysLater: days } : {}) }).catch((err: unknown) => {
       throw err instanceof ElectronError ? new EyesError(err.message) : err;
     });
     if (command === 'look') out(a.has('--json') ? JSON.stringify(walk.end, null, 2) : renderAppLook(walk.end));
@@ -752,7 +756,7 @@ async function main(argv: string[]): Promise<number> {
       const said = (a.one('--said') ?? '').replace(/\s+/g, ' ').trim();
       if ((verdict !== 'yes' && verdict !== 'no') || said === '') throw new EyesError('sz-eyes contract judged <id> <claim-id> --verdict yes|no --said "<the owner\'s words, as they said them>"');
       const at = new Date();
-      const day = at.toLocaleDateString('sv-SE');
+      const day = localDay(at.toISOString());
       const key = `${id}/${claim.id}`;
       if (contract.closedAt !== null) needLedger(project);
       Object.assign(claim, { status: verdict === 'yes' ? 'proven' : 'refuted', note: `주인이 봄 (${day}): "${said}"`, at: at.toISOString() });
