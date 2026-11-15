@@ -170,6 +170,8 @@ export function roundPage(folder: string): string {
     })
     .join('\n');
   return `<title>피드백 ${esc(round.id)}</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="claude:viewport-fit-sides" content="cover">
 <style>${PAGE_STYLE}</style>
 <main>

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 import { BACKLOG_FILE, addToBacklog, doneInBacklog, leftBy, openBacklog } from './backlog.ts';
 import { CONTRACTS_DIR, EVIDENCE_DIR, ClaimStatus, Contract, Lane, ShownBy, openContracts, owed, readContract, renderContract, writeContract } from './contract.ts';
@@ -12,6 +12,7 @@ import { EyesError, installApp, restSimulator, runFlow, screenText, screenshot, 
 import { downloadsOf, filesOf, leakReport, renderLeaks } from './leaks.ts';
 import { lookAtLive, renderLive } from './live.ts';
 import { DANGEROUS, classify, renderMigrations } from './migrations.ts';
+import { findProducts, overviewPage, renderOverview, viewOf } from './overview.ts';
 import { freePort } from './port.ts';
 import { GATE_LINES, lastRelease, releaseContract, releases, renderReleases, type Gate } from './release.ts';
 import { reviewWeb } from './review.ts';
@@ -112,6 +113,11 @@ const USAGE = `sz-eyes: launch what was built, look at it, operate it, and put w
 
   sz-eyes docker <args>...                               the container engine on this machine, reached without touching the owner's settings
   sz-eyes supabase <args>...                             the Supabase stack that runs on this machine for this project (never a hosted one)
+
+  sz-eyes overview [<folder>...] [--out <file.html>]
+        several products at once, most urgent first: promises that broke, what waits for the owner's judgement
+        (with the evidence page that shows it), and for each product what is live where, when it was last looked
+        at there, and what is left. A folder is a project, or holds projects. --out also writes the page
 
   sz-eyes port                                           a port nothing listens on, from the machine: start what you
         launch on it (PORT=$(sz-eyes port)), keep its process id ($!), and end it by that id. Never choose a
@@ -468,6 +474,18 @@ async function main(argv: string[]): Promise<number> {
     }
     out(renderStanding(project));
     return standing(project).stands.some((s) => s.last?.status === 'broken') ? 1 : 0;
+  }
+  if (area === 'overview') {
+    const a = parse(argv.slice(1), []);
+    const products = findProducts(a.words.length > 0 ? a.words : ['.']).flatMap((dir) => viewOf(dir) ?? []);
+    out(renderOverview(products));
+    if (a.one('--out')) {
+      const file = resolve(a.one('--out')!);
+      mkdirSync(dirname(file), { recursive: true });
+      writeFileSync(file, overviewPage(products, new Date().toISOString()));
+      out(`\n${file}`);
+    }
+    return 0;
   }
   if (area === 'port') {
     out(String(await freePort()));

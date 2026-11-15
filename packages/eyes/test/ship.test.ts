@@ -13,6 +13,7 @@ import { engineEnv, hostedSupabaseCall } from '../src/engine.ts';
 import { downloadsOf, filesOf, findLeaks, leakReport, renderLeaks, secretsFromEnv } from '../src/leaks.ts';
 import { lookAtLive, renderLive, sameCommit, versionsIn } from '../src/live.ts';
 import { classify, renderMigrations, statements } from '../src/migrations.ts';
+import { findProducts, overviewPage, renderOverview, viewOf } from '../src/overview.ts';
 import { GATE_LINES, gate, type Gate } from '../src/release.ts';
 import { marksOf, renderStrangers, strangers } from '../src/strangers.ts';
 import { closeBrowser, openBrowser } from '../src/web.ts';
@@ -514,5 +515,63 @@ drop table old_groups;`;
     assert.equal(eyes(project, 'migrations', 'look', 'migrations/0001_init.sql').code, 0);
   } finally {
     rmSync(project, { recursive: true, force: true });
+  }
+});
+
+test('several products are read at once: what waits for the owner and what broke come first, then what is live where', () => {
+  const root = mkdtempSync(join(tmpdir(), 'eyes-overview-'));
+  const git = (dir: string, ...args: string[]): string => spawnSync('git', ['-C', dir, '-c', 'user.name=t', '-c', 'user.email=t@t', ...args], { encoding: 'utf8' }).stdout.trim();
+  try {
+    const [a, b] = [join(root, 'enbbang'), join(root, 'maeum')];
+    for (const dir of [a, b, join(root, 'not-a-product')]) mkdirSync(join(dir, 'flows'), { recursive: true });
+    // One product: work closed, one thing left to the owner, released to a place, and then a promise broke.
+    mkdirSync(join(a, '.sz'));
+    writeFileSync(join(a, '.sz/map.md'), '# 지도: 엔빵\n\n## 무엇인가\n\n친구 모임의 정산 웹앱.\n');
+    writeFileSync(join(a, '.sz/progress.md'), '# 진행\n\n- 2026-11-15 M1 닫음\n- 2026-11-15 mac-stage에 내보냄\n');
+    writeFileSync(join(a, 'flows/split.sh'), 'true\n');
+    git(a, 'init', '-q');
+    assert.equal(eyes(a, 'contract', 'new', 'm1-split', '--lane', 'M', '--request', '나눠 낸다', '--claim', 'split|셋이 12만원이면 4만원씩|flow:flows/split.sh', '--claim', 'feel|숫자가 크게 느껴진다|owner:폰 사진').code, 0);
+    eyes(a, 'contract', 'freeze', 'm1-split', '--frozen', 'flows/split.sh');
+    eyes(a, 'contract', 'claim', 'm1-split', 'split', '--status', 'proven', '--note', '돌려서 통과를 봤다');
+    eyes(a, 'contract', 'claim', 'm1-split', 'feel', '--status', 'unchecked', '--note', '폰 사진 두 장을 붙였다');
+    eyes(a, 'evidence', 'm1-split');
+    eyes(a, 'contract', 'close', 'm1-split');
+    git(a, 'add', '-A');
+    git(a, 'commit', '-qm', 'v1');
+    const made = eyes(a, 'release', 'new', '--place', 'mac-stage', '--url', 'http://127.0.0.1:4100', '--candidate', 'http://127.0.0.1:4101', '--commit', 'HEAD', '--check', 'npm run check', '--backup', 'npm run backup', '--way-back', 'bash scripts/back.sh', '--walk', 'bash flows/live-walk.sh', '--errors', 'cat errors.log', '--without', 'rc-strangers|계정이 없는 제품이다: 링크가 곧 열쇠다');
+    assert.equal(made.code, 0, made.text);
+    for (const claim of readContract(join(a, CONTRACTS_DIR, 'release-1.json')).claims) eyes(a, 'contract', 'claim', 'release-1', claim.id, '--status', 'proven', '--note', '돌려서 통과를 봤다');
+    assert.equal(eyes(a, 'contract', 'close', 'release-1').code, 0);
+    assert.equal(eyes(a, 'standing', 'record', 'm1-split/split', '--status', 'broken', '--note', '4만원이 아니라 3만9천원이 나온다').code, 0);
+    // Another: only a spec, nothing built.
+    mkdirSync(join(b, '.sz'));
+    writeFileSync(join(b, '.sz/spec.md'), '# 마음장부: 경조사비 장부\n\n2026-11-15 처음 씀.\n\n## 무엇이고 누구를 위한 것인가\n\n경조사비를 적어 두는 서비스.\n');
+
+    assert.deepEqual(findProducts([root]), [a, b], 'a folder that holds projects: its children that have a .sz/');
+    assert.deepEqual(findProducts([a]), [a]);
+    const views = findProducts([root]).map((dir) => viewOf(dir)!);
+    assert.equal(viewOf(join(root, 'not-a-product')), null);
+    const [one, two] = views;
+    assert.deepEqual([one!.name, one!.says, one!.stands, one!.broken.length, one!.open.length], ['엔빵', '친구 모임의 정산 웹앱.', 1, 1, 0]);
+    assert.deepEqual(one!.waiting.map((w) => [w.text, w.page?.endsWith('.sz/evidence/m1-split/report.html')]), [['숫자가 크게 느껴진다: 폰 사진 두 장을 붙였다', true]]);
+    assert.deepEqual(one!.live.map((l) => [l.place, l.url, l.release, l.checked, l.wayBack]), [['mac-stage', 'http://127.0.0.1:4100', 'release-1', null, 'bash scripts/back.sh']]);
+    assert.equal(one!.last, '2026-11-15 mac-stage에 내보냄');
+    assert.deepEqual([two!.name, two!.says, two!.live, two!.stands], ['마음장부: 경조사비 장부', '경조사비를 적어 두는 서비스.', [], 0]);
+    // A look at what is live shows as when it was last looked at there.
+    assert.equal(eyes(a, 'release', 'check', '--place', 'mac-stage').code, 0);
+    assert.match(viewOf(a)!.live[0]!.checked!.verdict, /진행 중/);
+
+    const said = renderOverview(findProducts([root]).map((dir) => viewOf(dir)!));
+    assert.match(said, /^깨진 약속 1:\n  - 엔빵: 셋이 12만원이면 4만원씩 \(m1-split\/split\)\n\n주인의 판단을 기다리는 것 1:\n  - 엔빵: 숫자가 크게 느껴진다/);
+    assert.match(said, /살아 있는 곳 mac-stage: http:\/\/127\.0\.0\.1:4100 · [0-9a-f]{7} \(\d{4}-\d\d-\d\d release-1\) · 마지막 점검/);
+    assert.match(said, /마음장부: 경조사비 장부[\s\S]*아직 어디에도 내놓지 않음/);
+    const out = eyes(root, 'overview', root, '--out', join(root, 'page/overview.html'));
+    assert.equal(out.code, 0, out.text);
+    const page = readFileSync(join(root, 'page/overview.html'), 'utf8');
+    assert.match(page, /<title>작업실<\/title>[\s\S]*먼저 볼 것: 깨진 약속[\s\S]*주인의 판단을 기다리는 것[\s\S]*<h2>숫자가 크게 느껴진다<\/h2>[\s\S]*폰 사진 두 장을 붙였다[\s\S]*증거 페이지 열기/);
+    assert.match(page, /<meta name="viewport"/);
+    assert.equal(overviewPage([], '2026-11-15T00:00:00.000Z').includes('제품 0개'), true);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
   }
 });

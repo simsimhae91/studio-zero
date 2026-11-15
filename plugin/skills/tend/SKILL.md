@@ -1,6 +1,6 @@
 ---
 name: tend
-description: Use when the owner asks how a product is doing, what to do with it next, or to look after it, keep it healthy or grow it ("돌봐줘", "점검해줘", "뭘 더 하면 좋을까", "고도화"), and for the regular look at a product that is live. Checks that what was proven still holds, looks at what fails for people, how it is used and what they say, walks it as a newcomer, checks what it stands on, and leaves a ranked list of what to do next, each with evidence. Fixes what broke; proposes the rest.
+description: Use when the owner asks how a product (or all of their products) is doing, what to do with it next, or to look after it, keep it healthy or grow it ("돌봐줘", "점검해줘", "뭘 더 하면 좋을까", "고도화"), and for the regular look at a product that is live. Checks that what was proven still holds, looks at what fails for people, how it is used and what they say, walks it as a newcomer, checks what it stands on, and leaves a ranked list of what to do next, each with evidence. Fixes what broke; proposes the rest.
 ---
 
 # Tend: look after a product that lives
@@ -42,3 +42,5 @@ One screen, in the owner's language:
 Add a line to `.sz/progress.md`. What the owner says to the report is feedback (`sz:feedback`). "위 셋 해" is `sz:work` for each by its lane; several features at once is the `sz:build` workflow, which extends the spec the product already has.
 
 If the product is live and nobody looks at it regularly, say once that this look can be run on a schedule.
+
+When the owner asks how everything is doing, across products: `sz-eyes overview <the folder that holds the projects> --out <a file>` reads every project's `.sz/` and puts first what broke and what waits for their judgement, then what is live where. Give them the page; it changes nothing.

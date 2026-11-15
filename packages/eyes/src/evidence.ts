@@ -81,6 +81,8 @@ export function evidencePage(contract: Contract, folder: string, extra: { summar
 </section>`
     : '';
   return `<title>${release ? (release.candidate === null ? '점검' : '출하') : '증거'} ${esc(contract.id)}</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="claude:viewport-fit-sides" content="cover">
 <style>${PAGE_STYLE}</style>
 <main>
