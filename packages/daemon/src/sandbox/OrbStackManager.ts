@@ -4,7 +4,7 @@ import { createRequire } from 'node:module';
 import { isIPv4 } from 'node:net';
 import { homedir } from 'node:os';
 import { dirname, isAbsolute, join, posix } from 'node:path';
-import { ProductRoot, rootOf, type Checkpoint, type Project, type SandboxInfo } from '@studio-zero/protocol';
+import { ProductRoot, isAdopted, rootOf, type Checkpoint, type Project, type SandboxInfo } from '@studio-zero/protocol';
 import type { Config } from '../config.ts';
 import type { CheckpointRow, SandboxRow, Store } from '../db/Store.ts';
 import { WORKSPACE_DIR } from '../policy/PolicyEngine.ts';
@@ -70,6 +70,9 @@ RUN npm install -g playwright@${playwrightVersion} && npm cache clean --force
 RUN mkdir -p /usr/share/fonts/truetype/pretendard && cd /tmp && npm pack pretendard@${PRETENDARD_VERSION} --silent && tar -xzf pretendard-${PRETENDARD_VERSION}.tgz --strip-components=4 -C /usr/share/fonts/truetype/pretendard package/dist/public/variable/PretendardVariable.ttf && rm pretendard-${PRETENDARD_VERSION}.tgz && npm cache clean --force
 RUN printf '%s\\n' ${PRETENDARD_FONTCONFIG.map((line) => `'${line}'`).join(' ')} > /etc/fonts/conf.d/40-pretendard.conf && fc-cache -f
 `;
+
+/** This machine's time zone, as its name (`Asia/Seoul`). */
+const HOST_ZONE = Intl.DateTimeFormat().resolvedOptions().timeZone ?? '';
 
 export class SandboxError extends Error {
   readonly detail: string;
@@ -175,6 +178,10 @@ export class OrbStackManager {
       ANTHROPIC_BASE_URL: `${gateway}/anthropic`,
       OPENAI_BASE_URL: `${gateway}/openai/v1`,
       CI: '1',
+      // A product that was brought in was written, and its tests were, on this Mac: it gets this Mac's time
+      // zone. Its own suite failed here at first on "오늘 09:00" read as 00:00 (2026-11-15). A product the
+      // studio builds is written in the sandbox and stays on its clock.
+      ...(isAdopted(project) && /^[A-Za-z_]+(?:\/[A-Za-z0-9_+-]+){0,2}$/.test(HOST_ZONE) ? { TZ: HOST_ZONE } : {}),
     };
     // SDKs and CLIs inside the sandbox find the gateway token where they expect a provider key.
     const tokenEnv: Record<string, string> = { ANTHROPIC_API_KEY: gatewayToken, OPENAI_API_KEY: gatewayToken };

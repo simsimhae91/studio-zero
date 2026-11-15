@@ -13,7 +13,7 @@ import { migrate } from '../src/db/schema.ts';
 import { scopeOf } from '../src/product/scope.ts';
 import { OrbStackManager, SandboxError, productDir, resolveInProject } from '../src/sandbox/OrbStackManager.ts';
 import { changedFilesScript, depsScript, fromProduct } from '../src/sandbox/scripts.ts';
-import { localDocker, sampleProject, tempDir } from './helpers.ts';
+import { dockerArgs, localDocker, sampleProject, tempDir } from './helpers.ts';
 
 test('migration 20 gives every project an empty root and no origin', () => {
   const db = new DatabaseSync(':memory:');
@@ -107,6 +107,27 @@ test('a command of a project with a root runs in its product folder, and the git
     assert.equal((await sandboxes.readFile(project, '../docs/plan.md')).content, '# plan\n');
   } finally {
     cleanup();
+  }
+});
+
+test('a brought-in product runs on this machine\'s clock, and one the studio builds on the sandbox\'s', async () => {
+  const [home, ws] = [tempDir(), tempDir('sz-ws-')];
+  const docker = localDocker(ws.dir);
+  const store = new Store(':memory:');
+  const house = sampleProject('ledger');
+  const brought: Project = { ...sampleProject('credeal'), adopted: { path: '/Users/someone/credeal', base: 'main' } };
+  for (const project of [house, brought]) store.insertProject(project);
+  const sandboxes = new OrbStackManager({ config: testConfig(home.dir), store, clock: () => 1, run: docker.run });
+  try {
+    await sandboxes.ensure(house);
+    await sandboxes.ensure(brought);
+    const made = (name: string): string[] => docker.calls.map((call) => dockerArgs(call.args)).find((args) => args[0] === 'run' && args.includes(name)) ?? [];
+    const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    assert.ok(made('sz-credeal').includes(`TZ=${zone}`), made('sz-credeal').join(' '));
+    assert.ok(!made('sz-ledger').some((word) => word.startsWith('TZ=')));
+  } finally {
+    home.cleanup();
+    ws.cleanup();
   }
 });
 
