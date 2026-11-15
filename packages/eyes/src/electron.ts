@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { tmpdir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { join, resolve, sep } from 'node:path';
 import { _electron, type ElectronApplication, type Page } from 'playwright-core';
 import { describePage, doStep, renderLook, settled, type Look, type Step, type StepResult } from './web.ts';
@@ -28,6 +28,13 @@ export interface ElectronOptions {
   out?: string;
   name?: string;
   house?: boolean;
+  /**
+   * A folder to keep the app's data in for this run, in place of a new one that is thrown away afterwards: what
+   * one run stores is there for the next (the app closed and opened again), and a run can start from data put
+   * there beforehand (a file in the shape an older version wrote). Never a folder where the owner's own apps
+   * keep theirs.
+   */
+  data?: string;
   /** Show its windows on the owner's screen, as a person sees them. For an app whose layout follows the screen. */
   onscreen?: boolean;
   /** The Electron to run it with, when it is not the one installed in the app's own folder. */
@@ -83,7 +90,7 @@ function mainFile(folder: string): string | null {
   }
 }
 
-async function open(folder: string, opts: ElectronOptions): Promise<{ app: ElectronApplication; data: string; mainLog: string[] }> {
+async function open(folder: string, opts: ElectronOptions): Promise<{ app: ElectronApplication; data: string; own: boolean; mainLog: string[] }> {
   let bin = opts.executablePath;
   if (!bin) {
     try {
@@ -102,7 +109,14 @@ async function open(folder: string, opts: ElectronOptions): Promise<{ app: Elect
       `this app decides itself where it keeps its data (setPath('userData', ...) in ${entry}), so it cannot be given a folder of its own from outside: started as it is, it would open the owner's real data. Read next to that call which variable it takes the folder from, and give it: --env <THAT_VARIABLE>={data}. If it has none, it is not started here; say so.`,
     );
   }
-  const data = mkdtempSync(join(tmpdir(), 'sz-electron-'));
+  // A folder the caller keeps (to open the app twice on the same data), or a new one thrown away afterwards.
+  const kept = opts.data ? resolve(opts.data) : null;
+  if (kept) {
+    const real = existsSync(kept) ? realpathSync(kept) : kept;
+    if ([join(homedir(), 'Library'), join(homedir(), '.config')].some((owners) => `${real}${sep}`.startsWith(`${owners}${sep}`))) throw new ElectronError(`${kept} is where the owner's own apps keep their data: a run is given a folder made for it (under the project's .sz/ or a temporary folder), never that`);
+    mkdirSync(kept, { recursive: true });
+  }
+  const data = kept ?? mkdtempSync(join(tmpdir(), 'sz-electron-'));
   const put = (value: string): string => value.split('{data}').join(data);
   const mainLog: string[] = [];
   let app: ElectronApplication;
@@ -110,7 +124,7 @@ async function open(folder: string, opts: ElectronOptions): Promise<{ app: Elect
     // Occlusion is switched off: a window nobody can see would otherwise stop drawing.
     app = await _electron.launch({ executablePath: bin, args: [folder, `--user-data-dir=${data}`, '--disable-features=MacWebContentsOcclusion,CalculateNativeWinOcclusion', ...(opts.args ?? []).map(put)], cwd: folder, env: { ...(process.env as Record<string, string>), ...Object.fromEntries(Object.entries(opts.env ?? {}).map(([name, value]) => [name, put(value)])) }, timeout: opts.timeoutMs ?? 30_000 });
   } catch (err) {
-    rmSync(data, { recursive: true, force: true });
+    if (!kept) rmSync(data, { recursive: true, force: true });
     throw new ElectronError(`the app in ${folder} did not start: ${(err instanceof Error ? err.message : String(err)).split('\n')[0]!.slice(0, 300)}. Is it built (the map's build command), and does its package.json name its main file?`);
   }
   app.process().stderr?.on('data', (chunk: Buffer) => {
@@ -119,7 +133,7 @@ async function open(folder: string, opts: ElectronOptions): Promise<{ app: Elect
   });
   // And it is asked, once it runs, where it really keeps its data: anything but the folder made for it and it
   // is closed at once.
-  const kept = await app.evaluate(({ app: self }) => self.getPath('userData')).catch(() => null);
+  const says = await app.evaluate(({ app: self }) => self.getPath('userData')).catch(() => null);
   const inside = (path: string): boolean => {
     try {
       return `${realpathSync(resolve(path))}${sep}`.startsWith(`${realpathSync(data)}${sep}`);
@@ -127,9 +141,9 @@ async function open(folder: string, opts: ElectronOptions): Promise<{ app: Elect
       return resolve(path).startsWith(data);
     }
   };
-  if (kept === null || !inside(kept)) {
-    await shut(app, data);
-    throw new ElectronError(`the app keeps its data in ${kept ?? '(it did not say)'}, not in the folder made for this run: it was closed at once. Point it at that folder by its own variable or switch: --env <NAME>={data} or --arg <switch>={data}.`);
+  if (says === null || !inside(says)) {
+    await shut(app, data, !kept);
+    throw new ElectronError(`the app keeps its data in ${says ?? '(it did not say)'}, not in the folder made for this run: it was closed at once. Point it at that folder by its own variable or switch: --env <NAME>={data} or --arg <switch>={data}.`);
   }
   if (!opts.onscreen) {
     await app
@@ -144,15 +158,16 @@ async function open(folder: string, opts: ElectronOptions): Promise<{ app: Elect
       })
       .catch(() => undefined);
   }
-  return { app, data, mainLog };
+  return { app, data, own: !kept, mainLog };
 }
 
-async function shut(app: ElectronApplication, data: string): Promise<void> {
+async function shut(app: ElectronApplication, data: string, own: boolean): Promise<void> {
   const child = app.process();
   await Promise.race([app.close().catch(() => undefined), new Promise((done) => setTimeout(done, 4_000).unref())]);
   // It is ended by the process this started, never by its name: the owner may have the same app open.
   if (child.exitCode === null) child.kill('SIGKILL');
-  rmSync(data, { recursive: true, force: true });
+  // Only a folder that was made for this run is thrown away with it.
+  if (own) rmSync(data, { recursive: true, force: true });
 }
 
 async function lookAt(app: ElectronApplication, page: Page, opts: ElectronOptions, mainLog: string[], consoleErrors: string[]): Promise<AppLook> {
@@ -190,7 +205,7 @@ const listen = (page: Page, consoleErrors: string[]): void => {
 
 /** Starts the app, does the steps on its windows, and looks at the window it ended on. With no steps: a look. */
 export async function walkElectron(folder: string, steps: readonly Step[], opts: ElectronOptions = {}): Promise<AppWalk> {
-  const { app, data, mainLog } = await open(folder, opts);
+  const { app, data, own, mainLog } = await open(folder, opts);
   const consoleErrors: string[] = [];
   const results: StepResult[] = [];
   const reads: Record<string, unknown> = {};
@@ -232,7 +247,7 @@ export async function walkElectron(folder: string, steps: readonly Step[], opts:
     const end = await lookAt(app, page, { ...opts, name: steps.length > 0 ? `${opts.name ?? 'walk'}-end` : (opts.name ?? 'look') }, mainLog, consoleErrors);
     return { app: folder, passed: results.length === steps.length && results.every((r) => r.ok), steps: results, reads, end };
   } finally {
-    await shut(app, data);
+    await shut(app, data, own);
   }
 }
 

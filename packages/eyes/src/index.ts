@@ -16,4 +16,5 @@ export * from './review.ts';
 export * from './secrets.ts';
 export * from './standing.ts';
 export * from './strangers.ts';
+export * from './trial.ts';
 export * from './web.ts';

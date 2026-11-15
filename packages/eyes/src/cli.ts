@@ -20,6 +20,7 @@ import { GATE_LINES, lastRelease, releaseContract, releases, renderReleases, typ
 import { reviewWeb } from './review.ts';
 import { renderStrangers, strangers } from './strangers.ts';
 import { Shown, brokenDuring, keptFor, ledgerProblem, recordShown, renderStanding, stampClosed, standing, standingSummary } from './standing.ts';
+import { Felt, TrialFinding, TrialKind, Verdict, addAsk, addFinding, addNote, addPersona, latestTrial, newTrial, readTrial, renderTrial, setVerdict, unfinished, writeTrialPage } from './trial.ts';
 import { SIZES, lookAtWeb, renderLook, renderWalk, walkWeb, type Size } from './web.ts';
 
 const USAGE = `sz-eyes: launch what was built, look at it, operate it, and put what was seen on one page
@@ -60,13 +61,15 @@ const USAGE = `sz-eyes: launch what was built, look at it, operate it, and put w
         at --at), is it served as a public service has to be, and what would a person arriving trip on.
         Exits 1 when it is not the service as released
 
-  sz-eyes electron look <app folder> [--window <words of its title or address>] [--out <folder>] [--name <n>] [--arg <arg>]... [--env K=V]... [--onscreen] [--json]
+  sz-eyes electron look <app folder> [--window <words of its title or address>] [--out <folder>] [--name <n>] [--arg <arg>]... [--env K=V]... [--data <folder>] [--onscreen] [--json]
   sz-eyes electron do <app folder> --step "<step>"... [the same options]
         start a desktop app built on Electron from its folder (it must be built), look at a window of it and
         operate it with the steps of web do, then close it. window:<words> goes on in another window the app
         opened. The app gets a folder of its own for what it stores, so the owner's real profile is never
         opened and their own copy can stay open; its windows are invisible on their screen and take no click
-        or key of theirs (--onscreen shows them, for an app whose layout follows the screen)
+        or key of theirs (--onscreen shows them, for an app whose layout follows the screen). --data <folder>
+        keeps what it stores in a folder of yours instead of one thrown away: run twice on the same folder to
+        see what is there after the app is closed and opened again, or put a file there first to start from it
 
   sz-eyes ios spare [--type "iPhone 17"]                 the eyes' own simulator, made and booted with no window; prints its id
   sz-eyes ios install <udid> <path.app> --bundle-id <id> [--metro <port>]
@@ -102,6 +105,15 @@ const USAGE = `sz-eyes: launch what was built, look at it, operate it, and put w
         what was understood by it, what you think of it, and what came of it; "later" also writes it to the backlog
   sz-eyes feedback page [<round folder>] [--dir <project>]
         the page the owner reads after a round: each thing said, with the pictures in <round>/<n>/ (before-*, after-*)
+
+  sz-eyes trial new [--dir <project>]                    start a trial: the product used the whole way by stand-ins for the people it is for; prints its folder
+  sz-eyes trial person <folder> <id> --who "<who they are and the moment they arrive in>" [--instead "<what they use for this now>"] [--pays-if "<what would have to be true for them to pay>"]
+  sz-eyes trial note <folder> <person> --when "<첫날|다음 날|3일 뒤|결제 앞|...>" --wanted "<what they wanted>" [--saw "<what the screen gave them>"] [--did "<what they did>"] --felt stuck|lost|fine|glad [--picture <file under the folder>]
+  sz-eyes trial verdict <folder> <person> --reached yes|no --returned yes|no|untried --pay yes|no|not-yet|never-asked --why "<the one reason>" [--needs "<what would make it a yes>"]
+  sz-eyes trial finding <folder> "<what stands between a person and paying>" --kind block|return|worth|pay --basis seen|guessed --size S|M|L [--evidence <file under the folder>]...
+  sz-eyes trial ask <folder> "<a question only real people can answer>"
+  sz-eyes trial show [<folder>] [--dir <project>]        the trial as it stands (the latest by default), and what it still lacks
+  sz-eyes trial page [<folder>] [--dir <project>]        the page the owner reads; exits 1 while the trial is unfinished
 
   sz-eyes backlog [--dir <project>]                      what is written down as known and not done (${BACKLOG_FILE})
   sz-eyes backlog add "<one line, in the owner's language>" [--from "<where it came from>"] [--dir <project>]
@@ -390,7 +402,7 @@ async function main(argv: string[]): Promise<number> {
     const steps = a.all('--step');
     if (!folder || (command === 'do' && steps.length === 0)) throw new EyesError('sz-eyes electron look <app folder> [--window <words>]   or   sz-eyes electron do <app folder> --step "<step>"...');
     const env = Object.fromEntries(a.all('--env').map((pair) => [pair.slice(0, pair.indexOf('=')), pair.slice(pair.indexOf('=') + 1)]));
-    const walk = await walkElectron(resolve(folder), command === 'do' ? steps : [], { args: a.all('--arg'), env, onscreen: a.has('--onscreen'), house: a.has('--house'), ...(a.one('--window') ? { window: a.one('--window')! } : {}), ...(a.one('--out') ? { out: resolve(a.one('--out')!) } : {}), ...(a.one('--name') ? { name: a.one('--name')! } : {}), ...(a.one('--electron') ? { executablePath: resolve(a.one('--electron')!) } : {}) }).catch((err: unknown) => {
+    const walk = await walkElectron(resolve(folder), command === 'do' ? steps : [], { args: a.all('--arg'), env, onscreen: a.has('--onscreen'), house: a.has('--house'), ...(a.one('--window') ? { window: a.one('--window')! } : {}), ...(a.one('--out') ? { out: resolve(a.one('--out')!) } : {}), ...(a.one('--name') ? { name: a.one('--name')! } : {}), ...(a.one('--electron') ? { executablePath: resolve(a.one('--electron')!) } : {}), ...(a.one('--data') ? { data: resolve(a.one('--data')!) } : {}) }).catch((err: unknown) => {
       throw err instanceof ElectronError ? new EyesError(err.message) : err;
     });
     if (command === 'look') out(a.has('--json') ? JSON.stringify(walk.end, null, 2) : renderAppLook(walk.end));
@@ -545,6 +557,61 @@ async function main(argv: string[]): Promise<number> {
       out(`\n${file}`);
     }
     return 0;
+  }
+  if (area === 'trial') {
+    const a = parse(rest, []);
+    const project = resolve(a.one('--dir') ?? '.');
+    const now = new Date().toISOString();
+    try {
+      if (command === 'new') {
+        out(newTrial(project, now));
+        return 0;
+      }
+      if (command === 'show' || command === 'page') {
+        const folder = a.words[0] ? resolve(a.words[0]) : latestTrial(project);
+        if (!folder || !existsSync(join(folder, 'trial.json'))) throw new Error(a.words[0] ? `${a.words[0]} is not a trial (it has no trial.json)` : 'no trial has been started in this project: sz-eyes trial new');
+        if (command === 'show') {
+          out(renderTrial(readTrial(folder), folder));
+          return 0;
+        }
+        const left = unfinished(readTrial(folder));
+        out(writeTrialPage(folder));
+        if (left.length > 0) out(`not finished, and the page says so:\n${left.map((line) => `  - ${line}`).join('\n')}`);
+        return left.length > 0 ? 1 : 0;
+      }
+      const folder = a.words[0] ? resolve(a.words[0]) : '';
+      if (!folder || !existsSync(join(folder, 'trial.json'))) throw new Error(`which trial: give the folder sz-eyes trial new printed${a.words[0] ? ` (${a.words[0]} has no trial.json)` : ''}`);
+      if (command === 'person') {
+        addPersona(folder, { id: a.words[1] ?? '', who: a.one('--who') ?? '', instead: a.one('--instead') ?? '', paysIf: a.one('--pays-if') ?? '' });
+        out(`person: ${a.words[1]}`);
+        return 0;
+      }
+      if (command === 'note') {
+        addNote(folder, { persona: a.words[1] ?? '', when: a.one('--when') ?? '', wanted: a.one('--wanted') ?? '', saw: a.one('--saw') ?? '', did: a.one('--did') ?? '', felt: Felt.parse(a.one('--felt')), picture: a.one('--picture') ?? null, at: now });
+        out(`noted for ${a.words[1]}`);
+        return 0;
+      }
+      if (command === 'verdict') {
+        setVerdict(folder, Verdict.parse({ persona: a.words[1] ?? '', reached: a.one('--reached'), returned: a.one('--returned'), pay: a.one('--pay'), why: a.one('--why') ?? '', needs: a.one('--needs') ?? '' }));
+        out(`verdict for ${a.words[1]}`);
+        return 0;
+      }
+      if (command === 'finding') {
+        addFinding(folder, TrialFinding.parse({ text: a.words.slice(1).join(' '), kind: TrialKind.parse(a.one('--kind')), size: a.one('--size'), basis: a.one('--basis'), evidence: a.all('--evidence') }));
+        out('found');
+        return 0;
+      }
+      if (command === 'ask') {
+        if (a.words.slice(1).join(' ').trim().length < 8) throw new Error('sz-eyes trial ask <folder> "<a question only real people can answer>"');
+        addAsk(folder, a.words.slice(1).join(' '));
+        out('asked');
+        return 0;
+      }
+    } catch (err) {
+      // What a schema refuses is said in a line: which flag, and what it takes.
+      const issues = (err as { issues?: { path: (string | number)[]; message: string }[] }).issues;
+      throw new EyesError(Array.isArray(issues) ? `${issues.map((issue) => `${issue.path.join('.') || 'a value'}: ${issue.message}`).join('; ')} (sz-eyes help shows each flag and the words it takes)` : err instanceof Error ? err.message : String(err));
+    }
   }
   if (area === 'port') {
     out(String(await freePort()));

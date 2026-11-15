@@ -66,6 +66,8 @@ Prefer checks the project already has (its e2e flows, its tests) over new ones. 
 
 ## 4. L: ask, plan, then milestones
 
+**A request to charge for the product, or to make it "production", is first a question of whether a person would pay.** Run `sz:trial` before planning features: what its stand-ins could not get to, had no reason to come back for, or would not pay for is the feature list, and the payment itself comes last.
+
 **Ask the owner first**, in one message, five questions at most, only what they alone can answer: who it is for and the one thing it must do; what it must look or feel like (a reference they like); accounts, keys, money or publishing that are theirs to give; what is out of scope; when to stop and show them. Do not ask what you can decide or find out. If they are away, write the questions to `.sz/progress.md`, take the conservative answer to each, and say which answers were yours.
 
 **Plan:** write `.sz/spec.md`: what the product is, its features in the order they will be built, and for each milestone the claims that will make it done. Each milestone must leave the product working. In a product that already has a spec, a large request extends it: the spec is amended to describe the product as it will be, new milestones are added after the ones that are closed, and nothing that stands is planned again.

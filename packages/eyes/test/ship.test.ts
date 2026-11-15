@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
-import { tmpdir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -18,6 +18,7 @@ import { findProducts, overviewPage, renderOverview, viewOf } from '../src/overv
 import { GATE_LINES, gate, type Gate } from '../src/release.ts';
 import { heldSecrets, hide, parseRun, runWithSecrets, setSecret, type SecretStore } from '../src/secrets.ts';
 import { marksOf, renderStrangers, strangers } from '../src/strangers.ts';
+import { latestTrial, ranked, readTrial, unfinished } from '../src/trial.ts';
 import { closeBrowser, openBrowser, renderWalk, walkWeb } from '../src/web.ts';
 
 const HERE = fileURLToPath(new URL('.', import.meta.url));
@@ -662,6 +663,8 @@ test('each thing the owner says is told which way of working fits it, and a proj
   try {
     // The owner's first real use: a project nobody had mapped, a plain request, and no skill of the plugin loaded.
     assert.match(route('인원수에 0을 넣으면 Infinity원이 나오는데 고쳐줘', project), /^sz: this project has no map yet[\s\S]*sz:onboard skill first[\s\S]*then the sz:work skill[\s\S]*sz:feedback[\s\S]*sz:tend[\s\S]*sz:ship/);
+    // What the owner asked first in that session: to charge for the product. It was answered with a checkout.
+    assert.match(route('이거 프러덕션으로 돈 받고싶은데 필요한 기능목록 정의하고 구현해줘.', project), /wanting to charge for it or take it to production: sz:trial first, before anything is built for taking money/);
     mkdirSync(join(project, '.sz'));
     writeFileSync(join(project, '.sz/map.md'), '# 지도\n');
     const mapped = route('숫자가 좀 작은 느낌이에요', project);
@@ -698,6 +701,14 @@ test('a desktop app built on Electron is started on data of its own, operated ac
     const lost = await walkElectron(app, ['window:설정'], { executablePath: bin, stepTimeoutMs: 800 });
     assert.match(lost.steps[0]!.why ?? '', /no window whose title or address has "설정"\. Open: "Probe"/);
     await assert.rejects(walkElectron(join(HERE, 'fixtures'), [], { executablePath: bin, timeoutMs: 4_000 }), /did not start|opened no window/);
+    // Opened twice on a folder that is kept: what the first run stored is there for the second. And a run can
+    // start from what was put there beforehand.
+    const kept = join(out, 'kept-data');
+    for (const nth of ['1번째', '2번째']) assert.equal((await walkElectron(app, [`see:${nth}`], { executablePath: bin, data: kept })).passed, true, nth);
+    writeFileSync(join(kept, 'opened.json'), '{"opened":41}');
+    assert.equal((await walkElectron(app, ['see:42번째'], { executablePath: bin, data: kept })).passed, true, 'it starts from data in the shape an older run left');
+    assert.ok(existsSync(join(kept, 'opened.json')), 'a folder that was given is not thrown away');
+    await assert.rejects(walkElectron(app, [], { executablePath: bin, data: join(homedir(), 'Library/Application Support/sz-eyes-must-never-be-here') }), /where the owner's own apps keep their data/);
     // An app that sets its own data folder would open the owner's real data: it is not started until it is
     // pointed, by its own variable, at the folder made for the run.
     const own = join(HERE, 'fixtures/electron-app-own-data');
@@ -708,5 +719,59 @@ test('a desktop app built on Electron is started on data of its own, operated ac
     await assert.rejects(walkElectron(own, [], { executablePath: bin, env: { PROBE_DATA: join(out, 'elsewhere'), NOTE: '{data}' } }), /keeps its data in .*elsewhere, not in the folder made for this run: it was closed at once/);
   } finally {
     rmSync(out, { recursive: true, force: true });
+  }
+});
+
+test('a trial keeps who tried the product, what became of each, and what stands between a person and paying, first things first', () => {
+  const project = mkdtempSync(join(tmpdir(), 'eyes-trial-'));
+  try {
+    const made = eyes(project, 'trial', 'new');
+    assert.equal(made.code, 0, made.text);
+    const folder = made.text.trim();
+    assert.match(folder, /\.sz\/trials\/\d{4}-\d\d-\d\d-1$/);
+    assert.equal(latestTrial(project), folder);
+    const t = (...args: string[]): { code: number | null; text: string } => eyes(project, 'trial', args[0]!, folder, ...args.slice(1));
+    assert.match(eyes(project, 'trial', 'page').text, /nobody tried the product/);
+    assert.equal(t('person', 'chongmu', '--who', '동창회 총무, 단톡방에서 정산 얘기가 나온 직후', '--instead', '카톡에 숫자를 직접 적는다', '--pays-if', '매달 모임이 있고 계산이 틀린 적이 있을 때').code, 0);
+    assert.equal(t('person', 'doubter', '--who', '토스 더치페이를 이미 쓰는 친구, 링크를 받고 들어옴').code, 0);
+    // A step is someone's, has a feeling of the four, and its picture is a file of the trial.
+    assert.match(t('note', 'nobody', '--when', '첫날', '--wanted', '모임 만들기', '--felt', 'fine').text, /no such person in this trial: "nobody"\. They are: chongmu, doubter/);
+    assert.match(t('note', 'chongmu', '--when', '첫날', '--wanted', '모임 만들기', '--felt', 'happy').text, /a value: .*(stuck|expected)/i);
+    assert.match(t('note', 'chongmu', '--when', '첫날', '--wanted', '모임 만들기', '--felt', 'glad', '--picture', 'chongmu/none.png').text, /no such picture/);
+    mkdirSync(join(folder, 'chongmu'));
+    writeFileSync(join(folder, 'chongmu/first.png'), Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64'));
+    assert.equal(t('note', 'chongmu', '--when', '첫날', '--wanted', '모임을 만들고 링크를 받고 싶다', '--saw', '이름 칸 하나와 만들기', '--did', '동창회라고 적고 만들었다', '--felt', 'glad', '--picture', 'chongmu/first.png').code, 0);
+    assert.equal(t('verdict', 'chongmu', '--reached', 'yes', '--returned', 'untried', '--pay', 'never-asked', '--why', '정산은 끝났지만 돈을 내라는 곳도, 낼 만한 것도 없었다').code, 0);
+    assert.equal(t('finding', '링크로 들어온 사람이 무엇을 해야 하는지 첫 화면이 말해 주지 않는다', '--kind', 'block', '--basis', 'guessed', '--size', 'S').code, 0);
+    assert.equal(t('finding', '결제 창에서 뒤로 가면 적은 것이 사라진다', '--kind', 'pay', '--basis', 'seen', '--size', 'S').code, 0);
+    assert.equal(t('finding', '두 번째 모임을 만들 때 지난 사람들을 다시 적어야 한다', '--kind', 'return', '--basis', 'seen', '--size', 'M', '--evidence', 'chongmu/first.png').code, 0);
+    assert.equal(t('finding', '모임을 만들자마자 500이 뜬다', '--kind', 'block', '--basis', 'seen', '--size', 'S').code, 0);
+    // What stops a person earliest is first, and among those what was seen comes before what was guessed.
+    assert.deepEqual(ranked(readTrial(folder)).map((f) => [f.kind, f.basis]), [['block', 'seen'], ['block', 'guessed'], ['return', 'seen'], ['pay', 'seen']]);
+    // Half a trial does not read as a whole one: the page says what is missing, and the command does not pass.
+    const half = eyes(project, 'trial', 'page');
+    assert.equal(half.code, 1);
+    assert.match(half.text, /chongmu: only one moment of their use[\s\S]*doubter: no step of their use[\s\S]*doubter: no verdict[\s\S]*what only real people can tell/);
+    assert.match(readFileSync(join(folder, 'report.html'), 'utf8'), /아직 끝나지 않은 기록/);
+    t('note', 'chongmu', '--when', '다음 날', '--wanted', '어제 모임이 그대로 있는지', '--saw', '최근 모임에 동창회', '--felt', 'fine');
+    t('note', 'doubter', '--when', '첫날', '--wanted', '내가 낸 돈을 적고 싶다', '--saw', '누구세요? 와 이름들', '--felt', 'lost');
+    t('note', 'doubter', '--when', '일주일 뒤', '--wanted', '다시 올 일이 있나', '--saw', '링크를 잃어버렸다', '--felt', 'stuck');
+    t('verdict', 'doubter', '--reached', 'yes', '--returned', 'no', '--pay', 'no', '--why', '토스 더치페이로 충분하다', '--needs', '송금까지 한 번에 되면');
+    assert.match(t('ask', '짧다').text, /a question only real people can answer/);
+    assert.equal(t('ask', '지난 석 달 동안 모임 정산을 몇 번 했고, 그때 무엇이 가장 귀찮았나요?').code, 0);
+    assert.deepEqual(unfinished(readTrial(folder)), []);
+    const whole = eyes(project, 'trial', 'page');
+    assert.equal(whole.code, 0, whole.text);
+    const page = readFileSync(join(folder, 'report.html'), 'utf8');
+    assert.match(page, /<title>써 보기 [\s\S]*사람과 결제 사이에 있는 것[\s\S]*모임을 만들자마자 500이 뜬다[\s\S]*링크로 들어온 사람이[\s\S]*두 번째 모임을[\s\S]*결제 창에서 뒤로/);
+    assert.match(page, /한 가지 일까지 감 · 다시 오는 날은 못 봄 · 돈을 내라는 순간이 없었다[\s\S]*한 가지 일까지 감 · 다시 오지 않음 · 안 낸다[\s\S]*낸다고 하려면:<\/b> 송금까지 한 번에 되면[\s\S]*진짜 사람에게만 물을 수 있는 것/);
+    assert.doesNotMatch(page, /아직 끝나지 않은 기록/);
+    assert.match(page, /data:image\/png;base64/, 'the screen at a step is inside the page');
+    assert.match(eyes(project, 'trial', 'show').text, /chongmu: 동창회 총무[\s\S]*\[첫날\] 좋음[\s\S]*between a person and paying, first to deal with first:\n  1\. \[block, seen, S\]/);
+    // A second trial of the same day is a second folder, and the latest.
+    assert.match(eyes(project, 'trial', 'new').text.trim(), /-2$/);
+    assert.match(latestTrial(project)!, /-2$/);
+  } finally {
+    rmSync(project, { recursive: true, force: true });
   }
 });
