@@ -332,3 +332,88 @@ else
 fi
 git rev-parse ${shq(`refs/heads/${p.land.into}`)}`;
 }
+
+// ------------------------------------------------------------------ what a change reaches
+
+/**
+ * A node program, run in a workspace, that says what a set of changed files reaches. It reads
+ * `{ changed: string[], screens: string[] }` on stdin and prints, as JSON:
+ *
+ *   affected     the changed files and every file that imports one of them, however far up
+ *   named        of those, the files that carry a screen's id as a quoted string, with the ids
+ *   screenFiles  how many files of the whole workspace name a screen
+ *   loose        changed files that are not source and that nothing imports (a config, a stylesheet nobody
+ *                imports, the lockfile): what they reach cannot be read off imports
+ *
+ * Imports are read with a pattern, not a parser: `import … from`, `export … from`, a bare `import '…'`,
+ * `require('…')` and `import('…')`, relative or through a one-star `paths` entry of tsconfig.json. A router's
+ * layout file (`_layout.*`, `layout.*`) is taken to be imported by every file under its directory, since the
+ * router wraps them in it without their saying so. Where the pattern is wrong it is wrong towards more: a
+ * file thought affected that is not costs a walk, never a miss.
+ */
+const REACH_PROGRAM = String.raw`
+const fs = require('fs'), path = require('path').posix, cp = require('child_process');
+const input = JSON.parse(fs.readFileSync(0, 'utf8'));
+const SOURCE = /\.(tsx?|jsx?|mjs|cjs)$/;
+const listed = cp.execSync('git ls-files -co --exclude-standard', { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }).split('\n').filter(Boolean);
+const all = new Set(listed);
+const sources = listed.filter((f) => SOURCE.test(f));
+let aliases = [];
+try {
+  const text = fs.readFileSync('tsconfig.json', 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '').replace(/,(\s*[}\]])/g, '$1');
+  const options = JSON.parse(text).compilerOptions || {};
+  for (const [from, to] of Object.entries(options.paths || {})) {
+    if (!from.endsWith('/*')) continue;
+    for (const target of to) if (target.endsWith('/*')) aliases.push([from.slice(0, -1), path.join(options.baseUrl || '.', target.slice(0, -1))]);
+  }
+} catch {}
+const ENDINGS = ['', '.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.web.ts', '.web.tsx', '.native.ts', '.native.tsx', '/index.ts', '/index.tsx', '/index.js', '/index.jsx'];
+const resolve = (spec, from) => {
+  const tries = [];
+  if (spec.startsWith('.')) tries.push(path.join(path.dirname(from), spec));
+  else for (const [prefix, target] of aliases) if (spec.startsWith(prefix)) tries.push(path.join(target, spec.slice(prefix.length)));
+  for (const base of tries) for (const ending of ENDINGS) {
+    const file = path.normalize(base + ending).replace(/^\.\//, '');
+    if (all.has(file)) return file;
+  }
+  return null;
+};
+const IMPORT = /(?:import|export)\s[^'"()]*?from\s*['"]([^'"]+)['"]|import\s*['"]([^'"]+)['"]|(?:import|require)\s*\(\s*['"]([^'"]+)['"]\s*\)/g;
+const importers = new Map();
+const add = (file, by) => { if (file === by) return; const set = importers.get(file) || new Set(); set.add(by); importers.set(file, set); };
+const names = new Map();
+const ids = input.screens.filter((id) => /^[\w.-]{1,40}$/.test(id));
+for (const file of sources) {
+  let text = '';
+  try { text = fs.readFileSync(file, 'utf8'); } catch { continue; }
+  for (const m of text.matchAll(IMPORT)) { const to = resolve(m[1] || m[2] || m[3], file); if (to) add(to, file); }
+  const found = ids.filter((id) => text.includes("'" + id + "'") || text.includes('"' + id + '"') || text.includes(String.fromCharCode(96) + id + String.fromCharCode(96)));
+  if (found.length > 0) names.set(file, found);
+}
+for (const layout of sources.filter((f) => /(^|\/)_?layout\.(tsx?|jsx?)$/.test(f))) {
+  const dir = path.dirname(layout) === '.' ? '' : path.dirname(layout) + '/';
+  for (const file of sources) if (file !== layout && file.startsWith(dir)) add(layout, file);
+}
+const affected = new Set();
+const queue = input.changed.filter((f) => all.has(f));
+while (queue.length > 0) {
+  const file = queue.pop();
+  if (affected.has(file)) continue;
+  affected.add(file);
+  for (const by of importers.get(file) || []) queue.push(by);
+}
+const loose = input.changed.filter((f) => !SOURCE.test(f) && !(importers.get(f) || new Set()).size);
+const named = {};
+for (const file of affected) if (names.has(file)) named[file] = names.get(file);
+process.stdout.write(JSON.stringify({ affected: [...affected].sort(), named, screenFiles: names.size, loose }));
+`;
+
+/** Runs `REACH_PROGRAM` in a workspace. Feed it `JSON.stringify({ changed, screens })` on stdin. */
+export function reachScript(p: { workspace: string }): string {
+  return `set -eu\ncd ${shq(p.workspace)}\nnode -e ${shq(REACH_PROGRAM)}`;
+}
+
+/** The files a workspace's working tree changes against `base`, tracked or new, one a line. */
+export function changedFilesScript(p: { workspace: string; base: string }): string {
+  return `set -eu\ncd ${shq(p.workspace)}\n{ git diff --name-only ${shq(p.base)}; git ls-files -o --exclude-standard; } | sort -u`;
+}
