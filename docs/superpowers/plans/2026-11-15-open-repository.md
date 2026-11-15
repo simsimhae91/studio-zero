@@ -106,34 +106,34 @@ withBlock(existing: string, block: string): string
 
 **Files:** `packages/protocol/src/{domain,events,rpc}.ts`, `packages/daemon/src/db/{schema,Store}.ts`, `packages/daemon/src/config.ts`, test `packages/daemon/test/open-repository.test.ts`
 
-- [ ] Test: `migration 20 gives every project an empty root and no origin`; `a project keeps its root and where it was adopted from`.
-- [ ] Add the shapes above; migration 20 (`ALTER TABLE projects ADD COLUMN root TEXT NOT NULL DEFAULT ''`, `ADD COLUMN adopted_json TEXT`); `toProject`, `insertProject`; config `repos` (`dir` default `<dataDir>/repos`, `checkOnPush` true, `maxPackMb` 512); `EngineKind` keeps `adopt` with the build route.
-- [ ] Typecheck, test, commit.
+- [x] Test: `migration 20 gives every project an empty root and no origin`; `a project keeps its root and where it was adopted from`.
+- [x] Add the shapes above; migration 20 (`ALTER TABLE projects ADD COLUMN root TEXT NOT NULL DEFAULT ''`, `ADD COLUMN adopted_json TEXT`); `toProject`, `insertProject`; config `repos` (`dir` default `<dataDir>/repos`, `checkOnPush` true, `maxPackMb` 512); `EngineKind` keeps `adopt` with the build route.
+- [x] Typecheck, test, commit.
 
 ### Task 2: The product folder
 
 **Files:** `sandbox/OrbStackManager.ts`, `sandbox/scripts.ts`, `sandbox/Slots.ts`, `harness/Harness.ts` (changed files → product-relative), `product/scope.ts`, `arms/ProjectArms.ts` (`.git/info/exclude` by `git rev-parse --git-path`), tests `open-repository.test.ts`, `scope.test.ts`
 
-- [ ] Test: `a command of a project with a root runs in its product folder, and git scripts in the repository`; `a file tool path is relative to the product folder and may reach the rest of the repository but not leave it`; `a change outside the product folder is walked for in full`; `a slot of a project with a root installs in the product folder`.
-- [ ] `productDir`, `resolveInProject` used by `exec`, `readFile`, `writeFile`, `startProcess`; `changedFilesScript` at the top level + `toProduct(root, file)`; `scopeOf`: a non-document path starting `../` gives `all`; `slotDepsScript({ workspace, main })` given product dirs, marker at `$(git rev-parse --git-dir)/sz-deps`; `depsScript({ workspace })` for a project's own workspace (marker `node_modules/.sz-lock`).
-- [ ] Full suite, commit.
+- [x] Test: `a command of a project with a root runs in its product folder, and git scripts in the repository`; `a file tool path is relative to the product folder and may reach the rest of the repository but not leave it`; `a change outside the product folder is walked for in full`; `a slot of a project with a root installs in the product folder`.
+- [x] `productDir`, `resolveInProject` used by `exec`, `readFile`, `writeFile`, `startProcess`; `changedFilesScript` at the top level + `toProduct(root, file)`; `scopeOf`: a non-document path starting `../` gives `all`; `slotDepsScript({ workspace, main })` given product dirs, marker at `$(git rev-parse --git-dir)/sz-deps`; `depsScript({ workspace })` for a project's own workspace (marker `node_modules/.sz-lock`).
+- [x] Full suite, commit.
 
 ### Task 3: The gate, outward
 
 **Files:** `repo/Gate.ts`, `sandbox/scripts.ts` (`gateOutScript`), `app/compose.ts`, test `gate.test.ts`
 
-- [ ] Test (real git): `opening a gate mirrors every branch and no checkpoint ref`; `a branch that moved or went away is moved or removed at the gate`; `a gate that is not open is not written`; `the Core project has no gate`.
-- [ ] `Gate.open/publish/branches/isOpen/pathOf/forget`; hook file written on open and at boot for gates that exist; publish on `task.state` (terminal, parked, suspended), `task.landed`, `git.merged`, `checkpoint.restored` through an event subscriber, serialised per project.
-- [ ] Commit.
+- [x] Test (real git): `opening a gate mirrors every branch and no checkpoint ref`; `a branch that moved or went away is moved or removed at the gate`; `a gate that is not open is not written`; `the Core project has no gate`.
+- [x] `Gate.open/publish/branches/isOpen/pathOf/forget`; hook file written on open and at boot for gates that exist; publish on `task.state` (terminal, parked, suspended), `task.landed`, `git.merged`, `checkpoint.restored` through an event subscriber, serialised per project.
+- [x] Commit.
 
 ### Task 4: The gate, inward
 
 **Files:** `repo/Gate.ts` (`receive`), `sandbox/scripts.ts` (`packInScript`, `receiveScript`), `app/Studio.ts` (`repoReceive`, after-main steps), `policy`, `server/handlers.ts`, `cli.ts` (`gate-receive`, `clone`, `repo`), test `gate.test.ts`
 
-- [ ] Test (real `git push` through the hook into a test daemon): `a push to main that goes forward is in the container when git says it was pushed`; `a push to main that does not go forward is refused and nothing moves`; `a new branch is taken, and one a task at work holds is refused`; `main cannot be deleted and a tag is not taken`; `a gate that is behind is brought up and the push refused`; `a push with the daemon down is refused`; `after a push to main a full check is queued once`; `a push that arrives while main is being moved waits its turn`.
-- [ ] Hook → `sz gate-receive <projectId>`: reads updates, packs new objects (`git pack-objects --revs --stdout`) into `<gate>/sz-incoming/`, calls `repo.receive`, prints lines, exits 0 or 1.
-- [ ] `Studio.repoReceive`: policy, landing lock, `Gate.receive`, then for main: deps, schema, preview, check.
-- [ ] Commit.
+- [x] Test (real `git push` through the hook into a test daemon): `a push to main that goes forward is in the container when git says it was pushed`; `a push to main that does not go forward is refused and nothing moves`; `a new branch is taken, and one a task at work holds is refused`; `main cannot be deleted and a tag is not taken`; `a gate that is behind is brought up and the push refused`; `a push with the daemon down is refused`; `after a push to main a full check is queued once`; `a push that arrives while main is being moved waits its turn`.
+- [x] Hook → `sz gate-receive <projectId>`: reads updates, packs new objects (`git pack-objects --revs --stdout`) into `<gate>/sz-incoming/`, calls `repo.receive`, prints lines, exits 0 or 1.
+- [x] `Studio.repoReceive`: policy, landing lock, `Gate.receive`, then for main: deps, schema, preview, check.
+- [x] Commit.
 
 ### Task 5: Adoption
 

@@ -471,3 +471,101 @@ export function fromProduct(root: string, file: string): string {
   if (file.startsWith(`${root}/`)) return file.slice(root.length + 1);
   return `${root.split('/').map(() => '..').join('/')}/${file}`;
 }
+
+// ------------------------------------------------------------------ the gate
+
+const COMMIT_ID = /^[0-9a-f]{40}$/;
+const NO_COMMIT = '0'.repeat(40);
+
+/** Every branch of a repository with its commit, one a line: `<commit> <branch>`. Run in the repository. */
+export const LIST_BRANCHES = `git for-each-ref --format='%(objectname) %(refname:strip=2)' refs/heads`;
+
+/**
+ * In a project's workspace: `branches` as a git bundle in base64 on stdout, leaving out what the other side is
+ * known to hold (`have`: commits it has; the ones this repository does not know are passed over). This is how
+ * a project's branches reach its repository on the host. Exit code 7 when there is nothing to send.
+ */
+export function gateOutScript(p: { workspace: string; branches: readonly string[]; have: readonly string[] }): string {
+  for (const branch of p.branches) assertBranchName(branch);
+  if (p.have.some((commit) => !COMMIT_ID.test(commit))) throw new Error('a commit the other side has is named by its full id');
+  return `set -eu
+cd ${shq(p.workspace)}
+mkdir -p /tmp/sz
+not=''
+for c in ${p.have.join(' ')}; do if git cat-file -e "$c^{commit}" 2>/dev/null; then not="$not ^$c"; fi; done
+[ -n "$(git rev-list -n 1 ${p.branches.map((branch) => shq(`refs/heads/${branch}`)).join(' ')} $not)" ] || exit 7
+git bundle create -q /tmp/sz/gate-out.bundle ${p.branches.map((branch) => shq(`refs/heads/${branch}`)).join(' ')} $not
+base64 < /tmp/sz/gate-out.bundle
+rm -f /tmp/sz/gate-out.bundle`;
+}
+
+/**
+ * In a project's workspace that holds nothing yet: takes a bundle on stdin and stands on its `branch` as the
+ * integration branch. How a repository that was brought in arrives. Prints the commit.
+ */
+export function gateFillScript(p: { workspace: string; branch: string; into: string }): string {
+  assertBranchName(p.branch);
+  assertBranchName(p.into);
+  return `set -eu
+cd ${shq(p.workspace)}
+mkdir -p /tmp/sz
+cat > /tmp/sz/gate-in.bundle
+git fetch -q --no-tags /tmp/sz/gate-in.bundle ${shq(`refs/heads/${p.branch}`)}
+git checkout -q -f -B ${shq(p.into)} FETCH_HEAD
+rm -f /tmp/sz/gate-in.bundle
+git rev-parse HEAD`;
+}
+
+/** One branch of a push: where the pusher believes it is (`old`) and where it is to go (`new`); all zeros is "no commit". */
+export interface ReceiveUpdate {
+  branch: string;
+  old: string;
+  new: string;
+}
+
+/**
+ * In a project's workspace: takes a push. The objects it brings arrive as a pack on stdin (`pack`), and then
+ * every update is checked before any is made:
+ *
+ *   stale    the branch is not where the pusher believes it is
+ *   missing  the commit it is to go to did not arrive
+ *   back     the integration branch would not move forward
+ *   held     the branch is the one this workspace stands on, and it is not the integration branch
+ *
+ * A refusal prints `no <why> <branch>` for each and exits 3 with nothing changed. Otherwise the branches are
+ * moved, made or removed, and each prints `ok <branch> <commits it gained>`. Where this workspace stands on the
+ * integration branch its working files follow, which refuses to write over a change that is not committed:
+ * `no dirty <branch>`, exit 3, before anything else has moved.
+ */
+export function receiveScript(p: { workspace: string; into: string; pack: boolean; updates: readonly ReceiveUpdate[] }): string {
+  assertBranchName(p.into);
+  for (const update of p.updates) {
+    assertBranchName(update.branch);
+    if (!COMMIT_ID.test(update.old) || !COMMIT_ID.test(update.new)) throw new Error('a push names full commit ids');
+  }
+  const each = (body: string): string => p.updates.map((u) => `b=${shq(u.branch)}; old=${u.old}; new=${u.new}\n${body}`).join('\n');
+  return `set -eu
+cd ${shq(p.workspace)}
+${p.pack ? 'git index-pack --stdin --fix-thin >/dev/null' : ':'}
+zero=${NO_COMMIT}
+into=${shq(p.into)}
+here=$(git symbolic-ref --quiet --short HEAD || true)
+bad=0
+${each(`cur=$(git rev-parse -q --verify "refs/heads/$b" || echo $zero)
+if [ "$cur" != "$old" ]; then echo "no stale $b"; bad=1
+elif [ "$new" != "$zero" ] && ! git cat-file -e "$new^{commit}" 2>/dev/null; then echo "no missing $b"; bad=1
+elif [ "$b" = "$into" ] && { [ "$new" = "$zero" ] || ! git merge-base --is-ancestor "$old" "$new"; }; then echo "no back $b"; bad=1
+elif [ "$b" != "$into" ] && [ "$b" = "$here" ]; then echo "no held $b"; bad=1
+fi`)}
+[ "$bad" = 0 ] || exit 3
+${each(`if [ "$b" = "$into" ] && [ "$here" = "$into" ]; then
+  git merge -q --ff-only "$new" >/dev/null 2>&1 || { echo "no dirty $b"; exit 3; }
+fi`)}
+${each(`if [ "$new" = "$zero" ]; then
+  git update-ref -d "refs/heads/$b" "$old"; echo "ok $b 0"
+else
+  if [ "$b" != "$into" ] || [ "$here" != "$into" ]; then git update-ref "refs/heads/$b" "$new" "$old"; fi
+  if [ "$old" = "$zero" ]; then n=$(git rev-list --count "$new" --not --exclude="$b" --branches 2>/dev/null || echo 0); else n=$(git rev-list --count "$old..$new"); fi
+  echo "ok $b $n"
+fi`)}`;
+}

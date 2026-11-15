@@ -1,6 +1,8 @@
 import { randomBytes } from 'node:crypto';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import type Anthropic from '@anthropic-ai/sdk';
 import type { Logger as PinoLogger } from 'pino';
 import { ConfidenceCalibration } from '../ax/Calibration.ts';
@@ -23,7 +25,8 @@ import { ReflectionAgent } from '../harness/ReflectionAgent.ts';
 import { ReviewResumer } from '../harness/ReviewResumer.ts';
 import { PlanGate } from '../harness/PlanGate.ts';
 import { SandwichReviewer } from '../harness/SandwichReviewer.ts';
-import { SelfHosting } from '../harness/SelfHosting.ts';
+import { SelfHosting, findRepoRoot } from '../harness/SelfHosting.ts';
+import { Gate, type HookCommand } from '../repo/Gate.ts';
 import { Toolbox } from '../harness/Toolbox.ts';
 import { KirbyEngine } from '../kirby/KirbyEngine.ts';
 import type { PdfRenderer } from '../knowledge/exportPdf.ts';
@@ -83,6 +86,8 @@ export interface DaemonOverrides {
   run?: CommandRunner;
   /** Replaces `/usr/bin/security`. */
   securityRun?: CommandRunner;
+  /** Replaces what the receive hook of a project's repository runs to reach this daemon. */
+  gateHook?: HookCommand;
   fetch?: typeof fetch;
   openSocket?: (url: string) => SocketLike;
   anthropic?: Anthropic;
@@ -151,6 +156,7 @@ export interface Daemon {
   selfHosting: SelfHosting;
   external: ExternalApis;
   slots: Slots;
+  gate: Gate;
   start(): Promise<void>;
   stop(): Promise<void>;
 }
@@ -206,6 +212,22 @@ export async function createDaemon(config: Config, log: PinoLogger, overrides: D
   // project's heavy task. A slot nobody takes for a while is stopped (`slotReaper`, started with the daemon).
   const slots = new Slots({ config, sandboxes, clock, log: log.child({ mod: 'slots' }) });
   let slotReaper: ReturnType<typeof setInterval> | null = null;
+  // The projects' repositories on this Mac. Host git is the real one whatever stands in for docker: a gate is a
+  // repository on this machine's disk. Its hook runs the studio's command line from this checkout.
+  // The command line built beside this daemon when it runs from its bundle, and the source otherwise.
+  const builtCli = join(dirname(fileURLToPath(import.meta.url)), 'sz.mjs');
+  const checkout = findRepoRoot();
+  const gate = new Gate({ config, events, sandboxes, log: log.child({ mod: 'gate' }), hook: overrides.gateHook ?? { node: process.execPath, cli: existsSync(builtCli) ? builtCli : checkout ? join(checkout, 'packages', 'daemon', 'src', 'cli.ts') : '' } });
+  // Whatever moves a project's branches is copied out to its repository, if the owner has opened one.
+  const published = new Set(['succeeded', 'failed', 'cancelled', 'suspended', 'parked']);
+  const unpublish = events.subscribe((e) => {
+    const b = e.body;
+    const moved = b.type === 'task.landed' || b.type === 'git.merged' || b.type === 'checkpoint.restored' || (b.type === 'task.state' && published.has(b.state));
+    if (!moved || e.projectId === null) return;
+    const project = store.getProject(e.projectId);
+    if (!project || !gate.isOpen(project)) return;
+    void gate.publish(project).catch((err: unknown) => log.warn({ projectId: project.id, err: errorMessage(err) }, 'the repository could not be brought up to the project\'s branches'));
+  });
   toolbox.useArms(arms);
   const steering = new SteeringQueue();
   const calibration = new ConfidenceCalibration(store, clock);
@@ -292,7 +314,7 @@ export async function createDaemon(config: Config, log: PinoLogger, overrides: D
   const power: CaffeinateManager = new CaffeinateManager({ log: log.child({ mod: 'power' }), spawn: overrides.powerSpawn, platform: overrides.platform, onChange: (mode) => studio.announcePower(mode) });
   // "Gemini" is reached through Antigravity's CLI, the Google agent this daemon already knows how to confine.
   const advisors = { codex, gemini: antigravity };
-  const studio: Studio = new Studio({ config, store, events, policy, sandboxes, provisioner, arms, slots, queue, planGate, vault, claude, router, auditor, evals, lessons, kirby, scratch, knowledge, calibration, steering, mcp, files, mockups, pty, namer, ledger, power, quota, selfHosting, external, advisors, relayStates, clock, log: log.child({ mod: 'studio' }), version: VERSION });
+  const studio: Studio = new Studio({ config, store, events, policy, sandboxes, provisioner, arms, slots, queue, planGate, vault, claude, router, auditor, evals, lessons, kirby, scratch, knowledge, calibration, steering, mcp, files, mockups, pty, namer, ledger, power, quota, selfHosting, external, advisors, relayStates, gate, clock, log: log.child({ mod: 'studio' }), version: VERSION });
 
   // The owner's schedules: each run goes in through the same `submitTask` as a task typed at the desk.
   const scheduler = new Scheduler({ store, events, studio, clock, log: log.child({ mod: 'scheduler' }) });
@@ -393,8 +415,10 @@ export async function createDaemon(config: Config, log: PinoLogger, overrides: D
     selfHosting,
     external,
     slots,
+    gate,
     async start() {
       policy.start();
+      gate.refreshHooks(store.listProjects());
       await claude.refresh();
       // The pinned first project: the studio's own repository, when the daemon runs from a checkout of it.
       const core = await selfHosting.mount(clock());
@@ -417,6 +441,7 @@ export async function createDaemon(config: Config, log: PinoLogger, overrides: D
     },
     async stop() {
       if (slotReaper) clearInterval(slotReaper);
+      unpublish();
       await relay?.stop();
       await slack?.stop();
       await ntfy?.stop();

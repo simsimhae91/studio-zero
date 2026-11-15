@@ -49,6 +49,12 @@ export const Action = z.discriminatedUnion('kind', [
   // Moving the base branch of the studio's own checkout forward to a branch a Core task produced.
   z.object({ kind: z.literal('selfhost.merge'), projectId: z.string(), branch: z.string() }),
 
+  // A project's repository on this Mac: making it (the project's code is then on the host's disk as git
+  // objects), taking a push into the project's sandbox through it, and bringing a checkout in as a project.
+  z.object({ kind: z.literal('repo.open'), projectId: z.string() }),
+  z.object({ kind: z.literal('repo.receive'), projectId: z.string(), branches: z.array(z.string()) }),
+  z.object({ kind: z.literal('project.adopt'), path: z.string() }),
+
   z.object({ kind: z.literal('checkpoint.rollback'), projectId: z.string(), checkpointId: z.string() }),
   z.object({ kind: z.literal('git.merge'), projectId: z.string(), branch: z.string(), into: z.string() }),
 
@@ -145,6 +151,12 @@ export function describeAction(action: Action): string {
       return `Studio Zero 저장소에 작업 결과를 브랜치 "${action.branch}"(으)로 내보내기`;
     case 'selfhost.merge':
       return `Studio Zero 저장소에 브랜치 "${action.branch}" 병합`;
+    case 'repo.open':
+      return '프로젝트의 저장소를 이 Mac에 열기';
+    case 'repo.receive':
+      return `소유자가 올린 브랜치 받기 (${action.branches.slice(0, 4).join(', ')})`;
+    case 'project.adopt':
+      return `이 Mac의 저장소 ${action.path.slice(0, 120)}을(를) 프로젝트로 들여오기`;
     case 'checkpoint.rollback':
       return `워크스페이스를 체크포인트 ${action.checkpointId}(으)로 되돌리기`;
     case 'git.merge':

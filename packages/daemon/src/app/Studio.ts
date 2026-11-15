@@ -51,7 +51,7 @@ import type {
   TaskTrack,
   Template,
 } from '@studio-zero/protocol';
-import { CORE_PROJECT_ID, PROTOCOL_VERSION, ReviewResult } from '@studio-zero/protocol';
+import { CORE_PROJECT_ID, PROTOCOL_VERSION, ReviewResult, rootOf } from '@studio-zero/protocol';
 import type { ConfidenceCalibration } from '../ax/Calibration.ts';
 import type { SteeringQueue } from '../ax/Steering.ts';
 import type { Config, Effort, EngineId } from '../config.ts';
@@ -76,10 +76,13 @@ import type { Actor } from '../policy/actions.ts';
 import { parseReferenceUrl, toApproval, type PolicyEngine } from '../policy/PolicyEngine.ts';
 import { renderAuditFeedback, type VisualAuditor } from '../qa/VisualAuditor.ts';
 import type { TaskQueue } from '../queue/TaskQueue.ts';
-import { SandboxError, sandboxNames, type OrbStackManager } from '../sandbox/OrbStackManager.ts';
+import { SandboxError, productDir, sandboxNames, type OrbStackManager } from '../sandbox/OrbStackManager.ts';
 import type { PtyManager, TerminalSink } from '../sandbox/PtyManager.ts';
 import type { FileContent, FileListing, SandboxFileService } from '../sandbox/SandboxFileService.ts';
-import { assertBranchName } from '../sandbox/scripts.ts';
+import { assertBranchName, depsScript, fromProduct } from '../sandbox/scripts.ts';
+import type { Gate } from '../repo/Gate.ts';
+import { WORKSPACE_DIR } from '../policy/PolicyEngine.ts';
+import { SCREEN_SPEC_FILE, readScreenSpec } from '../scratch/ScreenSpec.ts';
 import type { MockupRenderer } from '../qa/MockupRenderer.ts';
 import { PromotionWorkflow, type PromotionHost } from '../scratch/PromotionWorkflow.ts';
 import type { ScratchService, ScratchView } from '../scratch/ScratchService.ts';
@@ -107,6 +110,9 @@ export interface Advisor {
 /** A constant: the owner's question is the only thing that changes, and it travels as the prompt, not in here. */
 export const ADVISOR_SYSTEM_PROMPT = `The owner of a software project, who is building it with another AI system, is asking you for a second opinion. Answer the question directly and concretely, in the language it is asked in. Lead with your recommendation, then give the reasoning that would change someone's mind, including what would make you wrong. Keep it to a few short paragraphs. You cannot see the project: where the answer depends on something you were not told, say what it depends on instead of guessing.`;
 const advisorLabel: Record<AdvisorId, string> = { codex: 'Codex', gemini: 'Gemini (Antigravity)' };
+
+/** The lockfiles a product's dependencies are installed by, as `depsScript` looks for them. */
+const LOCKFILES = ['pnpm-lock.yaml', 'package-lock.json', 'yarn.lock', 'bun.lockb'];
 
 export interface StudioDeps {
   config: Config;
@@ -138,7 +144,8 @@ export interface StudioDeps {
   quota: QuotaTracker;
   selfHosting: SelfHosting;
   external: ExternalApis;
-  arms: Pick<ProjectArms, 'rest' | 'forget'>;
+  arms: Pick<ProjectArms, 'rest' | 'forget' | 'has' | 'applySchema'>;
+  gate: Gate;
   slots: Pick<Slots, 'perProject' | 'landing'>;
   advisors: Record<AdvisorId, Advisor>;
   relayStates: () => ResultOf<'system.status'>['relays'];
@@ -306,6 +313,8 @@ export class Studio implements PromotionHost {
     // Its backend goes too, with every user and row in it: they were the project's, and nothing else points at them.
     await this.#d.arms.forget(project);
     await this.#d.sandboxes.destroy(project, { deleteWorkspace });
+    // Its repository on this Mac goes with the workspace it mirrors. A clone the owner made keeps what it has.
+    if (deleteWorkspace) await this.#d.gate.forget(project);
     this.#d.store.deleteProject(projectId);
     await rm(join(this.#d.config.artifactsDir, projectId), { recursive: true, force: true });
   }
@@ -910,21 +919,111 @@ export class Studio implements PromotionHost {
 
   // ------------------------------------------------------------ repository
 
-  /** The project's repository on this Mac, made if it is not there yet. */
-  async repoOpen(_actor: Actor, _projectId: string): Promise<RepoStatus> {
-    throw new UnavailableError('the open repository is not built yet');
+  /** Whether a project has a screen plan with scenarios: whether it can be walked at all. A stopped sandbox is not started to find out. */
+  async #planned(project: Project): Promise<boolean> {
+    if (this.#d.store.getWalks(project.id)) return true;
+    try {
+      const read = readScreenSpec(JSON.parse((await this.#d.sandboxes.readFile(project, SCREEN_SPEC_FILE, 1024 * 1024)).content), { works: true, draft: true });
+      return read.ok && read.spec.scenarios.length > 0;
+    } catch {
+      return false;
+    }
   }
 
-  async repoStatus(_projectId: string): Promise<RepoStatus> {
-    throw new UnavailableError('the open repository is not built yet');
+  async repoStatus(projectId: string): Promise<RepoStatus> {
+    const project = this.getProject(projectId);
+    const open = projectId !== CORE_PROJECT_ID && this.#d.gate.isOpen(project);
+    const path = open ? this.#d.gate.pathOf(project) : null;
+    const quoted = path === null ? null : /^[\w@%+=:,./-]+$/.test(path) ? path : `'${path.replaceAll("'", `'\\''`)}'`;
+    return {
+      open,
+      path,
+      cloneCommand: quoted === null ? null : `git clone -o studio ${quoted} ${project.slug}`,
+      branches: open ? await this.#d.gate.branches(project) : [],
+      adopted: project.adopted ?? null,
+      root: rootOf(project),
+      planned: await this.#planned(project),
+    };
   }
 
-  async repoReceive(_actor: Actor, _p: { projectId: string; updates: RepoUpdate[]; pack: string | null }): Promise<{ accepted: boolean; lines: string[] }> {
-    throw new UnavailableError('the open repository is not built yet');
+  /** The project's repository on this Mac, made if it is not there yet and brought up to the project's branches. */
+  async repoOpen(actor: Actor, projectId: string): Promise<RepoStatus> {
+    const project = this.getProject(projectId);
+    if (projectId === CORE_PROJECT_ID) throw new ConflictError('Studio Zero Core의 저장소는 이 Mac의 체크아웃 자체입니다. 따로 여는 문이 없습니다.');
+    await this.#d.policy.authorize(actor, { kind: 'repo.open', projectId });
+    await this.#inSandbox(project, () => this.#d.gate.open(project));
+    return this.repoStatus(projectId);
+  }
+
+  /**
+   * A push to a project's repository, from its receive hook. Taken whole into the project's sandbox or not at
+   * all, under the lock everything that moves the project's main holds. The owner's code is not gated: what
+   * follows a push to main (dependencies, the schema, the preview, a full check) is the studio catching up.
+   */
+  async repoReceive(actor: Actor, p: { projectId: string; updates: RepoUpdate[]; pack: string | null }): Promise<{ accepted: boolean; lines: string[] }> {
+    const project = this.getProject(p.projectId);
+    await this.#d.policy.authorize(actor, { kind: 'repo.receive', projectId: p.projectId, branches: p.updates.map((update) => update.ref.replace(/^refs\/heads\//, '')) });
+    const live = new Set<Task['state']>(['queued', 'running', 'awaiting_approval', 'awaiting_plan_review', 'suspended', 'parked']);
+    const held = (branch: string): string | null => this.#d.store.listTasks(p.projectId, 200).find((task) => live.has(task.state) && (task.branch ?? `sz/${task.id}`) === branch)?.id ?? null;
+    const received = await this.#d.slots.landing(p.projectId, () => this.#d.gate.receive(project, p.updates, p.pack, held));
+    if (received.stale) {
+      // The gate was behind the sandbox (the daemon was down when something moved): a fetch now gets the pusher what they lack.
+      await this.#d.gate.publish(project).catch((err: unknown) => this.#d.log.warn({ projectId: project.id, err: errorMessage(err) }, 'the repository could not be brought up to date'));
+    }
+    if (!received.accepted) return { accepted: false, lines: received.lines };
+    const main = received.moved.find((move) => move.branch === INTEGRATION_BRANCH);
+    const lines = [...received.lines];
+    if (main && main.old !== null && main.new !== null) lines.push(...(await this.#afterMainMoved(project, main.old, main.new).catch((err: unknown) => [`받은 뒤 처리에서 걸렸습니다: ${errorMessage(err)}`])));
+    return { accepted: true, lines };
+  }
+
+  /** What the studio does once the owner has moved a project's main: returns what the pusher is told of it. */
+  async #afterMainMoved(project: Project, old: string, now: string): Promise<string[]> {
+    const lines: string[] = [];
+    const listed = await this.#d.sandboxes.exec(project, `git diff --name-only ${old} ${now}; echo "@@$(git symbolic-ref --quiet --short HEAD || true)"`, { cwd: WORKSPACE_DIR, timeoutSec: 60 });
+    const out = listed.stdout.split('\n').map((line) => line.trim()).filter(Boolean);
+    const onMain = out.includes(`@@${INTEGRATION_BRANCH}`);
+    const changed = out.filter((line) => !line.startsWith('@@')).map((file) => fromProduct(rootOf(project), file));
+    const background = (what: string, job: Promise<unknown>): void => {
+      const tracked: Promise<void> = job.then(() => undefined, (err: unknown) => {
+        this.#d.log.warn({ projectId: project.id, err: errorMessage(err) }, what);
+        this.#d.events.emit({ projectId: project.id, taskId: null }, { type: 'notice', level: 'warn', message: `${what}: ${errorMessage(err)}` });
+      }).finally(() => this.#background.delete(tracked));
+      this.#background.add(tracked);
+    };
+
+    // The working files followed only if the workspace stands on main; a heavy task's branch has its own.
+    if (onMain && changed.some((file) => LOCKFILES.includes(file))) {
+      lines.push('잠금 파일이 바뀌어 의존성을 다시 놓습니다.');
+      background('의존성을 다시 놓지 못했습니다', this.#d.sandboxes.exec(project, depsScript({ workspace: productDir(project) }), { cwd: WORKSPACE_DIR, timeoutSec: 900 }).then((res) => {
+        if (res.exitCode !== 0) throw new Error(excerpt(res.stderr || res.stdout, 400));
+      }));
+    }
+    if (onMain && changed.some((file) => file.startsWith('supabase/')) && this.#d.arms.has(project)) {
+      const applied = await this.#d.arms.applySchema(project);
+      lines.push(applied.ok ? `스키마: ${applied.text.split('\n')[0]}` : `스키마를 넣지 못했습니다. main은 받았고, 백엔드는 그대로입니다. 고쳐서 다시 올리세요.\n${excerpt(applied.text, 600)}`);
+      if (!applied.ok) this.#d.events.emit({ projectId: project.id, taskId: null }, { type: 'notice', level: 'warn', message: `소유자가 올린 main의 스키마를 백엔드에 넣지 못했습니다:\n${excerpt(applied.text, 600)}` });
+    }
+    if (onMain) background('프리뷰를 새 코드로 맞추지 못했습니다', this.#refreshPreview(project));
+    if (this.#d.config.repos.checkOnPush && (await this.#planned(project))) {
+      const waiting = this.#d.store.listTasks(project.id, 100).find((task) => task.kind === 'check' && task.state === 'queued');
+      const check = waiting ?? (await this.submitTask({ type: 'system' }, { projectId: project.id, kind: 'check', prompt: '소유자가 main에 올린 뒤의 전체 점검' }, 'system'));
+      lines.push(waiting ? `전체 점검이 이미 줄 서 있습니다 (${check.id}).` : `전체 점검을 걸었습니다 (${check.id}): 올린 코드로 제품 전체를 걷고 화면 기준을 새로 적습니다.`);
+    }
+    return lines;
+  }
+
+  /** A preview that is being looked at shows main as it now is; one that is not running is not started. */
+  async #refreshPreview(project: Project): Promise<void> {
+    const active = new Set<Task['state']>(['running', 'awaiting_approval', 'awaiting_plan_review']);
+    if (this.#d.store.listTasks(project.id, 40).some((task) => active.has(task.state) && !isLight(task, this.#d.slots.perProject))) return;
+    const file = await readProjectFile(this.#d.sandboxes, project, this.#d.config);
+    if (!(await this.#d.sandboxes.waitForHttp(project, file.dev.port, '/', 1))) return;
+    await ensureDevServer(this.#d.sandboxes, project, file, { reuse: true, current: true });
   }
 
   async adoptProject(_actor: Actor, _p: { path: string; dir?: string; base?: string; name?: string; slug?: string }): Promise<ResultOf<'projects.adopt'>> {
-    throw new UnavailableError('the open repository is not built yet');
+    throw new UnavailableError('adoption is not built yet');
   }
 
   selfHostStatus(): Promise<SelfHostStatus> {

@@ -208,6 +208,15 @@ const rules: Rule[] = [
     },
   },
   {
+    // A project's code leaves its sandbox for the host's disk, comes back from it, or arrives from a folder on
+    // this Mac: the owner's own doing, at this Mac. A relay can ask for none of it, and no agent can.
+    id: 'repo.local-owner-only',
+    evaluate: (actor, action) => {
+      if (action.kind !== 'repo.open' && action.kind !== 'repo.receive' && action.kind !== 'project.adopt') return undefined;
+      return actor.type === 'owner' && actor.via === 'desktop' ? allow('owner on the control socket') : deny('a project\'s repository is opened, pushed to and brought in only from this Mac');
+    },
+  },
+  {
     id: 'task.submit',
     evaluate: (actor, action) => {
       if (action.kind !== 'task.submit') return undefined;

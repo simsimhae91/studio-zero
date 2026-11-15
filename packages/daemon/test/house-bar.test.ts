@@ -61,7 +61,7 @@ test('web_guidance: a pinned package run in the sandbox with its reporting switc
     const found = await toolbox.call(ctx, 'web_guidance', { action: 'search', query: "a dialog that won't scroll the page; rm -rf $HOME `id`" });
     assert.equal(found.isError, false);
     assert.match(found.content, /<untrusted-data[^>]*source="external-tool"[\s\S]*"id":"dialog"/, 'a third party\'s text comes back as data');
-    assert.equal(ran[0], `cd /workspace && out=$(mktemp) && DISABLE_TELEMETRY=1 NO_COLOR=1 npx -y modern-web-guidance@${WEB_GUIDANCE_VERSION} search 'a dialog that won'\\''t scroll the page; rm -rf $HOME \`id\`' > "$out"; code=$?; cat "$out"; rm -f "$out"; exit $code`);
+    assert.equal(ran[0], `out=$(mktemp) && DISABLE_TELEMETRY=1 NO_COLOR=1 npx -y modern-web-guidance@${WEB_GUIDANCE_VERSION} search 'a dialog that won'\\''t scroll the page; rm -rf $HOME \`id\`' > "$out"; code=$?; cat "$out"; rm -f "$out"; exit $code`);
     assert.match(WEB_GUIDANCE_VERSION, /^\d+\.\d+\.\d+$/, 'a version, not "latest"');
 
     await toolbox.call(ctx, 'web_guidance', { action: 'retrieve', ids: ['dialog', 'animate-to-from-top-layer'] });

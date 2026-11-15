@@ -1,5 +1,8 @@
 #!/usr/bin/env node
-import { DEFAULT_DAEMON_PORT, RpcCallError, RpcClient, Template, type EventEnvelope, type Project, type Roadmap, type TaskKind } from '@studio-zero/protocol';
+import { spawnSync } from 'node:child_process';
+import { closeSync, mkdirSync, openSync, rmSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+import { DEFAULT_DAEMON_PORT, NO_COMMIT, RpcCallError, RpcClient, Template, type EventEnvelope, type Project, type RepoUpdate, type Roadmap, type TaskKind } from '@studio-zero/protocol';
 import { notYetReal, renderProductMap } from './product/ProductMap.ts';
 import { CredentialIds, KeychainVault } from './vault/KeychainVault.ts';
 
@@ -16,6 +19,16 @@ const USAGE = `sz — Studio Zero command line
                                                                              screens it changes, and put on main by itself when it holds
   sz check <project-slug>                                                    walk every scenario of the project's main as it stands, with no engine: what is found,
                                                                              and the record small edits are checked by
+  sz clone <project-slug> [folder]                                           open the project's repository on this Mac (a git repository that mirrors its branches)
+                                                                             and clone it: fetch what the studio made, push what you made (main only moves forward)
+  sz repo <project-slug>                                                     where that repository is, its branches, and how to connect a checkout you already have
+  sz adopt <path> [--dir <folder>] [--base <branch>] [--name <name>] [--slug <slug>]
+                                                                             bring a checkout on this Mac in as a project: its base branch becomes the project's main,
+                                                                             the product is found in it (or named with --dir), and the checkout gets a remote "studio".
+                                                                             No engine runs and nothing in the working tree is touched
+  sz fit <project-slug> [notes...]                                           on a project that was brought in: one task that makes the product something the studio can
+                                                                             run, walk and measure (its web target, a screen plan of what is there, the marks), changing
+                                                                             neither its look nor what it does. It ends on a branch for you to read and merge
   sz cancel <task-id>                                                        stop a task that is queued, running or waiting; its work stays on its branch
   sz plan <task-id>                                                          the plan a task is waiting with, and the other model's notes on it
   sz plan approve <task-id> | sz plan change <task-id> <what to change...>   approve it (the build starts), or send it back to be drafted again
@@ -133,6 +146,13 @@ function localTime(text: string): number {
   return at;
 }
 
+/** Everything on stdin, as text: what git hands a hook. */
+async function readAll(): Promise<string> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of process.stdin) chunks.push(chunk as Buffer);
+  return Buffer.concat(chunks).toString('utf8');
+}
+
 async function readSecret(): Promise<string> {
   const stdin = process.stdin;
   if (!stdin.isTTY) {
@@ -207,6 +227,96 @@ async function main(argv: string[]): Promise<number> {
           for (const p of (await client.call('projects.list', {})).projects) process.stdout.write(`${p.slug.padEnd(24)} ${p.template.padEnd(16)} ${p.name}\n`);
         }
         return 0;
+      }
+      case 'gate-receive': {
+        // Run by the pre-receive hook of a project's repository (see `repo/Gate.ts`), in that repository, with
+        // what the push brings still in quarantine. Not a command to type.
+        const updates: RepoUpdate[] = (await readAll()).split('\n').map((line) => line.trim().split(' ')).filter((words) => words.length === 3).map(([old, now, ref]) => ({ old: old!, new: now!, ref: ref! }));
+        if (updates.length === 0) return 0;
+        const gateDir = resolve(process.env.GIT_DIR ?? '.');
+        const git = (argv: string[], input?: string): string => {
+          const res = spawnSync('git', argv, { cwd: gateDir, input, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+          if (res.status !== 0) throw new Error(`git ${argv[0]} failed: ${res.stderr.trim().slice(0, 300)}`);
+          return res.stdout;
+        };
+        const news = [...new Set(updates.filter((update) => update.new !== NO_COMMIT).map((update) => update.new))];
+        const have = git(['for-each-ref', '--format=%(objectname)', 'refs/heads']).split('\n').filter(Boolean);
+        let pack: string | null = null;
+        // Only what the studio does not hold yet travels: a branch made at a commit it has brings nothing.
+        if (news.length > 0 && git(['rev-list', '-n', '1', ...news, '--not', ...have]).trim() !== '') {
+          mkdirSync(join(gateDir, 'sz-incoming'), { recursive: true, mode: 0o700 });
+          pack = join(gateDir, 'sz-incoming', `${Date.now()}-${process.pid}.pack`);
+          const out = openSync(pack, 'w', 0o600);
+          try {
+            const packed = spawnSync('git', ['pack-objects', '--revs', '--stdout', '-q'], { cwd: gateDir, input: `${news.join('\n')}\n--not\n${have.join('\n')}\n`, stdio: ['pipe', out, 'pipe'] });
+            if (packed.status !== 0) throw new Error(`could not pack what was pushed: ${String(packed.stderr).trim().slice(0, 300)}`);
+          } finally {
+            closeSync(out);
+          }
+        }
+        try {
+          const answer = await client.call('repo.receive', { projectId: args[0] ?? '', updates, pack });
+          // Git shows a hook's stderr to whoever pushed, each line after "remote:".
+          for (const line of answer.lines.flatMap((text) => text.split('\n'))) process.stderr.write(`Studio Zero: ${line}\n`);
+          return answer.accepted ? 0 : 1;
+        } finally {
+          if (pack !== null) rmSync(pack, { force: true });
+        }
+      }
+      case 'clone':
+      case 'repo': {
+        const project = await projectBySlug(client, args[0]);
+        const repo = command === 'clone' ? await client.call('repo.open', { projectId: project.id }) : await client.call('repo.status', { projectId: project.id });
+        if (command === 'clone') {
+          const folder = args[1] ?? project.slug;
+          const cloned = spawnSync('git', ['clone', '-o', 'studio', repo.path!, folder], { stdio: 'inherit' });
+          if (cloned.status !== 0) return cloned.status ?? 1;
+          process.stdout.write(`\n${folder}: 스튜디오의 작업은 git fetch studio 로 받고, 한 일은 git push studio <브랜치> 로 보냅니다. main은 앞으로만 움직입니다.\n`);
+          return 0;
+        }
+        if (!repo.open) {
+          process.stdout.write(`${project.slug}: 저장소가 아직 이 Mac에 열려 있지 않습니다. sz clone ${project.slug} 로 엽니다.\n`);
+          return 0;
+        }
+        process.stdout.write(
+          [
+            `${project.slug}  ${repo.path}`,
+            ...(repo.adopted ? [`들여온 곳  ${repo.adopted.path} (${repo.adopted.base})`] : []),
+            ...(repo.root ? [`제품 폴더  ${repo.root}/`] : []),
+            `걷기 계획  ${repo.planned ? '있음' : `없음${repo.adopted ? ` (sz fit ${project.slug})` : ''}`}`,
+            `새로 받기  ${repo.cloneCommand}`,
+            `있는 체크아웃에 잇기  git remote add studio ${repo.path}`,
+            '',
+            ...repo.branches.map((branch) => `${branch.commit.slice(0, 7)}  ${branch.name.padEnd(28)} ${new Date(branch.at).toISOString().slice(0, 10)}  ${branch.subject}`),
+          ].join('\n') + '\n',
+        );
+        return 0;
+      }
+      case 'adopt': {
+        const flag = (name: string): string | undefined => (args.includes(name) ? args[args.indexOf(name) + 1] : undefined);
+        const flags = ['--dir', '--base', '--name', '--slug'];
+        const path = args.find((word, i) => !flags.includes(word) && !flags.includes(args[i - 1] ?? ''));
+        if (!path) throw new Error('say which checkout: sz adopt <path> [--dir <folder>] [--base <branch>] [--name <name>] [--slug <slug>]');
+        const [dir, base, name, slug] = flags.map(flag);
+        const adopted = await client.call('projects.adopt', { path: resolve(path), ...(dir !== undefined ? { dir } : {}), ...(base !== undefined ? { base } : {}), ...(name !== undefined ? { name } : {}), ...(slug !== undefined ? { slug } : {}) });
+        process.stdout.write(`${adopted.lines.join('\n')}\n`);
+        return 0;
+      }
+      case 'fit': {
+        const project = await projectBySlug(client, args[0]);
+        const task = await client.call('tasks.submit', { projectId: project.id, kind: 'adopt', prompt: args.slice(1).join(' ').trim() || '이 제품을 스튜디오가 걷고 잴 수 있게 맞춘다.' });
+        process.stdout.write(`task ${task.id}\n`);
+        const state = await new Promise<string>((done) => {
+          client.subscribe({ taskId: task.id }, (e) => {
+            if (e.body.type !== 'tool.call' && e.body.type !== 'tool.result' && e.body.type !== 'usage' && e.body.type !== 'policy.decision') printEvent(e);
+            if (e.body.type === 'task.state' && ['succeeded', 'failed', 'cancelled'].includes(e.body.state)) done(e.body.state);
+          }, 0);
+        });
+        const ended = await client.call('tasks.get', { taskId: task.id });
+        if (ended.summary) process.stdout.write(`\n${ended.summary}\n`);
+        const branch = ended.branch ?? `sz/${ended.id}`;
+        process.stdout.write(state === 'succeeded' ? `\n브랜치 ${branch}에 있습니다. 체크아웃에서 git fetch studio 후 studio/${branch}를 읽고, 합치려면 sz merge ${project.slug} ${branch} (또는 직접 합쳐 git push studio main).\n` : `\n끝까지 가지 못했습니다. 한 일은 브랜치 ${branch}에 있습니다.\n`);
+        return state === 'succeeded' ? 0 : 1;
       }
       case 'edit':
       case 'check': {
