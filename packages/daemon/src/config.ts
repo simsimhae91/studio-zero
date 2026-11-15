@@ -46,6 +46,11 @@ const defaultRoutes: Record<EngineKind, z.input<typeof RouteCandidate>[]> = {
     { engine: 'native-claude', model: 'claude-opus-5-5', effort: 'high' },
     { engine: 'claude-code', model: 'opus', effort: 'high' },
   ],
+  // Reading a product someone else built and making it walkable without changing it: a build's engine.
+  adopt: [
+    { engine: 'native-claude', model: 'claude-opus-5-5', effort: 'high' },
+    { engine: 'claude-code', model: 'opus', effort: 'high' },
+  ],
 };
 
 export const ConfigSchema = z.object({
@@ -165,7 +170,23 @@ export const ConfigSchema = z.object({
       antigravity: z.object({ enabled: z.boolean().default(true), bin: z.string().default('agy') }).prefault({}),
     })
     .prefault({}),
-  routes: z.record(EngineKind, z.array(RouteCandidate).min(1)).default(defaultRoutes as Record<EngineKind, RouteCandidate[]>),
+  // A kind the file does not list keeps its default: a config written before a kind existed still loads.
+  routes: z
+    .partialRecord(EngineKind, z.array(RouteCandidate).min(1))
+    .default({})
+    .transform((given): Record<EngineKind, RouteCandidate[]> => ({ ...z.record(EngineKind, z.array(RouteCandidate).min(1)).parse(defaultRoutes), ...given })),
+  /**
+   * The projects' repositories on this Mac (see `repo/Gate.ts`): bare git repositories under `<home>/repos`
+   * that mirror each project's branches, which the owner clones from and pushes to.
+   */
+  repos: z
+    .object({
+      /** After the owner pushes to a project's main, walk the whole product once, so that what a later small edit is held to is the code as it now is. */
+      checkOnPush: z.boolean().default(true),
+      /** The most one push may bring, in megabytes. It passes through memory on its way into the sandbox. */
+      maxPackMb: z.number().int().min(1).max(4096).default(512),
+    })
+    .prefault({}),
   images: z
     .object({
       /** Whether engines may have pictures made for a product through a connected subscription's image tool. */
@@ -238,6 +259,8 @@ export type Config = z.infer<typeof ConfigSchema> & {
   home: string;
   dbPath: string;
   artifactsDir: string;
+  /** Where the projects' repositories on this Mac are kept. */
+  reposDir: string;
 };
 
 /** Loads `$SZ_HOME/config.json` (default `~/.studio-zero`). A missing file means defaults; a malformed one is fatal. */
@@ -249,9 +272,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const parsed = ConfigSchema.parse(raw);
   const artifactsDir = join(home, 'artifacts');
   mkdirSync(artifactsDir, { recursive: true, mode: 0o700 });
-  return { ...parsed, home, dbPath: join(home, 'studio-zero.db'), artifactsDir };
+  return { ...parsed, home, dbPath: join(home, 'studio-zero.db'), artifactsDir, reposDir: join(home, 'repos') };
 }
 
 export function testConfig(home: string, overrides: z.input<typeof ConfigSchema> = {}): Config {
-  return { ...ConfigSchema.parse(overrides), home, dbPath: ':memory:', artifactsDir: join(home, 'artifacts') };
+  return { ...ConfigSchema.parse(overrides), home, dbPath: ':memory:', artifactsDir: join(home, 'artifacts'), reposDir: join(home, 'repos') };
 }

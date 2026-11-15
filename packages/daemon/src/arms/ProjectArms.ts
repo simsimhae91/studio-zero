@@ -77,7 +77,7 @@ export class ProjectArms {
 
     // The file is this machine's and never the repository's: the ports are this stack's. `.git/info/exclude`
     // keeps it out of every commit without touching the project's own ignore file.
-    const held = await this.#sandboxes.exec(project, `grep -qxF ${ENV_FILE} .git/info/exclude 2>/dev/null || echo ${ENV_FILE} >> .git/info/exclude; echo "SZ kit=$(test -f ${ARMS_KIT_ENTRY} && echo 1 || echo 0) schema=$(ls ${MIGRATIONS_DIR}/*.sql >/dev/null 2>&1 && echo 1 || echo 0)"; cat ${ENV_FILE} 2>/dev/null; true`, { timeoutSec: 15 });
+    const held = await this.#sandboxes.exec(project, `ex=$(git rev-parse --git-path info/exclude); mkdir -p "$(dirname "$ex")"; grep -qxF ${ENV_FILE} "$ex" 2>/dev/null || echo ${ENV_FILE} >> "$ex"; echo "SZ kit=$(test -f ${ARMS_KIT_ENTRY} && echo 1 || echo 0) schema=$(ls ${MIGRATIONS_DIR}/*.sql >/dev/null 2>&1 && echo 1 || echo 0)"; cat ${ENV_FILE} 2>/dev/null; true`, { timeoutSec: 15 });
     const first = held.stdout.indexOf('\n');
     const flags = held.stdout.slice(0, first === -1 ? undefined : first);
     const existing = first === -1 ? '' : held.stdout.slice(first + 1);

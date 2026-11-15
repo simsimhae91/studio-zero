@@ -19,7 +19,10 @@ import {
   PowerMode,
   PowerState,
   Project,
+  ProductRoot,
   ProposalCard,
+  RepoStatus,
+  RepoUpdate,
   SandboxInfo,
   SandboxState,
   SelfHostStatus,
@@ -388,6 +391,28 @@ export const methods = {
   'power.get': { params: empty, result: PowerState },
   'power.set': { params: z.object({ mode: PowerMode }), result: PowerState },
   'quota.get': { params: empty, result: z.object({ at: z.number().int(), subscriptions: z.array(SubscriptionQuota) }) },
+
+  /**
+   * A project's repository on this Mac: a bare git repository that mirrors the project's branches. `repo.open`
+   * makes it if it is not there yet (the owner's doing: until then nothing of the project is on the host's
+   * disk) and brings it up to date; `repo.status` only reads.
+   */
+  'repo.open': { params: z.object({ projectId: z.string() }), result: RepoStatus },
+  'repo.status': { params: z.object({ projectId: z.string() }), result: RepoStatus },
+  /**
+   * A push, from the receive hook of that repository. `pack` is a file inside the repository's own incoming
+   * folder holding the objects the push brings, or null when it brings none. The studio takes all of it into
+   * the project's sandbox or none: `accepted` is the hook's exit code, `lines` what the pusher is told.
+   */
+  'repo.receive': { params: z.object({ projectId: z.string(), updates: z.array(RepoUpdate).min(1).max(64), pack: z.string().max(1024).nullable() }), result: z.object({ accepted: z.boolean(), lines: z.array(z.string()) }) },
+  /**
+   * Brings a checkout on this Mac in as a project: its base branch becomes the project's `main`, the product is
+   * found in it (`dir`, or looked for), and the checkout gets a git remote named `studio`. No engine runs.
+   */
+  'projects.adopt': {
+    params: z.object({ path: z.string().min(1).max(1024), dir: ProductRoot.optional(), base: z.string().min(1).max(120).optional(), name: Project.shape.name.optional(), slug: Slug.optional() }),
+    result: z.object({ project: Project, gate: z.string(), remote: z.enum(['added', 'kept', 'differs']), base: z.string(), uncommitted: z.number().int(), lines: z.array(z.string()) }),
+  },
 
   /** The studio's own repository as a project. Read-only: what a task there would start from and whether its result could be merged. */
   'selfhost.status': { params: empty, result: SelfHostStatus },

@@ -250,13 +250,16 @@ git rev-parse HEAD`;
  * slot's own `.git`.
  */
 export function slotDepsScript(p: { workspace: string; main: string }): string {
+  // `workspace` and `main` are the product's folder in the slot and in the project's workspace: where the
+  // lockfile is. The marker is kept in the repository's own .git, wherever below it the product is.
   return `set -eu
 cd ${shq(p.workspace)}
 lock=''
 for f in pnpm-lock.yaml package-lock.json yarn.lock bun.lockb; do if [ -f "$f" ]; then lock="$f"; break; fi; done
 if [ -z "$lock" ]; then echo none; exit 0; fi
+marker="$(git rev-parse --absolute-git-dir)/sz-deps"
 want=$(git hash-object "$lock")
-have=$(cat .git/sz-deps 2>/dev/null || true)
+have=$(cat "$marker" 2>/dev/null || true)
 if [ "$want" = "$have" ] && [ -d node_modules ]; then echo kept; exit 0; fi
 rm -rf node_modules
 if [ -d ${shq(`${p.main}/node_modules`)} ] && [ -f ${shq(p.main)}/"$lock" ] && [ "$(git hash-object ${shq(p.main)}/"$lock")" = "$want" ]; then
@@ -273,8 +276,35 @@ else
   if ! $cmd >/tmp/sz/slot-install.log 2>&1; then tail -c 2000 /tmp/sz/slot-install.log >&2; exit 4; fi
   did=installed
 fi
-printf %s "$want" > .git/sz-deps
+printf %s "$want" > "$marker"
 echo "$did"`;
+}
+
+/**
+ * In a project's own workspace: installs what the lockfile in `workspace` (the product's folder) says, unless
+ * that is what is installed. Prints `none` (nothing to install by), `kept` or `installed`. The lockfile's id is
+ * kept inside node_modules, so a workspace that lost its node_modules installs again. For a product that was
+ * brought in: one the studio builds installs for itself as it is built.
+ */
+export function depsScript(p: { workspace: string }): string {
+  return `set -eu
+cd ${shq(p.workspace)}
+lock=''
+for f in pnpm-lock.yaml package-lock.json yarn.lock bun.lockb; do if [ -f "$f" ]; then lock="$f"; break; fi; done
+if [ -z "$lock" ]; then echo none; exit 0; fi
+want=$(git hash-object "$lock")
+if [ "$(cat node_modules/.sz-lock 2>/dev/null || true)" = "$want" ]; then echo kept; exit 0; fi
+mkdir -p /tmp/sz
+case "$lock" in
+  pnpm-lock.yaml) cmd='pnpm install --frozen-lockfile --prefer-offline' ;;
+  package-lock.json) cmd='npm ci' ;;
+  yarn.lock) cmd='yarn install --frozen-lockfile' ;;
+  *) cmd='bun install --frozen-lockfile' ;;
+esac
+if ! $cmd >/tmp/sz/install.log 2>&1; then tail -c 2000 /tmp/sz/install.log >&2; exit 4; fi
+mkdir -p node_modules
+printf %s "$want" > node_modules/.sz-lock
+echo installed`;
 }
 
 /**
@@ -423,10 +453,21 @@ export function reachScript(p: { workspace: string }): string {
 }
 
 /**
- * The files a workspace's working tree changes since it left `base`, tracked or new, one a line. Since it left:
- * measured from where the work and `base` part, so that what `base` has gained meanwhile is not counted as the
- * work's own.
+ * The files a workspace's working tree changes since it left `base`, tracked or new, one a line, each as a path
+ * from the repository's root (`workspace` is that root). Since it left: measured from where the work and `base`
+ * part, so that what `base` has gained meanwhile is not counted as the work's own.
  */
 export function changedFilesScript(p: { workspace: string; base: string }): string {
   return `set -eu\ncd ${shq(p.workspace)}\nfrom=$(git merge-base HEAD ${shq(p.base)} 2>/dev/null || git rev-parse ${shq(p.base)})\n{ git diff --name-only "$from"; git ls-files -o --exclude-standard; } | sort -u`;
+}
+
+/**
+ * A path from a repository's root as a path from its product's folder (`root`, '' for the root itself): a file
+ * of the product loses the folder's name, and one outside it is reached by going up (`../docs/a.md`).
+ */
+export function fromProduct(root: string, file: string): string {
+  if (root === '') return file;
+  if (file === root) return '.';
+  if (file.startsWith(`${root}/`)) return file.slice(root.length + 1);
+  return `${root.split('/').map(() => '..').join('/')}/${file}`;
 }

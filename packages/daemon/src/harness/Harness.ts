@@ -1,8 +1,8 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { INTEGRATION_BRANCH, SLOT_SEEN_REF, changedFilesScript, reachScript } from '../sandbox/scripts.ts';
+import { INTEGRATION_BRANCH, SLOT_SEEN_REF, changedFilesScript, fromProduct, reachScript } from '../sandbox/scripts.ts';
 import { join } from 'node:path';
 import { z } from 'zod';
-import { AcceptanceVerdict, Effort, ReviewerId, ReviewerPref, ScreenSpec as ScreenSpecShape, type AuditReport, type Phase, type Finding, type PlanFeedback, type ProductMap, type Project, type ScreenLedger, type Task, type TaskState } from '@studio-zero/protocol';
+import { AcceptanceVerdict, Effort, ReviewerId, ReviewerPref, ScreenSpec as ScreenSpecShape, isAdopted, rootOf, type AuditReport, type Phase, type Finding, type PlanFeedback, type ProductMap, type Project, type ScreenLedger, type Task, type TaskState } from '@studio-zero/protocol';
 import { EngineId, type Config } from '../config.ts';
 import { classifyQuotaFailure } from '../app/QuotaTracker.ts';
 import { isLight, type PlanVersionRow, type Store } from '../db/Store.ts';
@@ -16,7 +16,7 @@ import { flowTotals } from '../qa/FlowWalker.ts';
 import { MOCKUP_DIR, type MockupMeasurement, type MockupRenderer } from '../qa/MockupRenderer.ts';
 import type { ReferenceCapture, RefKit } from '../qa/RefKit.ts';
 import type { SmokeRunner } from '../qa/SmokeTester.ts';
-import { slotOf, type OrbStackManager, type Place } from '../sandbox/OrbStackManager.ts';
+import { productDir, slotOf, type OrbStackManager, type Place } from '../sandbox/OrbStackManager.ts';
 import type { Slots } from '../sandbox/Slots.ts';
 import { renderScope, scopeLabel, scopeOf, type Reach, type Scope } from '../product/scope.ts';
 import { appliedScript, readApplied } from '../arms/schema.ts';
@@ -1390,8 +1390,9 @@ export class Harness {
 
     const listed = await this.#sandboxes.exec(project, changedFilesScript({ workspace: WORKSPACE_DIR, base: SLOT_SEEN_REF }), { timeoutSec: 60, signal });
     if (listed.exitCode !== 0) throw new Error(`what the edit changed could not be listed: ${excerpt(listed.stderr, 300)}`);
-    const changed = listed.stdout.split('\n').map((line) => line.trim()).filter(Boolean);
-    const read = await this.#sandboxes.exec(project, reachScript({ workspace: WORKSPACE_DIR }), { stdin: JSON.stringify({ changed, screens: spec.screens.map((screen) => screen.id) }), timeoutSec: 120, maxOutputBytes: 8 * 1024 * 1024, signal });
+    // Git lists from the repository's root; the plan, the imports and the scope speak from the product's folder.
+    const changed = listed.stdout.split('\n').map((line) => line.trim()).filter(Boolean).map((file) => fromProduct(rootOf(project), file));
+    const read = await this.#sandboxes.exec(project, reachScript({ workspace: productDir(project) }), { stdin: JSON.stringify({ changed, screens: spec.screens.map((screen) => screen.id) }), timeoutSec: 120, maxOutputBytes: 8 * 1024 * 1024, signal });
     let reach: Reach | null = null;
     try {
       if (read.exitCode === 0 && !read.truncated) reach = JSON.parse(read.stdout) as Reach;
@@ -1714,6 +1715,6 @@ export function repairMessage(failures: readonly Failure[]): string {
 }
 
 function commitSubject(task: Task): string {
-  const prefix = { build: 'feat', refactor: 'refactor', inline_edit: 'fix', ideate: 'docs', kirby_materialize: 'feat', check: 'chore' }[task.kind];
+  const prefix = { build: 'feat', refactor: 'refactor', inline_edit: 'fix', ideate: 'docs', kirby_materialize: 'feat', check: 'chore', adopt: 'chore' }[task.kind];
   return `${prefix}: ${task.prompt.split('\n')[0]!.replace(/\s+/g, ' ').slice(0, 68)}\n\nStudio Zero task ${task.id}`;
 }

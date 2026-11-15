@@ -37,6 +37,8 @@ import type {
   PlanVersion,
   Project,
   ProposalCard,
+  RepoStatus,
+  RepoUpdate,
   ResultOf,
   ReviewDiff,
   ReviewOutcome,
@@ -905,6 +907,25 @@ export class Studio implements PromotionHost {
   }
 
   // ---------------------------------------------------------- self-hosting
+
+  // ------------------------------------------------------------ repository
+
+  /** The project's repository on this Mac, made if it is not there yet. */
+  async repoOpen(_actor: Actor, _projectId: string): Promise<RepoStatus> {
+    throw new UnavailableError('the open repository is not built yet');
+  }
+
+  async repoStatus(_projectId: string): Promise<RepoStatus> {
+    throw new UnavailableError('the open repository is not built yet');
+  }
+
+  async repoReceive(_actor: Actor, _p: { projectId: string; updates: RepoUpdate[]; pack: string | null }): Promise<{ accepted: boolean; lines: string[] }> {
+    throw new UnavailableError('the open repository is not built yet');
+  }
+
+  async adoptProject(_actor: Actor, _p: { path: string; dir?: string; base?: string; name?: string; slug?: string }): Promise<ResultOf<'projects.adopt'>> {
+    throw new UnavailableError('the open repository is not built yet');
+  }
 
   selfHostStatus(): Promise<SelfHostStatus> {
     return this.#d.selfHosting.status();

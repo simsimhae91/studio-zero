@@ -147,6 +147,13 @@ export const EventBody = z.discriminatedUnion('type', [
   z.object({ type: z.literal('git.merged'), branch: z.string(), into: z.string(), commit: z.string() }),
   /** A task's work was put on the integration branch by the studio itself, as this commit: a small edit that passed its checks. */
   z.object({ type: z.literal('task.landed'), commit: z.string(), into: z.string() }),
+  /**
+   * The owner pushed to the project's repository and the studio took it: a branch made (`old` null), moved, or
+   * removed (`new` null). `commits` is how many it gained.
+   */
+  z.object({ type: z.literal('repo.received'), branch: z.string(), old: z.string().nullable(), new: z.string().nullable(), commits: z.number().int() }),
+  /** The project's branches were copied out to its repository on this Mac: this many were made, moved or removed there. */
+  z.object({ type: z.literal('repo.published'), branches: z.number().int() }),
   /** The owner sent a message to a running task. It is delivered at the engine's next turn, without stopping it. */
   z.object({ type: z.literal('steer.queued'), text: z.string() }),
   z.object({ type: z.literal('steer.delivered'), count: z.number().int() }),

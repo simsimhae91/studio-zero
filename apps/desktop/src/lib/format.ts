@@ -15,7 +15,7 @@ export const taskStateLabel: Record<TaskState, string> = {
 
 export const phaseLabel: Record<Phase, string> = { plan: '계획', execute: '구현', verify: '검증', reflect: '회고', evolve: '반영' };
 
-export const kindLabel: Record<TaskKind, string> = { build: '만들기', refactor: '리팩터링', inline_edit: '빠른 수정', ideate: '기획', kirby_materialize: '제안 구현', check: '전체 점검' };
+export const kindLabel: Record<TaskKind, string> = { build: '만들기', refactor: '리팩터링', inline_edit: '빠른 수정', ideate: '기획', kirby_materialize: '제안 구현', check: '전체 점검', adopt: '스튜디오에 맞추기' };
 
 /** Effort levels in the owner's language, with the vendors' own word for each beside it in the menu. */
 export const effortLabel: Record<string, string> = { low: '낮음', medium: '보통', high: '높음', xhigh: '매우 높음', max: '최대' };

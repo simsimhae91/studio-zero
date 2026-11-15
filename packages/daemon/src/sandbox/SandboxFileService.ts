@@ -122,7 +122,7 @@ export class SandboxFileService {
 
   async list(project: Project, path = '.', depth = 1): Promise<FileListing> {
     const root = relative(path);
-    const res = await this.#sandboxes.exec(project, 'node -', { stdin: listScript({ root, depth, max: MAX_ENTRIES, omit: OMITTED_DIRECTORIES }), timeoutSec: 30, maxOutputBytes: 8 * 1024 * 1024 });
+    const res = await this.#sandboxes.exec(project, 'node -', { cwd: WORKSPACE_DIR, stdin: listScript({ root, depth, max: MAX_ENTRIES, omit: OMITTED_DIRECTORIES }), timeoutSec: 30, maxOutputBytes: 8 * 1024 * 1024 });
     if (res.exitCode !== 0) throw new SandboxError(`cannot list ${path}`, excerpt(res.stderr, 300));
 
     const entries: FileEntry[] = [];
@@ -163,7 +163,7 @@ export class SandboxFileService {
   async read(project: Project, path: string): Promise<FileContent> {
     const target = relative(path);
     if (target === '.') throw new ConflictError('the workspace root is a directory');
-    const res = await this.#sandboxes.exec(project, 'node -', { stdin: readScript({ path: target, max: MAX_READ_BYTES }), timeoutSec: 30, maxOutputBytes: MAX_READ_BYTES * 7 });
+    const res = await this.#sandboxes.exec(project, 'node -', { cwd: WORKSPACE_DIR, stdin: readScript({ path: target, max: MAX_READ_BYTES }), timeoutSec: 30, maxOutputBytes: MAX_READ_BYTES * 7 });
     if (res.exitCode !== 0) throw new SandboxError(`cannot read ${path}`, excerpt(res.stderr, 300));
     let json: unknown;
     try {
@@ -186,7 +186,8 @@ export class SandboxFileService {
     if (target === '.') throw new ConflictError('the workspace root is a directory');
     // The repository's own bookkeeping is not a file to edit by hand: checkpoints and rollback live there.
     if (target.split('/').includes('.git')) throw new ConflictError('files under .git cannot be written from here');
-    await this.#sandboxes.writeFile(project, target, content);
+    // The owner's file browser shows the whole repository, so its paths are from the repository's root wherever the product is.
+    await this.#sandboxes.writeFile(project, posix.join(WORKSPACE_DIR, target), content);
   }
 }
 

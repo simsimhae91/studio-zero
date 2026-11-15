@@ -254,7 +254,7 @@ export class Store {
   // ------------------------------------------------------------- projects
 
   insertProject(p: Project): void {
-    this.#run('INSERT INTO projects (id, slug, name, template, created_at) VALUES (:id, :slug, :name, :template, :createdAt)', { ...p });
+    this.#run('INSERT INTO projects (id, slug, name, template, created_at, root, adopted_json) VALUES (:id, :slug, :name, :template, :createdAt, :root, :adopted)', { id: p.id, slug: p.slug, name: p.name, template: p.template, createdAt: p.createdAt, root: p.root ?? '', adopted: p.adopted ? JSON.stringify(p.adopted) : null });
   }
 
   getProject(id: string): Project | null {
@@ -1412,8 +1412,19 @@ function toSession(r: Row): Session {
   return { id: str(r.id), projectId: str(r.project_id), name: str(r.name), createdAt: num(r.created_at) };
 }
 
+/** Where a project was adopted from, as stored. Text that does not read as that is "not adopted". */
+function adoptedOf(stored: unknown): Project['adopted'] {
+  if (typeof stored !== 'string' || stored === '') return null;
+  try {
+    const read = JSON.parse(stored) as { path?: unknown; base?: unknown };
+    return typeof read.path === 'string' && typeof read.base === 'string' ? { path: read.path, base: read.base } : null;
+  } catch {
+    return null;
+  }
+}
+
 function toProject(r: Row): Project {
-  return { id: str(r.id), slug: str(r.slug), name: str(r.name), template: str(r.template) as ProjectTemplate, createdAt: num(r.created_at) };
+  return { id: str(r.id), slug: str(r.slug), name: str(r.name), template: str(r.template) as ProjectTemplate, createdAt: num(r.created_at), root: typeof r.root === 'string' ? r.root : '', adopted: adoptedOf(r.adopted_json) };
 }
 
 function toSandbox(r: Row): SandboxRow {

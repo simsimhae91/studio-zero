@@ -10,8 +10,12 @@ export const Slug = z.string().regex(/^[a-z][a-z0-9-]{1,38}[a-z0-9]$/, 'lowercas
 /**
  * `check` is the one kind no engine works on: the studio walks every scenario of the project's main as it stands
  * and writes down where the walk went and what each screen was found breaking (see `ProjectWalks`).
+ *
+ * `adopt` is the first task of a product that was built elsewhere and brought in: an engine makes it something
+ * the studio can run, walk and measure (its web target, a screen plan of what is there, the marks), changing
+ * neither how it looks nor what it does.
  */
-export const TaskKind = z.enum(['build', 'refactor', 'inline_edit', 'ideate', 'kirby_materialize', 'check']);
+export const TaskKind = z.enum(['build', 'refactor', 'inline_edit', 'ideate', 'kirby_materialize', 'check', 'adopt']);
 export type TaskKind = z.infer<typeof TaskKind>;
 
 /**
@@ -57,14 +61,57 @@ export const CORE_PROJECT_ID = 'prj_core';
 export const TaskTrack = z.enum(['fast', 'full']);
 export type TaskTrack = z.infer<typeof TaskTrack>;
 
+/**
+ * The folder of a repository its product is in, as a path from the repository's root: `app`, `apps/mobile`. The
+ * empty string is the root itself. Every part begins with a letter, a digit or an underscore, so it can be
+ * neither an option to a command nor a way out of the repository.
+ */
+export const ProductRoot = z.string().regex(/^(?:[A-Za-z0-9_][A-Za-z0-9._-]{0,60}(?:\/[A-Za-z0-9_][A-Za-z0-9._-]{0,60}){0,3})?$/, 'a folder inside the repository, at most four deep');
+export type ProductRoot = z.infer<typeof ProductRoot>;
+
 export const Project = z.object({
   id: z.string(),
   slug: Slug,
   name: z.string().min(1).max(80),
   template: ProjectTemplate,
   createdAt: z.number().int(),
+  /** Where the product is inside its repository. Absent or empty for every project the studio started: theirs is the root. */
+  root: ProductRoot.optional(),
+  /**
+   * Set for a product that was built elsewhere and brought in: the checkout on this Mac it came from and the
+   * branch of it that became `main` here. Such a product keeps its own design; the house's theme, kits and
+   * design gates are not put on it.
+   */
+  adopted: z.object({ path: z.string(), base: z.string() }).nullable().optional(),
 });
 export type Project = z.infer<typeof Project>;
+/** The folder a project's product is in, from its repository's root: `''` for the root itself. */
+export const rootOf = (project: Pick<Project, 'root'>): string => project.root ?? '';
+/** Whether a project's product was built elsewhere and brought in. */
+export const isAdopted = (project: Pick<Project, 'adopted'>): boolean => (project.adopted ?? null) !== null;
+
+/** The all-zero id git writes for "no commit": the old side of a branch being made, the new side of one being deleted. */
+export const NO_COMMIT = '0'.repeat(40);
+const CommitId = z.string().regex(/^[0-9a-f]{40}$/);
+/** One line of a push as git hands it to a receive hook. */
+export const RepoUpdate = z.object({ ref: z.string().min(1).max(300), old: CommitId, new: CommitId });
+export type RepoUpdate = z.infer<typeof RepoUpdate>;
+
+/**
+ * A project's repository as the owner can reach it from this Mac. `open` is false until the owner has asked for
+ * it once: until then nothing of the project is on the host's disk. `planned`: the product has a screen plan
+ * with scenarios, so it can be walked (an adopted product has none until it has been fitted).
+ */
+export const RepoStatus = z.object({
+  open: z.boolean(),
+  path: z.string().nullable(),
+  cloneCommand: z.string().nullable(),
+  branches: z.array(z.object({ name: z.string(), commit: z.string(), subject: z.string(), at: z.number().int() })),
+  adopted: z.object({ path: z.string(), base: z.string() }).nullable(),
+  root: z.string(),
+  planned: z.boolean(),
+});
+export type RepoStatus = z.infer<typeof RepoStatus>;
 
 /** A named stream of tasks inside a project (a feature, a fix, a scratch line of work). Tasks still run one at a time per project: the workspace is one working tree. */
 export const Session = z.object({

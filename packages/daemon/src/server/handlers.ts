@@ -145,6 +145,10 @@ export function createHandlers(studio: Studio, deps: HandlerDeps): Handlers {
     'power.get': () => studio.powerState(),
     'power.set': (p) => studio.setPower(OWNER, p.mode),
     'quota.get': () => studio.quota(),
+    'repo.open': (p) => studio.repoOpen(OWNER, p.projectId),
+    'repo.status': (p) => studio.repoStatus(p.projectId),
+    'repo.receive': (p) => studio.repoReceive(OWNER, p),
+    'projects.adopt': (p) => studio.adoptProject(OWNER, p),
     'selfhost.status': () => studio.selfHostStatus(),
     'selfhost.merge': (p) => studio.selfHostMerge(OWNER, p.taskId),
 

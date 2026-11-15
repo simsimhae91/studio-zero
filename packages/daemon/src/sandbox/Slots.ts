@@ -1,7 +1,7 @@
-import type { Project } from '@studio-zero/protocol';
+import { rootOf, type Project } from '@studio-zero/protocol';
 import type { Config } from '../config.ts';
 import { KeyedMutex, type Clock } from '../util/core.ts';
-import { SandboxError, SLOT_MAIN_DIR, slotOf, type OrbStackManager, type Place } from './OrbStackManager.ts';
+import { SandboxError, SLOT_MAIN_DIR, productDir, slotOf, type OrbStackManager, type Place } from './OrbStackManager.ts';
 import { INTEGRATION_BRANCH, bundleInScript, bundleOutScript, rebaseOntoScript, slotDepsScript, syncSlotScript } from './scripts.ts';
 import { WORKSPACE_DIR } from '../policy/PolicyEngine.ts';
 
@@ -109,9 +109,9 @@ export class Slots {
     // The project's own sandbox first: a slot is a clone of its workspace and mounts its volume.
     await this.#sandboxes.ensure(project);
     await this.#sandboxes.ensure(place);
-    const synced = await this.#sandboxes.exec(place, syncSlotScript({ workspace: WORKSPACE_DIR, main: SLOT_MAIN_DIR, into: INTEGRATION_BRANCH }), { timeoutSec: SYNC_TIMEOUT_SEC, signal });
+    const synced = await this.#sandboxes.exec(place, syncSlotScript({ workspace: WORKSPACE_DIR, main: SLOT_MAIN_DIR, into: INTEGRATION_BRANCH }), { cwd: WORKSPACE_DIR, timeoutSec: SYNC_TIMEOUT_SEC, signal });
     if (synced.exitCode !== 0) throw new SandboxError(`slot ${slotOf(place)} of ${project.slug} could not be brought to the project's ${INTEGRATION_BRANCH}`, synced.stderr);
-    const deps = await this.#sandboxes.exec(place, slotDepsScript({ workspace: WORKSPACE_DIR, main: SLOT_MAIN_DIR }), { timeoutSec: DEPS_TIMEOUT_SEC, signal });
+    const deps = await this.#sandboxes.exec(place, slotDepsScript({ workspace: productDir(place), main: rootOf(place) === '' ? SLOT_MAIN_DIR : `${SLOT_MAIN_DIR}/${rootOf(place)}` }), { cwd: WORKSPACE_DIR, timeoutSec: DEPS_TIMEOUT_SEC, signal });
     if (deps.exitCode !== 0) throw new SandboxError(`slot ${slotOf(place)} of ${project.slug} could not install the project's dependencies`, deps.stderr);
   }
 
@@ -137,7 +137,7 @@ export class Slots {
   async export(place: Place, branch: string): Promise<boolean> {
     const bundle = await this.#bundle(place, INTEGRATION_BRANCH, branch);
     if (bundle === null) return false;
-    const taken = await this.#sandboxes.exec(this.#projectOf(place), bundleInScript({ workspace: WORKSPACE_DIR, branch }), { stdin: bundle.bytes, timeoutSec: SYNC_TIMEOUT_SEC });
+    const taken = await this.#sandboxes.exec(this.#projectOf(place), bundleInScript({ workspace: WORKSPACE_DIR, branch }), { cwd: WORKSPACE_DIR, stdin: bundle.bytes, timeoutSec: SYNC_TIMEOUT_SEC });
     if (taken.exitCode !== 0) throw new SandboxError(`could not take ${branch} into the project's repository`, taken.stderr);
     return true;
   }
@@ -152,14 +152,14 @@ export class Slots {
       // Twice at most: the second time is for an integration branch that moved between the look and the move,
       // which the lock leaves to the owner's own hand in a terminal.
       for (let attempt = 0; attempt < 2; attempt++) {
-        const rebased = await this.#sandboxes.exec(place, rebaseOntoScript({ workspace: WORKSPACE_DIR, main: SLOT_MAIN_DIR, into: INTEGRATION_BRANCH }), { timeoutSec: SYNC_TIMEOUT_SEC });
+        const rebased = await this.#sandboxes.exec(place, rebaseOntoScript({ workspace: WORKSPACE_DIR, main: SLOT_MAIN_DIR, into: INTEGRATION_BRANCH }), { cwd: WORKSPACE_DIR, timeoutSec: SYNC_TIMEOUT_SEC });
         if (rebased.exitCode === 3) return { landed: false, why: 'conflict', files: rebased.stdout.split('\n').map((line) => line.trim()).filter(Boolean) };
         const [how, old] = rebased.stdout.trim().split(/\s+/);
         if (rebased.exitCode !== 0 || !old || !/^[0-9a-f]{40}$/.test(old)) throw new SandboxError(`could not put ${branch} on the project's ${INTEGRATION_BRANCH}`, rebased.stderr);
         if (how === 'moved' && !(await again())) return { landed: false, why: 'checks' };
         const bundle = await this.#bundle(place, old, branch);
         if (bundle === null) return { landed: false, why: 'nothing' };
-        const taken = await this.#sandboxes.exec(this.#projectOf(place), bundleInScript({ workspace: WORKSPACE_DIR, branch, land: { into: INTEGRATION_BRANCH, commit: bundle.commit, old } }), { stdin: bundle.bytes, timeoutSec: SYNC_TIMEOUT_SEC });
+        const taken = await this.#sandboxes.exec(this.#projectOf(place), bundleInScript({ workspace: WORKSPACE_DIR, branch, land: { into: INTEGRATION_BRANCH, commit: bundle.commit, old } }), { cwd: WORKSPACE_DIR, stdin: bundle.bytes, timeoutSec: SYNC_TIMEOUT_SEC });
         if (taken.exitCode === 0) return { landed: true, commit: bundle.commit };
         if (taken.exitCode === 8) return { landed: false, why: 'dirty' };
         if (taken.exitCode !== 6) throw new SandboxError(`could not move the project's ${INTEGRATION_BRANCH} to ${branch}`, taken.stderr);
@@ -190,7 +190,7 @@ export class Slots {
 
   /** `base..branch` of a slot as a bundle with the commit it ends on, or null when there is nothing between them. */
   async #bundle(place: Place, base: string, branch: string): Promise<{ bytes: Uint8Array; commit: string } | null> {
-    const made = await this.#sandboxes.exec(place, bundleOutScript({ workspace: WORKSPACE_DIR, base, branch }), { timeoutSec: SYNC_TIMEOUT_SEC, maxOutputBytes: MAX_BUNDLE_BYTES });
+    const made = await this.#sandboxes.exec(place, bundleOutScript({ workspace: WORKSPACE_DIR, base, branch }), { cwd: WORKSPACE_DIR, timeoutSec: SYNC_TIMEOUT_SEC, maxOutputBytes: MAX_BUNDLE_BYTES });
     if (made.exitCode === 7) return null;
     const commit = made.stderr.trim().split('\n').at(-1)?.trim() ?? '';
     if (made.exitCode !== 0 || made.truncated || !/^[0-9a-f]{40}$/.test(commit)) throw new SandboxError(made.truncated ? `${branch} is too large to leave its slot (over ${MAX_BUNDLE_BYTES / (1024 * 1024)}MB)` : `could not bundle ${branch}`, made.stderr);

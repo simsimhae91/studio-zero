@@ -4,7 +4,7 @@ import { createRequire } from 'node:module';
 import { isIPv4 } from 'node:net';
 import { homedir } from 'node:os';
 import { dirname, isAbsolute, join, posix } from 'node:path';
-import type { Checkpoint, Project, SandboxInfo } from '@studio-zero/protocol';
+import { ProductRoot, rootOf, type Checkpoint, type Project, type SandboxInfo } from '@studio-zero/protocol';
 import type { Config } from '../config.ts';
 import type { CheckpointRow, SandboxRow, Store } from '../db/Store.ts';
 import { WORKSPACE_DIR } from '../policy/PolicyEngine.ts';
@@ -81,7 +81,7 @@ export class SandboxError extends Error {
 }
 
 export interface ExecOptions {
-  /** Relative to /workspace, or absolute inside it. */
+  /** Relative to the project's product folder (/workspace, or the folder of it a brought-in product is in), or absolute inside /workspace. */
   cwd?: string;
   timeoutSec?: number;
   stdin?: string | Uint8Array;
@@ -217,7 +217,7 @@ export class OrbStackManager {
 
     // A slot's workspace is not begun here: it is cloned from the project's when the slot is first taken.
     if (slot > 0) return this.info(project);
-    const init = await this.exec(project, initWorkspaceScript(WORKSPACE_DIR), { timeoutSec: 60 });
+    const init = await this.exec(project, initWorkspaceScript(WORKSPACE_DIR), { cwd: WORKSPACE_DIR, timeoutSec: 60 });
     if (init.exitCode !== 0) throw new SandboxError('could not initialise workspace', init.stderr);
     return this.info(project);
   }
@@ -302,7 +302,7 @@ export class OrbStackManager {
    */
   async exec(project: Place, script: string, opts: ExecOptions = {}): Promise<ExecResult> {
     const { container } = sandboxNames(project.slug, slotOf(project));
-    const cwd = resolveInWorkspace(opts.cwd ?? '.');
+    const cwd = resolveInProject(project, opts.cwd ?? '.');
     const timeoutSec = Math.min(opts.timeoutSec ?? this.#config.runtime.execTimeoutSec, 3600);
     const res = await this.#docker(
       // `timeout` runs inside the container, so an overrunning command is killed there, not just abandoned.
@@ -329,16 +329,16 @@ export class OrbStackManager {
   }
 
   async readFile(project: Place, path: string, maxBytes = 512 * 1024): Promise<{ content: string; truncated: boolean }> {
-    const target = resolveInWorkspace(path);
-    const res = await this.exec(project, `head -c ${maxBytes + 1} -- ${shq(target)}`, { timeoutSec: 30, maxOutputBytes: maxBytes + 1024 });
+    const target = resolveInProject(project, path);
+    const res = await this.exec(project, `head -c ${maxBytes + 1} -- ${shq(target)}`, { cwd: WORKSPACE_DIR, timeoutSec: 30, maxOutputBytes: maxBytes + 1024 });
     if (res.exitCode !== 0) throw new SandboxError(`cannot read ${path}`, lastLine(res.stderr));
     const truncated = Buffer.byteLength(res.stdout) > maxBytes;
     return { content: truncated ? res.stdout.slice(0, maxBytes) : res.stdout, truncated };
   }
 
   async writeFile(project: Place, path: string, content: string | Uint8Array): Promise<void> {
-    const target = resolveInWorkspace(path);
-    const res = await this.exec(project, `mkdir -p -- ${shq(posix.dirname(target))} && cat > ${shq(target)}`, { stdin: content, timeoutSec: 30 });
+    const target = resolveInProject(project, path);
+    const res = await this.exec(project, `mkdir -p -- ${shq(posix.dirname(target))} && cat > ${shq(target)}`, { cwd: WORKSPACE_DIR, stdin: content, timeoutSec: 30 });
     if (res.exitCode !== 0) throw new SandboxError(`cannot write ${path}`, lastLine(res.stderr));
   }
 
@@ -346,21 +346,21 @@ export class OrbStackManager {
   async startProcess(project: Place, name: string, command: string): Promise<void> {
     await this.stopProcess(project, name);
     const { container } = sandboxNames(project.slug, slotOf(project));
-    await this.#must(['exec', '--detach', container, 'setsid', 'bash', '-c', startProcessScript({ name, command, workspace: WORKSPACE_DIR })], `could not start ${name}`);
+    await this.#must(['exec', '--detach', container, 'setsid', 'bash', '-c', startProcessScript({ name, command, workspace: productDir(project) })], `could not start ${name}`);
   }
 
   async stopProcess(project: Place, name: string): Promise<void> {
-    await this.exec(project, stopProcessScript(name), { timeoutSec: 20 });
+    await this.exec(project, stopProcessScript(name), { cwd: WORKSPACE_DIR, timeoutSec: 20 });
   }
 
   async waitForHttp(project: Place, port: number, path: string, timeoutSec: number): Promise<boolean> {
-    const res = await this.exec(project, waitHttpScript({ url: `http://127.0.0.1:${port}${path}`, timeoutSec }), { timeoutSec: timeoutSec + 10 });
+    const res = await this.exec(project, waitHttpScript({ url: `http://127.0.0.1:${port}${path}`, timeoutSec }), { cwd: WORKSPACE_DIR, timeoutSec: timeoutSec + 10 });
     return res.exitCode === 0;
   }
 
   async processLog(project: Place, name: string, tailLines = 80): Promise<string> {
     if (!/^[a-z][a-z0-9-]{0,30}$/.test(name)) throw new SandboxError('invalid process name');
-    return (await this.exec(project, `tail -n ${tailLines} /tmp/sz/${name}.log 2>/dev/null || true`, { timeoutSec: 10 })).stdout;
+    return (await this.exec(project, `tail -n ${tailLines} /tmp/sz/${name}.log 2>/dev/null || true`, { cwd: WORKSPACE_DIR, timeoutSec: 10 })).stdout;
   }
 
   /**
@@ -394,7 +394,7 @@ export class OrbStackManager {
   /** Sub-second snapshot of the whole working tree (see `checkpointScript`). */
   async checkpoint(project: Place, label: string, taskId: string | null = null): Promise<Checkpoint> {
     const id = newId('ckp');
-    const res = await this.exec(project, checkpointScript({ workspace: WORKSPACE_DIR, id, label }), { timeoutSec: 120 });
+    const res = await this.exec(project, checkpointScript({ workspace: WORKSPACE_DIR, id, label }), { cwd: WORKSPACE_DIR, timeoutSec: 120 });
     const match = /^([0-9a-f]{40,64}) ([0-9a-f]{40,64}|none) (\S+)\s*$/.exec(res.stdout.trim());
     if (res.exitCode !== 0 || !match) throw new SandboxError('checkpoint failed', lastLine(res.stderr) || res.stdout);
     const row: CheckpointRow = { id, projectId: project.id, taskId, label, commit: match[1]!, headSha: match[2]!, branch: match[3]!, createdAt: this.#clock() };
@@ -404,7 +404,7 @@ export class OrbStackManager {
 
   /** What the workspace holds right now, as a tree id (see `treeScript`): equal ids mean no file differs. */
   async workspaceTree(project: Place): Promise<string> {
-    const res = await this.exec(project, treeScript({ workspace: WORKSPACE_DIR }), { timeoutSec: 120 });
+    const res = await this.exec(project, treeScript({ workspace: WORKSPACE_DIR }), { cwd: WORKSPACE_DIR, timeoutSec: 120 });
     const tree = res.stdout.trim();
     if (res.exitCode !== 0 || !/^[0-9a-f]{40,64}$/.test(tree)) throw new SandboxError('could not read the workspace tree', lastLine(res.stderr) || res.stdout);
     return tree;
@@ -415,7 +415,7 @@ export class OrbStackManager {
     const row = this.#store.getCheckpoint(checkpointId);
     if (!row || row.projectId !== project.id) throw new SandboxError(`checkpoint ${checkpointId} does not belong to this project`);
     const safety = await this.checkpoint(project, `before rollback to ${row.label}`.slice(0, 120));
-    const res = await this.exec(project, rollbackScript({ workspace: WORKSPACE_DIR, id: row.id, headSha: row.headSha, branch: row.branch }), { timeoutSec: 120 });
+    const res = await this.exec(project, rollbackScript({ workspace: WORKSPACE_DIR, id: row.id, headSha: row.headSha, branch: row.branch }), { cwd: WORKSPACE_DIR, timeoutSec: 120 });
     if (res.exitCode !== 0) throw new SandboxError('rollback failed', lastLine(res.stderr));
     return { restored: toCheckpoint(row), safety };
   }
@@ -428,7 +428,7 @@ export class OrbStackManager {
     const row = this.#store.getCheckpoint(checkpointId);
     if (!row || row.projectId !== project.id) throw new SandboxError(`checkpoint ${checkpointId} does not belong to this project`);
     const branch = `fork/${checkpointId.slice(-10)}`;
-    const res = await this.exec(project, `git rev-parse -q --verify ${shq(`refs/heads/${branch}`)} >/dev/null || git branch -- ${shq(branch)} ${row.commit}`, { timeoutSec: 30 });
+    const res = await this.exec(project, `git rev-parse -q --verify ${shq(`refs/heads/${branch}`)} >/dev/null || git branch -- ${shq(branch)} ${row.commit}`, { cwd: WORKSPACE_DIR, timeoutSec: 30 });
     if (res.exitCode !== 0) throw new SandboxError('could not create the fork', lastLine(res.stderr));
     return branch;
   }
@@ -438,14 +438,14 @@ export class OrbStackManager {
    * holds work of its own is kept as it is. Returns whether it was: true means the task goes on from earlier work.
    */
   async startBranch(project: Place, branch: string, from: string, opts: { keep?: boolean } = {}): Promise<boolean> {
-    const res = await this.exec(project, startBranchScript({ workspace: WORKSPACE_DIR, branch, from, keep: opts.keep }), { timeoutSec: 60 });
+    const res = await this.exec(project, startBranchScript({ workspace: WORKSPACE_DIR, branch, from, keep: opts.keep }), { cwd: WORKSPACE_DIR, timeoutSec: 60 });
     if (res.exitCode !== 0) throw new SandboxError(`cannot start branch ${branch}`, lastLine(res.stderr));
     return lastLine(res.stdout) === 'kept';
   }
 
   async checkout(project: Place, branch: string): Promise<void> {
     assertBranchName(branch);
-    const res = await this.exec(project, `git checkout -q ${shq(branch)}`, { timeoutSec: 60 });
+    const res = await this.exec(project, `git checkout -q ${shq(branch)}`, { cwd: WORKSPACE_DIR, timeoutSec: 60 });
     if (res.exitCode !== 0) throw new SandboxError(`cannot check out ${branch}`, lastLine(res.stderr));
   }
 
@@ -454,19 +454,19 @@ export class OrbStackManager {
    * as it lies: for a caller that wrote a few files on a branch whose other contents are not its to judge.
    */
   async commitAll(project: Place, message: string, only?: readonly string[]): Promise<string> {
-    const res = await this.exec(project, commitAllScript({ workspace: WORKSPACE_DIR, message, ...(only ? { only } : {}) }), { timeoutSec: 120 });
+    const res = await this.exec(project, commitAllScript({ workspace: WORKSPACE_DIR, message, ...(only ? { only } : {}) }), { cwd: WORKSPACE_DIR, timeoutSec: 120 });
     if (res.exitCode !== 0) throw new SandboxError('commit failed', lastLine(res.stderr));
     return res.stdout.trim().split('\n').at(-1) ?? '';
   }
 
   async merge(project: Place, branch: string, into: string): Promise<string> {
-    const res = await this.exec(project, mergeScript({ workspace: WORKSPACE_DIR, branch, into }), { timeoutSec: 120 });
+    const res = await this.exec(project, mergeScript({ workspace: WORKSPACE_DIR, branch, into }), { cwd: WORKSPACE_DIR, timeoutSec: 120 });
     if (res.exitCode !== 0) throw new SandboxError(res.exitCode === 3 ? `merging ${branch} into ${into} conflicts` : 'merge failed', lastLine(res.stderr));
     return res.stdout.trim().split('\n').at(-1) ?? '';
   }
 
   async diff(project: Place, base: string, branch: string, maxBytes = 400_000): Promise<{ diff: string; stat: { files: number; insertions: number; deletions: number }; truncated: boolean }> {
-    const res = await this.exec(project, diffScript({ workspace: WORKSPACE_DIR, base, branch }), { timeoutSec: 60, maxOutputBytes: maxBytes });
+    const res = await this.exec(project, diffScript({ workspace: WORKSPACE_DIR, base, branch }), { cwd: WORKSPACE_DIR, timeoutSec: 60, maxOutputBytes: maxBytes });
     if (res.exitCode !== 0) throw new SandboxError('diff failed', lastLine(res.stderr));
     const [statLine = '', diff = ''] = res.stdout.split('---sz-diff---\n');
     const pick = (re: RegExp): number => Number(re.exec(statLine)?.[1] ?? 0);
@@ -719,6 +719,27 @@ export function sandboxNames(slug: string, slot = 0): Pick<SandboxRow, 'containe
 /** Lexically confines a path to /workspace. This is hygiene for file tools; the container is the actual boundary. */
 export function resolveInWorkspace(path: string): string {
   const resolved = posix.resolve(WORKSPACE_DIR, path);
+  if (resolved !== WORKSPACE_DIR && !resolved.startsWith(`${WORKSPACE_DIR}/`)) throw new SandboxError(`path escapes ${WORKSPACE_DIR}: ${path}`);
+  return resolved;
+}
+
+/**
+ * Where a project's product is inside its sandbox: the repository's root (/workspace) for every project the
+ * studio started, and a folder of it for one that was brought in with its product further down (`root`). It is
+ * where a command runs unless it says otherwise, what a relative path is relative to, and where the dev server
+ * starts: everything that is about the product. What is about the repository (the git scripts) names
+ * /workspace itself. Like a slot's number, `root` is read here and nowhere above.
+ */
+export function productDir(place: Pick<Project, 'root'>): string {
+  const root = rootOf(place);
+  if (root === '') return WORKSPACE_DIR;
+  if (!ProductRoot.safeParse(root).success) throw new SandboxError(`invalid product folder: ${JSON.stringify(root)}`);
+  return `${WORKSPACE_DIR}/${root}`;
+}
+
+/** A path as a project's tools give it: relative to its product folder, anywhere in its repository, never outside it. */
+export function resolveInProject(place: Pick<Project, 'root'>, path: string): string {
+  const resolved = posix.resolve(productDir(place), path);
   if (resolved !== WORKSPACE_DIR && !resolved.startsWith(`${WORKSPACE_DIR}/`)) throw new SandboxError(`path escapes ${WORKSPACE_DIR}: ${path}`);
   return resolved;
 }

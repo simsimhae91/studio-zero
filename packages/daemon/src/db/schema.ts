@@ -514,6 +514,12 @@ const migrations: string[] = [
     updated_at   INTEGER NOT NULL
   ) STRICT;
   `,
+  // 20: a project's product may be in a folder of its repository, and a project may have been brought in from
+  // a checkout on this Mac (the open repository, 2026-11-15).
+  `
+  ALTER TABLE projects ADD COLUMN root TEXT NOT NULL DEFAULT '';
+  ALTER TABLE projects ADD COLUMN adopted_json TEXT;
+  `,
 ];
 
 /** Brings the database to the latest version, or to `target` (a test replaying one migration on rows it put in). */

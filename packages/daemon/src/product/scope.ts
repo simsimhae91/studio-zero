@@ -52,6 +52,10 @@ export function scopeOf(input: { changed: readonly string[]; spec: ScreenSpec; r
   const code = changed.filter((file) => !isDoc(file));
   if (code.length === 0) return { kind: 'none', why: `only documents were changed (${list(changed)})` };
   if (code.includes(SCREEN_SPEC_FILE)) return { kind: 'all', why: `the screen plan (${SCREEN_SPEC_FILE}) was changed` };
+  // A brought-in product may sit in a folder of its repository. What is changed outside that folder (a shared
+  // package, a script the build runs) reaches the product by ways the imports under it do not show.
+  const outside = code.filter((file) => file.startsWith('../'));
+  if (outside.length > 0) return { kind: 'all', why: `${list(outside)} ${outside.length === 1 ? 'is' : 'are'} outside the product's folder, so what ${outside.length === 1 ? 'it reaches' : 'they reach'} cannot be read off the product's imports` };
   if (!reach) return { kind: 'all', why: 'what the change reaches could not be read off the imports' };
   if (reach.loose.length > 0) return { kind: 'all', why: `${list(reach.loose)} ${reach.loose.length === 1 ? 'is' : 'are'} not source that anything imports, so what ${reach.loose.length === 1 ? 'it reaches' : 'they reach'} is the whole product` };
 

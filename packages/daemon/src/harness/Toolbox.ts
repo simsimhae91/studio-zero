@@ -4,7 +4,8 @@ import type { EventLog } from '../events/EventLog.ts';
 import type { McpRegistry } from '../mcp/McpRegistry.ts';
 import type { Action, Actor } from '../policy/actions.ts';
 import { ApprovalDeniedError, PolicyDeniedError, type PolicyEngine } from '../policy/PolicyEngine.ts';
-import { SandboxError, type OrbStackManager, slotOf } from '../sandbox/OrbStackManager.ts';
+import { SandboxError, productDir, type OrbStackManager, slotOf } from '../sandbox/OrbStackManager.ts';
+import { posix } from 'node:path';
 import { untrusted, type UntrustedSource } from '../trust/dataBlock.ts';
 import { errorMessage, excerpt, newId } from '../util/core.ts';
 import type { ProjectArms } from '../arms/ProjectArms.ts';
@@ -16,6 +17,12 @@ import { renderScenarioFeedback, type ScenarioRunnerLike } from '../qa/ScenarioR
 import { SCREEN_SPEC_FILE, readScreenSpec } from '../scratch/ScreenSpec.ts';
 import { WEB_GUIDANCE_VERSION } from './houseBar.ts';
 import { THEME_SEED_FILE, ThemeChoice, chosenTheme, writeProjectTheme } from './themeSeed.ts';
+
+/**
+ * A path an engine gave, as the policy reads it: where it lands in the sandbox. An engine's paths are relative
+ * to its project's product folder, which in a brought-in repository is not the repository's root.
+ */
+const placedPath = (project: Project, path: string): string => posix.resolve(productDir(project), path);
 
 export interface ToolContext {
   project: Project;
@@ -209,7 +216,7 @@ export class Toolbox {
           path: z.string().min(1).max(1000).describe('Path relative to /workspace.'),
           content: z.string().max(2_000_000).describe('The complete new file content.'),
         }),
-        action: (input, project) => ({ kind: 'sandbox.write', projectId: project.id, path: input.path }),
+        action: (input, project) => ({ kind: 'sandbox.write', projectId: project.id, path: placedPath(project, input.path) }),
         summarize: (input) => `${input.path} (${input.content.length} chars)`,
         run: async (input, ctx) => {
           await sandboxes.writeFile(ctx.project, input.path, input.content);
@@ -338,7 +345,7 @@ export class Toolbox {
           new_string: z.string().describe('Replacement text.'),
           replace_all: z.boolean().optional().describe('Replace every occurrence instead of requiring a unique match.'),
         }),
-        action: (input, project) => ({ kind: 'sandbox.write', projectId: project.id, path: input.path }),
+        action: (input, project) => ({ kind: 'sandbox.write', projectId: project.id, path: placedPath(project, input.path) }),
         summarize: (input) => input.path,
         run: async (input, ctx) => {
           const { content, truncated } = await sandboxes.readFile(ctx.project, input.path, 2_000_000);
@@ -377,7 +384,7 @@ export class Toolbox {
           // a few words, so it never leaves: the opt-out is set here, for every call, and not left to an engine.
           // Written to a file and read back: with its output on a pipe the package saves a long guide somewhere of
           // its own choosing and prints where, for an agent with a file tool that can reach it. An engine here has none.
-          const res = await sandboxes.exec(ctx.project, `cd /workspace && out=$(mktemp) && DISABLE_TELEMETRY=1 NO_COLOR=1 npx -y modern-web-guidance@${WEB_GUIDANCE_VERSION} ${args} > "$out"; code=$?; cat "$out"; rm -f "$out"; exit $code`, { timeoutSec: 180, signal: ctx.signal });
+          const res = await sandboxes.exec(ctx.project, `out=$(mktemp) && DISABLE_TELEMETRY=1 NO_COLOR=1 npx -y modern-web-guidance@${WEB_GUIDANCE_VERSION} ${args} > "$out"; code=$?; cat "$out"; rm -f "$out"; exit $code`, { timeoutSec: 180, signal: ctx.signal });
           const text = res.stdout.trim();
           if (res.exitCode !== 0 || text === '') return { text: `The guidance could not be read (${excerpt(res.stderr.trim() || 'no output', 400)}). Build it from what you know, with the platform's own element where there is one.`, ok: false, exitCode: res.exitCode };
           return { text: text === '[]' ? 'No guide matches. Say the need differently, or build it from what you know.' : text, ok: true, exitCode: res.exitCode };
