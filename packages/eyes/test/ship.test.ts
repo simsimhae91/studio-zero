@@ -167,7 +167,7 @@ test('a service says which version it is, and what answers is compared with what
   }
 });
 
-const GATE: Gate = { place: 'fly', url: 'https://enbbang.example', commit: '955a9ea1c0ffee', previous: 'b36523e000', candidate: 'http://127.0.0.1:4000', check: 'SZ_URL=http://127.0.0.1:4000 npm run check', strangers: 'flow:flows/strangers.sh', data: 'bash scripts/rehearse.sh', backup: 'npm run backup', wayBack: 'fly deploy --image registry.fly.io/enbbang:b36523e', walk: 'flow:flows/live-walk.sh', errors: 'bash scripts/errors-since.sh', kept: 'bash scripts/counts.sh', env: ['.env.production'], migrations: ['migrations/0002_shared.sql'] };
+const GATE: Gate = { place: 'fly', url: 'https://enbbang.example', commit: '955a9ea1c0ffee', previous: 'b36523e000', candidate: 'http://127.0.0.1:4000', check: 'SZ_URL=http://127.0.0.1:4000 npm run check', strangers: 'flow:flows/strangers.sh', data: 'bash scripts/rehearse.sh', backup: 'npm run backup', wayBack: 'fly deploy --image registry.fly.io/enbbang:b36523e', walk: 'flow:flows/live-walk.sh', errors: 'bash scripts/errors-since.sh', kept: 'bash scripts/counts.sh', env: ['.env.production'], migrations: ['migrations/0002_shared.sql'], versionAt: null };
 
 test('the release gate is the same lines every time: each is shown or waived with a reason, never left out', () => {
   const full = gate(GATE, new Map());
@@ -177,6 +177,7 @@ test('the release gate is the same lines every time: each is shown or waived wit
   assert.deepEqual(full.claims.find((c) => c.id === 'rc-stands')!.shownBy, { kind: 'command', ref: 'SZ_URL=http://127.0.0.1:4000 npm run check' }, 'a bare command with a colon in it is a command');
   assert.equal(full.claims.find((c) => c.id === 'live-same')!.shownBy.ref, 'sz-eyes web live https://enbbang.example --commit 955a9ea1c0ffee');
   assert.equal(full.claims.find((c) => c.id === 'rc-secrets')!.shownBy.ref, 'sz-eyes web leaks http://127.0.0.1:4000 --env .env.production');
+  assert.equal(gate({ ...GATE, versionAt: '/version' }, new Map()).claims.find((c) => c.id === 'live-same')!.shownBy.ref, 'sz-eyes web live https://enbbang.example --commit 955a9ea1c0ffee --at /version', 'a product whose /healthz is promised to say something else says its version elsewhere');
   // Nothing given: every line the product has to say is named at once.
   assert.throws(() => gate({ ...GATE, check: null, strangers: null, walk: '', errors: null }, new Map()), /4 line\(s\) with no way to be shown[\s\S]*rc-stands[\s\S]*--check[\s\S]*rc-strangers[\s\S]*live-walk[\s\S]*live-quiet/);
   assert.throws(() => gate({ ...GATE, strangers: null }, new Map([['rc-strangers', 'n/a']])), /say why rc-strangers does not apply/);

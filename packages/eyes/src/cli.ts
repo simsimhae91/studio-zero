@@ -98,6 +98,7 @@ const USAGE = `sz-eyes: launch what was built, look at it, operate it, and put w
         --check "<how what stands is shown again on the candidate>" --strangers "<how it is shown that others' data cannot be seen>"
         --backup "<...>" --way-back "<the command that puts the previous version back>" --walk "<the one thing, done on what is live>"
         --errors "<what prints the errors recorded since>" [--data "<...>"] [--kept "<...>"] [--previous <sha>] [--env <file>]...
+        [--version-at <the path where the service says its commit, when it is not /healthz>]
         [--without "<line>|<why it does not apply>"]... [--claim "<id>|<what will be true>|<kind>:<ref>"]... [--frozen <path>]... [--dir <project>]
         the release gate as a frozen contract: the same lines for every release, each shown ("<kind>:<ref>" or a
         bare command) or waived with a reason the owner reads. Lines: ${GATE_LINES.join(', ')}.
@@ -326,7 +327,7 @@ async function main(argv: string[]): Promise<number> {
       const without = new Map(a.all('--without').map((text) => [text.slice(0, Math.max(0, text.indexOf('|'))).trim() || text.trim(), text.includes('|') ? text.slice(text.indexOf('|') + 1) : ''] as const));
       const previous = a.one('--previous') ?? lastRelease(project, place)?.release!.commit ?? null;
       const migrations = previous === null ? [] : git('diff', '--name-only', '--diff-filter=AMR', previous, commit.text, '--', '*.sql').text.split('\n').filter((line) => line.trim() !== '');
-      const g: Gate = { place, url, commit: commit.text, previous, migrations, candidate, check: a.one('--check') ?? null, strangers: a.one('--strangers') ?? null, data: a.one('--data') ?? null, backup: a.one('--backup') ?? null, wayBack: a.one('--way-back') ?? null, walk: a.one('--walk') ?? null, errors: a.one('--errors') ?? null, kept: a.one('--kept') ?? null, env: a.all('--env') };
+      const g: Gate = { place, url, commit: commit.text, previous, migrations, versionAt: a.one('--version-at') ?? null, candidate, check: a.one('--check') ?? null, strangers: a.one('--strangers') ?? null, data: a.one('--data') ?? null, backup: a.one('--backup') ?? null, wayBack: a.one('--way-back') ?? null, walk: a.one('--walk') ?? null, errors: a.one('--errors') ?? null, kept: a.one('--kept') ?? null, env: a.all('--env') };
       try {
         contract = releaseContract(project, idFree(`release-${releases(project).filter((c) => c.release!.candidate !== null).length + 1}`), g, { without, claims: extraClaims, frozen, now });
       } catch (err) {

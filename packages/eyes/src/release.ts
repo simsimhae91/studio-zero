@@ -45,6 +45,8 @@ export interface Gate {
   env: string[];
   /** The migration files (.sql) that changed since the previous release. */
   migrations: string[];
+  /** Where the service says which version it is, when that is not `/healthz`. */
+  versionAt: string | null;
 }
 
 const leaks = (url: string, g: Gate): string => `command:sz-eyes web leaks ${url}${g.env.map((file) => ` --env ${file}`).join('')}`;
@@ -64,7 +66,7 @@ const LINES: Line[] = [
   },
   { id: 'rc-backup', half: 'before', says: () => '데이터의 사본을 뜰 수 있고, 그 사본에서 되살려지는 것을 봤다', shown: (g) => g.backup },
   { id: 'rc-back', half: 'before', says: () => '되돌리는 길이 적혀 있고, 후보에서 한 번 해 봤다', shown: (g) => g.wayBack },
-  { id: 'live-same', half: 'after', says: (g) => `사람들이 닿는 주소에서 답하는 것이 이 버전(${g.commit.slice(0, 7)})이다`, shown: (g) => `command:sz-eyes web live ${g.url} --commit ${g.commit}` },
+  { id: 'live-same', half: 'after', says: (g) => `사람들이 닿는 주소에서 답하는 것이 이 버전(${g.commit.slice(0, 7)})이다`, shown: (g) => `command:sz-eyes web live ${g.url} --commit ${g.commit}${g.versionAt ? ` --at ${g.versionAt}` : ''}` },
   { id: 'live-walk', half: 'after', says: () => '살아 있는 서비스에서 이 제품의 한 가지 일이 처음부터 끝까지 된다', shown: (g) => g.walk },
   { id: 'live-secrets', half: 'after', says: () => '살아 있는 주소에서도 서버의 비밀이 내려오지 않는다', shown: (g) => leaks(g.url, g) },
   { id: 'live-quiet', half: 'after', says: () => '내보낸 뒤에 새 오류가 기록되지 않았다', shown: (g) => g.errors },
