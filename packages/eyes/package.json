@@ -1,0 +1,20 @@
+{
+  "name": "@studio-zero/eyes",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Eyes and hands for an agent: launch what was built, look at it, operate it, and put what was seen on one page. Web, the iOS Simulator, and more to come.",
+  "bin": {
+    "sz-eyes": "./src/cli.ts"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@studio-zero/daemon": "workspace:*",
+    "@studio-zero/design": "workspace:*",
+    "@studio-zero/protocol": "workspace:*",
+    "playwright-core": "^1.65.0",
+    "zod": "^4.6.7"
+  }
+}

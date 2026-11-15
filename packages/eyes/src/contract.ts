@@ -1,0 +1,119 @@
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { z } from 'zod';
+
+/** Where a project keeps what the harness knows of it. */
+export const SZ_DIR = '.sz';
+export const CONTRACTS_DIR = `${SZ_DIR}/contracts`;
+export const EVIDENCE_DIR = `${SZ_DIR}/evidence`;
+
+/**
+ * How much process a piece of work gets. S: a few files, no new screen and no schema: do it, and show it. M: one
+ * feature: a handful of claims, built, then proven once by someone who did not build it. L: several features or
+ * a new product: the owner is asked what only they can say, the work is cut into milestones, each with its own
+ * contract.
+ */
+export const Lane = z.enum(['S', 'M', 'L']);
+export type Lane = z.infer<typeof Lane>;
+
+/**
+ * How a claim is shown to be true. `flow`: a flow file run on the product (Maestro on a phone, Playwright on a
+ * page). `test`: a test command. `look`: the screen itself, looked at in a named state. `command`: any command
+ * whose exit says it. `owner`: nothing a machine can say (is it fun, does it sound right): left for the owner.
+ */
+export const ShownBy = z.object({ kind: z.enum(['flow', 'test', 'look', 'command', 'owner']), ref: z.string().max(600) });
+
+/**
+ * `unproven` is where every claim starts and where it stays until someone shows otherwise. `unchecked`: it
+ * could not be checked here (no device, no way to see it), and that is said instead of assumed.
+ */
+export const ClaimStatus = z.enum(['unproven', 'proven', 'refuted', 'unchecked']);
+export type ClaimStatus = z.infer<typeof ClaimStatus>;
+
+export const Claim = z.object({
+  id: z.string().regex(/^[a-z0-9][a-z0-9-]{0,30}$/),
+  /** What will be true, as the owner would say it and could see it. */
+  says: z.string().min(4).max(400),
+  shownBy: ShownBy,
+  status: ClaimStatus.default('unproven'),
+  /** Files that show it, relative to the contract's evidence folder. */
+  evidence: z.array(z.string().max(300)).max(24).default([]),
+  note: z.string().max(1200).default(''),
+});
+export type Claim = z.infer<typeof Claim>;
+
+/**
+ * One piece of work, agreed before it is built: what was asked, what will be true when it is done and how each
+ * of those will be shown, what is deliberately not done, and what could go wrong. Whoever builds does not edit
+ * it once it is frozen, nor the flows and tests it points at: a claim is proven by someone else, on the product.
+ */
+export const Contract = z.object({
+  id: z.string().regex(/^[a-z0-9][a-z0-9-]{2,60}$/),
+  request: z.string().min(1).max(4000),
+  lane: Lane,
+  /** What the product runs as, for whoever verifies: `web`, `ios`, `android`, `macos`, `windows`, `game`. */
+  targets: z.array(z.string().max(20)).max(6).default([]),
+  claims: z.array(Claim).min(1).max(60),
+  notDoing: z.array(z.string().max(300)).max(20).default([]),
+  risks: z.array(z.string().max(300)).max(20).default([]),
+  /** Paths the builder may not change while this is open (the flows and tests the claims point at). */
+  frozen: z.array(z.string().max(300)).max(60).default([]),
+  frozenAt: z.string().nullable().default(null),
+  createdAt: z.string(),
+  /** Set when the work is closed: by whom, and with what left. */
+  closedAt: z.string().nullable().default(null),
+});
+export type Contract = z.infer<typeof Contract>;
+
+export function readContract(file: string): Contract {
+  return Contract.parse(JSON.parse(readFileSync(file, 'utf8')));
+}
+
+export function writeContract(file: string, contract: Contract): void {
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(file, `${JSON.stringify(Contract.parse(contract), null, 2)}\n`);
+}
+
+/** The contracts of a project that are not closed, oldest first. */
+export function openContracts(projectDir: string): { file: string; contract: Contract }[] {
+  const dir = join(projectDir, CONTRACTS_DIR);
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir)
+    .filter((name) => name.endsWith('.json'))
+    .sort()
+    .flatMap((name) => {
+      try {
+        const contract = readContract(join(dir, name));
+        return contract.closedAt === null ? [{ file: join(dir, name), contract }] : [];
+      } catch {
+        return [];
+      }
+    });
+}
+
+/** What of a contract still stands in the way of calling the work done. Empty when nothing does. */
+export function owed(contract: Contract): string[] {
+  const lines: string[] = [];
+  if (contract.frozenAt === null) lines.push('the contract is not frozen yet: nothing is built against a contract that can still move');
+  for (const claim of contract.claims) {
+    if (claim.status === 'unproven') lines.push(`${claim.id}: not shown yet (${claim.shownBy.kind}: ${claim.shownBy.ref}): ${claim.says}`);
+    if (claim.status === 'refuted') lines.push(`${claim.id}: shown to be false: ${claim.says}${claim.note ? ` (${claim.note})` : ''}`);
+  }
+  return lines;
+}
+
+const MARK: Record<ClaimStatus, string> = { proven: '증명됨', refuted: '반증됨', unproven: '아직', unchecked: '확인 못 함' };
+
+/** A contract as the owner reads it, in their language. */
+export function renderContract(contract: Contract): string {
+  const list = (title: string, items: string[]): string => `## ${title}\n\n${items.join('\n')}`;
+  const blocks = [
+    `# 계약 ${contract.id} (레인 ${contract.lane})`,
+    [`요청: ${contract.request}`, ...(contract.targets.length > 0 ? [`대상: ${contract.targets.join(', ')}`] : [])].join('\n'),
+    list('끝났을 때 참인 것', contract.claims.map((claim) => `- [${MARK[claim.status]}] **${claim.id}** ${claim.says}\n  - 보이는 방법: ${claim.shownBy.kind} \`${claim.shownBy.ref}\`${claim.note ? `\n  - ${claim.note}` : ''}`)),
+    ...(contract.notDoing.length > 0 ? [list('하지 않는 것', contract.notDoing.map((line) => `- ${line}`))] : []),
+    ...(contract.risks.length > 0 ? [list('위험', contract.risks.map((line) => `- ${line}`))] : []),
+    contract.frozenAt ? `얼린 때: ${contract.frozenAt}${contract.frozen.length > 0 ? ` (만드는 쪽이 못 고치는 파일: ${contract.frozen.join(', ')})` : ''}` : '아직 얼리지 않았습니다.',
+  ];
+  return `${blocks.join('\n\n')}\n`;
+}
