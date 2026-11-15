@@ -84,7 +84,11 @@ export function viewOf(dir: string): ProductView | null {
       const look = looks.at(-1) ?? null;
       return [{ place, url: out.release!.url, commit: out.release!.commit, releasedAt: out.closedAt!, release: out.id, checked: look ? { at: look.createdAt, id: look.id, verdict: verdictOf(look) } : null, wayBack: out.release!.wayBack }];
     }),
-    waiting: lines.filter((line) => OWNER.test(line)).map((line) => ({ text: line.replace(OWNER, '').replace(/\s*\(계약 [a-z0-9-]+\)\s*$/, ''), page: page(/\(계약 ([a-z0-9-]+)\)\s*$/.exec(line)?.[1] ?? '') })),
+    // What they judged once and later work changed: theirs to look at again. Then what they have never judged.
+    waiting: [
+      ...stands.filter((s) => s.claim.shownBy.kind === 'owner' && s.last?.status === 'unchecked').map((s) => ({ text: `다시 볼 것: ${s.claim.says}${s.last!.note ? `: ${s.last!.note}` : ''}`, page: page(s.last!.during ?? s.contract) })),
+      ...lines.filter((line) => OWNER.test(line)).map((line) => ({ text: line.replace(OWNER, '').replace(/\s*\(계약 [a-z0-9-]+\)\s*$/, ''), page: page(/\(계약 ([a-z0-9-]+)\)\s*$/.exec(line)?.[1] ?? '') })),
+    ],
     left: lines.filter((line) => !OWNER.test(line)),
     last: read(join(sz, 'progress.md')).trim().split('\n').filter((line) => line.trim() !== '').at(-1)?.replace(/^-\s*/, '').slice(0, 260) ?? '',
     pages: contracts

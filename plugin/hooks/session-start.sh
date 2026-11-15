@@ -19,5 +19,7 @@ if [ -f .sz/progress.md ]; then echo; echo "Last lines of .sz/progress.md:"; tai
 if [ -f .sz/backlog.md ]; then
   left=$(grep -c '^[[:space:]]*- \[ \] ' .sz/backlog.md || true)
   [ "${left:-0}" -gt 0 ] && echo "${left} line(s) are written down as known and not done in .sz/backlog.md (sz-eyes backlog lists them)."
+  waits=$(grep -c '^[[:space:]]*- \[ \] 주인이 볼 것' .sz/backlog.md || true)
+  [ "${waits:-0}" -gt 0 ] && echo "${waits} of them wait for the owner's own judgement (the lines starting 주인이 볼 것). When the owner says what they think of one, in any words, record it at once: sz-eyes contract judged <contract> <claim> --verdict yes|no --said \"<their words>\"."
 fi
 exit 0

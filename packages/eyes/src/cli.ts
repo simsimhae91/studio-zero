@@ -83,6 +83,10 @@ const USAGE = `sz-eyes: launch what was built, look at it, operate it, and put w
         --supersedes names a standing claim of earlier work that this work deliberately replaces, and why
   sz-eyes contract freeze <id> [--frozen <path>]... [--dir <project>]
   sz-eyes contract claim <id> <claim-id> --status proven|refuted|unchecked [--evidence <file under the evidence folder>]... [--note <text>] [--dir <project>]
+  sz-eyes contract judged <id> <claim-id> --verdict yes|no --said "<the owner's words>" [--dir <project>]
+        the owner's own verdict on a claim that was left for them to judge (shown by owner), in their words; the
+        contract may be closed. Yes: from here it stands, and later work that changes what they saw has to show
+        it to them again. No: it is refuted and written down as left to do.
   sz-eyes contract amend <id> --file <a frozen file> --why "<text>" [--dir <project>]
         record that a frozen check was corrected after the freeze (the arbiter's, never the builder's)
   sz-eyes contract supersede <id> <contract>/<claim> --why "<text>" [--dir <project>]
@@ -721,7 +725,7 @@ async function main(argv: string[]): Promise<number> {
     if (command === 'claim') {
       // A closed contract is the record of what was shown then. What is found of it later is a look at a
       // standing claim, written where it cannot quietly take a promise off the list.
-      if (contract.closedAt !== null) throw new EyesError(`contract ${id} is closed: its verdicts are the record of what was shown then. What is found now is recorded with \`sz-eyes standing record ${id}/<claim> --status holds|broken|unchecked\`.`);
+      if (contract.closedAt !== null) throw new EyesError(`contract ${id} is closed: its verdicts are the record of what was shown then. What is found now is recorded with \`sz-eyes standing record ${id}/<claim> --status holds|broken|unchecked\`; the owner's own verdict on a claim left for them, with \`sz-eyes contract judged ${id} <claim> --verdict yes|no --said "<their words>"\`.`);
       const claimId = a.words[1];
       const claim = contract.claims.find((c) => c.id === claimId);
       if (!claim) throw new EyesError(`contract ${id} has no claim "${claimId ?? ''}". Its claims: ${contract.claims.map((c) => c.id).join(', ')}`);
@@ -734,6 +738,40 @@ async function main(argv: string[]): Promise<number> {
       Object.assign(claim, { status, evidence: [...new Set([...claim.evidence, ...shown])], note: a.one('--note') ?? claim.note, at: new Date().toISOString() });
       writeContract(file, contract);
       out(`${claimId}: ${status}`);
+      return 0;
+    }
+    if (command === 'judged') {
+      // What only the owner can say is said by the owner, usually after the work is closed and in a few words.
+      // Their words are the evidence. Nobody else's verdict is taken this way: a claim a machine can show is shown.
+      const claimId = a.words[1];
+      const claim = contract.claims.find((c) => c.id === claimId);
+      if (!claim) throw new EyesError(`contract ${id} has no claim "${claimId ?? ''}". Its claims: ${contract.claims.map((c) => c.id).join(', ')}`);
+      if (claim.shownBy.kind !== 'owner') throw new EyesError(`${id}/${claim.id} is shown by ${claim.shownBy.kind}, not left for the owner to judge: it is shown by running it (${claim.shownBy.ref})`);
+      if (contract.frozenAt === null) throw new EyesError(`contract ${id} is not agreed yet (not frozen): there is nothing built to judge`);
+      const verdict = a.one('--verdict');
+      const said = (a.one('--said') ?? '').replace(/\s+/g, ' ').trim();
+      if ((verdict !== 'yes' && verdict !== 'no') || said === '') throw new EyesError('sz-eyes contract judged <id> <claim-id> --verdict yes|no --said "<the owner\'s words, as they said them>"');
+      const at = new Date();
+      const day = at.toLocaleDateString('sv-SE');
+      const key = `${id}/${claim.id}`;
+      if (contract.closedAt !== null) needLedger(project);
+      Object.assign(claim, { status: verdict === 'yes' ? 'proven' : 'refuted', note: `주인이 봄 (${day}): "${said}"`, at: at.toISOString() });
+      writeContract(file, contract);
+      const did: string[] = [];
+      if (contract.closedAt !== null) {
+        // Closing wrote a line for it in the list of what is left; their verdict ends that line.
+        try {
+          doneInBacklog(project, `주인이 볼 것: ${claim.says.replace(/\s+/g, ' ').trim()}`, `주인의 판단 ${day}: "${said}"`);
+          did.push(`its line in ${BACKLOG_FILE} is ticked`);
+        } catch {
+          // The owner may have edited or removed the line by hand: the contract is the record.
+        }
+        if (verdict === 'yes') {
+          recordShown(project, key, { status: 'holds', note: `주인이 봄: "${said}"`, during: null, at: at.toISOString() });
+          did.push('it stands from here');
+        } else if (addToBacklog(project, [{ text: `주인이 보고 아니라고 함: ${claim.says}: "${said}"`, from: `계약 ${id}` }]) > 0) did.push(`what they said is written to ${BACKLOG_FILE}`);
+      }
+      out(`${key}: ${verdict === 'yes' ? 'proven' : 'refuted'} by the owner${did.length > 0 ? ` (${did.join('; ')})` : ''}`);
       return 0;
     }
     if (command === 'amend') {

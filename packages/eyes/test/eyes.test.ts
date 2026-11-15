@@ -497,3 +497,44 @@ test('a port is taken from the machine, not chosen', async () => {
   await new Promise<void>((done, fail) => server.once('error', fail).listen(port, '127.0.0.1', done));
   server.close();
 });
+
+test('the owner’s verdict on what was left for them is taken in their words, after the work is closed', () => {
+  const project = mkdtempSync(join(tmpdir(), 'eyes-judged-'));
+  try {
+    assert.equal(eyes(project, 'contract', 'new', 'm1-feel', '--lane', 'M', '--request', '장부', '--claim', 'adds|합계가 맞다|command:true', '--claim', 'feel|차분하고 금액이 크다|owner:폰 사진', '--claim', 'fast|이어 적기가 빠르다|owner:영상').code, 0);
+    assert.match(eyes(project, 'contract', 'judged', 'm1-feel', 'feel', '--verdict', 'yes', '--said', '좋음').text, /not agreed yet/);
+    assert.equal(eyes(project, 'contract', 'freeze', 'm1-feel').code, 0);
+    assert.equal(eyes(project, 'contract', 'claim', 'm1-feel', 'adds', '--status', 'proven', '--note', '돌려서 통과를 봤다').code, 0);
+    for (const claim of ['feel', 'fast']) assert.equal(eyes(project, 'contract', 'claim', 'm1-feel', claim, '--status', 'unchecked', '--note', '사진을 주인이 볼 것').code, 0);
+    assert.equal(eyes(project, 'contract', 'close', 'm1-feel').code, 0);
+    assert.match(eyes(project, 'standing', '--summary').text, /^1 claim\(s\)/);
+    assert.match(eyes(project, 'overview', project).text, /주인의 판단을 기다리는 것 2/);
+
+    // Only the owner's claims, and only with a verdict and their words.
+    assert.match(eyes(project, 'contract', 'judged', 'm1-feel', 'adds', '--verdict', 'yes', '--said', '좋음').text, /is shown by command, not left for the owner/);
+    assert.match(eyes(project, 'contract', 'judged', 'm1-feel', 'feel', '--verdict', 'maybe', '--said', '글쎄').text, /--verdict yes\|no/);
+    assert.match(eyes(project, 'contract', 'judged', 'm1-feel', 'feel', '--verdict', 'yes').text, /--verdict yes\|no/);
+
+    // Yes: the claim is proven by their words, stands from here, and its line in the backlog is ticked.
+    const yes = eyes(project, 'contract', 'judged', 'm1-feel', 'feel', '--verdict', 'yes', '--said', '차분하고 금액도 잘 보임');
+    assert.match(yes.text, /m1-feel\/feel: proven by the owner \(its line in \.sz\/backlog\.md is ticked; it stands from here\)/);
+    assert.match(eyes(project, 'contract', 'show', 'm1-feel').text, /주인이 봄 \(\d{4}-\d{2}-\d{2}\): "차분하고 금액도 잘 보임"/);
+    assert.match(eyes(project, 'standing').text, /2 claim\(s\) stand[\s\S]*m1-feel\/feel \[holds/);
+    assert.match(readFileSync(join(project, '.sz/backlog.md'), 'utf8'), /- \[x\] 주인이 볼 것: 차분하고 금액이 크다.* — 끝남: 주인의 판단 \d{4}-\d{2}-\d{2}: "차분하고 금액도 잘 보임"/);
+
+    // No: refuted, not standing, and what they said is what is left to do.
+    assert.match(eyes(project, 'contract', 'judged', 'm1-feel', 'fast', '--verdict', 'no', '--said', '칸이 너무 많음').text, /m1-feel\/fast: refuted by the owner/);
+    assert.match(eyes(project, 'standing', '--summary').text, /^2 claim\(s\)/);
+    assert.match(eyes(project, 'backlog').text, /1 open[\s\S]*주인이 보고 아니라고 함: 이어 적기가 빠르다: "칸이 너무 많음"/);
+    assert.doesNotMatch(eyes(project, 'overview', project).text, /주인의 판단을 기다리는 것/);
+
+    // Later work changed what they saw: the verifier does not judge it for them, and it waits for them again.
+    assert.equal(eyes(project, 'standing', 'record', 'm1-feel/feel', '--status', 'unchecked', '--note', '홈 화면의 카드가 바뀜: look/home-after.png').code, 0);
+    assert.match(eyes(project, 'overview', project).text, /주인의 판단을 기다리는 것 1:[\s\S]*다시 볼 것: 차분하고 금액이 크다: 홈 화면의 카드가 바뀜/);
+    // And they say again what they think of it as it is now.
+    assert.equal(eyes(project, 'contract', 'judged', 'm1-feel', 'feel', '--verdict', 'yes', '--said', '바뀐 것도 괜찮음').code, 0);
+    assert.doesNotMatch(eyes(project, 'overview', project).text, /주인의 판단을 기다리는 것/);
+  } finally {
+    rmSync(project, { recursive: true, force: true });
+  }
+});
