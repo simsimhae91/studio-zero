@@ -1,4 +1,5 @@
 import { rm } from 'node:fs/promises';
+import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type {
   Approval,
@@ -481,6 +482,8 @@ export class Studio implements PromotionHost {
     const url = info.previewUrls.find((p) => p.containerPort === file.dev.port);
     if (!url) throw new UnavailableError(`port ${file.dev.port} is not one of the sandbox's preview ports (${this.#d.config.runtime.previewPorts.join(', ')})`);
     const server = await ensureDevServer(this.#d.sandboxes, project, file, { reuse: true });
+    // A product that was brought in and not fitted yet has nothing the studio knows how to start: say that, not a dev server's last words.
+    if (!server.ready && isAdopted(project) && !(await this.#planned(project))) throw new UnavailableError(`이 제품은 아직 스튜디오에 맞추지 않아 프리뷰를 띄울 수 없습니다. 저장소 탭의 "스튜디오에 맞추기"(sz fit ${project.slug})를 먼저 하세요.`);
     if (!server.ready) throw new UnavailableError(`the dev server (${file.dev.command}) did not answer on port ${file.dev.port}: ${excerpt(server.log, 400)}`);
     return url;
   }
@@ -1039,7 +1042,9 @@ export class Studio implements PromotionHost {
    */
   async adoptProject(actor: Actor, p: { path: string; dir?: string; base?: string; name?: string; slug?: string }): Promise<ResultOf<'projects.adopt'>> {
     await this.#d.policy.authorize(actor, { kind: 'project.adopt', path: p.path });
-    const found = await inspect(runCommand, p.path, { dir: p.dir, base: p.base });
+    // A path typed into a field is typed the way a person writes one: from their home.
+    const path = p.path.trim() === '~' ? homedir() : p.path.trim().startsWith('~/') ? join(homedir(), p.path.trim().slice(2)) : p.path.trim();
+    const found = await inspect(runCommand, path, { dir: p.dir?.trim() || undefined, base: p.base?.trim() || undefined });
     const already = this.#d.store.listProjects().find((project) => project.adopted?.path === found.repo && rootOf(project) === found.root);
     if (already) throw new ConflictError(`이 저장소는 이미 들여왔습니다: ${already.slug}`);
     const wanted = p.slug ?? slugOf(found.name);
