@@ -27,10 +27,13 @@ const USAGE = `sz-eyes: launch what was built, look at it, operate it, and put w
         open a page in a headless Chrome of its own and say what is on it: the words, what can be pressed, what it
         logged, and what was measured (text that can be read, controls that can be pressed, nothing cut off)
 
-  sz-eyes web do <url> --step "<step>"... [--size ...] [--out <folder>] [--name <n>] [--json]
+  sz-eyes web do <url> --step "<step>"... [--size ...] [--out <folder>] [--name <n>] [--clock] [--json]
         do things on a page as a person would and keep a picture of what each led to. Steps: tap:<words>,
-        type:<field>=<text>, press:<key>, wait:<words>, gone:<words>, see:<words>, shot:<name>, go:<path>.
-        Stops at the first step that cannot be done and says why; ends with a look at where it arrived
+        type:<field>=<text>, press:<key>, wait:<words>, gone:<words>, see:<words>, shot:<name>, go:<path>,
+        read:<name>=<expression> (keep what the page says), expect:<expression> (it must be true in the page),
+        hold:<key>=<ms>, run:<ms>. Stops at the first step that cannot be done and says why; ends with a look
+        at where it arrived. --clock holds the page's own time still and moves it only with run: and hold:,
+        so that a game, or anything that moves by itself, does the same thing every time it is asked
 
   sz-eyes web review <url> [--size phone|tablet|desktop] [--dark] [--round <folder>] [--dir <project>]
         open the running product in a window for the owner: they use it as usual, press 말하기, point at what
@@ -192,13 +195,13 @@ async function main(argv: string[]): Promise<number> {
     return 0;
   }
   if (area === 'web' && command === 'do') {
-    const a = parse(rest, ['--dark', '--house', '--json']);
+    const a = parse(rest, ['--dark', '--house', '--json', '--clock']);
     const url = a.words[0];
     const steps = a.all('--step');
     if (!url || steps.length === 0) throw new EyesError('sz-eyes web do <url> --step "tap:<words>" --step "type:<field>=<text>" ... [--out <folder>]');
     const size = (a.one('--size') ?? 'phone') as Size;
     if (!(size in SIZES)) throw new EyesError(`--size is one of ${Object.keys(SIZES).join(', ')}`);
-    const walk = await walkWeb(url, steps, { size, dark: a.has('--dark'), house: a.has('--house'), ...(a.one('--wait') ? { waitFor: a.one('--wait')! } : {}), ...(a.one('--out') ? { out: resolve(a.one('--out')!) } : {}), ...(a.one('--name') ? { name: a.one('--name')! } : {}) });
+    const walk = await walkWeb(url, steps, { size, dark: a.has('--dark'), house: a.has('--house'), clock: a.has('--clock'), ...(a.one('--wait') ? { waitFor: a.one('--wait')! } : {}), ...(a.one('--out') ? { out: resolve(a.one('--out')!) } : {}), ...(a.one('--name') ? { name: a.one('--name')! } : {}) });
     out(a.has('--json') ? JSON.stringify(walk, null, 2) : renderWalk(walk, steps.length));
     return walk.passed ? 0 : 1;
   }

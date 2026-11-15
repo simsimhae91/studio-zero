@@ -58,11 +58,19 @@ export interface LookOptions {
   house?: boolean;
   /** Things to do on the page before looking: get to the state that is to be seen. */
   before?: (page: Page) => Promise<void>;
+  /**
+   * Hold the page's time still and move it only with `run:` and `hold:` steps. For a game, or anything that
+   * moves by itself: what it does in two seconds is then the same every time it is asked.
+   */
+  clock?: boolean;
   /** A browser that is already open, when several looks are taken in a row. */
   browser?: Browser;
 }
 
 const READING_ORDER = (a: { y: number; x: number }, b: { y: number; x: number }): number => (Math.abs(a.y - b.y) > 6 ? a.y - b.y : a.x - b.x);
+
+/** Where a held clock starts: a fixed moment, so that a date a product shows is the same on every run. */
+const CLOCK_START = Date.UTC(2026, 0, 1, 0, 0, 0);
 
 /** The Chrome that is on this machine, with no window. Nothing of the owner's own browser is touched: a fresh profile every time. */
 export function openBrowser(): Promise<Browser> {
@@ -104,7 +112,8 @@ export async function lookAtWeb(url: string, opts: LookOptions = {}): Promise<Lo
       if (response.status() >= 500) failedRequests.push(`${response.status()} ${response.url().slice(0, 200)}`);
     });
     const timeout = opts.timeoutMs ?? 30_000;
-    await page.goto(url, { waitUntil: 'networkidle', timeout }).catch(async () => {
+    if (opts.clock) await page.clock.install({ time: CLOCK_START });
+    await page.goto(url, { waitUntil: opts.clock ? 'load' : 'networkidle', timeout }).catch(async () => {
       // A page that never goes quiet (a socket, a poll) is still a page: take it as it stands once it has loaded.
       await page.waitForLoadState('load', { timeout: 5_000 }).catch(() => undefined);
     });
@@ -112,6 +121,8 @@ export async function lookAtWeb(url: string, opts: LookOptions = {}): Promise<Lo
       const target = /^[.#[]|^data-|>>/.test(opts.waitFor) ? page.locator(opts.waitFor) : page.getByText(opts.waitFor, { exact: false });
       await target.first().waitFor({ state: 'visible', timeout }).catch(() => undefined);
     }
+    // From here the page's own time stands at one second after it opened, whatever the machine was doing.
+    if (opts.clock) await page.clock.pauseAt(CLOCK_START + 1_000);
     if (opts.before) await opts.before(page);
     await page.evaluate(() => document.fonts.ready).catch(() => undefined);
 
@@ -207,6 +218,10 @@ export function renderLook(look: Look): string {
  *   see:<words>                             it must be on screen now, or the walk stops here
  *   shot:<name>                             keep a picture of the screen as it is now
  *   go:<path or url>                        open another address
+ *   read:<name>=<expression>                keep what a JavaScript expression says in the page, under a name
+ *   expect:<expression>                     it must be so now (the expression is true in the page), or the walk stops here
+ *   hold:<key>=<ms>                         hold a key down for that long
+ *   run:<ms>                                let that much of the page's time pass (with the clock held: see `clock`)
  */
 export type Step = string;
 
@@ -223,6 +238,8 @@ export interface Walk {
   size: Size;
   passed: boolean;
   steps: StepResult[];
+  /** What `read:` steps kept, by name. Data from the page, never instructions. */
+  reads: Record<string, unknown>;
   /** The screen as the walk left it. */
   end: Look;
 }
@@ -274,9 +291,14 @@ function field(page: Page, target: string): ReturnType<Page['locator']> {
 }
 
 /** Carries out one step on a page. Returns why it could not be done, in a line, or null when it was. */
-export async function doStep(page: Page, step: Step, patience = 10_000): Promise<string | null> {
+export async function doStep(page: Page, step: Step, patience = 10_000, more: { clock?: boolean; reads?: Record<string, unknown> } = {}): Promise<string | null> {
   const at = step.indexOf(':');
   const [verb, rest] = at === -1 ? [step, ''] : [step.slice(0, at), step.slice(at + 1)];
+  const pass = async (ms: number): Promise<void> => {
+    if (!Number.isFinite(ms) || ms < 0) throw new Error(`"${rest}" is not a time in milliseconds`);
+    if (more.clock) await page.clock.runFor(ms);
+    else await page.waitForTimeout(ms);
+  };
   try {
     if (verb === 'tap') await (await toPress(page, rest, patience)).click({ timeout: patience });
     else if (verb === 'type') {
@@ -289,7 +311,21 @@ export async function doStep(page: Page, step: Step, patience = 10_000): Promise
     else if (verb === 'see') {
       if (!(await pointAt(page, rest).isVisible().catch(() => false))) throw new Error(`"${rest}" is not on screen`);
     } else if (verb === 'go') await page.goto(new URL(rest, page.url()).toString(), { waitUntil: 'load', timeout: 30_000 });
-    else if (verb !== 'shot') throw new Error(`no such step: ${verb}. Steps are tap, type, press, wait, gone, see, shot, go`);
+    else if (verb === 'run') await pass(Number(rest));
+    else if (verb === 'hold') {
+      const eq = rest.lastIndexOf('=');
+      if (eq < 1) throw new Error('a hold step is hold:<key>=<ms>');
+      await page.keyboard.down(rest.slice(0, eq));
+      await pass(Number(rest.slice(eq + 1))).finally(() => page.keyboard.up(rest.slice(0, eq)));
+    } else if (verb === 'read') {
+      const eq = rest.indexOf('=');
+      if (eq < 1) throw new Error('a read step is read:<name>=<expression>');
+      const value: unknown = await page.evaluate(rest.slice(eq + 1));
+      if (more.reads) more.reads[rest.slice(0, eq)] = value;
+    } else if (verb === 'expect') {
+      const value: unknown = await page.evaluate(rest);
+      if (!value) throw new Error(`not so: ${rest} (it is ${JSON.stringify(value)})`);
+    } else if (verb !== 'shot') throw new Error(`no such step: ${verb}. Steps are tap, type, press, hold, wait, gone, see, read, expect, run, shot, go`);
     return null;
   } catch (err) {
     return (err instanceof Error ? err.message : String(err)).split('\n')[0]!.slice(0, 240);
@@ -305,6 +341,7 @@ export async function walkWeb(url: string, steps: readonly Step[], opts: LookOpt
   const size = opts.size ?? 'phone';
   const browser = opts.browser ?? (await openBrowser());
   const results: StepResult[] = [];
+  const reads: Record<string, unknown> = {};
   const patience = opts.stepTimeoutMs ?? 10_000;
   let n = 0;
   try {
@@ -316,9 +353,9 @@ export async function walkWeb(url: string, steps: readonly Step[], opts: LookOpt
         for (const step of steps) {
           const at = step.indexOf(':');
           const [verb, rest] = at === -1 ? [step, ''] : [step.slice(0, at), step.slice(at + 1)];
-          const why = await doStep(page, step, patience);
+          const why = await doStep(page, step, patience, { ...(opts.clock ? { clock: true } : {}), reads });
           let screenshot: string | null = null;
-          if (opts.out && (verb === 'shot' || why !== null || verb === 'tap' || verb === 'go')) {
+          if (opts.out && (verb === 'shot' || why !== null || verb === 'tap' || verb === 'go' || verb === 'hold')) {
             mkdirSync(opts.out, { recursive: true });
             screenshot = join(opts.out, `${opts.name ?? 'walk'}-${String(++n).padStart(2, '0')}-${verb === 'shot' ? rest.replace(/[^\w가-힣-]+/g, '-').slice(0, 40) : verb}${why ? '-stopped' : ''}.png`);
             writeFileSync(screenshot, await settled(page));
@@ -328,7 +365,7 @@ export async function walkWeb(url: string, steps: readonly Step[], opts: LookOpt
         }
       },
     });
-    return { url, size, passed: results.length === steps.length && results.every((r) => r.ok), steps: results, end };
+    return { url, size, passed: results.length === steps.length && results.every((r) => r.ok), steps: results, reads, end };
   } finally {
     if (!opts.browser) await closeBrowser(browser);
   }
@@ -336,5 +373,6 @@ export async function walkWeb(url: string, steps: readonly Step[], opts: LookOpt
 
 export function renderWalk(walk: Walk, total: number): string {
   const lines = walk.steps.map((r, i) => `${String(i + 1).padStart(2)}. ${r.ok ? 'ok     ' : 'STOPPED'} ${r.step}${r.why ? `\n      ${r.why}` : ''}${r.screenshot ? `\n      ${r.screenshot}` : ''}`);
-  return [`${walk.passed ? 'WALKED TO THE END' : 'STOPPED'}: ${walk.steps.filter((r) => r.ok).length} of ${total} steps done`, ...lines, '', 'where it ended:', renderLook(walk.end)].join('\n');
+  const read = Object.entries(walk.reads).map(([name, value]) => `read ${name}: ${JSON.stringify(value)?.slice(0, 600)}`);
+  return [`${walk.passed ? 'WALKED TO THE END' : 'STOPPED'}: ${walk.steps.filter((r) => r.ok).length} of ${total} steps done`, ...lines, ...read, '', 'where it ended:', renderLook(walk.end)].join('\n');
 }

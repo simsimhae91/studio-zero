@@ -17,7 +17,7 @@ import { findProducts, overviewPage, renderOverview, viewOf } from '../src/overv
 import { GATE_LINES, gate, type Gate } from '../src/release.ts';
 import { heldSecrets, hide, parseRun, runWithSecrets, setSecret, type SecretStore } from '../src/secrets.ts';
 import { marksOf, renderStrangers, strangers } from '../src/strangers.ts';
-import { closeBrowser, openBrowser } from '../src/web.ts';
+import { closeBrowser, openBrowser, renderWalk, walkWeb } from '../src/web.ts';
 
 const HERE = fileURLToPath(new URL('.', import.meta.url));
 const eyes = (project: string, ...args: string[]): { code: number | null; text: string } => {
@@ -601,4 +601,56 @@ test('a command is given the owner\'s keys by name, and a key it prints does not
   assert.equal(err, 'warn [TOKEN: hidden]');
   await assert.rejects(runWithSecrets(store, [{ env: 'FLY', id: 'host/fly/api-token' }], ['true'], io), /not in the vault: host\/fly\/api-token[\s\S]*pbpaste \| sz-eyes secret set host\/fly\/api-token/);
   assert.match(eyes(tmpdir(), 'secret', 'run', 'TOKEN=not an id', '--', 'true').text, /is not <NAME>=<vault id>/);
+});
+
+test('a thing that moves by itself is asked with its time held still, and says the same every time', async (t) => {
+  // A game in forty lines: a square that moves 100px a second while the right arrow is held, and a score that
+  // goes up once a second after Space. It keeps time the way games do (frames, and the clock).
+  const game = `<!doctype html><html lang="ko"><title>네모</title><canvas id="c" width="300" height="100"></canvas><p id="hud">0점</p><script>
+const s = { x: 0, score: 0, started: false, since: 0, frames: 0 };
+const keys = new Set();
+addEventListener('keydown', (e) => { keys.add(e.key); if (e.key === ' ' && !s.started) { s.started = true; s.since = performance.now(); } });
+addEventListener('keyup', (e) => keys.delete(e.key));
+let last = performance.now();
+const frame = (now) => {
+  const dt = (now - last) / 1000; last = now; s.frames++;
+  if (keys.has('ArrowRight')) s.x += 100 * dt;
+  if (s.started) s.score = Math.floor((now - s.since) / 1000);
+  document.querySelector('#hud').textContent = s.score + '점';
+  const g = document.querySelector('#c').getContext('2d'); g.clearRect(0, 0, 300, 100); g.fillRect(s.x, 40, 20, 20);
+  requestAnimationFrame(frame);
+};
+requestAnimationFrame(frame);
+window.__game = { state: () => ({ x: Math.round(s.x), score: s.score, started: s.started }) };
+</script></html>`;
+  const { server, url } = await serve((_req, res) => void res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }).end(game));
+  const browser = await openBrowser().catch((err: unknown) => {
+    if (/Chromium distribution 'chrome' is not found|Executable doesn't exist|ProcessSingleton/.test(String(err))) return null;
+    throw err;
+  });
+  if (browser === null) {
+    server.close();
+    return t.skip('no Chrome on this machine');
+  }
+  try {
+    const steps = ['read:before=window.__game.state()', 'press:Space', 'run:3000', 'expect:window.__game.state().score === 3', 'hold:ArrowRight=500', 'read:after=window.__game.state()', 'see:3점'];
+    const play = await walkWeb(url, steps, { clock: true, browser });
+    assert.equal(play.passed, true, renderWalk(play, steps.length));
+    assert.deepEqual(play.reads.before, { x: 0, score: 0, started: false });
+    assert.deepEqual(play.reads.after, { x: 50, score: 3, started: true }, 'three seconds of its own time, then half a second with the key held');
+    // Asked again, it says the same: its time moved only when it was told to.
+    const again = await walkWeb(url, steps, { clock: true, browser });
+    assert.deepEqual(again.reads, play.reads);
+    assert.match(renderWalk(play, steps.length), /read after: \{"x":50,"score":3,"started":true\}/);
+    // What is expected and is not so stops the walk, with what it is instead.
+    const wrong = await walkWeb(url, ['press:Space', 'run:2000', 'expect:window.__game.state().score >= 5'], { clock: true, browser });
+    assert.equal(wrong.passed, false);
+    assert.match(wrong.steps.at(-1)!.why ?? '', /not so: window\.__game\.state\(\)\.score >= 5 \(it is false\)/);
+    // With its time held, nothing happens that was not asked for.
+    const still = await walkWeb(url, ['press:Space', 'read:s=window.__game.state().score'], { clock: true, browser });
+    assert.equal(still.reads.s, 0);
+  } finally {
+    await closeBrowser(browser);
+    server.close();
+  }
 });

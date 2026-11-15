@@ -57,7 +57,9 @@ sz-eyes ios rest <udid> --erase                     # when done: a booted simula
 
 Check free disk space first (`df -h /System/Volumes/Data`): a simulator's first boot takes about 3 GB. If there is not room, say so and mark the claim `unchecked`. A React Native debug build needs its packager running on the port given to `--metro`, started from a clone or worktree, never on the owner's own port.
 
-**Anything else** (a game, a desktop app, a CLI): use what the map names: the project's test runner, a headless run that prints state, a screenshot command. Prefer a check that exposes state (a game that can print its state and step its clock) to one that needs a picture judged.
+**A web game, or a page that moves by itself:** hold its time and ask it (`sz:game`). `sz-eyes web do <url> --clock --step "press:Space" --step "run:3000" --step "expect:window.__game.state().score === 3" --step "hold:ArrowRight=500" --step "read:after=window.__game.state()"`: with `--clock` the page's time moves only on `run:` and `hold:`, so the same steps give the same state every time. `read:` and `expect:` work on any page (what is in storage, what a counter says).
+
+**Anything else** (a desktop app, a CLI, a game in an engine): use what the map names: the project's test runner, a headless run that prints state, a screenshot command. Prefer a check that exposes state (a game that can print its state and step its clock) to one that needs a picture judged.
 
 ## What stood before
 
