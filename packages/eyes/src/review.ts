@@ -73,15 +73,14 @@ function overlay(): void {
     * { box-sizing: border-box; font: 500 13px/1.4 -apple-system, "Apple SD Gothic Neo", system-ui, sans-serif; }
     [hidden] { display: none !important; }
     .bar, .hint, .note { pointer-events: auto; position: fixed; background: #1c1b18; color: #f4f2ec; border-radius: 12px; box-shadow: 0 6px 24px rgba(0,0,0,.35); }
-    .bar { top: 8px; right: 8px; display: flex; align-items: center; gap: 2px; padding: 4px; }
-    .bar.low { top: auto; bottom: 8px; }
+    .bar, .hint { top: 8px; right: 8px; display: flex; align-items: center; gap: 2px; padding: 4px; }
+    .bar.low, .hint.low { top: auto; bottom: 8px; }
     button { all: unset; cursor: pointer; padding: 8px 12px; border-radius: 8px; color: inherit; min-height: 20px; }
     button:hover { background: rgba(255,255,255,.14); }
     .say, .save { background: #f4f2ec; color: #1c1b18; font-weight: 700; }
     .say:hover, .save:hover { background: #fff; }
     .count { padding: 0 8px; opacity: .75; font-variant-numeric: tabular-nums; }
-    .hint { left: 8px; right: 8px; top: 8px; padding: 6px 6px 6px 14px; display: flex; align-items: center; gap: 4px; }
-    .hint span { flex: 1; }
+    .hint span { padding: 0 6px 0 10px; opacity: .75; }
     .note { left: 8px; right: 8px; bottom: 8px; padding: 10px; display: flex; flex-direction: column; gap: 8px; }
     .note.high { bottom: auto; top: 8px; }
     .note p { margin: 0; opacity: .75; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -91,7 +90,7 @@ function overlay(): void {
   </style>
   <div class="ring" hidden></div>
   <div class="bar"><button class="say" type="button">말하기</button><span class="count">0</span><button class="flip" type="button" title="막대 옮기기">↕</button><button class="done" type="button">끝내기</button></div>
-  <div class="hint" hidden><span>말하고 싶은 곳을 누르세요</span><button class="whole" type="button">화면 전체</button><button class="cancel" type="button">취소</button></div>
+  <div class="hint" hidden><span>가리키세요</span><button class="whole" type="button">화면 전체</button><button class="cancel" type="button">취소</button></div>
   <form class="note" hidden><p></p><textarea placeholder="여기에 대해 하고 싶은 말" rows="3"></textarea><div class="row"><button class="cancel" type="button">취소</button><button class="save" type="submit">적어 두기</button></div></form>`;
   const $ = <T extends HTMLElement>(selector: string): T => root.querySelector(selector) as T;
   const ring = $('.ring');
@@ -136,7 +135,8 @@ function overlay(): void {
     picked = null;
     show();
   };
-  const wordsOf = (el: Element): string => (el.getAttribute('aria-label') || (el as HTMLElement).innerText || el.getAttribute('alt') || el.getAttribute('placeholder') || '').trim().replace(/\s+/g, ' ').slice(0, 120);
+  // What a person would call it: its accessible name, the label of a field, the words in it.
+  const wordsOf = (el: Element): string => (el.getAttribute('aria-label') || (el as HTMLInputElement).labels?.[0]?.innerText || (el as HTMLElement).innerText || el.getAttribute('alt') || el.getAttribute('placeholder') || '').trim().replace(/\s+/g, ' ').slice(0, 120);
   const pathOf = (el: Element): string => {
     const parts: string[] = [];
     for (let at: Element | null = el; at && at !== document.documentElement && parts.length < 5; at = at.parentElement) {
@@ -157,7 +157,11 @@ function overlay(): void {
     picked = null;
     show();
   });
-  $('.flip').addEventListener('click', () => bar.classList.toggle('low'));
+  // The bar sits in a corner and can be sent to the other one, so that what is under it can be pointed at too.
+  $('.flip').addEventListener('click', () => {
+    bar.classList.toggle('low');
+    hint.classList.toggle('low');
+  });
   $('.done').addEventListener('click', () => void w.__szDone());
   $('.whole').addEventListener('click', () => {
     picked = null;
