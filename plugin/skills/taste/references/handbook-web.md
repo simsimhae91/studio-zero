@@ -1,0 +1,77 @@
+# 화면을 짜는 법: 웹
+
+How a screen is put together here. Each rule is a default with its numbers: depart from one only for a reason that comes from this product's subject, and say so when you finish. The audit measures several and the reviewer judges by all, each by its number.
+
+Type.
+T1. One typeface. The product is set in the one face its theme names (Pretendard, SUIT or SUITE), Latin and Hangul alike, and the theme already loads its file: install and name no other. A title is that face made heavier: no serif, no second sans, no italics. Monospace only inside code, pre and kbd; dates and figures are the body face with tabular-nums.
+T2. Every size has a role. On a page: the one headline 56 to 96px on a desktop and 36 to 44px on a phone, at 700 or 800, tracking -0.02em, leading 1.05 to 1.15; section heading text-3xl or text-4xl at 700; sub-heading text-xl or text-2xl; lead text-lg or text-xl; body text-base; small text-sm; caption text-xs. On an app screen: page title text-2xl or text-3xl at 700; section text-lg at 600 or 700; body and controls text-sm or text-base; table cells text-sm; table headers text-xs at 600; a headline figure text-2xl to text-4xl at 700.
+T3. Small text has a budget. text-xs and text-2xs are for timestamps, units, badges, stat labels and column headers: never a sentence, never what the screen exists to say, and at most about a third of the text on a screen. A screen of mostly small grey labels has no body: promote what matters.
+T4. Three weights a screen at most: 400 for reading, 600 or 700 for names, titles and values, 800 for the one figure.
+T5. Text is upright and horizontal: no rotated labels, no Hangul stacked a syllable to a line, no numerals turned around a dial or laid along a curve.
+T6. Text aligns to the start. Only numbers in a column align to the end; only a lone figure with its caption, or an empty state, is centred. A block of words never aligns to the end.
+T7. Leading: body 1.5 to 1.6, titles 1.2 to 1.3, the figure 1.0 to 1.1. A label never runs to a third line; a button's stays on one. A figure never breaks onto a second line: give its column the width of its longest value, or set it a step smaller. No text is drawn over other text.
+
+Colour.
+C1. Colours have roles, and only these exist: paper (bg-bg), surfaces (bg-surface, bg-sunken, border-border), ink (text-fg, text-fg-muted), the brand (bg-brand with text-on-brand, text-accent, bg-brand-soft), a second colour (bg-second with text-on-second, bg-second-soft), a data series (series-1 to series-6) and state (danger, success, warning). Invent no colour, and never dim text with opacity.
+C2. Strong colour lives on one hero (E5): the band or card in bg-brand with text-on-brand that holds the product's state. Elsewhere it is the primary action, the mark of what is selected, icon tiles, badges and the fill of a meter. No second filled card. The audit counts it: past 45% of the first screen is a flood, and under a fifth with no pictures is a grey screen.
+C3. No dark band across a light screen. On a phone or app screen, dark is the scheme of the whole screen, which the theme provides, never a panel dropped into a paper one. A web page may carry one inverse section, full width, below its first screen.
+C4. Two sides, or several kinds. The brand is this side (me, ours, the current one) and the second colour is the other; in the one block that compares them, each side may fill its half. More than two kinds take series-1, series-2 and on, in order, as marks: an icon tile, the colour of a number, a dot, one segment of a bar. Never alone: a name or a position says the same thing.
+C5. Washes. bg-brand-soft and bg-second-soft, or a series colour at 15% (bg-series-2/15), are for icon tiles, badges, the selected row and today's column. Not for a whole section.
+C6. State colours mean state and nothing else.
+C7. No gradient on a control or a surface.
+C8. Choosing a palette: the hue from the subject's own thing; chroma 0.12 to 0.16 for tools and money, 0.17 to 0.22 for consumer products, 0.23 to 0.28 for play and sport; second_hue only when the product has two sides or kinds; corners sharp for tools and data, soft by default, round for friendly consumer products; Pretendard for neutral, dense products, SUIT for crisp geometric ones, SUITE for soft, wide ones.
+
+A page.
+P1. First decide what each route is: a page, which is read and persuades, or an app screen, which works. Rules P are for pages and rules A for app screens. Do not put a marketing hero on a tool, or lay a landing page out as a dashboard.
+P2. Grid and measure. Content 1120 to 1200px wide, twelve columns, 24px gutters. A text column is 68 characters at most (38 to 42 in Hangul). Sections are 96 to 128px apart on a desktop and 56 to 72px on a phone.
+P3. The first screen holds four things: one headline (two lines at most on a desktop, three on a phone), one supporting sentence (text-lg or text-xl), the working thing itself, with at least half of it in view on a desktop and its start within the first screen on a phone, and one primary action. Do not colour one word of the headline by habit.
+P4. Balance. No column of the first screen stays empty for more than a third of its height. When the working thing is taller than the words, centre the words against it, make them stick, or stack the two.
+P5. Sections. One claim (a heading) and one thing to operate or to look at. Five to seven sections at most. Three equal cards of features are not the default.
+P6. Navigation. The bar of E2: the wordmark is text in the product's face at 700 or 800; five links at most; one action.
+P7. Proof and numbers are real or absent. The price is said plainly.
+P8. On a phone a page is one column: the headline, the working thing, the action.
+P9. A hand-made mark: one at most, tilted 12 degrees at most.
+P10. The footer is quiet.
+
+An app screen.
+A1. Shell. The navigation of E2, as a top bar when there are five sections or fewer, or with a side navigation 220 to 256px wide for five to eight. The content's width follows the job: a table takes the width, a form 560 to 640px, reading 720px.
+A2. Page head. A title (text-2xl or text-3xl at 700), one line of context, and the primary action at the right. Filters and search sit in one row below it.
+A3. Tables. Rows 44 to 52px. Sticky headers in text-xs at 600. The first column is the name, at 600. Numbers are aligned to the end and tabular. A status is a badge: a dot and a word. Seven columns at most at 1280px; the rest is in the detail. Pressing a row opens its detail in a side panel. Selecting several brings up a floating bar of actions. The table has its empty, loading and error states.
+A4. Detail. A side panel 400 to 480px wide to look, a full page to edit.
+A5. Forms. One column, labels above (text-sm at 600), controls 40 to 44px tall, help below, the primary action at the bottom left. Validate in place.
+A6. Dashboards. One headline figure and its trend, then two to four supporting stats, then the table that explains them. No wall of equal cards.
+A7. Density. Base text-sm or text-base; spacing of 8, 12, 16 and 24px.
+A8. Answering back. Toasts at the bottom right; a confirmation dialog only before something is destroyed; otherwise change at once and offer undo.
+A9. Narrow. Under 1024px the navigation becomes a drawer. Under 640px a table becomes rows of two lines (the name and the key value) and the rest opens on press.
+A10. Focus is visible and the keyboard reaches everything.
+
+Pictures.
+I1. What a picture shows decides what it is made of. Data or the working thing: drawn in code (a chart, a meter, an instrument), as large as it needs. A kind of thing, an action, a state: an icon. A thing the product names, and a person: drawn in code as an object or a face (E1); a person's own photograph when there is one. Something whose look is the content (food, goods, a place, a pet, a game's world): a real image from generate_image or the owner's own file, never an SVG. A mood, a scene, a backdrop: nothing.
+I2. Never made, drawn or generated: a scene (a landscape, people doing something, abstract shapes, a backdrop), a stock photograph, a 3D blob, a drawing of an interface, an emoji as an icon. An object or a face says what a row or a figure is about; a scene only sets a mood, and goes.
+I3. Proportions: a thumbnail 1:1, a card picture 4:3 or 3:2, a hero 16:9 or 3:2.
+I4. One set, one direction: the same light and distance, colours toward the theme, no words in the picture.
+I5. How many: one for a mock-up direction; for a build, six for the fixtures and one hero at most.
+I6. Words on a photograph sit on a plate or a scrim, never on the bare picture.
+I7. Icons come from one set (lucide), with a 1.5 to 2px stroke: in ink when bare, in the tile's colour on a tile, in the accent when active.
+
+What a screen is made of.
+The owner's standard is the consumer products people call alive: a game maker's store, a shopping app, a live-streaming app, a neighbourhood marketplace, a finance app. Their first screens were measured on a phone with the studio's own ruler, beside the pages the studio used to draw:
+
+| | pictures and drawn art | icons in view | strong colour | boxes ruled with a hairline |
+|---|---|---|---|---|
+| those products | 15 to 60% of the screen | 12 to 28 | about a quarter | none or one |
+| the studio's earlier pages | 0% | 0 to 6 | 6% | nearly every box |
+
+Filmed, the same products answer a press on four controls in five, move in 150 to 300ms (500ms for a sheet or a slide), and half of them keep something alive at rest (a banner that advances, a live dot), where the studio's pages answered every press and then sat still.
+
+Their large pictures are the content itself (goods, streams, a game's art). Text and rules on grey paper is what the owner rejected as flat. A drawn scene filling a card went back too, and so did screens with their faces and objects taken out: the product's people and things are drawn, and no scenery. Make the screen of the same material as those products. Its concept, its scene, its data and its core flow stay exactly its own.
+
+E1. Material. A first screen is made of the product's own things and not of text and rules alone. The working thing and its data are drawn (a chart, a meter, the instrument). People are avatars with a drawn face or a character, not a name or an initial alone. The things the product names are illustrated objects (the box, the stamp, the receipt), and the hero carries the one the product is about beside its figure. Draw them in code as SVG in one style: flat, rounded shapes, two or three tones an object from the theme's colours. Objects and faces, never a scene: no landscape, no people doing something, no backdrop, and no drawing that pushes the work down.
+E2. Icons and navigation. A navigation bar runs across the top and stays as the page scrolls: the product's mark at the start, its sections each with an icon, and search, the account or the one action at the end; at a phone's width the sections become a bottom tab bar or a menu. Every tab, chip, stat and section heading has an icon: a glyph in a rounded tile of 36 to 44px, tinted with a soft wash of a series colour (C5). In a table the status and the kind of thing carry theirs.
+E3. A diet of text. Text covers a quarter of the first screen at most. Cut meta lines; say it with a picture, an icon, a number or a badge. One line of secondary text an item at most.
+E4. Surfaces. The canvas is bg-sunken; content sits on bg-surface cards with rounded-xl (16px or more) and no border: a soft shadow or nothing. Chips and buttons are pills. A table sits on one card with dividers between its rows and no rule round it or its cells; sections part with space and a heading, not a line. What floats covers no text at rest, and the page ends clear of it.
+E5. Colour. Strong colour is welcome: a fifth to a third of the first screen. A page and an app screen alike open on a band or a hero in bg-brand (text-on-brand) that holds the state as a figure, its sentence and its instrument (a meter, a small chart), or on a page the working thing or a real picture of the subject. Tint icon tiles and badges; give the other side the second colour. Tokens only.
+E6. Rhythm. Mix kinds of block: a hero, a row of tiles, a strip of cards, a list or the table. A page is never one column of paragraphs, and an app screen never a table alone.
+E7. Badges ride on things: a count on a picture, a state chip on a card, the points a row earned.
+E8. Voice. The headline is a friendly sentence with the number in it; the figure is heavy (800) and large.
+E9. Motion. What is pressed answers at once (a press-in, a change of surface) and settles in 150 to 300ms, ease-out; a sheet, a drawer or a screen moves in 300 to 500ms. The outcome of the main action lands once, as motion: the figure rolls to its new value, the new row drops in, the stamp comes down. One thing on a first screen is alive at rest, and one only: a live dot that pulses, the hero's drawing breathing, a strip that advances every 3 to 5 seconds. The hero enters once, in 400 to 700ms. No entrance on every block, and prefers-reduced-motion is honoured.
