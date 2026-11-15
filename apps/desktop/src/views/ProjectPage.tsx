@@ -1,7 +1,7 @@
 import * as Tabs from '@radix-ui/react-tabs';
-import { Check, ChevronDown, ClipboardList, FileDiff, FileText, Film, FolderTree, GitFork, GitMerge, Globe, History as HistoryIcon, KeyRound, Lightbulb, ListChecks, Map as MapIcon, Maximize2, MessageCircleQuestion, Monitor, MoreHorizontal, Pencil, Plus, Power, ReceiptText, RotateCw, ScanEye, Smartphone, Sparkles, Square, SquareTerminal, Star, Trash2, X } from 'lucide-react';
+import { Check, ChevronDown, ClipboardList, FileDiff, FileText, Film, FolderTree, GitBranch, GitFork, GitMerge, Globe, History as HistoryIcon, KeyRound, Lightbulb, ListChecks, Map as MapIcon, Maximize2, MessageCircleQuestion, Monitor, MoreHorizontal, Pencil, Plus, Power, ReceiptText, RotateCw, ScanEye, Smartphone, Sparkles, Square, SquareTerminal, Star, Trash2, X } from 'lucide-react';
 import { Suspense, lazy, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { ReviewerPref, type AdvisorId, type Approval, type Project, type ReviewComment, type Session, type Task, type TaskKind, type TaskState, type TaskTrack } from '@studio-zero/protocol';
+import { ReviewerPref, isAdopted, rootOf, type AdvisorId, type Approval, type Project, type ReviewComment, type Session, type Task, type TaskKind, type TaskState, type TaskTrack } from '@studio-zero/protocol';
 import { Markdown } from '@studio-zero/ax/react';
 import { duration, effortLabel, elapsed, engineLabel, kindLabel, phaseLabel, stamp, subscriptionLabel, taskStateLabel, templateLabel, tokens, upcoming } from '../lib/format.ts';
 import { redrawRequest, revisionRequest, type MockupNote } from '../lib/mockups.ts';
@@ -26,13 +26,14 @@ import { Ledger } from './panels/Ledger.tsx';
 import { SCREEN_SPEC_FILE, ScreenSpecView, useScreenSpec } from './panels/ScreenSpecView.tsx';
 import { Preview } from './panels/Preview.tsx';
 import { Proposals } from './panels/Proposals.tsx';
+import { Repository, arrivals, useReceived } from './panels/Repository.tsx';
 import { DeleteProjectModal, InlineName, restartSandbox } from './projectActions.tsx';
 import type { Route } from './Shell.tsx';
 
 // The terminal emulator is the largest thing in the client: fetched when the terminal tab is first opened.
 const InteractiveTerminal = lazy(() => import('./panels/InteractiveTerminal.tsx').then((m) => ({ default: m.InteractiveTerminal })));
 
-type TabId = 'preview' | 'roadmap' | 'plan' | 'changes' | 'files' | 'terminal' | 'history' | 'audit' | 'ledger' | 'proposals' | 'learning';
+type TabId = 'preview' | 'roadmap' | 'plan' | 'changes' | 'files' | 'terminal' | 'history' | 'repo' | 'audit' | 'ledger' | 'proposals' | 'learning';
 /** Addresses typed into the reference field: up to three, separated by spaces, commas or new lines. */
 const referencesOf = (text: string): string[] => text.split(/[\s,]+/).filter((part) => part !== '').slice(0, 3);
 type Pane = 'chat' | 'work';
@@ -131,6 +132,11 @@ function Workbench({ project, onOpen, onChanged }: { project: Project; onOpen: (
   // Off unless the owner turns it on for the next task: the studio drafts first and asks nothing.
   const [reviewPlan, setReviewPlan] = useState(false);
   const core = project.template === 'studio-core';
+  // A product built elsewhere and brought in keeps its own design: no roadmap, no design task, and every task on
+  // the fast track (the daemon holds it to that whatever is asked).
+  const adopted = isAdopted(project);
+  // What the owner pushes to the project's repository on this Mac, as it arrives while the page is open.
+  const received = useReceived(core ? null : project.id);
   const [renaming, setRenaming] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [keys, setKeys] = useState(false);
@@ -161,8 +167,12 @@ function Workbench({ project, onOpen, onChanged }: { project: Project; onOpen: (
   const planTask = list.findLast((t) => t.state === 'awaiting_plan_review') ?? (selected?.reviewPlan ? selected : null);
   const ready = list.some((t) => t.state === 'succeeded' && t.kind !== 'ideate');
   // A project that started as a draft keeps iterating as one, until the owner asks for the full checks.
-  const track = trackChoice ?? list.findLast((t) => t.kind !== 'ideate')?.track ?? 'fast';
+  const track = adopted ? 'fast' : (trackChoice ?? list.findLast((t) => t.kind !== 'ideate')?.track ?? 'fast');
   const pending = (approvals.data?.approvals ?? []).filter((a) => a.projectId === project.id);
+  // A product brought in that nothing has been done to yet: its conversation opens on what came in and what is next.
+  const untouched = adopted && tasks.data !== undefined && list.length === 0;
+  const plannedYet = useQuery('repo.status', untouched ? { projectId: project.id } : null);
+  const arrived = untouched ? { lines: arrivals.get(project.id) ?? [], planned: plannedYet.data?.planned ?? false } : null;
 
   const show = (next: TabId): void => {
     setTab(next);
@@ -323,13 +333,16 @@ function Workbench({ project, onOpen, onChanged }: { project: Project; onOpen: (
   const plans = (kind === 'build' || kind === 'refactor') && track === 'full';
   const tabs: readonly { id: TabId; label: string; icon: typeof Monitor }[] = [
     { id: 'preview', label: '프리뷰', icon: project.template === 'mobile-expo' ? Smartphone : Monitor },
-    // A product is planned whole and built to its map's end here. The studio's own repository is changed a task at a time.
-    ...(core ? [] : [{ id: 'roadmap' as const, label: '로드맵', icon: MapIcon }]),
+    // A product is planned whole and built to its map's end here. The studio's own repository is changed a task at
+    // a time, and a product that was brought in already is what it is: neither has a roadmap.
+    ...(core || adopted ? [] : [{ id: 'roadmap' as const, label: '로드맵', icon: MapIcon }]),
     ...(planTask ? [{ id: 'plan' as const, label: '계획', icon: ClipboardList }] : []),
     ...(reviewTask ? [{ id: 'changes' as const, label: '변경', icon: FileDiff }] : []),
     { id: 'files', label: '파일', icon: FolderTree },
     { id: 'terminal', label: '터미널', icon: SquareTerminal },
     { id: 'history', label: '시점', icon: HistoryIcon },
+    // The studio's own repository is this Mac's checkout already: it has no second one to open.
+    ...(core ? [] : [{ id: 'repo' as const, label: '저장소', icon: GitBranch }]),
     { id: 'audit', label: '감사', icon: ScanEye },
     { id: 'ledger', label: '장부', icon: ReceiptText },
     { id: 'proposals', label: '제안', icon: Sparkles },
@@ -392,6 +405,26 @@ function Workbench({ project, onOpen, onChanged }: { project: Project; onOpen: (
             }}
           />
         );
+      case 'repo':
+        return (
+          <Repository
+            project={project}
+            received={received}
+            fit={list.findLast((t) => t.kind === 'adopt') ?? null}
+            onFit={(task) => {
+              // The fit runs in the project's default stream: go there and follow it.
+              pickSession(null);
+              setPicked((prev) => ({ ...prev, [DEFAULT_SESSION]: task.id }));
+              tasks.reload();
+              setPane('chat');
+            }}
+            onTask={(taskId) => {
+              pickSession(null);
+              setPicked((prev) => ({ ...prev, [DEFAULT_SESSION]: taskId }));
+              setPane('chat');
+            }}
+          />
+        );
       case 'audit':
         return (
           <Audit
@@ -432,6 +465,8 @@ function Workbench({ project, onOpen, onChanged }: { project: Project; onOpen: (
           )}
         </h1>
         <span className="hidden text-sm text-fg-muted md:inline">{templateLabel[project.template]}</span>
+        {/* Said on every size: what the studio does and does not do here depends on it. */}
+        {adopted ? <span className="min-w-0 break-words text-sm text-fg-muted">들여온 프로젝트 · {rootOf(project) === '' ? '저장소 루트' : `${rootOf(project)}/`}</span> : null}
         {sandbox.data ? <Status tone={sandbox.data.state === 'running' ? 'good' : 'neutral'}>{sandboxLabel[sandbox.data.state]}</Status> : null}
         <div className="ml-auto flex items-center gap-2">
           <div className="pane-switch">
@@ -517,6 +552,7 @@ function Workbench({ project, onOpen, onChanged }: { project: Project; onOpen: (
                     onReuse={reuse}
                     onRerun={(task) => rerun.run(task)}
                     core={core}
+                    adopted={arrived}
                   />
                 );
               })}
@@ -547,7 +583,8 @@ function Workbench({ project, onOpen, onChanged }: { project: Project; onOpen: (
               ) : (
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-border pb-2">
                   <Segmented compact label="작업 종류" value={kind} options={KINDS} onChange={setKind} />
-                  <Segmented compact label="검증 범위" value={track} options={TRACKS} onChange={setTrackChoice} />
+                  {/* A product that was brought in has no house design to be verified against: every task on it runs on the fast track. */}
+                  {adopted ? null : <Segmented compact label="검증 범위" value={track} options={TRACKS} onChange={setTrackChoice} />}
                   <EnginePicker choice={choice} />
                   {plans ? (
                     <button type="button" aria-pressed={reviewPlan} title="계획과 교차 검토 의견을 먼저 보여 드리고, 승인해야 코드를 씁니다" onClick={() => setReviewPlan((on) => !on)} className={`${pickerClass} ${reviewPlan ? 'bg-sunken text-fg' : ''}`}>
@@ -723,14 +760,38 @@ function SessionTabs({ sessions, current, busy, onSelect, onCreate, onRename, on
 }
 
 /** One session's task stream, in its own scrolling layer. */
-function SessionStream({ visible, loaded, tasks, selected, pending, asking, advice, onPick, onShow, onCheckpoint, onFile, onBuild, onContinue, onReuse, onRerun, core }: { onReuse: (prompt: string) => void; onRerun: (task: Task) => Promise<unknown>; visible: boolean; loaded: boolean; tasks: Task[]; selected: Task | null; pending: Approval[]; asking: AdvisorId | null; advice: Advice[]; onPick: (taskId: string) => void; onShow: (tab: TabId) => void; onCheckpoint: (checkpointId: string) => void; onFile: (path: string) => void; onBuild: (track: TaskTrack, mockup: string | null, from: string | null) => void; onContinue: (branch: string) => void; core: boolean }) {
+function SessionStream({ visible, loaded, tasks, selected, pending, asking, advice, onPick, onShow, onCheckpoint, onFile, onBuild, onContinue, onReuse, onRerun, core, adopted }: { onReuse: (prompt: string) => void; onRerun: (task: Task) => Promise<unknown>; visible: boolean; loaded: boolean; tasks: Task[]; selected: Task | null; pending: Approval[]; asking: AdvisorId | null; advice: Advice[]; onPick: (taskId: string) => void; onShow: (tab: TabId) => void; onCheckpoint: (checkpointId: string) => void; onFile: (path: string) => void; onBuild: (track: TaskTrack, mockup: string | null, from: string | null) => void; onContinue: (branch: string) => void; core: boolean; adopted: { lines: readonly string[]; planned: boolean } | null }) {
   const events = useTaskEvents(selected?.id ?? null);
   const items = useMemo(() => narrate(events), [events]);
   const scroll = useStickToEnd(`${selected?.id}:${events.length}:${selected?.state}:${asking}:${advice.length}`);
   return (
     <div ref={scroll} className={`pane-scroll absolute inset-0 ${visible ? '' : 'invisible'}`} aria-hidden={!visible}>
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-3 px-4 py-4">
-        {loaded && tasks.length === 0 ? (
+        {/* A product brought in starts as it came: what the daemon said of it when it was brought in from this window, and the next step. */}
+        {loaded && tasks.length === 0 && adopted ? (
+          <div className="flex flex-col items-start gap-3 py-6">
+            <h2 className="text-lg font-semibold">들여온 그대로입니다</h2>
+            {adopted.lines.length > 0 ? (
+              <ul className="flex flex-col gap-1">
+                {adopted.lines.map((line) => (
+                  <li key={line} className="max-w-none break-words text-base">
+                    {line}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+            {adopted.planned ? (
+              <p className="text-base text-fg-muted">이 제품에는 걷기 계획이 이미 있어 바로 작업을 낼 수 있습니다. 아래에 할 일을 적으세요.</p>
+            ) : (
+              <>
+                <p className="text-base text-fg-muted">스튜디오가 이 제품을 띄우고 걸으려면 먼저 맞춰야 합니다. 저장소 탭에서 맞추기 작업을 내고, 그 브랜치를 읽고 합치면 프리뷰와 걷기, 화면 측정이 돌기 시작합니다.</p>
+                <Button onClick={() => onShow('repo')} icon={<GitBranch className="size-4" aria-hidden />}>
+                  저장소 탭 열기
+                </Button>
+              </>
+            )}
+          </div>
+        ) : loaded && tasks.length === 0 ? (
           <div className="flex flex-col gap-2 py-6">
             <h2 className="text-lg font-semibold">아직 아무것도 만들지 않았습니다</h2>
             <p className="text-base text-fg-muted">아래에 만들 것을 적으면 질문 없이 바로 시작합니다. 오른쪽 프리뷰에서 돌아가는 화면을 보며 고쳐 나가면 됩니다.</p>

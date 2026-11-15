@@ -87,6 +87,14 @@ const screens: { name: string; url: string; go: (page: Page, narrow: boolean) =>
   { name: 'connect', url: '/', go: async () => undefined },
   { name: 'home', url: '/?demo', go: async () => undefined },
   { name: 'home-deep', url: '/?demo', go: async (page) => void (await page.getByRole('radio', { name: /^설계부터/ }).click()) },
+  // A checkout on this Mac brought in as a project: the quiet form under the blank sheet, opened and filled in.
+  { name: 'adopt-form', url: '/?demo', go: async (page) => {
+    await page.getByRole('button', { name: '이미 있는 저장소 이어서 하기' }).click();
+    await page.getByRole('textbox', { name: /^이 Mac의 저장소 폴더/ }).fill('~/projects/credeal');
+    await page.getByRole('textbox', { name: /^제품 폴더/ }).fill('app');
+    await page.getByRole('textbox', { name: /^이름/ }).fill('CreDeal');
+    await page.getByRole('button', { name: '들여오기' }).scrollIntoViewIfNeeded();
+  } },
   { name: 'worksheet', url: '/?demo', go: openFromIndex('현장 기사용 청구서 앱') },
   { name: 'worksheet-papers', url: '/?demo', go: async (page, narrow) => {
     await openFromIndex('현장 기사용 청구서 앱')(page, narrow);
@@ -127,6 +135,16 @@ const screens: { name: string; url: string; go: (page: Page, narrow: boolean) =>
     // The row of the past task (its request and its state), not the button in the field that starts a new one.
     await page.getByRole('button', { name: /^전체 점검 .+/ }).first().click();
     await page.getByRole('article', { name: '작업: 전체 점검' }).waitFor();
+  } },
+  // A project's repository on this Mac: where it is, how to reach it, its branches, and a push the owner just made.
+  { name: 'repo-panel', url: '/?demo', go: async (page, narrow) => {
+    await workspaceTab('Ledger', '저장소')(page, narrow);
+    await page.getByText('소유자가 main에 커밋 3개를 올림').waitFor();
+  } },
+  // A product brought in and not fitted yet: what it lacks, said above everything, with the task that fits it.
+  { name: 'adopted-unfit', url: '/?demo', go: async (page, narrow) => {
+    await workspaceTab('CreDeal', '저장소')(page, narrow);
+    await page.getByRole('region', { name: '스튜디오에 맞추기' }).waitFor();
   } },
   { name: 'project-steps', url: '/?demo', go: async (page, narrow) => {
     await openFromIndex('Ledger')(page, narrow);

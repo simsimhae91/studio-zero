@@ -231,6 +231,18 @@ function refresh(group: Building): void {
 /** A lane as the owner reads it: a direction's engine is named by its direction. */
 const laneName = (lane: string): string => (/^[abc]$/.test(lane) ? `${lane.toUpperCase()}안` : lane);
 
+/**
+ * What the owner pushed to the project's repository on this Mac and the studio took, as one line. Made from the
+ * event's fields alone: a branch made (`old` null), removed (`new` null) or moved.
+ */
+export function receivedLine(b: Extract<EventEnvelope['body'], { type: 'repo.received' }>): string {
+  if (b.new === null) return `소유자가 브랜치 ${b.branch}를 지움`;
+  if (b.old === null) return `소유자가 브랜치 ${b.branch}를 올림 (커밋 ${b.commits}개)`;
+  // A forced move to commits the studio already had gains none: it is still the owner's move.
+  if (b.commits === 0) return `소유자가 ${b.branch}를 ${b.new.slice(0, 7)}로 옮김`;
+  return `소유자가 ${b.branch}에 커밋 ${b.commits}개를 올림`;
+}
+
 /** A gate of the harness, as the owner reads its name. */
 export const gateLabel = { compiler: '컴파일', smoke: '스모크 테스트', anchor: '고정표', build: '프로덕션 빌드', screens: '화면 명세', flow: '시안에서 핵심 흐름 걷기', directions: '시안 방향표', scenarios: '시나리오 걷기', coverage: '기능마다 걷는 시나리오', looks: '걸은 화면 측정', scope: '검사 범위' } as const;
 
@@ -408,6 +420,12 @@ export function narrate(events: readonly EventEnvelope[]): Item[] {
         break;
       case 'selfhost.merged':
         items.push({ kind: 'note', at: e.at, text: `${b.branch}를 ${b.into}에 합쳤습니다.` });
+        break;
+      case 'repo.received':
+        items.push({ kind: 'note', at: e.at, text: receivedLine(b) });
+        break;
+      case 'repo.published':
+        // The studio copying its own branches out to the repository on this Mac: housekeeping, not news.
         break;
       case 'eval.result':
         verify?.lines.push({ text: evalLabel(b.name), mono: false, tone: b.passed ? 'good' : b.unverified ? 'warn' : 'bad', meta: `${b.passed ? '통과' : b.unverified ? '검증하지 못함' : '실패'}, ${duration(b.durationMs)}`, output: b.passed ? '' : b.detail });

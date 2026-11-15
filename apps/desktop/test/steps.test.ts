@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { EventBody, EventEnvelope, FlowTaskWalk } from '@studio-zero/protocol';
-import { advisorCommand, buildRequest, classify, flowLine, measuresLine, mockupName, narrate, packagesOf, type Item, type Step } from '../src/lib/steps.ts';
+import { advisorCommand, buildRequest, classify, flowLine, measuresLine, mockupName, narrate, packagesOf, receivedLine, type Item, type Step } from '../src/lib/steps.ts';
 
 const envelopes = (bodies: EventBody[]): EventEnvelope[] => bodies.map((body, i) => ({ seq: i + 1, at: 1000 + i, projectId: 'prj', taskId: 'tsk', body }));
 const call = (callId: string, tool: string, input: string): EventBody => ({ type: 'tool.call', callId, tool, input });
@@ -285,4 +285,15 @@ test('a mock-up\'s walk and its audit each read as one line the owner can set be
   assert.deepEqual(measuresLine({ blockers: 1, majors: 2, copyHabits: 1, slopScore: 41 }), { ok: false, text: '막는 결함 1 · 큰 결함 2 · 문구 습관 1 · 슬롭 지수 41' });
   assert.deepEqual(measuresLine({ blockers: 0, majors: 1, copyHabits: 0, slopScore: null }), { ok: true, text: '큰 결함 1 · 디자인 심사 없음' }, 'a page nobody reviewed says so instead of showing a number');
   assert.equal(measuresLine({ blockers: 0, majors: 0, copyHabits: 0, slopScore: 31 }).ok, false, 'past the slop line a clean measurement is still not fine');
+});
+
+test('what the owner pushed to the project\'s repository reads as one line; the studio copying its own branches out reads as nothing', () => {
+  const a = 'a'.repeat(40);
+  const b = 'b'.repeat(40);
+  assert.equal(receivedLine({ type: 'repo.received', branch: 'main', old: a, new: b, commits: 3 }), '소유자가 main에 커밋 3개를 올림');
+  assert.equal(receivedLine({ type: 'repo.received', branch: 'feat/x', old: null, new: b, commits: 2 }), '소유자가 브랜치 feat/x를 올림 (커밋 2개)');
+  assert.equal(receivedLine({ type: 'repo.received', branch: 'feat/x', old: a, new: null, commits: 0 }), '소유자가 브랜치 feat/x를 지움');
+  assert.equal(receivedLine({ type: 'repo.received', branch: 'feat/x', old: a, new: b, commits: 0 }), '소유자가 feat/x를 bbbbbbb로 옮김', 'a forced move that gains nothing still says where the branch went');
+  const items = narrate(envelopes([{ type: 'repo.received', branch: 'main', old: a, new: b, commits: 3 }, { type: 'repo.published', branches: 2 }]));
+  assert.deepEqual(items.map((item) => (item.kind === 'note' ? item.text : item.kind)), ['소유자가 main에 커밋 3개를 올림']);
 });

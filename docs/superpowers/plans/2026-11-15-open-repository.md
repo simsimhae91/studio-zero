@@ -153,8 +153,8 @@ withBlock(existing: string, block: string): string
 
 **Files:** `apps/desktop/src/…` (found at execution: new-project dialog, project header, task kind labels, activity lines, demo data, audit screen list)
 
-- [ ] Adopt dialog (path, folder, name), repository panel (gate path, clone command, branches, origin, "스튜디오에 맞추기"), labels for `adopt` and `repo.received`, demo project `credeal-demo`, audit screens `adopt-dialog`, `repo-panel`, `adopted-unfit`.
-- [ ] Desktop audit: 0 blocker, 0 major. Commit.
+- [x] Adopt dialog (path, folder, name), repository panel (gate path, clone command, branches, origin, "스튜디오에 맞추기"), labels for `adopt` and `repo.received`, demo project `credeal-demo`, audit screens `adopt-dialog`, `repo-panel`, `adopted-unfit`.
+- [x] Desktop audit: 0 blocker, 0 major. Commit.
 
 ### Task 8: Document, deploy, run for real
 

@@ -1,10 +1,12 @@
+import { ChevronDown, FolderInput } from 'lucide-react';
 import { useId, useState, type FormEvent } from 'react';
-import type { Project, Scratchpad, Template } from '@studio-zero/protocol';
+import { ProductRoot, type Project, type Scratchpad, type Template } from '@studio-zero/protocol';
 import { ago, creatableTemplates, templateLabel } from '../lib/format.ts';
 import { useDraft } from '../lib/drafts.ts';
 import { useAction, useStudio } from '../lib/studio.tsx';
-import { Button, Problem, Segmented, TitlebarSpace } from '../ui.tsx';
+import { Button, Field, Problem, Segmented, TitlebarSpace, inputClass } from '../ui.tsx';
 import { EnginePicker, useEngineChoice } from './enginePicker.tsx';
+import { arrivals } from './panels/Repository.tsx';
 import { scratchState, type Route } from './Shell.tsx';
 
 type Mode = 'fast' | 'deep' | 'think' | 'research' | 'document';
@@ -109,6 +111,8 @@ export function Home({ scratchpads, projects, onOpen, onCreated }: { scratchpads
           </Button>
         </form>
 
+        <Adopt onOpen={onOpen} onCreated={onCreated} />
+
         {recent.length > 0 ? (
           <section className="flex flex-col px-4 pb-16 md:px-10">
             <h2 className="pb-3 text-sm font-medium text-fg-muted">이어서 하기</h2>
@@ -124,5 +128,68 @@ export function Home({ scratchpads, projects, onOpen, onCreated }: { scratchpads
         ) : null}
       </div>
     </div>
+  );
+}
+
+/** "app/", "./apps/mobile", "." as a person types a folder: the form the daemon takes, with "" for the root. */
+const folderOf = (typed: string): string => typed.trim().replace(/^\.\/+/, '').replace(/\/+$/, '').replace(/^\.$/, '');
+
+/**
+ * A checkout on this Mac, brought in as a project: work started somewhere else goes on here. Quiet beside the
+ * blank sheet above it, which is how most work starts. Only what is committed is read, the working files are
+ * left as they are, and no engine runs; what the daemon says it did is kept for the project page to show.
+ */
+function Adopt({ onOpen, onCreated }: { onOpen: (route: Route) => void; onCreated: () => void }) {
+  const { backend } = useStudio();
+  const [open, setOpen] = useState(false);
+  const [path, setPath] = useState('');
+  const [dir, setDir] = useState('');
+  const [name, setName] = useState('');
+  const [invalid, setInvalid] = useState<string | null>(null);
+  const adopt = useAction(async () => {
+    const folder = folderOf(dir);
+    const result = await backend.call('projects.adopt', { path: path.trim(), ...(folder === '' ? {} : { dir: folder }), ...(name.trim() === '' ? {} : { name: name.trim() }) });
+    arrivals.set(result.project.id, result.lines);
+    setPath('');
+    setDir('');
+    setName('');
+    onCreated();
+    onOpen({ kind: 'project', id: result.project.id });
+  });
+  const submit = (e: FormEvent): void => {
+    e.preventDefault();
+    // Checked here, so the answer is a sentence and not the schema's: the daemon would refuse it all the same.
+    const folder = folderOf(dir);
+    if (folder !== '' && !ProductRoot.safeParse(folder).success) return setInvalid('제품 폴더는 저장소 안의 폴더 이름이어야 합니다. 글자, 숫자, 밑줄로 시작하고 공백 없이, 네 단계까지 적습니다.');
+    setInvalid(null);
+    if (path.trim() !== '') void adopt.run();
+  };
+  return (
+    <section aria-label="이미 있는 저장소 이어서 하기" className="flex flex-col gap-4 px-4 pb-12 md:px-10">
+      <button type="button" aria-expanded={open} onClick={() => setOpen(!open)} className="flex min-h-11 items-center gap-2 self-start rounded-md px-1 text-base font-medium text-fg-muted hover:bg-sunken hover:text-fg">
+        <FolderInput className="size-5 shrink-0" aria-hidden />
+        이미 있는 저장소 이어서 하기
+        <ChevronDown className={`size-4 shrink-0 ${open ? 'rotate-180' : ''}`} aria-hidden />
+      </button>
+      {open ? (
+        <form onSubmit={submit} className="flex max-w-2xl flex-col gap-4 rounded-lg border border-border bg-surface p-4">
+          <p className="text-base text-fg-muted">커밋된 것만 읽고 작업 폴더의 파일은 건드리지 않으며, 체크아웃에 원격 studio 하나를 달 뿐 엔진은 돌지 않습니다.</p>
+          <Field label="이 Mac의 저장소 폴더">
+            <input required value={path} maxLength={1024} onChange={(e) => setPath(e.target.value)} placeholder="~/projects/my-app" autoCapitalize="none" autoCorrect="off" spellCheck={false} className={`${inputClass} font-mono`} />
+          </Field>
+          <Field label="제품 폴더" hint="비우면 찾아봅니다. 저장소 루트가 아니라 하위 폴더에 앱이 있을 때 적습니다.">
+            <input value={dir} maxLength={250} onChange={(e) => setDir(e.target.value)} placeholder="app" autoCapitalize="none" autoCorrect="off" spellCheck={false} className={`${inputClass} font-mono`} />
+          </Field>
+          <Field label="이름" hint="비우면 저장소 폴더의 이름을 씁니다.">
+            <input value={name} maxLength={80} onChange={(e) => setName(e.target.value)} className={inputClass} />
+          </Field>
+          {(invalid ?? adopt.error) ? <Problem>{invalid ?? adopt.error}</Problem> : null}
+          {adopt.busy ? <p className="text-base text-fg-muted">저장소를 읽고, 이 Mac에 프로젝트의 저장소를 여는 중입니다.</p> : null}
+          <Button type="submit" variant="primary" busy={adopt.busy} disabled={path.trim() === ''} icon={<FolderInput className="size-4" aria-hidden />} className="self-start">
+            {adopt.busy ? '들여오는 중' : '들여오기'}
+          </Button>
+        </form>
+      ) : null}
+    </section>
   );
 }

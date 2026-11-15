@@ -1,4 +1,4 @@
-import type { Approval, DiffFile, DiffLine, PlanVersion, ReviewDiff, AuditReport, AxBlock, Checkpoint, Eval, EventBody, EventEnvelope, FileEntry, FlowTaskWalk, KnowledgeJob, LedgerEntry, Lesson, MethodName, ParamsOf, ProductMap, Project, ProposalCard, ResultOf, Roadmap, SandboxInfo, ScratchEntry, Scratchpad, ScreenSpec, Session, SubscriptionQuota, Task, OwnerSettings } from '@studio-zero/protocol';
+import type { Approval, DiffFile, DiffLine, PlanVersion, ReviewDiff, AuditReport, AxBlock, Checkpoint, Eval, EventBody, EventEnvelope, FileEntry, FlowTaskWalk, KnowledgeJob, LedgerEntry, Lesson, MethodName, ParamsOf, ProductMap, Project, ProposalCard, RepoStatus, ResultOf, Roadmap, SandboxInfo, ScratchEntry, Scratchpad, ScreenSpec, Session, SubscriptionQuota, Task, OwnerSettings } from '@studio-zero/protocol';
 import { RpcCallError, matchesFilter } from '@studio-zero/protocol';
 import { hashMarkdown } from './annotate.ts';
 import type { Backend } from './backend.ts';
@@ -19,6 +19,8 @@ const projects: Project[] = [
   { id: 'prj_tide', slug: 'tide', name: 'Tide 정산', template: 'web-vite-react', createdAt: min(-70) },
   { id: 'prj_pace', slug: 'pace', name: 'Pace 2주 식단', template: 'mobile-expo', createdAt: min(-12) },
   { id: 'prj_harbor', slug: 'harbor', name: 'Harbor 예약', template: 'web-vite-react', createdAt: min(-40) },
+  // Built elsewhere and brought in from a checkout on this Mac: the app is in its app/ folder, and it has not been fitted yet.
+  { id: 'prj_credeal', slug: 'credeal', name: 'CreDeal', template: 'mobile-expo', createdAt: min(-210), root: 'app', adopted: { path: '/Users/owner/projects/credeal', base: 'main' } },
 ];
 
 const baseTask = { projectId: 'prj_ledger', origin: 'desktop', engine: 'native-claude', model: 'claude-opus-5-5', budgetTokens: 2_000_000, error: null, baseBranch: null, enginePref: null, modelPref: null, effort: 'high', effortPref: null, sessionId: null, reviewerPref: null, references: [] as string[], track: 'full', parkedUntil: null, parkCount: 0 } as const;
@@ -693,6 +695,39 @@ const roadmaps = new Map<string, Roadmap>([
   }],
 ]);
 
+/**
+ * Each project's repository on this Mac. Ledger's is open, with main and two task branches mirrored, and the
+ * owner pushed three commits to its main a moment ago. CreDeal was brought in, so its was made when it came, and
+ * it has no walking plan yet. The others have never been opened: nothing of them is on the disk.
+ */
+const gatePath = (slug: string): string => `/Users/owner/.studio-zero/repos/${slug}.git`;
+const LEDGER_MAIN = '7c41e9a2d08b35f61e4a9c2b7d3f05e81a6c4b92';
+const opened = (project: Project, branches: RepoStatus['branches'], planned: boolean): RepoStatus => ({
+  open: true, path: gatePath(project.slug), cloneCommand: `git clone -o studio ${gatePath(project.slug)} ${project.slug}`, branches, adopted: project.adopted ?? null, root: project.root ?? '', planned,
+});
+const repos = new Map<string, RepoStatus>([
+  ['prj_ledger', opened(projects.find((p) => p.id === 'prj_ledger')!, [
+    { name: 'main', commit: LEDGER_MAIN, subject: '미결제 목록을 고객 이름순으로 정렬', at: min(-2) },
+    { name: 'sz/tsk_detail', commit: 'f00dfeed3a91c27b54e0d8f6a2c4b1e9d7a5c3b8', subject: '청구서 상세에 결제 이력 섹션 추가', at: min(-6) },
+    { name: 'sz/tsk_list', commit: 'a11ce55b2e8d40f96c1a7b3e5d9f2c4a6b8e0d1f', subject: '미결제 청구서 목록 화면', at: min(-81) },
+  ], true)],
+  ['prj_credeal', opened(projects.find((p) => p.id === 'prj_credeal')!, [
+    { name: 'main', commit: 'b3e0c1d47a29f58e6c0b1d3a5e7f9c2b4d6a8e01', subject: '공유 확장에서 받은 링크를 딜 초안으로 연다', at: min(-260) },
+  ], false)],
+]);
+const repoOf = (projectId: string): RepoStatus => {
+  const project = projects.find((p) => p.id === projectId);
+  if (!project) throw new RpcCallError('not_found', `project ${projectId} not found`);
+  return repos.get(projectId) ?? { open: false, path: null, cloneCommand: null, branches: [], adopted: project.adopted ?? null, root: project.root ?? '', planned: true };
+};
+/**
+ * What happens as the demo window connects: the owner's push to Ledger's main, which the studio took. A live
+ * subscription is handed it the way the daemon would hand one that was open when it came.
+ */
+const arriving: EventEnvelope[] = [
+  { seq: 1400, at: min(-2), projectId: 'prj_ledger', taskId: null, body: { type: 'repo.received', branch: 'main', old: '4f9c2a17b3d05e8861a7c0d2e9f4b6a1c3d5e7f9', new: LEDGER_MAIN, commits: 3 } },
+];
+
 const handlers: Handlers = {
   'system.status': () => ({
     version: '0.1.0', protocol: 1, uptimeSec: 86_400, runtime: { context: 'orbstack', reachable: true, detail: '29.8.2 linux/arm64' }, relays: [{ id: 'telegram', state: 'connected' }, { id: 'slack', state: 'disabled' }, { id: 'ntfy', state: 'disabled' }], queue: { queued: 0, running: 1 },
@@ -707,7 +742,42 @@ const handlers: Handlers = {
   }),
   // Cursor's level is part of its model names; the others take it as a setting of their own.
   'engines.models': (p) => ({ models: demoModels[p.engine] ?? [], efforts: p.engine === 'cursor' || p.engine === 'antigravity' ? [] : ['low', 'medium', 'high', 'xhigh', 'max'] }),
-  'projects.list': () => ({ projects, live: [{ projectId: 'prj_core', sandbox: 'running', busy: false }, { projectId: 'prj_ledger', sandbox: 'running', busy: true }, { projectId: 'prj_atlas', sandbox: 'stopped', busy: false }, { projectId: 'prj_tide', sandbox: 'stopped', busy: false }, { projectId: 'prj_pace', sandbox: 'running', busy: true }, { projectId: 'prj_harbor', sandbox: 'running', busy: true, planWaiting: true }] }),
+  'projects.list': () => ({ projects, live: [{ projectId: 'prj_core', sandbox: 'running', busy: false }, { projectId: 'prj_ledger', sandbox: 'running', busy: true }, { projectId: 'prj_atlas', sandbox: 'stopped', busy: false }, { projectId: 'prj_tide', sandbox: 'stopped', busy: false }, { projectId: 'prj_pace', sandbox: 'running', busy: true }, { projectId: 'prj_harbor', sandbox: 'running', busy: true, planWaiting: true }, ...projects.filter((p) => p.adopted).map((p) => ({ projectId: p.id, sandbox: 'stopped' as const, busy: false }))] }),
+  'repo.status': (p) => repoOf(p.projectId),
+  'repo.open': (p) => {
+    const project = projects.find((x) => x.id === p.projectId);
+    if (project?.template === 'studio-core') throw new RpcCallError('conflict', 'Studio Zero Core의 저장소는 이 Mac의 체크아웃 자체입니다. 따로 여는 문이 없습니다.');
+    const now = repoOf(p.projectId);
+    if (now.open) return now;
+    const made = opened(project!, [{ name: 'main', commit: 'e1d2c3b4a5f60718293a4b5c6d7e8f9012345678', subject: '스튜디오가 만든 첫 화면', at: min(-20) }], now.planned);
+    repos.set(p.projectId, made);
+    return made;
+  },
+  // Nothing is read from this Mac in the demo: the checkout is taken to be a Vite app at its root, or in the folder given.
+  'projects.adopt': (p) => {
+    const path = p.path.trim().replace(/^~(?=\/|$)/, '/Users/owner').replace(/\/+$/, '');
+    const name = (p.name ?? path.slice(path.lastIndexOf('/') + 1)).trim().slice(0, 80) || 'project';
+    const slug = p.slug ?? (name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^[^a-z]+/, '').replace(/-+$/, '').slice(0, 36) || 'adopted');
+    const root = p.dir ?? '';
+    const base = p.base ?? 'main';
+    if (!path.startsWith('/')) throw new RpcCallError('conflict', `${p.path}: 그런 폴더가 없습니다.`);
+    const already = projects.find((x) => x.adopted?.path === path && (x.root ?? '') === root);
+    if (already) throw new RpcCallError('conflict', `이 저장소는 이미 들여왔습니다: ${already.slug}`);
+    const project: Project = { id: `prj_${slug.replace(/-/g, '_')}_${projects.length}`, slug, name, template: 'web-vite-react', createdAt: Date.now(), root, adopted: { path, base } };
+    projects.push(project);
+    repos.set(project.id, opened(project, [{ name: 'main', commit: 'c0a1b2c3d4e5f60718293a4b5c6d7e8f90123456', subject: '들여온 기준 브랜치의 마지막 커밋', at: Date.now() - 3_600_000 }], false));
+    const gate = gatePath(slug);
+    return {
+      project, gate, remote: 'added', base, uncommitted: 0,
+      lines: [
+        `${slug}: 들여왔습니다 (web-vite-react${root ? `, 제품 폴더 ${root}/` : ''}).`,
+        `main은 ${path}의 ${base}입니다 (c0a1b2c, 커밋 48개).`,
+        `체크아웃에 원격 studio를 달았습니다: ${gate}`,
+        `받기: git fetch studio    보내기: git push studio ${base === 'main' ? 'main' : `${base}:main`}  (main은 앞으로만)`,
+        `의존성을 설치하는 중입니다. 다음: sz fit ${slug} (스튜디오가 걷고 잴 수 있게 맞추기. 구독을 씁니다)`,
+      ],
+    };
+  },
   'ledger.list': (p) => ({ entries: ledger.filter((e) => e.projectId === p.projectId) }),
   'external.list': (p) => ({ apis: p.projectId === 'prj_ledger' ? [{ projectId: 'prj_ledger', name: 'tosspay', origin: 'https://api.tosspayments.com', variables: ['SECRET_KEY'], createdAt: min(-200) }] : [] }),
   'power.get': () => ({ mode: 'system', supported: true }),
@@ -798,6 +868,7 @@ export function demoBackend(): Backend {
     },
     subscribe: (filter, onEvent, sinceSeq) => {
       if (sinceSeq !== 'now') queueMicrotask(() => events.filter((e) => matchesFilter(e, filter)).forEach(onEvent));
+      else queueMicrotask(() => arriving.filter((e) => matchesFilter(e, filter)).forEach(onEvent));
       return () => undefined;
     },
     // A shell that only echoes: enough to show the terminal, and honest about not running anything.
