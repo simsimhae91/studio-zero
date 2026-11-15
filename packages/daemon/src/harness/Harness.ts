@@ -1,27 +1,31 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { INTEGRATION_BRANCH } from '../sandbox/scripts.ts';
+import { INTEGRATION_BRANCH, SLOT_SEEN_REF, changedFilesScript, reachScript } from '../sandbox/scripts.ts';
 import { join } from 'node:path';
 import { z } from 'zod';
-import { AcceptanceVerdict, Effort, ReviewerId, ReviewerPref, ScreenSpec as ScreenSpecShape, type AuditReport, type Phase, type Finding, type PlanFeedback, type ProductMap, type Project, type Task, type TaskState } from '@studio-zero/protocol';
+import { AcceptanceVerdict, Effort, ReviewerId, ReviewerPref, ScreenSpec as ScreenSpecShape, type AuditReport, type Phase, type Finding, type PlanFeedback, type ProductMap, type Project, type ScreenLedger, type Task, type TaskState } from '@studio-zero/protocol';
 import { EngineId, type Config } from '../config.ts';
 import { classifyQuotaFailure } from '../app/QuotaTracker.ts';
-import type { PlanVersionRow, Store } from '../db/Store.ts';
+import { isLight, type PlanVersionRow, type Store } from '../db/Store.ts';
 import type { EventLog } from '../events/EventLog.ts';
 import { pngBlock, textBlock, type ClaudeClient } from '../llm/ClaudeClient.ts';
 import type { EnginePick, ModelRouter } from '../llm/ModelRouter.ts';
-import { ApprovalDeniedError, type PolicyEngine } from '../policy/PolicyEngine.ts';
+import { ApprovalDeniedError, WORKSPACE_DIR, type PolicyEngine } from '../policy/PolicyEngine.ts';
 import { flowTotals } from '../qa/FlowWalker.ts';
 import { MOCKUP_DIR, type MockupMeasurement, type MockupRenderer } from '../qa/MockupRenderer.ts';
 import type { ReferenceCapture, RefKit } from '../qa/RefKit.ts';
 import type { SmokeRunner } from '../qa/SmokeTester.ts';
-import type { OrbStackManager } from '../sandbox/OrbStackManager.ts';
+import { slotOf, type OrbStackManager, type Place } from '../sandbox/OrbStackManager.ts';
+import type { Slots } from '../sandbox/Slots.ts';
+import { renderScope, scopeLabel, scopeOf, type Reach, type Scope } from '../product/scope.ts';
+import { appliedScript, readApplied } from '../arms/schema.ts';
+import type { ProjectArms } from '../arms/ProjectArms.ts';
 import { ANCHOR_FILE, AnchorTableShape, anchorTableJson, readAnchorTable, renderAnchorTable, type AnchorRead, type AnchorTable } from '../scratch/AnchorTable.ts';
 import { DIRECTIONS_FILE, directionThemeFile, readDirections, renderDirection, type Direction, type DirectionId, type DirectionsRead } from '../scratch/Directions.ts';
-import { renderScenarioFeedback, type ScenarioRunnerLike, type ScreenLook } from '../qa/ScenarioRunner.ts';
+import { renderScenarioFeedback, type ScenarioOutcome, type ScenarioRunnerLike, type ScreenLook } from '../qa/ScenarioRunner.ts';
 import { variantOf } from '../arms/kit.ts';
 import { SCREEN_DOC_FILE, SCREEN_SPEC_FILE, readScreenSpec, renderScreenSpec, screenSpecMarkdown, type FlowTask, type ScreenSpecRead } from '../scratch/ScreenSpec.ts';
 import { untrusted, type UntrustedSource } from '../trust/dataBlock.ts';
-import { errorMessage, excerpt, newId, type Clock, type Logger } from '../util/core.ts';
+import { errorMessage, excerpt, newId, sleep, type Clock, type Logger } from '../util/core.ts';
 import type { WorkspaceProvisioner } from './bootstrap.ts';
 import type { BuildMeter } from './BuildMeter.ts';
 import type { CompilerGate } from './CompilerGate.ts';
@@ -30,7 +34,7 @@ import type { EngineResult, EngineSession } from './engines/Engine.ts';
 import { countCompilerErrors, emptyRun, renderEvidence, type Ledger, type RunRecord } from './Ledger.ts';
 import type { LessonBook } from './LessonBook.ts';
 import { materialFor } from './handbook.ts';
-import { ANCHOR_BRIEF, CONTINUED_BRIEF, DEEP_DIVE_BRIEF, DRAFT_BRIEF, MILESTONE_BRIEF, DRAW_ALL_BRIEF, IDEATION_BRIEF, IDEATION_REQUIRED_FILES, IDEATION_REVISION_BRIEF, PLAN_REVISION_BRIEF, PLANNER_SYSTEM_PROMPT, SCREEN_SPEC_RULES, codingSystemPrompt, directionBrief } from './prompts.ts';
+import { ANCHOR_BRIEF, CONTINUED_BRIEF, DEEP_DIVE_BRIEF, DRAFT_BRIEF, EDIT_BRIEF, MILESTONE_BRIEF, DRAW_ALL_BRIEF, IDEATION_BRIEF, IDEATION_REQUIRED_FILES, IDEATION_REVISION_BRIEF, PLAN_REVISION_BRIEF, PLANNER_SYSTEM_PROMPT, SCREEN_SPEC_RULES, codingSystemPrompt, directionBrief } from './prompts.ts';
 import { hashPlan, renderPlanMarkdown, type PlanGate } from './PlanGate.ts';
 import { chosenTheme, writeProjectTheme } from './themeSeed.ts';
 import type { ReflectionAgent } from './ReflectionAgent.ts';
@@ -168,6 +172,23 @@ interface SpecDemand {
 }
 
 /** The milestone of a product map a task builds: the map, and which of its milestones (from 0). */
+/**
+ * A small edit at work in a slot: what it turned out to change (set by each verification), what was measured on
+ * the screens it changed, and how often its screens alone have sent it back.
+ */
+interface Editing {
+  scope: Scope | null;
+  /** Of the last walk: each measured screen with the rules above minor it was found breaking, for the project's ledger once the edit lands. */
+  measured: Map<string, string[]>;
+  /** The trails of the last walk, when it walked every scenario. */
+  trails: ScenarioOutcome['trails'] | null;
+  looksRounds: number;
+}
+
+/** How long a small edit's walk waits for a heavy task that has changed the schema and not yet merged it. */
+const SCHEMA_WAIT_MS = 90 * 60_000;
+const SCHEMA_POLL_MS = 15_000;
+
 interface Building {
   map: ProductMap;
   index: number;
@@ -176,6 +197,8 @@ interface Building {
 }
 
 export class Harness {
+  readonly #slots: Slots | null;
+  readonly #arms: Pick<ProjectArms, 'has' | 'sql'> | null;
   readonly #config: Config;
   readonly #store: Store;
   readonly #events: EventLog;
@@ -224,6 +247,10 @@ export class Harness {
     selfHosting?: SelfHosting | null;
     /** Where a task submitted with `reviewPlan` waits for the owner's word on its plan. Without one, no task waits. */
     planGate?: PlanGate | null;
+    /** The projects' slots. Without them every task runs in its project's own workspace. */
+    slots?: Slots | null;
+    /** To ask the backend which migrations it holds, before a small edit is walked against it. */
+    arms?: Pick<ProjectArms, 'has' | 'sql'> | null;
     clock: Clock;
     log: Logger;
   }) {
@@ -248,19 +275,27 @@ export class Harness {
     this.#mockups = deps.mockups ?? null;
     this.#core = deps.selfHosting ?? null;
     this.#gate = deps.planGate ?? null;
+    this.#slots = deps.slots ?? null;
+    this.#arms = deps.arms ?? null;
     this.#clock = deps.clock;
     this.#log = deps.log;
   }
 
   async run(initial: Task, signal: AbortSignal): Promise<void> {
-    const project = this.#store.getProject(initial.projectId);
-    if (!project) {
+    const home = this.#store.getProject(initial.projectId);
+    if (!home) {
       this.#finish(initial, 'failed', { error: 'project no longer exists' });
       return;
     }
-    const scope = { projectId: project.id, taskId: initial.id };
+    // A light task (a small edit, a full check) runs in a slot of its project: a clone in a container of its
+    // own, beside whatever the project's workspace is doing. From the moment it has one, `project` is that slot,
+    // and everything below that is handed `project` (the tools, the dev server, the walk) works there.
+    const light = this.#slots !== null && isLight(initial, this.#slots.perProject);
+    let project: Place = home;
+    const editing: Editing | null = light && initial.kind === 'inline_edit' ? { scope: null, measured: new Map(), trails: null, looksRounds: 0 } : null;
+    const scope = { projectId: home.id, taskId: initial.id };
     const ideation = initial.kind === 'ideate';
-    const draft = initial.track === 'fast';
+    const draft = initial.track === 'fast' || light;
     const branch = initial.branch ?? `sz/${initial.id}`;
     let task = initial;
     // Held in an object because it is opened from inside a closure, on first use.
@@ -312,7 +347,17 @@ export class Harness {
 
     try {
       this.#events.emit(scope, { type: 'task.state', state: 'running', error: null });
+      if (light) {
+        project = await this.#slots!.take(home, initial.id, signal);
+        task = this.#store.updateTask(task.id, { slot: slotOf(project) });
+      }
       await this.#provisioner.ensure(project);
+      // A full check is the studio's own walk of main as it stands: no engine, no branch, nothing to commit.
+      if (task.kind === 'check') {
+        phase('verify', 1);
+        task = this.#finish(task, 'succeeded', { summary: await this.#fullCheck(project, task, signal) });
+        return;
+      }
 
       // The engine is routed and opened when it is first needed. A resumed task needs one only if verification
       // finds something to repair.
@@ -374,8 +419,10 @@ export class Harness {
         if (project.template === 'studio-core') await this.#core?.sync(project, { signal });
         const decided = await routed();
         this.#events.emit(scope, { type: 'route.decided', taskKind: task.kind, engine: decided.candidate.engine, model: decided.candidate.model, effort: decided.candidate.effort, considered: decided.considered });
-        const base = await this.#sandboxes.checkpoint(project, `before ${task.kind} ${task.id}`, task.id);
-        this.#events.emit(scope, { type: 'checkpoint.created', checkpointId: base.id, label: base.label });
+        // A slot is not a place to go back to: its checkpoints would be the project's on paper and nowhere in
+        // the project's repository. What a small edit leaves is its branch, and one commit on main.
+        const base = light ? null : await this.#sandboxes.checkpoint(project, `before ${task.kind} ${task.id}`, task.id);
+        if (base) this.#events.emit(scope, { type: 'checkpoint.created', checkpointId: base.id, label: base.label });
         // Woken from a usage limit, a task goes on from the work it committed when it stopped: the limit has
         // only just reset, and doing the same work twice is the surest way back to it. A design task starts its
         // documents again, as any other run does: a half-written set would be read as a design to revise.
@@ -387,7 +434,7 @@ export class Harness {
         // The map a milestone is built to is in the workspace before the engine opens it: the brief points at the file.
         if (building) await this.#writeProductMap(project, building.map);
         // The table has a level for every engine; it is recorded only where the engine was actually run at one.
-        task = this.#store.updateTask(task.id, { engine: decided.candidate.engine, model: decided.candidate.model, effort: decided.engine.efforts.length > 0 ? decided.candidate.effort : null, branch, baseCheckpointId: base.id });
+        task = this.#store.updateTask(task.id, { engine: decided.candidate.engine, model: decided.candidate.model, effort: decided.engine.efforts.length > 0 ? decided.candidate.effort : null, branch, ...(base ? { baseCheckpointId: base.id } : {}) });
 
         const lessons = this.#lessons.forTask(project.id);
         appliedLessons = lessons.ids;
@@ -453,7 +500,7 @@ export class Harness {
         await open();
         // A design task that starts where a finished design already is (the owner sent it back with notes) revises it.
         const revising = ideation && (await this.#ideationDocuments(project)).length === 0;
-        result = await send(executeMessage(task, plan, lessons.text, { anchor, critique, references, revising, specOwed, template: project.template, continued }));
+        result = await send(executeMessage(task, plan, lessons.text, { anchor, critique, references, revising, specOwed, template: project.template, continued, edit: editing !== null }));
         checkCancel();
         // A new design: its directions are drawn from the table the lead just wrote, each by an engine of its own.
         if (ideation && !revising) {
@@ -477,7 +524,7 @@ export class Harness {
           round += 1;
           phase('verify', round);
           const looked = ideation ? await this.#verifyIdeation(project, task, signal) : null;
-          const checked = looked ?? (await this.#verify(project, task, plan, signal, { design, spec: specFor, record, building }));
+          const checked = looked ?? (await this.#verify(project, task, plan, signal, { design, spec: specFor, record, building, edit: editing }));
           record.rounds = round;
           const failures = checked.failures;
           unverified = checked.unverified;
@@ -495,7 +542,9 @@ export class Harness {
           }
           // What was measured on a milestone's walked screens is sent back once and never again (`#walkedScreens`),
           // so it cannot loop, and it is not charged to the corrections a product that does not yet work needs.
-          const looksOnly = failures.every((f) => f.name === 'looks');
+          // A small edit is sent back for its screens once without charge too; after that it is charged, since
+          // nothing else stops it coming back with the same finding (a milestone's is recorded and let through).
+          const looksOnly = failures.every((f) => f.name === 'looks') && (editing === null || editing.looksRounds++ < 1);
           // A plan that does not hold yet (its shape, a feature with no scenario) is a document to correct: a
           // turn of seconds that says nothing about whether the product works. The first real build to a map
           // spent all three corrections on it and failed at the first check of the product itself. A few such
@@ -559,6 +608,39 @@ export class Harness {
       }
 
       await this.#sandboxes.commitAll(project, commitSubject(task));
+      // A small edit that passed goes onto main by itself. Main may have moved since it began (another edit
+      // landed): it is then put on top, checked again there, and what fails there or collides goes back to the
+      // engine once.
+      if (editing) {
+        for (let attempt = 0; ; attempt++) {
+          let failedThere: Failure[] = [];
+          const landing = await this.#slots!.land(project, branch, async () => {
+            round += 1;
+            phase('verify', round);
+            failedThere = (await this.#verify(project, task, plan, signal, { design, spec: specFor, record, building, edit: editing })).failures;
+            return failedThere.length === 0;
+          });
+          checkCancel();
+          if (landing.landed) {
+            task = this.#store.updateTask(task.id, { landedCommit: landing.commit });
+            this.#events.emit(scope, { type: 'task.landed', commit: landing.commit, into: INTEGRATION_BRANCH });
+            this.#rememberEdit(home.id, editing, landing.commit);
+            break;
+          }
+          if (landing.why === 'nothing') {
+            this.#events.emit(scope, { type: 'notice', level: 'info', message: '바뀐 것이 없어 main에 넣을 것이 없습니다.' });
+            break;
+          }
+          if (landing.why === 'dirty') throw new Error(`the change passed its checks and could not be put on ${INTEGRATION_BRANCH}: the project's own workspace holds an uncommitted change to a file this edit touches. It is on ${branch}; commit or discard that change and merge the branch.`);
+          const why = landing.why === 'conflict' ? `${INTEGRATION_BRANCH} moved while this was being made, and the two changed the same lines of ${landing.files.join(', ')}` : `${INTEGRATION_BRANCH} moved while this was being made, and on top of it the change no longer passes (${failedThere.map((f) => f.name).join(', ')})`;
+          if (attempt >= 1) throw new Error(`the change could not be put on ${INTEGRATION_BRANCH}: ${why}. It is on ${branch}.`);
+          phase('execute', round + 1);
+          result = await send(landing.why === 'conflict' ? movedMessage(landing.files) : repairMessage(failedThere));
+          checkCancel();
+          await verifyUntilClean();
+          await this.#sandboxes.commitAll(project, commitSubject(task));
+        }
+      }
       if (waitingOn !== null) {
         // Nothing is known to be wrong and the one judgement still owed cannot be had today. The work stays on
         // its branch; the task steps out of the queue's way until a reviewer is back.
@@ -637,6 +719,7 @@ export class Harness {
       task = this.#finish(task, cancelled || stopped ? 'cancelled' : 'failed', { error: cancelled ? 'cancelled by the owner' : errorMessage(err) }, limit !== null && soonEnough && maxParks > 0 && parks >= maxParks);
     } finally {
       await closeAll();
+      if (slotOf(project) > 0) this.#slots!.release(project);
     }
 
     // ---------------------------------------------------------------- Ledger
@@ -992,7 +1075,7 @@ export class Harness {
     }
   }
 
-  async #verify(project: Project, task: Task, plan: Pick<Plan, 'auditRoutes'> | null, signal: AbortSignal, run: { design: boolean; spec: SpecDemand | null; record: RunRecord; building?: Building | null }): Promise<{ failures: Failure[]; unverified: string[]; waitingOn: string | null }> {
+  async #verify(project: Project, task: Task, plan: Pick<Plan, 'auditRoutes'> | null, signal: AbortSignal, run: { design: boolean; spec: SpecDemand | null; record: RunRecord; building?: Building | null; edit?: Editing | null }): Promise<{ failures: Failure[]; unverified: string[]; waitingOn: string | null }> {
     const scope = { projectId: project.id, taskId: task.id };
     const record = run.record;
 
@@ -1002,6 +1085,13 @@ export class Harness {
       record.firstCompilerErrors ??= record.compilerErrors;
       this.#events.emit(scope, { type: 'gate.result', gate: 'compiler', name: compiled.command, passed: compiled.passed, exitCode: compiled.exitCode, durationMs: compiled.durationMs, detail: compiled.passed ? '' : excerpt(compiled.output, 2000) });
       if (!compiled.passed) return { failures: [{ name: 'compiler', source: 'sandbox-output', detail: compiled.output, compiler: { command: compiled.command, exitCode: compiled.exitCode } }], unverified: [], waitingOn: null };
+    }
+
+    // A small edit is checked in proportion to what it changed. A project with no plan to walk by has nothing
+    // to be in proportion to, and is checked as any task is.
+    if (run.edit) {
+      const edited = await this.#verifyEdit(project, task, signal, run.edit, record);
+      if (edited) return edited;
     }
 
     // The engine may revise the anchor table as it builds; it may not leave the work without a valid one.
@@ -1052,6 +1142,8 @@ export class Harness {
             this.#events.emit(scope, { type: 'gate.result', gate: 'scenarios', name: planned.spec.scenarios.map((scenario) => scenario.id).join(' '), passed: walked.passed, exitCode: null, durationMs: walked.durationMs, detail: walked.passed ? walked.detail : excerpt(renderScenarioFeedback(walked), 3000) });
             if (!walked.passed) return { failures: [{ name: 'scenarios', source: 'browser-page', detail: renderScenarioFeedback(walked) }], unverified: [], waitingOn: null };
             // It works. The screens its people stood on, signed in, are the ones the audit never opens: measured here.
+            // Where this walk went and what it found is what a later small edit is checked by.
+            if (run.building) this.#rememberWalk(project.id, walked, await this.#headOf(project));
             if (run.building && walked.looks && walked.looks.length > 0) {
               const found = await this.#walkedScreens(project, task, run.building, walked.looks);
               if (found) return { failures: [found], unverified: [], waitingOn: null };
@@ -1268,11 +1360,199 @@ export class Harness {
     return lead.value;
   }
 
-  /** Keep the unfinished work on its branch for inspection and put the workspace back on the integration branch. */
-  async #parkBranch(project: Project, task: Task, why: string): Promise<void> {
+  // ------------------------------------------------------------------ the fine gear
+
+  /**
+   * Checks a small edit in proportion to what it changed (`product/scope.ts`): the scenarios that stand on the
+   * screens it reached are walked, those screens are measured, and what they are found breaking is held against
+   * what main was last recorded breaking there. Null when the project has no plan to walk by, for the caller to
+   * check it as any task is. The compiler has already passed.
+   */
+  async #verifyEdit(project: Place, task: Task, signal: AbortSignal, edit: Editing, record: RunRecord): Promise<{ failures: Failure[]; unverified: string[]; waitingOn: string | null } | null> {
+    const scope = { projectId: project.id, taskId: task.id };
+    if (!this.#scenarios || !this.#evals.usesBrowser(project.id) || variantOf(project.template) === null) return null;
+    const planned = await this.#readSpec(project, { works: true, draft: true });
+    if (!planned?.ok || planned.spec.scenarios.length === 0) return null;
+    const spec = planned.spec;
+    const total = spec.scenarios.length;
+
+    const listed = await this.#sandboxes.exec(project, changedFilesScript({ workspace: WORKSPACE_DIR, base: SLOT_SEEN_REF }), { timeoutSec: 60, signal });
+    if (listed.exitCode !== 0) throw new Error(`what the edit changed could not be listed: ${excerpt(listed.stderr, 300)}`);
+    const changed = listed.stdout.split('\n').map((line) => line.trim()).filter(Boolean);
+    const read = await this.#sandboxes.exec(project, reachScript({ workspace: WORKSPACE_DIR }), { stdin: JSON.stringify({ changed, screens: spec.screens.map((screen) => screen.id) }), timeoutSec: 120, maxOutputBytes: 8 * 1024 * 1024, signal });
+    let reach: Reach | null = null;
     try {
-      await this.#sandboxes.stopProcess(project, 'dev');
+      if (read.exitCode === 0 && !read.truncated) reach = JSON.parse(read.stdout) as Reach;
+    } catch {
+      reach = null;
+    }
+    const found = scopeOf({ changed, spec, reach, trails: this.#store.getWalks(project.id)?.trails ?? null });
+    edit.scope = found;
+    edit.measured = new Map();
+    edit.trails = null;
+    this.#events.emit(scope, { type: 'gate.result', gate: 'scope', name: scopeLabel(found, total), passed: found.kind !== 'refused', exitCode: null, durationMs: listed.durationMs + read.durationMs, detail: renderScope(found, total) });
+    if (found.kind === 'refused') {
+      return { failures: [{ name: 'scope', source: 'sandbox-output', detail: `${renderScope(found, total)}\nTake that part out of the change (\`git checkout ${SLOT_SEEN_REF} -- supabase\` puts the backend's files back) and do what was asked without it. If it cannot be done without it, undo your change and say so in your final message.` }], unverified: [], waitingOn: null };
+    }
+
+    if (found.kind !== 'none') {
+      await this.#schemaSettled(project, task, signal);
+      const toWalk = found.kind === 'some' ? { ...spec, scenarios: spec.scenarios.filter((scenario) => found.scenarios.includes(scenario.id)) } : spec;
+      let walked: ScenarioOutcome;
+      try {
+        walked = await this.#scenarios.run(project, toWalk, { signal, brief: true, look: found.kind === 'some' ? { only: found.screens } : true });
+      } catch (err) {
+        if (signal.aborted) throw err;
+        // Unlike a build, which is said to be unvouched for and left to the owner: nobody looks at this before it is on main.
+        throw new Error(`the scenarios could not be walked (${errorMessage(err)}), and a small edit goes onto ${INTEGRATION_BRANCH} only on what was walked`);
+      }
+      this.#events.emit(scope, { type: 'gate.result', gate: 'scenarios', name: toWalk.scenarios.map((scenario) => scenario.id).join(' '), passed: walked.passed, exitCode: null, durationMs: walked.durationMs, detail: walked.passed ? walked.detail : excerpt(walked.problems.join('\n'), 3000) });
+      if (!walked.passed) return { failures: [{ name: 'scenarios', source: 'browser-page', detail: renderScenarioFeedback(walked) }], unverified: [], waitingOn: null };
+      const screens = this.#editedScreens(project, task, edit, walked);
+      if (screens) return { failures: [screens], unverified: [], waitingOn: null };
+      if (found.kind === 'all') edit.trails = walked.trails ?? null;
+    }
+
+    const outcomes = await this.#evals.runAll(project, task.id, { commandsOnly: true, devServerRunning: found.kind !== 'none', signal });
+    const commands = outcomes.filter((o) => o.eval.spec.kind === 'command');
+    record.checksPassed = commands.filter((o) => o.passed).length;
+    record.checksFailed = commands.filter((o) => !o.passed).map((o) => o.eval.name);
+    return { failures: outcomes.filter((o) => !o.passed && !o.unverified).map((o): Failure => ({ name: o.eval.name, source: 'sandbox-output', detail: o.detail })), unverified: [], waitingOn: null };
+  }
+
+  /**
+   * What the walk measured on the screens a small edit changed, held against the project's ledger: a rule the
+   * screen was already recorded breaking on main is said and let be (it is not this edit's), and anything else
+   * above minor sends the edit back. A screen the ledger has never seen has no "already": whoever changes it
+   * answers for what is on it.
+   */
+  #editedScreens(project: Place, task: Task, edit: Editing, walked: ScenarioOutcome): Failure | null {
+    const looks = walked.looks ?? [];
+    const ledger = this.#store.getWalks(project.id)?.ledger ?? {};
+    const heavy = looks.flatMap((look) => look.findings.filter((finding) => finding.severity !== 'minor').map((finding) => ({ look, finding })));
+    for (const look of looks) edit.measured.set(look.screen, [...new Set([...(edit.measured.get(look.screen) ?? []), ...look.findings.filter((finding) => finding.severity !== 'minor').map((finding) => finding.rule)])]);
+    const known = (screen: string, rule: string): boolean => ledger[screen]?.rules.includes(rule) ?? false;
+    const lines = [...new Set(heavy.filter((h) => !known(h.look.screen, h.finding.rule)).map(({ look, finding }) => `Screen ${look.screen} (scenario "${look.scenario}"), ${finding.severity}, ${finding.rule}: ${finding.message}${finding.selector ? ` At ${finding.selector}.` : ''}${finding.fix ? ` ${finding.fix}` : ''}`))];
+    const kept = new Set(heavy.filter((h) => known(h.look.screen, h.finding.rule)).map((h) => `${h.look.screen}|${h.finding.rule}`)).size;
+    const measured = new Set(looks.map((look) => look.screen)).size;
+    this.#events.emit({ projectId: project.id, taskId: task.id }, {
+      type: 'gate.result',
+      gate: 'looks',
+      name: `${measured} screens`,
+      passed: lines.length === 0,
+      exitCode: null,
+      durationMs: 0,
+      detail: lines.length === 0 ? `${measured} ${measured === 1 ? 'screen' : 'screens'} the edit changed, measured as the walk stood on ${measured === 1 ? 'it' : 'them'}: nothing above minor that is this edit's${kept > 0 ? `, besides ${kept} already recorded on ${INTEGRATION_BRANCH}` : ''}` : excerpt(lines.join('\n'), 3000),
+    });
+    if (lines.length === 0) return null;
+    return {
+      name: 'looks',
+      source: 'browser-page',
+      detail: `Every scenario walked reached its end. The studio then measured the screens this edit changed, signed in, at the size they were walked at, in each state the walk put them in. These are measurements, not opinions, and none of them is among what the screen was last recorded breaking on ${INTEGRATION_BRANCH}. Fix each in the code of the screen it names, and change nothing about how the scenarios are walked:\n${lines.map((line) => `- ${line}`).join('\n')}`,
+    };
+  }
+
+  /**
+   * Waits, before a small edit is walked, for a heavy task that has put migrations into the backend and not yet
+   * merged them: the edit stands on main, and main's code against a schema that is ahead of it fails for a
+   * reason that is nobody's defect. A backend that is ahead with no heavy task at work (a branch that was
+   * dropped) is not waited for: nothing is coming to put it right.
+   */
+  async #schemaSettled(project: Place, task: Task, signal: AbortSignal): Promise<void> {
+    const arms = this.#arms;
+    if (!arms || !arms.has(project)) return;
+    const active = new Set(['running', 'awaiting_approval', 'awaiting_plan_review']);
+    const heavyAtWork = (): boolean => this.#store.listTasks(project.id, 40).some((other) => active.has(other.state) && !isLight(other, this.#slots?.perProject ?? 0));
+    const ahead = async (): Promise<string[]> => {
+      const files = await this.#sandboxes.exec(project, 'ls -1 supabase/migrations 2>/dev/null || true', { timeoutSec: 20 });
+      const here = new Set(files.stdout.split('\n').map((line) => line.trim()).filter(Boolean));
+      const applied = await arms.sql(project, appliedScript());
+      // A migration's name begins with a digit; the seed is recorded among them under a name that does not.
+      return applied.exitCode === 0 ? [...readApplied(applied.stdout).keys()].filter((name) => /^\d/.test(name) && !here.has(name)) : [];
+    };
+    const started = this.#clock();
+    let said = false;
+    while (heavyAtWork() && this.#clock() - started < SCHEMA_WAIT_MS) {
+      const extra = await ahead().catch(() => [] as string[]);
+      if (extra.length === 0) return;
+      if (!said) this.#events.emit({ projectId: project.id, taskId: task.id }, { type: 'notice', level: 'info', message: `큰 작업이 아직 합치지 않은 스키마 변경(${extra.slice(0, 3).join(', ')}${extra.length > 3 ? ` 외 ${extra.length - 3}개` : ''})을 백엔드에 넣어 둔 상태입니다. 그 작업이 끝날 때까지 이 수정의 걷기를 기다립니다.` });
+      said = true;
+      await sleep(SCHEMA_POLL_MS, signal);
+    }
+  }
+
+  /**
+   * A full check: every scenario of the project's main walked as it stands, each screen measured, and where the
+   * walk went and what each screen was found breaking written down for the small edits that come after. No
+   * engine and no tokens. Returns what it found, for the owner, in their language.
+   */
+  async #fullCheck(project: Place, task: Task, signal: AbortSignal): Promise<string> {
+    const scope = { projectId: project.id, taskId: task.id };
+    if (!this.#scenarios) throw new Error('this studio has nothing to walk a product with');
+    const planned = await this.#readSpec(project, { works: true, draft: true });
+    if (!planned?.ok || planned.spec.scenarios.length === 0) throw new Error(`there is nothing to walk: ${SCREEN_SPEC_FILE} ${planned && !planned.ok ? 'does not hold as a screen plan' : 'is missing or has no scenarios'}`);
+    const total = planned.spec.scenarios.length;
+    const walked = await this.#scenarios.run(project, planned.spec, { signal, look: true });
+    this.#events.emit(scope, { type: 'gate.result', gate: 'scenarios', name: planned.spec.scenarios.map((scenario) => scenario.id).join(' '), passed: walked.passed, exitCode: null, durationMs: walked.durationMs, detail: walked.passed ? walked.detail : excerpt(walked.problems.join('\n'), 3000) });
+    const looks = walked.looks ?? [];
+    const heavy = [...new Set(looks.flatMap((look) => look.findings.filter((finding) => finding.severity !== 'minor').map((finding) => debtLine(look.screen, look.scenario, finding))))];
+    const measured = new Set(looks.map((look) => look.screen)).size;
+    this.#events.emit(scope, { type: 'gate.result', gate: 'looks', name: `${measured} screens`, passed: heavy.length === 0, exitCode: null, durationMs: 0, detail: heavy.length === 0 ? `${measured} screens measured as the walk stood on them: nothing above minor` : excerpt(heavy.join('\n'), 3000) });
+    this.#rememberWalk(project.id, walked, await this.#headOf(project));
+    const parts = [`시나리오 ${total}개 가운데 ${walked.walked}개를 끝까지 걸었습니다(${Math.round(walked.durationMs / 1000)}초). 화면 ${measured}장을 쟀습니다.`];
+    if (walked.problems.length > 0) parts.push(`걷다가 걸린 것 ${walked.problems.length}건:\n${walked.problems.map((problem) => `- ${excerpt(problem.replace(/\s+/g, ' '), 400)}`).join('\n')}`);
+    parts.push(heavy.length > 0 ? `화면에서 잰 사소하지 않은 결함 ${heavy.length}건:\n${heavy.map((line) => `- ${line}`).join('\n')}` : '화면에서 잰 사소하지 않은 결함은 없습니다.');
+    return excerpt(parts.join('\n\n'), 6000);
+  }
+
+  /** The commit a workspace stands on, or null when it cannot say. */
+  async #headOf(project: Place): Promise<string | null> {
+    const head = await this.#sandboxes.exec(project, 'git rev-parse HEAD', { timeoutSec: 20 }).catch(() => null);
+    return head && head.exitCode === 0 && /^[0-9a-f]{40}$/.test(head.stdout.trim()) ? head.stdout.trim() : null;
+  }
+
+  /**
+   * Writes down what a walk of every scenario found, for the project: where each scenario went, and for each
+   * screen measured the rules above minor it was found breaking. Best effort, and never a task's outcome.
+   */
+  #rememberWalk(projectId: string, walked: ScenarioOutcome, commit: string | null): void {
+    try {
+      const looks = walked.looks ?? [];
+      if (!walked.trails || looks.length === 0) return;
+      const now = this.#clock();
+      const ledger: ScreenLedger = {};
+      for (const look of looks) {
+        const entry = (ledger[look.screen] ??= { rules: [], at: now });
+        for (const finding of look.findings) if (finding.severity !== 'minor' && !entry.rules.includes(finding.rule)) entry.rules.push(finding.rule);
+      }
+      this.#store.putWalks(projectId, { trails: walked.trails, ledger, commit, updatedAt: now });
+    } catch (err) {
+      this.#log.warn({ projectId, err: errorMessage(err) }, 'what the walk found could not be kept');
+    }
+  }
+
+  /** A small edit landed: the screens it was measured on are as it left them, and the ledger says so. */
+  #rememberEdit(projectId: string, edit: Editing, commit: string): void {
+    try {
+      if (edit.measured.size === 0 && !edit.trails) return;
+      const now = this.#clock();
+      const before = this.#store.getWalks(projectId);
+      const ledger: ScreenLedger = { ...(before?.ledger ?? {}) };
+      for (const [screen, rules] of edit.measured) ledger[screen] = { rules, at: now };
+      this.#store.putWalks(projectId, { trails: edit.trails ?? before?.trails ?? {}, ledger, commit: edit.trails ? commit : (before?.commit ?? null), updatedAt: now });
+    } catch (err) {
+      this.#log.warn({ projectId, err: errorMessage(err) }, 'what the edit left on its screens could not be kept');
+    }
+  }
+
+  /** Keep the unfinished work on its branch for inspection and put the workspace back on the integration branch. */
+  async #parkBranch(project: Place, task: Task, why: string): Promise<void> {
+    try {
+      // A slot's dev server is left running for whoever takes the slot next: it is nobody's preview to mislead.
+      if (slotOf(project) === 0) await this.#sandboxes.stopProcess(project, 'dev');
       await this.#sandboxes.commitAll(project, `wip: ${task.id} (${why})`);
+      // What was made in a slot is in nobody's repository until it is taken there: to go on from, or to merge by hand.
+      if (slotOf(project) > 0) await this.#slots!.export(project, task.branch ?? `sz/${task.id}`);
       await this.#sandboxes.checkout(project, INTEGRATION_BRANCH);
     } catch (err) {
       this.#log.warn({ taskId: task.id, err: errorMessage(err) }, 'could not park task branch');
@@ -1321,14 +1601,15 @@ function referenceBlock(ref: ReferenceCapture): string {
   return `Reference page ${ref.url} as measured in a browser. Read principles out of it; its numbers and assets are its own and are not to be carried across:\n${untrusted('browser-page', `${ref.title}\n${ref.summary}`, { url: ref.url })}`;
 }
 
-function executeMessage(task: Task, plan: Plan | null, lessonText: string, handed: { anchor: AnchorTable | null; critique: PlanCritique | null; references: readonly ReferenceCapture[]; revising?: boolean; specOwed?: string[] | null; template?: Project['template']; continued?: boolean } = { anchor: null, critique: null, references: [] }): string {
+function executeMessage(task: Task, plan: Plan | null, lessonText: string, handed: { anchor: AnchorTable | null; critique: PlanCritique | null; references: readonly ReferenceCapture[]; revising?: boolean; specOwed?: string[] | null; template?: Project['template']; continued?: boolean; edit?: boolean } = { anchor: null, critique: null, references: [] }): string {
   // A draft's brief says how to start a product (a screen plan, sign-up, a backend). The studio's own repository
   // is a codebase with conventions: a quick change there is still held to its type check, tests and build, and
   // is not told to build any of that.
-  const drafted = task.track === 'fast' && task.kind !== 'ideate' && handed.template !== 'studio-core';
+  // A small edit in a slot is one change to a product that is built: it is told that, and not how to start one.
+  const drafted = task.track === 'fast' && task.kind !== 'ideate' && handed.template !== 'studio-core' && !handed.edit;
   // A milestone of a product map is not a draft of a product: it is told how a slice of a whole one is built.
   const milestone = drafted && task.milestone !== null && task.milestone !== undefined;
-  const parts = [task.kind === 'ideate' ? (handed.revising ? IDEATION_REVISION_BRIEF : IDEATION_BRIEF) : '', milestone ? MILESTONE_BRIEF : drafted ? DRAFT_BRIEF : '', `The owner's request:\n${task.prompt}`];
+  const parts = [task.kind === 'ideate' ? (handed.revising ? IDEATION_REVISION_BRIEF : IDEATION_BRIEF) : '', handed.edit ? EDIT_BRIEF : milestone ? MILESTONE_BRIEF : drafted ? DRAFT_BRIEF : '', `The owner's request:\n${task.prompt}`];
   if (handed.continued) parts.push(CONTINUED_BRIEF);
   if (plan) parts.push(`Plan drafted for this request (follow it unless the code shows it is wrong; say so if you deviate):\n${planText(plan)}`);
   // The table's cells were written by a model that had read reference pages, so they travel as data; the instruction to build to it is the harness's.
@@ -1364,6 +1645,11 @@ function anchorMessage(task: Task, references: readonly ReferenceCapture[], prob
 }
 
 
+
+/** What a small edit's engine is told when the project's main moved under it and the two collide. */
+function movedMessage(files: readonly string[]): string {
+  return `Your change passed its checks, and could not be put on ${INTEGRATION_BRANCH}: while you worked, another change landed there, and the two changed the same lines of ${files.join(', ')}. The project's ${INTEGRATION_BRANCH} as it is now is at ${SLOT_SEEN_REF} in this workspace. Put your work on top of it: run \`git rebase ${SLOT_SEEN_REF}\`, settle each file it stops on so that both changes hold (what landed stays; yours is made again on top of it), \`git add\` it and \`git -c core.editor=true rebase --continue\`, until the rebase is done. Then stop: it is checked again and put on ${INTEGRATION_BRANCH}.`;
+}
 
 /** The acceptance reviewer's single corrective patch, as the engine receives it. */
 function patchMessage(acceptance: Acceptance): string {

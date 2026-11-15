@@ -4,7 +4,7 @@ import type { EventLog } from '../events/EventLog.ts';
 import type { McpRegistry } from '../mcp/McpRegistry.ts';
 import type { Action, Actor } from '../policy/actions.ts';
 import { ApprovalDeniedError, PolicyDeniedError, type PolicyEngine } from '../policy/PolicyEngine.ts';
-import { SandboxError, type OrbStackManager } from '../sandbox/OrbStackManager.ts';
+import { SandboxError, type OrbStackManager, slotOf } from '../sandbox/OrbStackManager.ts';
 import { untrusted, type UntrustedSource } from '../trust/dataBlock.ts';
 import { errorMessage, excerpt, newId } from '../util/core.ts';
 import type { ProjectArms } from '../arms/ProjectArms.ts';
@@ -127,6 +127,8 @@ export class Toolbox {
    * returned to or forked from. Best effort: a failed snapshot is not a reason to fail the work.
    */
   async checkpointTurn(ctx: ToolContext, label: string): Promise<void> {
+    // A slot is not a place to go back to: what is made there is its branch (see `Harness.run`).
+    if (slotOf(ctx.project) > 0) return;
     try {
       const checkpoint = await this.#sandboxes.checkpoint(ctx.project, label.replace(/\s+/g, ' ').slice(0, 100), ctx.taskId);
       this.#events.emit({ projectId: ctx.project.id, taskId: ctx.taskId }, { type: 'checkpoint.created', checkpointId: checkpoint.id, label: checkpoint.label });
@@ -237,6 +239,9 @@ export class Toolbox {
         run: async (_input, ctx) => {
           const backend = arms();
           if (!backend) return { text: 'The studio cannot run a backend here.', ok: false, exitCode: null };
+          // The database is one for the whole project, and this is a copy of the project at work on a small edit
+          // beside whatever else is running: a schema changed from here would change it under all of them.
+          if (slotOf(ctx.project) > 0) return { text: 'Not here. This is a small edit, in a copy of the project, and the database is one for the whole project and for every task at work on it. A change that needs the schema is not a small edit: make no change to supabase/, and say in your final message that this needs a build.', ok: false, exitCode: null };
           const result = await backend.applySchema(ctx.project);
           return { text: result.text, ok: result.ok, exitCode: null };
         },

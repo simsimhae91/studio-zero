@@ -212,6 +212,13 @@ exit 1`;
 // ------------------------------------------------------------------ slots
 
 /**
+ * In a slot: the project's integration branch as the slot last saw it (when it was taken, and again each time it
+ * tried to land). What a slot's task changed is measured from here, and a task told that the project has moved
+ * puts its work on top of this.
+ */
+export const SLOT_SEEN_REF = 'refs/sz/main';
+
+/**
  * Brings a slot's workspace to the project's as it stands: a clone of it the first time, then every branch the
  * project has, the integration branch checked out, and nothing left of whoever was here before (untracked files
  * go; what git ignores, installed dependencies and the backend's address among it, stays). Prints the commit.
@@ -231,6 +238,7 @@ git fetch -q --no-tags --force ${shq(p.main)} '+refs/heads/*:refs/heads/*'
 git checkout -q -f ${shq(p.into)}
 git reset -q --hard
 git clean -fdq
+git update-ref ${SLOT_SEEN_REF} HEAD
 git rev-parse HEAD`;
 }
 
@@ -280,6 +288,7 @@ export function rebaseOntoScript(p: { workspace: string; main: string; into: str
 cd ${shq(p.workspace)}
 git fetch -q --no-tags ${shq(p.main)} ${shq(`refs/heads/${p.into}`)}
 new=$(git rev-parse FETCH_HEAD)
+git update-ref ${SLOT_SEEN_REF} "$new"
 if git merge-base --is-ancestor "$new" HEAD; then echo "same $new"; exit 0; fi
 if git ${GIT_ID} rebase -q "$new" >/dev/null 2>&1; then echo "moved $new"; exit 0; fi
 git diff --name-only --diff-filter=U
@@ -413,7 +422,11 @@ export function reachScript(p: { workspace: string }): string {
   return `set -eu\ncd ${shq(p.workspace)}\nnode -e ${shq(REACH_PROGRAM)}`;
 }
 
-/** The files a workspace's working tree changes against `base`, tracked or new, one a line. */
+/**
+ * The files a workspace's working tree changes since it left `base`, tracked or new, one a line. Since it left:
+ * measured from where the work and `base` part, so that what `base` has gained meanwhile is not counted as the
+ * work's own.
+ */
 export function changedFilesScript(p: { workspace: string; base: string }): string {
-  return `set -eu\ncd ${shq(p.workspace)}\n{ git diff --name-only ${shq(p.base)}; git ls-files -o --exclude-standard; } | sort -u`;
+  return `set -eu\ncd ${shq(p.workspace)}\nfrom=$(git merge-base HEAD ${shq(p.base)} 2>/dev/null || git rev-parse ${shq(p.base)})\n{ git diff --name-only "$from"; git ls-files -o --exclude-standard; } | sort -u`;
 }

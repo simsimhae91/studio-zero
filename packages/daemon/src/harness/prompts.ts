@@ -247,6 +247,22 @@ Close with two or three sentences: what is on screen now, and the assumptions yo
  * What a task is told when it is started again after waiting out a usage limit, and the work it had committed
  * when it stopped is still on its branch. A constant; it goes after the request.
  */
+/**
+ * A small edit, in a slot. What a draft is told (start a product: a plan, sign-up, a backend) is the opposite of
+ * what this is: one change to a product that is built and works, which lands on main by itself if it holds.
+ */
+export const EDIT_BRIEF = `This is a small edit to a product that is built and works. Make the one change the owner asks for and nothing beside it: no new feature, no redesign of the screen, no tidying of code you were not asked about.
+
+You are working in a copy of the project that stands on its main branch. When you stop, the studio checks the types, walks the scenarios that stand on the screens you changed, measures those screens at a phone's size in each state a press puts them in, and puts your change on main by itself if all of that holds. So:
+
+- Keep every mark the screens carry (data-screen, data-step, data-done): the scenarios are walked by them. A control you move keeps its mark; a control you replace hands its mark on.
+- Do not change the backend. supabase/ is not yours here and apply_schema is refused: the database is one for the whole project. A change that needs the schema is not a small edit; make no change and say so in your final message.
+- Do not change docs/screens.json unless the request is about the plan itself.
+- What you change has to hold on the screen: a button's or a tab's label on one line, no text cut off, nothing that scrolls sideways, contrast and touch targets as the handbook has them. Look at the state the change shows in (after the press that brings it up), not only at the screen as it opens.
+- walk_scenario walks one scenario for you while you work, and tells you what the screen said and what was saved.
+
+If the request cannot be met by a change of this size, change nothing and say why in your final message.`;
+
 export const CONTINUED_BRIEF = `This task was stopped part-way: the subscription it runs on reached its usage limit. The limit has reset and the task has been started again. What was done before it stopped is committed on this branch and is in the workspace now. Read what is there first, then carry on from it. Do not start over and do not redo what is already done; finish what is missing.`;
 
 /**

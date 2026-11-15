@@ -53,7 +53,7 @@ import { CORE_PROJECT_ID, PROTOCOL_VERSION, ReviewResult } from '@studio-zero/pr
 import type { ConfidenceCalibration } from '../ax/Calibration.ts';
 import type { SteeringQueue } from '../ax/Steering.ts';
 import type { Config, Effort, EngineId } from '../config.ts';
-import type { Store } from '../db/Store.ts';
+import { isLight, type Store } from '../db/Store.ts';
 import type { EventLog } from '../events/EventLog.ts';
 import type { WorkspaceProvisioner } from '../harness/bootstrap.ts';
 import { ensureDevServer } from '../harness/devServer.ts';
@@ -88,6 +88,7 @@ import { shq } from '../util/run.ts';
 import { CredentialIds, type KeychainVault } from '../vault/KeychainVault.ts';
 import { ConflictError, NotFoundError, UnavailableError } from './errors.ts';
 import type { ProjectArms } from '../arms/ProjectArms.ts';
+import type { Slots } from '../sandbox/Slots.ts';
 import type { ExternalApis } from './ExternalApis.ts';
 import type { ProjectNamer } from './ProjectNamer.ts';
 import type { QuotaTracker } from './QuotaTracker.ts';
@@ -136,6 +137,7 @@ export interface StudioDeps {
   selfHosting: SelfHosting;
   external: ExternalApis;
   arms: Pick<ProjectArms, 'rest' | 'forget'>;
+  slots: Pick<Slots, 'perProject' | 'landing'>;
   advisors: Record<AdvisorId, Advisor>;
   relayStates: () => ResultOf<'system.status'>['relays'];
   clock: Clock;
@@ -496,7 +498,8 @@ export class Studio implements PromotionHost {
     const budgetTokens = p.budgetTokens ?? this.#d.config.budgets.taskTokens;
     // Decided once, here, and kept with the task: a restart or a changed default does not change what was asked.
     // Only a task that plans has a plan to show; a draft or a design task goes on as it always has.
-    const track = p.track ?? 'full';
+    // A small edit or a full check on a project with slots is the fine gear: always the fast track, in a slot.
+    const track = isLight({ kind: p.kind, projectId: p.projectId }, this.#d.slots.perProject) ? 'fast' : (p.track ?? 'full');
     const reviewPlan = (p.reviewPlan ?? this.#d.config.planReview.defaultOn) && track === 'full' && (p.kind === 'build' || p.kind === 'refactor' || p.kind === 'kirby_materialize');
     await this.#d.policy.authorize(actor, { kind: 'task.submit', projectId: p.projectId, taskKind: p.kind, budgetTokens });
     const task = this.#d.store.insertTask({ id: newId('tsk'), projectId: p.projectId, kind: p.kind, prompt: p.prompt, origin, budgetTokens, branch: p.branch ?? null, baseBranch: p.baseBranch ?? null, enginePref: p.engine ?? null, modelPref: p.model ?? null, effortPref: p.effort ?? null, sessionId: p.sessionId ?? null, track, reviewerPref: p.reviewer ?? null, references, reviewPlan, milestone: p.milestone ?? null, createdAt: this.#d.clock() });
@@ -693,12 +696,15 @@ export class Studio implements PromotionHost {
   async rollback(actor: Actor, projectId: string, checkpointId: string): Promise<{ restored: Checkpoint; safety: Checkpoint }> {
     const project = this.getProject(projectId);
     await this.#d.policy.authorize(actor, { kind: 'checkpoint.rollback', projectId, checkpointId });
-    this.#assertIdle(projectId, 'roll back');
-    const result = await this.#d.sandboxes.rollback(project, checkpointId);
-    const scope = { projectId, taskId: null };
-    this.#d.events.emit(scope, { type: 'checkpoint.created', checkpointId: result.safety.id, label: result.safety.label });
-    this.#d.events.emit(scope, { type: 'checkpoint.restored', checkpointId });
-    return result;
+    this.#assertIdle(projectId, 'roll back', { lightToo: false });
+    // Under the lock a landing holds: a small edit is not put on a main that is being taken back.
+    return this.#d.slots.landing(projectId, async () => {
+      const result = await this.#d.sandboxes.rollback(project, checkpointId);
+      const scope = { projectId, taskId: null };
+      this.#d.events.emit(scope, { type: 'checkpoint.created', checkpointId: result.safety.id, label: result.safety.label });
+      this.#d.events.emit(scope, { type: 'checkpoint.restored', checkpointId });
+      return result;
+    });
   }
 
   /** Time travel, the non-destructive way: a new branch that starts at a checkpoint. A task can then be started from it. */
@@ -725,7 +731,13 @@ export class Studio implements PromotionHost {
     // Inside its sandbox the Core project's branches lead nowhere: its work is merged in the checkout itself.
     if (projectId === CORE_PROJECT_ID) throw new ConflictError('Studio Zero Core의 작업은 이 Mac의 저장소로 내보낸 기능 브랜치를 병합합니다 (selfhost.merge).');
     await this.#d.policy.authorize(actor, { kind: 'git.merge', projectId, branch, into: INTEGRATION_BRANCH });
-    this.#assertIdle(projectId, 'merge');
+    this.#assertIdle(projectId, 'merge', { lightToo: false });
+    // One thing moves a project's main at a time: this merge, or a small edit landing from a slot.
+    return this.#d.slots.landing(projectId, () => this.#merge(project, branch));
+  }
+
+  async #merge(project: Project, branch: string): Promise<{ commit: string; into: string }> {
+    const projectId = project.id;
     const scope = { projectId, taskId: null };
 
     const linear = (await this.#d.sandboxes.exec(project, `git merge-base --is-ancestor ${INTEGRATION_BRANCH} '${branch}'`, { timeoutSec: 30 })).exitCode === 0;
@@ -812,7 +824,7 @@ export class Studio implements PromotionHost {
 
   async runAudit(_actor: Actor, projectId: string, routes: string[] | undefined): Promise<AuditReport> {
     const project = this.getProject(projectId);
-    this.#assertIdle(projectId, 'run an audit');
+    this.#assertIdle(projectId, 'run an audit', { lightToo: false });
     await this.#provision(project);
     const file = await readProjectFile(this.#d.sandboxes, project, this.#d.config);
     const server = await ensureDevServer(this.#d.sandboxes, project, file, { reuse: false });
@@ -1186,8 +1198,12 @@ export class Studio implements PromotionHost {
     return this.#d.events.history(filter, sinceSeq, limit);
   }
 
-  #assertIdle(projectId: string, what: string): void {
-    const busy = this.#d.store.listTasks(projectId, 20).find((t) => t.state === 'running' || t.state === 'awaiting_approval' || t.state === 'awaiting_plan_review');
+  /**
+   * `lightToo: false` for what only the project's own workspace is needed for (a merge, a rollback, an audit):
+   * a small edit or a full check at work in a slot is not in its way.
+   */
+  #assertIdle(projectId: string, what: string, opts: { lightToo: boolean } = { lightToo: true }): void {
+    const busy = this.#d.store.listTasks(projectId, 40).find((t) => (t.state === 'running' || t.state === 'awaiting_approval' || t.state === 'awaiting_plan_review') && (opts.lightToo || !isLight(t, this.#d.slots.perProject)));
     if (busy) throw new ConflictError(`cannot ${what} while task ${busy.id} is using the workspace`);
   }
 }

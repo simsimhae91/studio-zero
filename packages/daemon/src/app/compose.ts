@@ -50,6 +50,7 @@ import { TelegramRelay } from '../relay/TelegramRelay.ts';
 import { openAiTranscriber } from '../relay/transcribe.ts';
 import { resolveDockerBin } from '../sandbox/dockerBin.ts';
 import { OrbStackManager } from '../sandbox/OrbStackManager.ts';
+import { Slots } from '../sandbox/Slots.ts';
 import { PtyManager, type PtyOpen } from '../sandbox/PtyManager.ts';
 import { SandboxFileService } from '../sandbox/SandboxFileService.ts';
 import { ScratchService } from '../scratch/ScratchService.ts';
@@ -149,6 +150,7 @@ export interface Daemon {
   quota: QuotaTracker;
   selfHosting: SelfHosting;
   external: ExternalApis;
+  slots: Slots;
   start(): Promise<void>;
   stop(): Promise<void>;
 }
@@ -200,6 +202,10 @@ export async function createDaemon(config: Config, log: PinoLogger, overrides: D
   const mcp = new McpRegistry({ store, vault, policy, clock, connect: overrides.mcpConnect });
   mcp.seed();
   const toolbox = new Toolbox({ sandboxes, policy, events, mcp });
+  // The projects' slots: clones in containers of their own, where small edits and full checks run beside a
+  // project's heavy task. A slot nobody takes for a while is stopped (`slotReaper`, started with the daemon).
+  const slots = new Slots({ config, sandboxes, clock, log: log.child({ mod: 'slots' }) });
+  let slotReaper: ReturnType<typeof setInterval> | null = null;
   toolbox.useArms(arms);
   const steering = new SteeringQueue();
   const calibration = new ConfidenceCalibration(store, clock);
@@ -235,7 +241,7 @@ export async function createDaemon(config: Config, log: PinoLogger, overrides: D
   // A task submitted with `reviewPlan` waits here for the owner's word on its plan. One that was waiting when the
   // daemon stopped is queued again on boot (see `Store.recoverInterruptedTasks`) and comes back to its stored plan.
   const planGate = new PlanGate({ store, events, config: config.planReview, clock });
-  const harness = new Harness({ config, store, events, policy, sandboxes, provisioner, router, claude, evals, compiler, smoke, scenarios, lessons, reflection, refkit, reviewer, ledger, build: new BuildMeter({ sandboxes }), mockups, selfHosting, planGate, clock, log: log.child({ mod: 'harness' }) });
+  const harness = new Harness({ config, store, events, policy, sandboxes, provisioner, slots, arms, router, claude, evals, compiler, smoke, scenarios, lessons, reflection, refkit, reviewer, ledger, build: new BuildMeter({ sandboxes }), mockups, selfHosting, planGate, clock, log: log.child({ mod: 'harness' }) });
   // The roadmap runner is made further down, after the studio it submits through: the queue tells it of each task that has wholly ended.
   const settled: { tell: ((taskId: string) => void) | null } = { tell: null };
   const queue = new TaskQueue({ store, events, execute: (task, signal) => harness.run(task, signal), concurrency: config.queue.concurrency, slots: config.slots.perProject, clock, log: log.child({ mod: 'queue' }), onSettled: (taskId) => settled.tell?.(taskId) });
@@ -286,7 +292,7 @@ export async function createDaemon(config: Config, log: PinoLogger, overrides: D
   const power: CaffeinateManager = new CaffeinateManager({ log: log.child({ mod: 'power' }), spawn: overrides.powerSpawn, platform: overrides.platform, onChange: (mode) => studio.announcePower(mode) });
   // "Gemini" is reached through Antigravity's CLI, the Google agent this daemon already knows how to confine.
   const advisors = { codex, gemini: antigravity };
-  const studio: Studio = new Studio({ config, store, events, policy, sandboxes, provisioner, arms, queue, planGate, vault, claude, router, auditor, evals, lessons, kirby, scratch, knowledge, calibration, steering, mcp, files, mockups, pty, namer, ledger, power, quota, selfHosting, external, advisors, relayStates, clock, log: log.child({ mod: 'studio' }), version: VERSION });
+  const studio: Studio = new Studio({ config, store, events, policy, sandboxes, provisioner, arms, slots, queue, planGate, vault, claude, router, auditor, evals, lessons, kirby, scratch, knowledge, calibration, steering, mcp, files, mockups, pty, namer, ledger, power, quota, selfHosting, external, advisors, relayStates, clock, log: log.child({ mod: 'studio' }), version: VERSION });
 
   // The owner's schedules: each run goes in through the same `submitTask` as a task typed at the desk.
   const scheduler = new Scheduler({ store, events, studio, clock, log: log.child({ mod: 'scheduler' }) });
@@ -386,6 +392,7 @@ export async function createDaemon(config: Config, log: PinoLogger, overrides: D
     quota,
     selfHosting,
     external,
+    slots,
     async start() {
       policy.start();
       await claude.refresh();
@@ -401,12 +408,15 @@ export async function createDaemon(config: Config, log: PinoLogger, overrides: D
       resumer.start();
       if (config.scheduler.enabled) scheduler.start();
       roadmaps.start();
+      slotReaper = setInterval(() => void slots.reap().catch((err: unknown) => log.warn({ err: errorMessage(err) }, 'idle slots could not be looked over')), 60_000);
+      slotReaper.unref();
       // The relay is a convenience channel: if Telegram is unreachable at boot the daemon still comes up.
       await relay?.start().catch((err: unknown) => log.error({ err: errorMessage(err) }, 'telegram relay failed to start'));
       await slack?.start().catch((err: unknown) => log.error({ err: errorMessage(err) }, 'slack relay failed to start'));
       ntfy?.start();
     },
     async stop() {
+      if (slotReaper) clearInterval(slotReaper);
       await relay?.stop();
       await slack?.stop();
       await ntfy?.stop();

@@ -166,6 +166,11 @@ test('what a change reaches is read off the imports: aliases, a layout over its 
     put('src/components/New.tsx', 'export const New = 1;\n');
     put('node_modules/dep/extra.js', '');
     assert.deepEqual(sh(changedFilesScript({ workspace: tmp.dir, base: 'main' })).trim().split('\n'), ['src/components/Button.tsx', 'src/components/New.tsx']);
+    // Measured from where the work left the base: what the base has gained since is not the work's own change.
+    sh('git checkout -q -b sz/edit && git add -A && git -c user.name=t -c user.email=t@t commit -q -m edit && git checkout -q main');
+    put('src/lib/elsewhere.ts', 'export const elsewhere = 1;\n');
+    sh('git add -A && git -c user.name=t -c user.email=t@t commit -q -m "main moves" && git checkout -q sz/edit');
+    assert.deepEqual(sh(changedFilesScript({ workspace: tmp.dir, base: 'main' })).trim().split('\n'), ['src/components/Button.tsx', 'src/components/New.tsx']);
   } finally {
     tmp.cleanup();
   }
