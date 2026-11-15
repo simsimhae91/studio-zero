@@ -18,6 +18,8 @@ export interface Asked {
   body: string | null;
   status: number;
   answer: string;
+  /** True for what the page's own script asked for (a fetch): a page or a file is the same for everyone far more often. */
+  byScript?: boolean;
 }
 
 export interface Finding {
@@ -40,6 +42,8 @@ export interface StrangersReport {
   findings: Finding[];
   /** Addresses that answered someone else and were declared open to everyone. */
   open: string[];
+  /** What was asked again or tried, so that whoever reads the result can see what it covered. */
+  asked: string[];
   /** The step of a walk that could not be done: nothing can be said until it can. */
   stopped: string | null;
 }
@@ -63,6 +67,7 @@ export interface StrangersOptions {
   browser?: Browser;
 }
 
+const STATIC = new Set(['script', 'stylesheet', 'image', 'font', 'media', 'manifest', 'texttrack', 'websocket', 'eventsource', 'ping', 'cspreport']);
 const SESSION = /(^|\/)(auth|login|logout|signin|signup|sign-in|sign-up|sign_in|sign_up|token|otp|verify|session|sessions|callback|magiclink|recover|register)(\/|$|\?)/i;
 const CHANGES = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 const typed = (steps: readonly Step[]): string[] => steps.filter((step) => step.startsWith('type:') && step.includes('=')).map((step) => step.slice(step.indexOf('=') + 1));
@@ -78,30 +83,58 @@ async function use(browser: Browser, origin: string, steps: readonly Step[], hea
   const context = await browser.newContext({ ...SIZES.phone.context, extraHTTPHeaders: headers });
   const asked: Asked[] = [];
   const pending: Promise<void>[] = [];
+  // What was asked for and never answered to the page: a file that was downloaded leaves no answer to read.
+  const unanswered = new Map<object, Omit<Asked, 'status' | 'answer'>>();
+  context.on('request', (request) => {
+    if (STATIC.has(request.resourceType()) || request.method() !== 'GET') return;
+    pending.push(
+      request
+        .allHeaders()
+        .catch(() => ({}) as Record<string, string>)
+        .then((headers) => void unanswered.set(request, { method: 'GET', url: request.url(), headers, body: null })),
+    );
+  });
   // A change is tried as the others before the person's own goes through: afterwards the thing may be gone
   // (they removed it), and asking again would say nothing.
   if (beforeChange) {
     await context.route('**/*', async (route) => {
       const request = route.request();
-      if (['xhr', 'fetch'].includes(request.resourceType()) && CHANGES.has(request.method())) await beforeChange({ method: request.method(), url: request.url(), headers: await request.allHeaders().catch(() => ({}) as Record<string, string>), body: request.postData() }).catch(() => undefined);
+      if (!STATIC.has(request.resourceType()) && CHANGES.has(request.method())) await beforeChange({ method: request.method(), url: request.url(), headers: await request.allHeaders().catch(() => ({}) as Record<string, string>), body: request.postData() }).catch(() => undefined);
       await route.continue().catch(() => undefined);
     });
   }
   context.on('response', (response) => {
     const request = response.request();
-    if (!['xhr', 'fetch'].includes(request.resourceType())) return;
+    // Everything the page asked a server for, but the files every visitor is given alike (scripts, styles,
+    // pictures, fonts). A page drawn on the server and a file that is downloaded hold a person's data as much as
+    // an answer to a fetch does (the first product with a download had its export go unasked).
+    if (STATIC.has(request.resourceType())) return;
     pending.push(
       (async () => {
         const all = await request.allHeaders().catch(() => ({}) as Record<string, string>);
         const answer = await response.text().catch(() => '');
-        asked.push({ method: request.method(), url: request.url(), headers: all, body: request.postData(), status: response.status(), answer: answer.slice(0, 1024 * 1024) });
+        asked.push({ method: request.method(), url: request.url(), headers: all, body: request.postData(), status: response.status(), answer: answer.slice(0, 1024 * 1024), byScript: ['xhr', 'fetch'].includes(request.resourceType()) });
+        unanswered.delete(request);
       })(),
     );
   });
+  // A download: the browser took the file and the page was told the request was given up.
+  context.on('requestfailed', (request) => {
+    if (!/ERR_ABORTED/.test(request.failure()?.errorText ?? '')) unanswered.delete(request);
+  });
   const page: Page = await context.newPage();
+  // A file the browser downloads is taken outside the page: the page's own record of what it asked never
+  // shows it. Its address is kept here, and the file is not saved.
+  const downloaded: string[] = [];
+  context.on('page', (opened) => opened.on('download', (file) => (downloaded.push(file.url()), void file.cancel().catch(() => undefined))));
+  page.on('download', (file) => (downloaded.push(file.url()), void file.cancel().catch(() => undefined)));
   let stopped: string | null = null;
   await page.goto(origin, { waitUntil: 'load', timeout: 30_000 }).catch(() => undefined);
   await quiet(page);
+  await Promise.all(pending);
+  // Opening the product is not using it: the page everyone is given on arriving is not something to ask again.
+  const arriving = asked.findIndex((ask) => ask.method === 'GET' && !ask.byScript && ask.url.split('#')[0] === page.url().split('#')[0]);
+  if (arriving >= 0) asked.splice(arriving, 1);
   for (const step of steps) {
     const why = await doStep(page, step, patience);
     if (why !== null) {
@@ -112,6 +145,11 @@ async function use(browser: Browser, origin: string, steps: readonly Step[], hea
   await quiet(page);
   await page.waitForTimeout(400);
   await Promise.all(pending);
+  await Promise.all(pending);
+  // What the first person was given as a file is asked for again like anything else; what it held is not known
+  // here, so it is judged by what only they stored.
+  for (const left of unanswered.values()) if (!asked.some((ask) => ask.method === left.method && ask.url === left.url)) asked.push({ ...left, status: 200, answer: '' });
+  for (const url of downloaded) if (/^https?:/.test(url) && !asked.some((ask) => ask.method === 'GET' && ask.url === url)) asked.push({ method: 'GET', url, headers: {}, body: null, status: 200, answer: '' });
   return { asked, context, stopped };
 }
 
@@ -148,7 +186,7 @@ export async function strangers(origin: string, opts: StrangersOptions): Promise
     const withOther = (opts.other?.length ?? 0) > 0 || Object.keys(opts.otherHeaders ?? {}).length > 0;
     const patience = opts.stepTimeoutMs ?? 10_000;
     const b = withOther ? await use(browser, origin, opts.other ?? [], opts.otherHeaders ?? {}, patience) : null;
-    if (b?.stopped) return { reads: 0, changes: 0, withOther, marks, findings: [], open: [], stopped: `as the second person, ${b.stopped}` };
+    if (b?.stopped) return { reads: 0, changes: 0, withOther, marks, findings: [], open: [], asked: [], stopped: `as the second person, ${b.stopped}` };
 
     const cookieOf = async (context: BrowserContext, url: string): Promise<string> => (await context.cookies(url)).map((cookie) => `${cookie.name}=${cookie.value}`).join('; ');
     const bearerOf = (asks: Asked[], url: string): string | null => asks.filter((ask) => new URL(ask.url).origin === new URL(url).origin && ask.headers.authorization).at(-1)?.headers.authorization ?? null;
@@ -197,12 +235,15 @@ export async function strangers(origin: string, opts: StrangersOptions): Promise
         const path = `${ask.method} ${pathOf(ask.url)}`;
         const held = marks.filter((mark) => got.answer.includes(mark));
         if (held.length > 0) findings.push({ who: asker.who, method: ask.method, url: ask.url, status: got.status, why: `${path} gave ${asker.who} what only the first person stored (it holds "${held[0]!.slice(0, 40)}")` });
-        else if (marks.length === 0 && ask.answer.length >= 20 && got.answer === ask.answer) findings.push({ who: asker.who, method: ask.method, url: ask.url, status: got.status, why: `${path} gave ${asker.who} exactly what it gave the first person (${ask.answer.length} characters)` });
+        // With nothing to mark the first person's data, an answer to their script that is the same for someone
+        // else is taken for theirs. A page is not: the same page is given to everyone who opens the address.
+        else if (marks.length === 0 && ask.byScript && ask.answer.length >= 20 && got.answer === ask.answer) findings.push({ who: asker.who, method: ask.method, url: ask.url, status: got.status, why: `${path} gave ${asker.who} exactly what it gave the first person (${ask.answer.length} characters)` });
       }
     }
     await a.context.close();
     await b?.context.close();
-    return { reads: reads.length, changes: tried.size, withOther, marks, findings, open: [...answeredOpen].sort(), stopped: a.stopped ? `as the first person, ${a.stopped}` : null };
+    const asked = [...new Set([...reads.map((ask) => `${ask.method} ${pathOf(ask.url)}`), ...[...tried].map((key) => `${key.split(' ')[0]} ${pathOf(key.split(' ')[1]!)}`)])];
+    return { reads: reads.length, changes: tried.size, withOther, marks, findings, open: [...answeredOpen].sort(), asked, stopped: a.stopped ? `as the first person, ${a.stopped}` : null };
   } finally {
     if (!opts.browser) await closeBrowser(browser);
   }
@@ -217,6 +258,7 @@ export function renderStrangers(report: StrangersReport, origin: string): string
     `${origin}: the first person's browser asked a server for ${report.reads} thing(s) and made ${report.changes} change(s); each read was asked again, and each change tried first, as nobody (no session)${report.withOther ? ' and as a second person' : ''}`,
     report.marks.length > 0 ? `looked for in every answer: ${report.marks.map((mark) => `"${mark.slice(0, 40)}"`).join(', ')} (what only the first person stored)` : 'no words mark the first person\'s data (nothing they typed is theirs alone): answers were compared whole. Have the walk type something only they would have, or give --mark',
   ];
+  lines.push(`asked again or tried (${report.asked.length}): ${report.asked.slice(0, 40).join(', ')}${report.asked.length > 40 ? ', …' : ''}`);
   if (!report.withOther) lines.push('nobody was there as a second person: whether one signed-in person can reach another\'s things was not asked. Give --other steps that sign a second person in');
   if (report.open.length > 0) lines.push(`declared open to everyone, and answered: ${report.open.join(', ')}`);
   if (report.findings.length === 0) lines.push('nothing of the first person\'s was given to anyone else, and no change of theirs went through for anyone else');

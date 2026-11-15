@@ -88,6 +88,7 @@ const USAGE = `sz-eyes: launch what was built, look at it, operate it, and put w
   sz-eyes contract supersede <id> <contract>/<claim> --why "<text>" [--dir <project>]
         after the fact: an earlier claim turned out to be replaced by what this contract was asked (the arbiter's)
   sz-eyes contract notice <id> "<what was noticed that no claim covers>" [--evidence <file>]... [--dir <project>]
+  sz-eyes contract frozen <id> [--dir <project>]         the files it froze and whether each is still as it was frozen; exits 1 when one changed
   sz-eyes contract show <id> [--dir <project>]           the contract as the owner reads it
   sz-eyes contract status [--dir <project>]              what open contracts still owe; exits 1 when anything is owed
   sz-eyes contract close <id> [--dir <project>]
@@ -175,6 +176,17 @@ function parse(argv: string[], booleans: string[]): { words: string[]; flags: Ma
 const out = (text: string): void => void process.stdout.write(`${text}\n`);
 const contractFile = (project: string, id: string): string => join(project, CONTRACTS_DIR, `${id}.json`);
 const evidenceFolder = (project: string, id: string): string => join(project, EVIDENCE_DIR, id);
+/**
+ * A file of a contract's evidence as it is kept: relative to that contract's evidence folder. Given with the
+ * folder in front, or from the project's root, it is the same file (two verifiers in a row gave it that way
+ * and were told "no such file").
+ */
+const evidencePath = (project: string, id: string, given: string): string => {
+  const folder = evidenceFolder(project, id);
+  const whole = resolve(project, given);
+  if (whole.startsWith(`${folder}/`) && existsSync(whole)) return whole.slice(folder.length + 1);
+  return given.replace(/^\.\//, '');
+};
 
 /** `<contract>/<claim>|<why>`: a standing claim that a piece of work replaces, and the reason the owner reads. */
 function supersedeOf(project: string, key: string, why: string): { contract: string; claim: string; why: string; at: string } {
@@ -689,6 +701,14 @@ async function main(argv: string[]): Promise<number> {
       out(`${renderContract(contract)}${changed.length > 0 ? `\n얼린 뒤 바뀐 파일 (중재자의 수정 기록 없음): ${changed.join(', ')}\n` : ''}`);
       return 0;
     }
+    if (command === 'frozen') {
+      // Whether the checks a contract froze are still as they were: asked by whoever verifies, in one command.
+      if (contract.frozenAt === null) throw new EyesError(`${id} is not frozen yet`);
+      const now = fingerprints(project, contract.frozen);
+      const changed = contract.frozen.filter((path) => contract.frozenPrints[path] !== undefined && contract.frozenPrints[path] !== now[path]);
+      out(contract.frozen.length === 0 ? `${id} froze no file` : `${id} froze ${contract.frozen.length} file(s) at ${contract.frozenAt}:\n${contract.frozen.map((path) => `  ${changed.includes(path) ? 'CHANGED  ' : contract.frozenPrints[path] === undefined ? 'unstamped' : 'as frozen'} ${path}${contract.amendments.some((amend) => amend.file === path) ? ' (corrected by the arbiter since, and stamped again)' : ''}`).join('\n')}`);
+      return changed.length > 0 ? 1 : 0;
+    }
     if (command === 'freeze') {
       if (contract.frozenAt !== null) throw new EyesError(`${id} was frozen at ${contract.frozenAt}`);
       const frozen = [...new Set([...contract.frozen, ...a.all('--frozen')])];
@@ -707,10 +727,11 @@ async function main(argv: string[]): Promise<number> {
       if (!claim) throw new EyesError(`contract ${id} has no claim "${claimId ?? ''}". Its claims: ${contract.claims.map((c) => c.id).join(', ')}`);
       const status = ClaimStatus.parse(a.one('--status'));
       const folder = evidenceFolder(project, id);
-      for (const path of a.all('--evidence')) if (!existsSync(join(folder, path))) throw new EyesError(`${join(folder, path)}: no such file. Evidence is a file under ${folder}`);
+      const shown = a.all('--evidence').map((path) => evidencePath(project, id, path));
+      for (const path of shown) if (!existsSync(join(folder, path))) throw new EyesError(`${join(folder, path)}: no such file. Evidence is a file under ${folder}, named from there (look/home.png)`);
       // A claim is not called proven on someone's word: there is something to look at, or a command that said so.
-      if (status === 'proven' && a.all('--evidence').length === 0 && !a.one('--note')) throw new EyesError('a claim is proven by something that shows it: give --evidence (a picture, a film, a log under the evidence folder) or a --note that says what was run and what it said');
-      Object.assign(claim, { status, evidence: [...new Set([...claim.evidence, ...a.all('--evidence')])], note: a.one('--note') ?? claim.note, at: new Date().toISOString() });
+      if (status === 'proven' && shown.length === 0 && !a.one('--note')) throw new EyesError('a claim is proven by something that shows it: give --evidence (a picture, a film, a log under the evidence folder) or a --note that says what was run and what it said');
+      Object.assign(claim, { status, evidence: [...new Set([...claim.evidence, ...shown])], note: a.one('--note') ?? claim.note, at: new Date().toISOString() });
       writeContract(file, contract);
       out(`${claimId}: ${status}`);
       return 0;
@@ -737,8 +758,9 @@ async function main(argv: string[]): Promise<number> {
       const text = a.words.slice(1).join(' ').trim();
       if (text === '') throw new EyesError('sz-eyes contract notice <id> "<what was noticed>" [--evidence <file>]');
       const folder = evidenceFolder(project, id);
-      for (const path of a.all('--evidence')) if (!existsSync(join(folder, path))) throw new EyesError(`${join(folder, path)}: no such file. Evidence is a file under ${folder}`);
-      writeContract(file, { ...contract, noticed: [...contract.noticed, { text, evidence: a.all('--evidence') }] });
+      const shown = a.all('--evidence').map((path) => evidencePath(project, id, path));
+      for (const path of shown) if (!existsSync(join(folder, path))) throw new EyesError(`${join(folder, path)}: no such file. Evidence is a file under ${folder}, named from there (look/home.png)`);
+      writeContract(file, { ...contract, noticed: [...contract.noticed, { text, evidence: shown }] });
       out('noted');
       return 0;
     }

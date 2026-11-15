@@ -362,7 +362,7 @@ const notesProduct = (holes: boolean) => {
   let next = 1;
   const page = `<!doctype html><html lang="ko"><title>메모</title><body>
 <form id="in"><input aria-label="이름" id="name"><button>들어가기</button></form>
-<form id="add" hidden><input aria-label="메모" id="body"><button>적기</button></form><ul id="list"></ul><p id="who"></p>
+<form id="add" hidden><input aria-label="메모" id="body"><button>적기</button></form><ul id="list"></ul><p id="who"></p><a href="/export.csv" download>내려받기</a>
 <script>
 const list = async () => {
   const mine = await (await fetch('/api/notes')).json();
@@ -383,6 +383,11 @@ document.querySelector('#list').onclick = async (e) => { if (e.target.dataset.id
       const url = new URL(req.url ?? '/', 'http://x');
       if (url.pathname === '/') return void res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }).end(page);
       if (url.pathname === '/api/config') return json(200, { name: '메모', maxLength: 200, greeting: '안녕하세요, 메모입니다' });
+      // A file that is downloaded, and a page drawn on the server: neither is an answer to a fetch.
+      if (url.pathname === '/export.csv') {
+        if (!who && !holes) return json(401, { error: '로그인이 필요해요' });
+        return void res.writeHead(200, { 'content-type': 'text/csv; charset=utf-8', 'content-disposition': 'attachment; filename="notes.csv"' }).end(notes.filter((n) => holes || n.owner === who).map((n) => n.body).join('\n'));
+      }
       if (url.pathname === '/api/login') return json(200, { ok: true }, { 'set-cookie': `sid=${encodeURIComponent(JSON.parse(sent).name)}; Path=/; HttpOnly` });
       if (url.pathname === '/api/notes' && req.method === 'GET') {
         if (holes && url.searchParams.has('all')) return json(200, notes);
@@ -408,7 +413,7 @@ document.querySelector('#list').onclick = async (e) => { if (e.target.dataset.id
 
 test('what one person stored is asked for again as nobody and as a second person, and only a product with holes gives it up', async (t) => {
   assert.deepEqual(marksOf(['type:이름=수아', 'type:메모=수아만-아는-메모-7f3', 'type:비밀번호=같은비밀번호', 'tap:적기'], ['type:이름=지훈', 'type:비밀번호=같은비밀번호']), ['수아만-아는-메모-7f3'], 'what both typed, and what is too short to be anyone\'s alone, marks nothing');
-  const as = ['type:이름=수아', 'tap:들어가기', 'wait:들어왔어요', 'type:메모=수아만-아는-메모-7f3', 'tap:적기', 'wait:수아만-아는-메모-7f3', 'type:메모=지울-메모-수아-91c', 'tap:적기', 'wait:지울-메모-수아-91c 지우기', 'tap:지울-메모-수아-91c 지우기', 'gone:지울-메모-수아-91c 지우기'];
+  const as = ['type:이름=수아', 'tap:들어가기', 'wait:들어왔어요', 'type:메모=수아만-아는-메모-7f3', 'tap:적기', 'wait:수아만-아는-메모-7f3', 'tap:내려받기', 'type:메모=지울-메모-수아-91c', 'tap:적기', 'wait:지울-메모-수아-91c 지우기', 'tap:지울-메모-수아-91c 지우기', 'gone:지울-메모-수아-91c 지우기'];
   const other = ['type:이름=지훈', 'tap:들어가기', 'wait:들어왔어요'];
   const browser = await openBrowser().catch((err: unknown) => {
     if (/Chromium distribution 'chrome' is not found|Executable doesn't exist|ProcessSingleton/.test(String(err))) return null;
@@ -431,6 +436,10 @@ test('what one person stored is asked for again as nobody and as a second person
     assert.equal(holed.stopped, null, 'the walk itself went to its end');
     assert.ok(!whys.some((line) => line.startsWith('another person: POST')), 'a second person making a note of their own is not a finding');
     assert.ok(!whys.some((line) => line.endsWith('GET /api/notes')), 'the list that gives each person their own is sound in both');
+    // The file that is downloaded was asked for again too, and the result says what was asked.
+    assert.ok(whys.includes('nobody: GET /export.csv') && whys.includes('another person: GET /export.csv'), `the export of a product with holes gives one person's notes to anyone:\n${whys.join('\n')}\nasked: ${holed.asked.join(', ')}`);
+    assert.ok(sound.asked.includes('GET /export.csv') && sound.asked.includes('GET /api/notes') && sound.asked.some((line) => line.startsWith('DELETE /api/notes/')), sound.asked.join(', '));
+    assert.match(renderStrangers(sound, tight.url), /asked again or tried \(\d+\): .*GET \/export\.csv/);
     assert.match(renderStrangers(holed, loose.url), /FINDING\(S\)[\s\S]*what only the first person stored \(it holds "수아만-아는-메모-7f3"\)/);
 
     // A walk that cannot be done proves nothing, and neither does one that asks a server for nothing.
@@ -839,6 +848,21 @@ test('where the time of a piece of work went is on its page: agreeing, building,
     eyes(project, 'contract', 'freeze', 'm1-split');
     eyes(project, 'contract', 'claim', 'm1-split', 'split', '--status', 'proven', '--note', '돌려서 봤다');
     assert.match(readContract(join(project, CONTRACTS_DIR, 'm1-split.json')).claims[0]!.at ?? '', /^\d{4}-\d\d-\d\dT/);
+    // Evidence named with its folder in front is the same file; what is not there is still refused.
+    mkdirSync(join(project, '.sz/evidence/m1-split/look'), { recursive: true });
+    writeFileSync(join(project, '.sz/evidence/m1-split/look/home.png'), 'x');
+    assert.equal(eyes(project, 'contract', 'claim', 'm1-split', 'split', '--status', 'proven', '--evidence', '.sz/evidence/m1-split/look/home.png').code, 0);
+    assert.deepEqual(readContract(join(project, CONTRACTS_DIR, 'm1-split.json')).claims[0]!.evidence, ['look/home.png']);
+    assert.match(eyes(project, 'contract', 'claim', 'm1-split', 'split', '--status', 'proven', '--evidence', 'look/none.png').text, /no such file\. Evidence is a file under .*named from there/);
+    // Whether what a contract froze is as it was frozen is one question.
+    mkdirSync(join(project, 'flows'));
+    writeFileSync(join(project, 'flows/a.sh'), 'true\n');
+    assert.equal(eyes(project, 'contract', 'new', 'm2-more', '--lane', 'M', '--request', '하나 더', '--claim', 'more|하나 더 넣어도 그대로 된다|flow:flows/a.sh').code, 0);
+    eyes(project, 'contract', 'freeze', 'm2-more', '--frozen', 'flows/a.sh');
+    assert.match(eyes(project, 'contract', 'frozen', 'm2-more').text, /froze 1 file\(s\)[\s\S]*as frozen flows\/a\.sh/);
+    writeFileSync(join(project, 'flows/a.sh'), 'exit 0\n');
+    const moved = eyes(project, 'contract', 'frozen', 'm2-more');
+    assert.deepEqual([moved.code, /CHANGED\s+flows\/a\.sh/.test(moved.text)], [1, true]);
   } finally {
     rmSync(project, { recursive: true, force: true });
   }
