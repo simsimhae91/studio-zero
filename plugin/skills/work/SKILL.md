@@ -23,7 +23,14 @@ When in doubt between two lanes, take the smaller one and say what would make yo
 
 ## 2. S: do it and show it
 
-Make the change the way the project makes such changes. Run the type check or the nearest test. If anything a person sees changed, take a look before and after (`sz-eyes web look` / `sz-eyes ios look`, see `sz:verify`) and put both pictures in front of the owner. Report in three lines: what changed, what was run and what it said, what was not checked. Done.
+In this order, because a picture of "before" cannot be taken afterwards:
+
+1. If anything a person sees will change, look at it as it is now, in the state the request is about (`sz-eyes web look|do` / `sz-eyes ios look`, see `sz:verify`), with `--out .sz/evidence/quick/<date>-<a few words>/ --name before`.
+2. Make the change the way the project makes such changes. Find the cause; do not paper over the symptom.
+3. Run the type check or the nearest test.
+4. Look again in the same state, same size, `--name after`, into the same folder. Read the state off the look (the words, the figure), not off the picture.
+
+Report in a few lines: the cause, what changed, what was run and what it said (the figures before and after), where the two pictures are, what was not checked, and anything you decided that the owner might have decided otherwise. Add a line to `.sz/progress.md`. Done: no contract, no verifier.
 
 ## 3. M: contract, build, proof
 
@@ -54,6 +61,8 @@ Prefer checks the project already has (its e2e flows, its tests) over new ones. 
 **Plan:** write `.sz/spec.md`: what the product is, its features in the order they will be built, and for each milestone the claims that will make it done. Each milestone must leave the product working.
 
 **Build milestone by milestone**, each as an M (contract, freeze, build, `sz:verifier`, evidence). After each: commit, add a line to `.sz/progress.md` (what is done, what was decided and why, what is next), and tell the owner in two lines. A later session must be able to continue from the spec and the progress file alone.
+
+**Unattended, to the end:** when the owner has answered and asks for it to run without them (or says to use a workflow), start the saved workflow `sz:build` with the Workflow tool, `args: { request: "<their words>", answers: "<what they answered, or the conservative answers you took, marked as yours>" }`. It writes the spec, then builds, verifies, fixes and closes one milestone at a time, and stops rather than build on a milestone that is known to be broken. Tell the owner it will use many agents before you start it. When it returns, report milestone by milestone: proven, refuted, unchecked, where each evidence page is, and where it stopped if it did.
 
 ## Always
 
