@@ -7,6 +7,8 @@ description: Use when the owner asks whether the product is worth paying for, wa
 
 The checkout does not sell a product. A person pays when the thing has already given them something, they have a reason to come back, and what is behind the price is worth more to them than what they use today. An owner who says "I want to charge for this" is asking first whether that is true, and when it is not, what would make it so. Building the payment before knowing is the commonest way to finish a product nobody buys.
 
+**The trial is run, not offered.** When the owner asks what the product needs before it can be charged for, the answer is what the trial finds. A list written from your own judgement, with the hosting and the payment company at the top, is the answer they did not want: it says how to take money and not whether anyone would give it. (The first session that was asked this built a checkout; the first one given this skill wrote such a list in a minute and offered the trial at the end, as an option.) Do not ask whether to run it and do not leave it as a suggestion: say in one line that stand-ins will now use the product and about how long that takes, and start. The owner is usually not there to answer, and this is the work they asked for.
+
 People to try it on are hard to find, and each can be spent once. So before any of them: stand-ins use the product the whole way. A stand-in finds where a person is stopped, confused or left with nothing. It cannot know whether they would want it. The trial says which is which, and ends with what to ask the real people.
 
 Read `.sz/map.md` (how the product is opened and operated), `.sz/spec.md` or the README and the landing page (who it says it is for), `.sz/owner.md`, and the last trial if there is one (`sz-eyes trial show`).
@@ -62,6 +64,8 @@ And what only real people can tell, as the questions to put to the first of them
 3. **What you would build first, and why.** One thing, two at most.
 4. What only real people can tell.
 5. If nobody reached wanting what is behind the price: say plainly that building the payment now would sell nothing, and what would have to be true first.
+
+When the owner asked for a list of what is needed to charge for it or to go to production, the list is this, in this order and proportion: first what the trial found, in the page's order, each with its evidence; then, short and marked as what follows once someone would pay, what putting it online and taking money themselves need (from `sz:ship` and the Money part of `sz:backend`: a place to run, backups, the notices the law asks for, the payment company), with the part that is the owner's own (a registration, a contract). Never the second part alone, and never first.
 
 Each finding goes to the backlog (`sz-eyes backlog add "<it> [S|M|L]" --from "써 보기 <date>"`). What the owner says to the page is `sz:feedback`; "1, 2, 3 해" is `sz:work` for each, or the `sz:build` workflow for several.
 

@@ -664,7 +664,7 @@ test('each thing the owner says is told which way of working fits it, and a proj
     // The owner's first real use: a project nobody had mapped, a plain request, and no skill of the plugin loaded.
     assert.match(route('인원수에 0을 넣으면 Infinity원이 나오는데 고쳐줘', project), /^sz: this project has no map yet[\s\S]*sz:onboard skill first[\s\S]*then the sz:work skill[\s\S]*sz:feedback[\s\S]*sz:tend[\s\S]*sz:ship/);
     // What the owner asked first in that session: to charge for the product. It was answered with a checkout.
-    assert.match(route('이거 프러덕션으로 돈 받고싶은데 필요한 기능목록 정의하고 구현해줘.', project), /wanting to charge for it or take it to production: sz:trial first, before anything is built for taking money/);
+    assert.match(route('이거 프러덕션으로 돈 받고싶은데 필요한 기능목록 정의하고 구현해줘.', project), /wanting to charge for it or take it to production: sz:trial first \(run the trial; do not answer from judgement and do not offer it as an option\)/);
     mkdirSync(join(project, '.sz'));
     writeFileSync(join(project, '.sz/map.md'), '# 지도\n');
     const mapped = route('숫자가 좀 작은 느낌이에요', project);
