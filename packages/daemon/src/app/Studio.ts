@@ -51,7 +51,7 @@ import type {
   TaskTrack,
   Template,
 } from '@studio-zero/protocol';
-import { CORE_PROJECT_ID, PROTOCOL_VERSION, ReviewResult, rootOf } from '@studio-zero/protocol';
+import { CORE_PROJECT_ID, PROTOCOL_VERSION, ReviewResult, isAdopted, rootOf } from '@studio-zero/protocol';
 import type { ConfidenceCalibration } from '../ax/Calibration.ts';
 import type { SteeringQueue } from '../ax/Steering.ts';
 import type { Config, Effort, EngineId } from '../config.ts';
@@ -81,6 +81,8 @@ import type { PtyManager, TerminalSink } from '../sandbox/PtyManager.ts';
 import type { FileContent, FileListing, SandboxFileService } from '../sandbox/SandboxFileService.ts';
 import { assertBranchName, depsScript, fromProduct } from '../sandbox/scripts.ts';
 import type { Gate } from '../repo/Gate.ts';
+import { inspect, linkCheckout, slugOf } from '../repo/Adoption.ts';
+import { runCommand } from '../util/run.ts';
 import { WORKSPACE_DIR } from '../policy/PolicyEngine.ts';
 import { SCREEN_SPEC_FILE, readScreenSpec } from '../scratch/ScreenSpec.ts';
 import type { MockupRenderer } from '../qa/MockupRenderer.ts';
@@ -490,7 +492,9 @@ export class Studio implements PromotionHost {
   // ----------------------------------------------------------------- tasks
 
   async submitTask(actor: Actor, p: { projectId: string; kind: TaskKind; prompt: string; budgetTokens?: number; branch?: string; baseBranch?: string; engine?: EngineId; model?: string; effort?: Effort; sessionId?: string; track?: TaskTrack; reviewer?: ReviewerPref; references?: string[]; reviewPlan?: boolean; milestone?: number }, origin: Origin): Promise<Task> {
-    this.getProject(p.projectId);
+    const adopted = isAdopted(this.getProject(p.projectId));
+    if (p.kind === 'adopt' && !adopted) throw new ConflictError('맞추기는 들여온 프로젝트의 작업입니다. 스튜디오가 지은 프로젝트는 처음부터 맞게 지어집니다.');
+    if (p.kind === 'ideate' && adopted) throw new ConflictError('들여온 제품에는 처음부터 기획하는 디자인 작업을 두지 않습니다. 바꿀 것은 만들기나 빠른 수정으로 내세요.');
     assertPick(p, this.#d.router);
     // A reference is refused here, before the task exists, so a mistyped address is not found out mid-build.
     const references = (p.references ?? []).map((raw) => {
@@ -510,7 +514,9 @@ export class Studio implements PromotionHost {
     // Decided once, here, and kept with the task: a restart or a changed default does not change what was asked.
     // Only a task that plans has a plan to show; a draft or a design task goes on as it always has.
     // A small edit or a full check on a project with slots is the fine gear: always the fast track, in a slot.
-    const track = isLight({ kind: p.kind, projectId: p.projectId }, this.#d.slots.perProject) ? 'fast' : (p.track ?? 'full');
+    // A product that was brought in keeps its own design: the full track's design gates and cross-checks are the
+    // house's, so everything on it runs on the fast track (compiler, plan, smoke, scenarios, commands).
+    const track = isLight({ kind: p.kind, projectId: p.projectId }, this.#d.slots.perProject) || adopted ? 'fast' : (p.track ?? 'full');
     const reviewPlan = (p.reviewPlan ?? this.#d.config.planReview.defaultOn) && track === 'full' && (p.kind === 'build' || p.kind === 'refactor' || p.kind === 'kirby_materialize');
     await this.#d.policy.authorize(actor, { kind: 'task.submit', projectId: p.projectId, taskKind: p.kind, budgetTokens });
     const task = this.#d.store.insertTask({ id: newId('tsk'), projectId: p.projectId, kind: p.kind, prompt: p.prompt, origin, budgetTokens, branch: p.branch ?? null, baseBranch: p.baseBranch ?? null, enginePref: p.engine ?? null, modelPref: p.model ?? null, effortPref: p.effort ?? null, sessionId: p.sessionId ?? null, track, reviewerPref: p.reviewer ?? null, references, reviewPlan, milestone: p.milestone ?? null, createdAt: this.#d.clock() });
@@ -583,7 +589,10 @@ export class Studio implements PromotionHost {
   /** A roadmap builds a product. The studio's own repository is changed a task at a time, each read before it is merged. */
   #productOf(projectId: string): Project {
     if (projectId === CORE_PROJECT_ID) throw new ConflictError('Studio Zero Core에는 로드맵을 두지 않습니다. 스튜디오 자신의 코드는 작업 하나씩 읽고 합칩니다.');
-    return this.getProject(projectId);
+    const project = this.getProject(projectId);
+    // A roadmap builds a product from nothing to the end of a map, on the house's contract (its backend, its kits, its design).
+    if (isAdopted(project)) throw new ConflictError('들여온 제품에는 아직 로드맵을 두지 않습니다. 로드맵은 스튜디오의 약속(백엔드, 키트, 디자인)으로 처음부터 짓는 길입니다.');
+    return project;
   }
 
   /** The runner is made after the studio it submits through, and handed in (`compose.ts`). */
@@ -1022,8 +1031,61 @@ export class Studio implements PromotionHost {
     await ensureDevServer(this.#d.sandboxes, project, file, { reuse: true, current: true });
   }
 
-  async adoptProject(_actor: Actor, _p: { path: string; dir?: string; base?: string; name?: string; slug?: string }): Promise<ResultOf<'projects.adopt'>> {
-    throw new UnavailableError('adoption is not built yet');
+  /**
+   * Brings a checkout on this Mac in as a project. Read through git and from what is committed; its base branch
+   * becomes the project's main, by way of the project's repository on this Mac, which the checkout then has as
+   * the remote `studio`. No engine runs. At the end the studio's main is the owner's, commit for commit: what
+   * the studio adds to the repository comes later, on a task's branch, for the owner to merge.
+   */
+  async adoptProject(actor: Actor, p: { path: string; dir?: string; base?: string; name?: string; slug?: string }): Promise<ResultOf<'projects.adopt'>> {
+    await this.#d.policy.authorize(actor, { kind: 'project.adopt', path: p.path });
+    const found = await inspect(runCommand, p.path, { dir: p.dir, base: p.base });
+    const already = this.#d.store.listProjects().find((project) => project.adopted?.path === found.repo && rootOf(project) === found.root);
+    if (already) throw new ConflictError(`이 저장소는 이미 들여왔습니다: ${already.slug}`);
+    const wanted = p.slug ?? slugOf(found.name);
+    let slug = wanted;
+    for (let n = 2; this.#d.store.getProjectBySlug(slug); n++) {
+      if (p.slug !== undefined) throw new ConflictError(`${p.slug}: 이미 있는 프로젝트 이름입니다.`);
+      slug = `${wanted.slice(0, 36).replace(/-+$/, '')}-${n}`;
+    }
+    const project: Project = { id: newId('prj'), slug, name: (p.name ?? found.name).trim().slice(0, 80) || slug, template: found.template, createdAt: this.#d.clock(), root: found.root, adopted: { path: found.repo, base: found.base } };
+    this.#d.store.insertProject(project);
+    this.#d.evals.seed(project);
+    let remote: 'added' | 'kept' | 'differs';
+    try {
+      await this.#d.gate.seed(project, { repo: found.repo, base: found.base });
+      await this.#d.sandboxes.ensure(project);
+      await this.#d.gate.fill(project);
+      remote = await linkCheckout(runCommand, found.repo, this.#d.gate.pathOf(project));
+    } catch (err) {
+      // Half a project is worse than none: what was made for it is taken down, and the checkout was not touched.
+      await this.#d.sandboxes.destroy(project, { deleteWorkspace: true }).catch(() => undefined);
+      await this.#d.gate.forget(project).catch(() => undefined);
+      this.#d.store.deleteProject(project.id);
+      throw err;
+    }
+    this.#d.events.emit({ projectId: project.id, taskId: null }, { type: 'notice', level: 'info', message: `${found.repo}의 ${found.base}을(를) 들여왔습니다 (${found.template}${found.root ? `, 제품 폴더 ${found.root}/` : ''}). 의존성을 설치하는 중입니다.` });
+    // Installing can take minutes: it runs behind the answer, as a new project's provisioning does.
+    const job: Promise<void> = this.#provision(project)
+      .then(() => this.#d.events.emit({ projectId: project.id, taskId: null }, { type: 'notice', level: 'info', message: '의존성 설치가 끝났습니다.' }))
+      .then(() => undefined)
+      .catch((err: unknown) => {
+        this.#d.log.warn({ projectId: project.id, err: errorMessage(err) }, 'an adopted project could not be provisioned');
+        this.#d.events.emit({ projectId: project.id, taskId: null }, { type: 'notice', level: 'warn', message: `의존성을 설치하지 못했습니다: ${errorMessage(err)}` });
+      })
+      .finally(() => this.#background.delete(job));
+    this.#background.add(job);
+
+    const gate = this.#d.gate.pathOf(project);
+    const lines = [
+      `${project.slug}: 들여왔습니다 (${found.template}${found.root ? `, 제품 폴더 ${found.root}/` : ''}).`,
+      `main은 ${found.repo}의 ${found.base}입니다 (${found.commit.slice(0, 7)}, 커밋 ${found.commits}개).${found.uncommitted > 0 ? ` 커밋되지 않은 변경 ${found.uncommitted}개는 가지 않았습니다.` : ''}`,
+      remote === 'added' ? `체크아웃에 원격 studio를 달았습니다: ${gate}` : remote === 'kept' ? `체크아웃에 원격 studio가 이미 이 저장소를 가리킵니다: ${gate}` : `체크아웃에 studio라는 원격이 이미 다른 곳을 가리켜 건드리지 않았습니다. 다른 이름으로 다세요: git remote add <이름> ${gate}`,
+      `받기: git fetch studio    보내기: git push studio ${found.base === INTEGRATION_BRANCH ? INTEGRATION_BRANCH : `${found.base}:${INTEGRATION_BRANCH}`}  (main은 앞으로만)`,
+      ...(found.base === INTEGRATION_BRANCH ? [] : [`스튜디오 안에서 이 브랜치의 이름은 ${INTEGRATION_BRANCH}입니다.`]),
+      `의존성을 설치하는 중입니다. 다음: sz fit ${project.slug} (스튜디오가 걷고 잴 수 있게 맞추기. 구독을 씁니다)`,
+    ];
+    return { project, gate, remote, base: found.base, uncommitted: found.uncommitted, lines };
   }
 
   selfHostStatus(): Promise<SelfHostStatus> {

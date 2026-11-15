@@ -1,9 +1,12 @@
 import { THEME_GENERATOR, themeGeneratorOf } from '@studio-zero/design';
 import { THEME_SEED_FILE, faceHome, placeholderTheme, regeneratedTheme, writeProjectTheme } from './themeSeed.ts';
-import type { Project, SandboxInfo } from '@studio-zero/protocol';
+import { isAdopted, rootOf, type Project, type SandboxInfo } from '@studio-zero/protocol';
 import { EXTERNAL_ENV_FILE, type ExternalApis } from '../app/ExternalApis.ts';
 import type { ProjectArms } from '../arms/ProjectArms.ts';
-import type { OrbStackManager } from '../sandbox/OrbStackManager.ts';
+import { SandboxError, productDir, slotOf, type OrbStackManager, type Place } from '../sandbox/OrbStackManager.ts';
+import { depsScript } from '../sandbox/scripts.ts';
+import { WORKSPACE_DIR } from '../policy/PolicyEngine.ts';
+import { excerpt } from '../util/core.ts';
 import { KeyedMutex } from '../util/core.ts';
 import { AX_DIR, AX_ENTRY, kitFiles } from './axKit.ts';
 import { MOBILE_KIT_DIR, MOBILE_KIT_ENTRY, mobileKitFiles } from './mobileKit.ts';
@@ -56,6 +59,19 @@ export class WorkspaceProvisioner {
       if (project.template === 'studio-core') {
         // Filled once, here; a task brings it up to date itself before it branches.
         await this.#core?.sync(project, { onlyIfEmpty: true });
+        return info;
+      }
+      // A product that was brought in keeps what it came with: none of the house's files are put on it (no
+      // theme, no kits, no project file: the task that fits it writes what the studio needs, on a branch the
+      // owner merges). What it does need is its dependencies as its lockfile has them, since nobody here
+      // built it up from an empty folder. A slot has just had them put in place when it was taken.
+      if (isAdopted(project)) {
+        if (slotOf(project as Place) === 0) {
+          const deps = await this.#sandboxes.exec(project, depsScript({ workspace: productDir(project) }), { cwd: WORKSPACE_DIR, timeoutSec: 900 });
+          if (deps.exitCode !== 0) throw new SandboxError(`the product's dependencies could not be installed${deps.timedOut ? ' (timed out)' : ''}`, excerpt(deps.stderr || deps.stdout, 600));
+        }
+        const backend = await this.#arms?.ensure(project);
+        if (backend && backend.added.length > 0) await this.#sandboxes.commitAll(project, `chore: add the Studio Zero ${backend.added.join(' and ')}`, [rootOf(project) === '' ? STUDIO_DIR : `${rootOf(project)}/${STUDIO_DIR}`]);
         return info;
       }
       // One round trip answers every question; each file set is written only when it is missing. The sheet's

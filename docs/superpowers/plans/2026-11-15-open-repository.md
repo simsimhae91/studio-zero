@@ -139,8 +139,8 @@ withBlock(existing: string, block: string): string
 
 **Files:** `repo/Adoption.ts`, `repo/Gate.ts` (`seed`, `fill`), `app/Studio.ts` (`adoptProject`, forcing and refusals), `harness/bootstrap.ts`, `harness/EvalRunner.ts` (`seed`), `cli.ts` (`adopt`), tests `adoption.test.ts`
 
-- [ ] Test: `detectStack` table; `a checkout whose product is one folder down is found there, and two candidates are refused`; `adoption takes the base branch as main, adds the remote, and leaves the working tree alone`; `an adopted project gets no house file and no slop lint`; `a build on an adopted project runs on the fast track, and a design task is refused`; `a root with a space is refused`.
-- [ ] Implement; commit.
+- [x] Test: `detectStack` table; `a checkout whose product is one folder down is found there, and two candidates are refused`; `adoption takes the base branch as main, adds the remote, and leaves the working tree alone`; `an adopted project gets no house file and no slop lint`; `a build on an adopted project runs on the fast track, and a design task is refused`; `a root with a space is refused`.
+- [x] Implement; commit.
 
 ### Task 6: Fitting and the agent file
 

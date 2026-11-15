@@ -1,5 +1,5 @@
 import { lintSources } from '@studio-zero/design';
-import type { AuditReport, Eval, EvalSpec, Finding, Project } from '@studio-zero/protocol';
+import { isAdopted, type AuditReport, type Eval, type EvalSpec, type Finding, type Project } from '@studio-zero/protocol';
 import type { Config } from '../config.ts';
 import type { Store } from '../db/Store.ts';
 import type { EventLog } from '../events/EventLog.ts';
@@ -62,7 +62,9 @@ export class EvalRunner {
    * to hold there is that the studio still works.
    */
   seed(project: Project): void {
-    this.#add(project.id, 'slop-lint', { kind: 'slop-lint', maxMajor: 0 }, null);
+    // A product that was brought in has its own design: the slop lint reads a project against the house's theme
+    // and would find a stranger's product guilty of not being ours. The browser's switch it gets like any other.
+    if (!isAdopted(project)) this.#add(project.id, 'slop-lint', { kind: 'slop-lint', maxMajor: 0 }, null);
     if (project.template === 'studio-core') {
       this.#add(project.id, 'tests', { kind: 'command', command: 'pnpm test', timeoutSec: 900 }, null);
       this.#add(project.id, 'build', { kind: 'command', command: 'pnpm build', timeoutSec: 600 }, null);
