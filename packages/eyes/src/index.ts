@@ -12,6 +12,7 @@ export * from './overview.ts';
 export * from './port.ts';
 export * from './release.ts';
 export * from './review.ts';
+export * from './secrets.ts';
 export * from './standing.ts';
 export * from './strangers.ts';
 export * from './web.ts';

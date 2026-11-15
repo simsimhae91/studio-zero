@@ -17,6 +17,8 @@ Read `.sz/map.md` (its "배포와 데이터" and "오류와 사용이 보이는 
 
 **Never yours:** deleting or resetting a hosted database, project, app, volume or bucket. The plugin refuses those commands; the owner runs them (`! <command>`). You do not hold the live database's address or an admin key while building: only the release steps use them, from the environment, never printed and never written to a file in the repository.
 
+**Keys.** A key is the owner's and is in their vault under a name (`sz-eyes secret has <id>...` says which are there). The owner puts one in themselves, from the clipboard: `! pbpaste | sz-eyes secret set host/cloudflare/api-token`. A command that needs one gets it by name: `sz-eyes secret run CLOUDFLARE_API_TOKEN=host/cloudflare/api-token -- npx wrangler deploy`. Never ask for a key in the conversation, never read one into a variable or a file, and never put one in the repository; a live secret of the product goes from the vault into the place's own secret store the same way (`sz-eyes secret run V=<id> -- sh -c 'printf %s "$V" | npx wrangler secret put <NAME>'`).
+
 In a session whose permission mode refuses production deploys, show the release command and let the owner allow it or run it.
 
 ## 1. The place

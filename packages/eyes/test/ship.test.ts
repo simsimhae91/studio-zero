@@ -15,6 +15,7 @@ import { lookAtLive, renderLive, sameCommit, versionsIn } from '../src/live.ts';
 import { classify, renderMigrations, statements } from '../src/migrations.ts';
 import { findProducts, overviewPage, renderOverview, viewOf } from '../src/overview.ts';
 import { GATE_LINES, gate, type Gate } from '../src/release.ts';
+import { heldSecrets, hide, parseRun, runWithSecrets, setSecret, type SecretStore } from '../src/secrets.ts';
 import { marksOf, renderStrangers, strangers } from '../src/strangers.ts';
 import { closeBrowser, openBrowser } from '../src/web.ts';
 
@@ -575,4 +576,29 @@ test('several products are read at once: what waits for the owner and what broke
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test('a command is given the owner\'s keys by name, and a key it prints does not reach the session', async () => {
+  const kept = new Map<string, string>();
+  const store: SecretStore = { get: async (id) => (kept.has(id) ? { expose: () => kept.get(id)! } : null), set: async (id, secret) => void kept.set(id, secret.expose()) };
+  assert.deepEqual(parseRun(['CLOUDFLARE_API_TOKEN=host/cloudflare/api-token', 'KAKAO=login/kakao/client-secret', '--', 'npx', 'wrangler', 'deploy', '--', 'x']), { bindings: [{ env: 'CLOUDFLARE_API_TOKEN', id: 'host/cloudflare/api-token' }, { env: 'KAKAO', id: 'login/kakao/client-secret' }], command: ['npx', 'wrangler', 'deploy', '--', 'x'] });
+  assert.throws(() => parseRun(['TOKEN=host/cloudflare/api-token']), /secret run <NAME>=<vault id>/);
+  assert.throws(() => parseRun(['TOKEN=the-actual-secret-value', '--', 'true']), /is not <NAME>=<vault id>/, 'a value where an id belongs is refused before anything runs');
+  assert.equal(hide('token k9Qw7LmZp2Xv and again k9Qw7LmZp2Xv', [{ env: 'TOKEN', value: 'k9Qw7LmZp2Xv' }]), 'token [TOKEN: hidden] and again [TOKEN: hidden]');
+
+  await setSecret(store, 'host/cloudflare/api-token', 'k9Qw7LmZp2Xv4Ra8Tn3Yb6Ue\n');
+  assert.equal(kept.get('host/cloudflare/api-token'), 'k9Qw7LmZp2Xv4Ra8Tn3Yb6Ue', 'the newline a clipboard adds is not part of the key');
+  await assert.rejects(setSecret(store, 'Bad Id', 'x'), /is not a vault id/);
+  await assert.rejects(setSecret(store, 'host/x/y', ' \n'), /nothing came on stdin/);
+  assert.deepEqual(await heldSecrets(store, ['host/cloudflare/api-token', 'host/fly/api-token']), [{ id: 'host/cloudflare/api-token', held: true }, { id: 'host/fly/api-token', held: false }]);
+
+  let [out, err] = ['', ''];
+  const io = { out: (text: string) => void (out += text), err: (text: string) => void (err += text) };
+  // The command has the key (it can use it), and what it prints of it is taken out, on both streams.
+  const code = await runWithSecrets(store, [{ env: 'TOKEN', id: 'host/cloudflare/api-token' }], [process.execPath, '-e', 'const t = process.env.TOKEN; console.log(`length ${t.length}`); console.log(`the key is ${t}`); process.stderr.write(`warn ${t}`); process.exit(t === "k9Qw7LmZp2Xv4Ra8Tn3Yb6Ue" ? 7 : 1)'], io);
+  assert.equal(code, 7, 'the command\'s own exit is passed on');
+  assert.equal(out, 'length 24\nthe key is [TOKEN: hidden]\n');
+  assert.equal(err, 'warn [TOKEN: hidden]');
+  await assert.rejects(runWithSecrets(store, [{ env: 'FLY', id: 'host/fly/api-token' }], ['true'], io), /not in the vault: host\/fly\/api-token[\s\S]*pbpaste \| sz-eyes secret set host\/fly\/api-token/);
+  assert.match(eyes(tmpdir(), 'secret', 'run', 'TOKEN=not an id', '--', 'true').text, /is not <NAME>=<vault id>/);
 });

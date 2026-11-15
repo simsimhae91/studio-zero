@@ -14,6 +14,7 @@ import { lookAtLive, renderLive } from './live.ts';
 import { DANGEROUS, classify, renderMigrations } from './migrations.ts';
 import { findProducts, overviewPage, renderOverview, viewOf } from './overview.ts';
 import { freePort } from './port.ts';
+import { heldSecrets, ownersVault, parseRun, runWithSecrets, setSecret } from './secrets.ts';
 import { GATE_LINES, lastRelease, releaseContract, releases, renderReleases, type Gate } from './release.ts';
 import { reviewWeb } from './review.ts';
 import { renderStrangers, strangers } from './strangers.ts';
@@ -111,6 +112,12 @@ const USAGE = `sz-eyes: launch what was built, look at it, operate it, and put w
         read migration files (the ones given, or the .sql files that changed between two commits) and say which
         statements can lose or break what people stored: a drop, a rename, a type change, a required column
         with no default, a rule added to a table that has rows, row security turned off. Exits 1 when there is one
+
+  sz-eyes secret run <NAME>=<vault id>... -- <command>...
+        run a command with the owner's keys in its environment, by their names in the vault (the macOS Keychain).
+        A key is in no argument, no file and no line of the session: if the command prints it, it is taken out
+  sz-eyes secret has <vault id>...                       which of these the vault holds (names only); exits 1 when one is missing
+  sz-eyes secret set <vault id>                          the owner's: puts what comes on stdin in the vault (pbpaste | sz-eyes secret set host/cloudflare/api-token)
 
   sz-eyes docker <args>...                               the container engine on this machine, reached without touching the owner's settings
   sz-eyes supabase <args>...                             the Supabase stack that runs on this machine for this project (never a hosted one)
@@ -249,6 +256,32 @@ async function main(argv: string[]): Promise<number> {
     const steps = classify(files);
     out(a.has('--json') ? JSON.stringify(steps, null, 2) : renderMigrations(steps, files.map((f) => f.file)));
     return steps.some((step) => DANGEROUS.includes(step.kind)) ? 1 : 0;
+  }
+  if (area === 'secret') {
+    const words = argv.slice(2);
+    try {
+      if (command === 'run') {
+        const { bindings, command: toRun } = parseRun(words);
+        return await runWithSecrets(ownersVault(), bindings, toRun);
+      }
+      if (command === 'has') {
+        if (words.length === 0) throw new Error('sz-eyes secret has <vault id>...');
+        const held = await heldSecrets(ownersVault(), words);
+        out(held.map((entry) => `${entry.held ? 'held   ' : 'MISSING'} ${entry.id}`).join('\n'));
+        return held.every((entry) => entry.held) ? 0 : 1;
+      }
+      if (command === 'set') {
+        if (words.length !== 1) throw new Error('sz-eyes secret set <vault id>   (the value comes on stdin: pbpaste | sz-eyes secret set <id>)');
+        if (process.stdin.isTTY) throw new Error('the value comes on stdin, so that it is never typed where it is kept: pbpaste | sz-eyes secret set <id>');
+        let value = '';
+        for await (const chunk of process.stdin) value += chunk;
+        await setSecret(ownersVault(), words[0]!, value);
+        out(`in the vault: ${words[0]}`);
+        return 0;
+      }
+    } catch (err) {
+      throw new EyesError(err instanceof Error ? err.message : String(err));
+    }
   }
   if (area === 'docker' || area === 'supabase') {
     const args = argv.slice(1);
