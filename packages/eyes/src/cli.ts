@@ -4,6 +4,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 import { BACKLOG_FILE, addToBacklog, doneInBacklog, leftBy, openBacklog } from './backlog.ts';
 import { CONTRACTS_DIR, EVIDENCE_DIR, ClaimStatus, Contract, Lane, ShownBy, openContracts, owed, readContract, renderContract, writeContract } from './contract.ts';
+import { ElectronError, renderAppLook, renderAppWalk, walkElectron } from './electron.ts';
 import { engineEnv, findTool, hostedSupabaseCall } from './engine.ts';
 import { writeEvidencePage } from './evidence.ts';
 import { changedSinceFrozen, fingerprint, fingerprints } from './fingerprint.ts';
@@ -58,6 +59,14 @@ const USAGE = `sz-eyes: launch what was built, look at it, operate it, and put w
         ask a service where people reach it: is it up, is it the version that was released (it says its commit
         at --at), is it served as a public service has to be, and what would a person arriving trip on.
         Exits 1 when it is not the service as released
+
+  sz-eyes electron look <app folder> [--window <words of its title or address>] [--out <folder>] [--name <n>] [--arg <arg>]... [--env K=V]... [--onscreen] [--json]
+  sz-eyes electron do <app folder> --step "<step>"... [the same options]
+        start a desktop app built on Electron from its folder (it must be built), look at a window of it and
+        operate it with the steps of web do, then close it. window:<words> goes on in another window the app
+        opened. The app gets a folder of its own for what it stores, so the owner's real profile is never
+        opened and their own copy can stay open; its windows are invisible on their screen and take no click
+        or key of theirs (--onscreen shows them, for an app whose layout follows the screen)
 
   sz-eyes ios spare [--type "iPhone 17"]                 the eyes' own simulator, made and booted with no window; prints its id
   sz-eyes ios install <udid> <path.app> --bundle-id <id> [--metro <port>]
@@ -374,6 +383,19 @@ async function main(argv: string[]): Promise<number> {
     writeContract(file, Contract.parse(contract));
     out(`${file}\n\n${renderContract(Contract.parse(contract))}\nIt is frozen. ${contract.release!.candidate === null ? 'Have each line shown on what is live' : 'Have the rc- lines shown on the candidate before the switch, and the live- lines on what people reach after it'}: sz-eyes contract claim ${contract.id} <line> --status ...`);
     return 0;
+  }
+  if (area === 'electron' && (command === 'look' || command === 'do')) {
+    const a = parse(rest, ['--json', '--onscreen', '--house']);
+    const folder = a.words[0];
+    const steps = a.all('--step');
+    if (!folder || (command === 'do' && steps.length === 0)) throw new EyesError('sz-eyes electron look <app folder> [--window <words>]   or   sz-eyes electron do <app folder> --step "<step>"...');
+    const env = Object.fromEntries(a.all('--env').map((pair) => [pair.slice(0, pair.indexOf('=')), pair.slice(pair.indexOf('=') + 1)]));
+    const walk = await walkElectron(resolve(folder), command === 'do' ? steps : [], { args: a.all('--arg'), env, onscreen: a.has('--onscreen'), house: a.has('--house'), ...(a.one('--window') ? { window: a.one('--window')! } : {}), ...(a.one('--out') ? { out: resolve(a.one('--out')!) } : {}), ...(a.one('--name') ? { name: a.one('--name')! } : {}), ...(a.one('--electron') ? { executablePath: resolve(a.one('--electron')!) } : {}) }).catch((err: unknown) => {
+      throw err instanceof ElectronError ? new EyesError(err.message) : err;
+    });
+    if (command === 'look') out(a.has('--json') ? JSON.stringify(walk.end, null, 2) : renderAppLook(walk.end));
+    else out(a.has('--json') ? JSON.stringify(walk, null, 2) : renderAppWalk(walk, steps.length));
+    return walk.passed ? 0 : 1;
   }
   if (area === 'web' && command === 'review') {
     const a = parse(rest, ['--dark']);

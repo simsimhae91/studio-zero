@@ -32,7 +32,7 @@ When in doubt between two lanes, take the smaller one and say what would make yo
 
 In this order, because a picture of "before" cannot be taken afterwards:
 
-1. If anything a person sees will change, look at it as it is now, in the state the request is about (`sz-eyes web look|do` / `sz-eyes ios look`, see `sz:verify`), with `--out .sz/evidence/quick/<date>-<a few words>/ --name before`.
+1. If anything a person sees will change, look at it as it is now, in the state the request is about (`sz-eyes web look|do` / `sz-eyes electron look|do` / `sz-eyes ios look`, by the command the map gives; see `sz:verify`), with `--out .sz/evidence/quick/<date>-<a few words>/ --name before`.
 2. Make the change the way the project makes such changes. Find the cause; do not paper over the symptom.
 3. Run the type check and the project's checks: all of them when the map says they are quick. A small change is where an old promise breaks unnoticed.
 4. Look again in the same state, same size, `--name after`, into the same folder. Read the state off the look (the words, the figure), not off the picture.

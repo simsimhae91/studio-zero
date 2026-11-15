@@ -1,6 +1,6 @@
 ---
 name: verify
-description: Use when a claim about software has to be shown true on the running product, not argued. How to launch, look at and operate a web page, an iOS app, and other targets with sz-eyes, and what counts as evidence.
+description: Use when a claim about software has to be shown true on the running product, not argued. How to launch, look at and operate a web page, an iOS app, an Electron desktop app, a web game and other targets with sz-eyes, and what counts as evidence.
 ---
 
 # Verify: show it on the running product
@@ -56,6 +56,15 @@ sz-eyes ios rest <udid> --erase                     # when done: a booted simula
 ```
 
 Check free disk space first (`df -h /System/Volumes/Data`): a simulator's first boot takes about 3 GB. If there is not room, say so and mark the claim `unchecked`. A React Native debug build needs its packager running on the port given to `--metro`, started from a clone or worktree, never on the owner's own port.
+
+**A desktop app built on Electron** (the map says its folder, what must be built first, and the variables below):
+
+```
+sz-eyes electron look <app folder> [--window "<words of its title or address>"] --env <ITS_DATA_VARIABLE>={data} --out <folder> --name <state>
+sz-eyes electron do <app folder> --step "tap:<words>" --step "window:<words>" --step "see:<words>" ... --env <ITS_DATA_VARIABLE>={data} --out <folder> --name <flow>
+```
+
+The steps are those of `web do`, and `window:<words>` goes on in another window the app opened (a popover, its settings). The app is started on a folder of its own for what it stores (`{data}` stands for it), its windows are invisible on the owner's screen and take none of their clicks or keys, and it is ended by the process that was started, so the owner's own copy of the same app can stay open. An app that decides itself where it keeps its data (`app.setPath('userData', ...)`) is not started until it is pointed at `{data}` by its own variable: started bare it would open the owner's real data. Give it the map's other switches the same way (`--env`): the port it listens on, no update check, which window to open. What reaches outside the app (a browser extension it pairs with, a global shortcut, a login item) is not exercised unless the map says how it is kept off the owner's own.
 
 **A web game, or a page that moves by itself:** hold its time and ask it (`sz:game`). `sz-eyes web do <url> --clock --step "press:Space" --step "run:3000" --step "expect:window.__game.state().score === 3" --step "hold:ArrowRight=500" --step "read:after=window.__game.state()"`: with `--clock` the page's time moves only on `run:` and `hold:`, so the same steps give the same state every time. `read:` and `expect:` work on any page (what is in storage, what a counter says).
 

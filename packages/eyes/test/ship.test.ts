@@ -2,13 +2,14 @@
 // version that was released, the release gate is the same lines every time, and what is live is not deleted.
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { readContract, CONTRACTS_DIR } from '../src/contract.ts';
+import { walkElectron, renderAppWalk } from '../src/electron.ts';
 import { engineEnv, hostedSupabaseCall } from '../src/engine.ts';
 import { downloadsOf, filesOf, findLeaks, leakReport, renderLeaks, secretsFromEnv } from '../src/leaks.ts';
 import { lookAtLive, renderLive, sameCommit, versionsIn } from '../src/live.ts';
@@ -677,5 +678,35 @@ test('each thing the owner says is told which way of working fits it, and a proj
     rmSync(bare, { recursive: true, force: true });
   } finally {
     rmSync(project, { recursive: true, force: true });
+  }
+});
+
+test('a desktop app built on Electron is started on data of its own, operated across its windows, and closed', async (t) => {
+  // Electron is 250 MB and not a dependency of this repository: the test runs where one is pointed at.
+  const bin = process.env.SZ_TEST_ELECTRON_BIN;
+  if (!bin || !existsSync(bin)) return t.skip('SZ_TEST_ELECTRON_BIN names no Electron binary');
+  const app = join(HERE, 'fixtures/electron-app');
+  const out = mkdtempSync(join(tmpdir(), 'eyes-electron-'));
+  try {
+    const steps = ['see:탭 정리', 'tap:하나 더', 'tap:하나 더', 'expect:document.querySelector("#count").textContent === "2개"', "read:data=document.querySelector('#where').textContent", 'tap:작은 창 열기', 'window:Mini', 'see:작은 창'];
+    const walk = await walkElectron(app, steps, { executablePath: bin, out, name: 'probe', env: { PROBE_PORT: '4242' } });
+    assert.equal(walk.passed, true, renderAppWalk(walk, steps.length));
+    assert.match(String(walk.reads.data), /sz-electron-/, 'what it stores is in a folder of its own, not the owner\'s profile');
+    assert.deepEqual([walk.end.windows, walk.end.title, walk.end.texts, walk.end.controls.map((c) => c.label)], [['Probe', 'Mini'], 'Mini', ['닫기', '작은 창'], ['닫기']]);
+    assert.ok(walk.end.screenshot && existsSync(walk.end.screenshot) && walk.steps.filter((s) => s.screenshot).length === 4, 'a picture after each press and of the window it ended on');
+    // A window that is not there, and a control that is not there, stop the walk with what is there instead.
+    const lost = await walkElectron(app, ['window:설정'], { executablePath: bin, stepTimeoutMs: 800 });
+    assert.match(lost.steps[0]!.why ?? '', /no window whose title or address has "설정"\. Open: "Probe"/);
+    await assert.rejects(walkElectron(join(HERE, 'fixtures'), [], { executablePath: bin, timeoutMs: 4_000 }), /did not start|opened no window/);
+    // An app that sets its own data folder would open the owner's real data: it is not started until it is
+    // pointed, by its own variable, at the folder made for the run.
+    const own = join(HERE, 'fixtures/electron-app-own-data');
+    await assert.rejects(walkElectron(own, [], { executablePath: bin }), /decides itself where it keeps its data[\s\S]*would open the owner's real data[\s\S]*--env <THAT_VARIABLE>=\{data\}/);
+    const pointed = await walkElectron(own, ["read:data=document.querySelector('#where').textContent"], { executablePath: bin, env: { PROBE_DATA: '{data}' } });
+    assert.match(String(pointed.reads.data), /sz-electron-/);
+    // Pointed at somewhere else all the same, it is closed as soon as it says where it keeps its data.
+    await assert.rejects(walkElectron(own, [], { executablePath: bin, env: { PROBE_DATA: join(out, 'elsewhere'), NOTE: '{data}' } }), /keeps its data in .*elsewhere, not in the folder made for this run: it was closed at once/);
+  } finally {
+    rmSync(out, { recursive: true, force: true });
   }
 });

@@ -1,0 +1,3 @@
+<!doctype html><html lang="ko"><meta charset="utf-8"><title>Probe</title>
+<h1>탭 정리</h1><p id="count">0개</p><button id="add">하나 더</button><button id="mini">작은 창 열기</button><p id="where"></p>
+<script>let n=0;document.querySelector('#add').onclick=()=>{document.querySelector('#count').textContent=(++n)+'개'};document.querySelector('#mini').onclick=()=>window.probe.mini();window.probe.where().then(w=>document.querySelector('#where').textContent=w.userData)</script></html>

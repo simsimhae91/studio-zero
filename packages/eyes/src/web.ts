@@ -88,6 +88,47 @@ export async function closeBrowser(browser: Browser): Promise<void> {
   await Promise.race([closing, new Promise((done) => setTimeout(done, 250).unref())]);
 }
 
+/** What is on a page as it stands: its words, what can be pressed, and what was measured on it. */
+export async function describePage(page: Page, at: { viewport: ViewportId; width: number; touch: boolean; route: string }, house: boolean): Promise<Pick<Look, 'title' | 'texts' | 'controls' | 'findings' | 'overflowsSideways'>> {
+  const digest = PageDigest.safeParse(await page.evaluate(collectDigest, 600).catch(() => null));
+  const measured = digest.success ? runDomChecks(digest.data, { viewport: at.viewport, viewportWidth: at.width, route: at.route, touch: at.touch, scope: 'full' }, contract) : [];
+  const findings = (house ? measured : forForeignProduct(measured)).map(({ rule, severity, message, selector, fix }) => ({ rule, severity, message, selector, fix }));
+  const elements = digest.success ? [...digest.data.elements].sort(READING_ORDER) : [];
+  const seen = new Set<string>();
+  const texts = elements.map((e) => e.text.trim()).filter((text) => text !== '' && !seen.has(text) && seen.add(text) !== undefined);
+  const pressable = elements.filter((e) => e.interactive);
+  // A control's name as a person reads it: its label for assistive technology, or the words inside it (the
+  // digest keeps an element's own text only, and a button's words are usually its children's).
+  // And whether a person could press it at all: what lies under another screen (a router keeps the screen it
+  // came from mounted beneath) is in the page and not on it. So a control is asked for where it is drawn, not
+  // by its selector: two screens stacked have controls with the same selector, and the one a selector finds
+  // first is the one underneath. (The first verifier to use this was told the sign-in screen had a
+  // "이메일로 가입하기" button, and was not told of its "로그인" button.)
+  const CONTROL = 'button, a[href], input, select, textarea, summary, [role="button"], [role="link"], [role="tab"], [role="checkbox"], [role="radio"], [role="switch"], [role="menuitem"], [tabindex]:not([tabindex="-1"])';
+  const named = await page
+    .evaluate(({ boxes, control }) => boxes.map(({ x, y, w, h, selector }) => {
+      const nameOf = (el: Element): string => (el.getAttribute('aria-label') || (el as HTMLElement).innerText || el.getAttribute('title') || el.getAttribute('placeholder') || '').trim().replace(/\s+/g, ' ').slice(0, 60);
+      const [cx, cy] = [x - window.scrollX + w / 2, y - window.scrollY + h / 2];
+      if (cx < 0 || cy < 0 || cx > window.innerWidth || cy > window.innerHeight) {
+        // Below the screenful: it can be scrolled to, and the selector is all there is to ask by.
+        const el = document.querySelector(selector);
+        return { name: el ? nameOf(el) : '', reachable: el !== null && el.closest('[aria-hidden="true"], [inert]') === null };
+      }
+      const top = document.elementFromPoint(cx, cy);
+      const hit = top?.closest(control) ?? null;
+      return { name: hit ? nameOf(hit) : top ? nameOf(top) : '', reachable: hit !== null };
+    }), { boxes: pressable.map((e) => ({ x: e.x, y: e.y, w: e.w, h: e.h, selector: e.selector })), control: CONTROL })
+    .catch(() => [] as { name: string; reachable: boolean }[]);
+  const listed = new Set<string>();
+  const controls = pressable.flatMap((e, i): Control[] => {
+    if (named[i] && !named[i]!.reachable) return [];
+    const control: Control = { label: named[i]?.name || e.text.trim(), role: e.role || e.tag, box: [Math.round(e.x), Math.round(e.y), Math.round(e.w), Math.round(e.h)], selector: e.selector };
+    const key = `${control.label}|${control.box.join(',')}`;
+    return listed.has(key) ? [] : (listed.add(key), [control]);
+  });
+  return { title: digest.success ? digest.data.title : await page.title().catch(() => ''), texts, controls, findings, overflowsSideways: digest.success ? digest.data.scrollWidth > digest.data.width + 1 : false };
+}
+
 /**
  * Opens a page as a person would meet it and says what is there: the words, what can be pressed and how big it
  * is, what the page logged, and what was measured on it. The measurement is the universal one by default (text
@@ -126,42 +167,7 @@ export async function lookAtWeb(url: string, opts: LookOptions = {}): Promise<Lo
     if (opts.before) await opts.before(page);
     await page.evaluate(() => document.fonts.ready).catch(() => undefined);
 
-    const digest = PageDigest.safeParse(await page.evaluate(collectDigest, 600).catch(() => null));
-    const measured = digest.success ? runDomChecks(digest.data, { viewport: at.id, viewportWidth: at.context.viewport!.width, route: new URL(url).pathname, touch: at.touch, scope: 'full' }, contract) : [];
-    const findings = (opts.house ? measured : forForeignProduct(measured)).map(({ rule, severity, message, selector, fix }) => ({ rule, severity, message, selector, fix }));
-    const elements = digest.success ? [...digest.data.elements].sort(READING_ORDER) : [];
-    const seen = new Set<string>();
-    const texts = elements.map((e) => e.text.trim()).filter((text) => text !== '' && !seen.has(text) && seen.add(text) !== undefined);
-    const pressable = elements.filter((e) => e.interactive);
-    // A control's name as a person reads it: its label for assistive technology, or the words inside it (the
-    // digest keeps an element's own text only, and a button's words are usually its children's).
-    // And whether a person could press it at all: what lies under another screen (a router keeps the screen it
-    // came from mounted beneath) is in the page and not on it. So a control is asked for where it is drawn, not
-    // by its selector: two screens stacked have controls with the same selector, and the one a selector finds
-    // first is the one underneath. (The first verifier to use this was told the sign-in screen had a
-    // "이메일로 가입하기" button, and was not told of its "로그인" button.)
-    const CONTROL = 'button, a[href], input, select, textarea, summary, [role="button"], [role="link"], [role="tab"], [role="checkbox"], [role="radio"], [role="switch"], [role="menuitem"], [tabindex]:not([tabindex="-1"])';
-    const named = await page
-      .evaluate(({ boxes, control }) => boxes.map(({ x, y, w, h, selector }) => {
-        const nameOf = (el: Element): string => (el.getAttribute('aria-label') || (el as HTMLElement).innerText || el.getAttribute('title') || el.getAttribute('placeholder') || '').trim().replace(/\s+/g, ' ').slice(0, 60);
-        const [cx, cy] = [x - window.scrollX + w / 2, y - window.scrollY + h / 2];
-        if (cx < 0 || cy < 0 || cx > window.innerWidth || cy > window.innerHeight) {
-          // Below the screenful: it can be scrolled to, and the selector is all there is to ask by.
-          const el = document.querySelector(selector);
-          return { name: el ? nameOf(el) : '', reachable: el !== null && el.closest('[aria-hidden="true"], [inert]') === null };
-        }
-        const top = document.elementFromPoint(cx, cy);
-        const hit = top?.closest(control) ?? null;
-        return { name: hit ? nameOf(hit) : top ? nameOf(top) : '', reachable: hit !== null };
-      }), { boxes: pressable.map((e) => ({ x: e.x, y: e.y, w: e.w, h: e.h, selector: e.selector })), control: CONTROL })
-      .catch(() => [] as { name: string; reachable: boolean }[]);
-    const listed = new Set<string>();
-    const controls = pressable.flatMap((e, i): Control[] => {
-      if (named[i] && !named[i]!.reachable) return [];
-      const control: Control = { label: named[i]?.name || e.text.trim(), role: e.role || e.tag, box: [Math.round(e.x), Math.round(e.y), Math.round(e.w), Math.round(e.h)], selector: e.selector };
-      const key = `${control.label}|${control.box.join(',')}`;
-      return listed.has(key) ? [] : (listed.add(key), [control]);
-    });
+    const seen = await describePage(page, { viewport: at.id, width: at.context.viewport!.width, touch: at.touch, route: new URL(url).pathname }, opts.house ?? false);
 
     let screenshot: string | null = null;
     if (opts.out) {
@@ -171,17 +177,13 @@ export async function lookAtWeb(url: string, opts: LookOptions = {}): Promise<Lo
     }
     return {
       url,
-      title: digest.success ? digest.data.title : await page.title().catch(() => ''),
       size,
       scheme,
       screenshot,
-      texts,
-      controls,
-      findings,
+      ...seen,
       bar: opts.house ? 'house' : 'universal',
       consoleErrors: [...new Set(consoleErrors)].slice(0, 20),
       failedRequests: [...new Set(failedRequests)].slice(0, 20),
-      overflowsSideways: digest.success ? digest.data.scrollWidth > digest.data.width + 1 : false,
     };
   } finally {
     await context.close();
@@ -249,7 +251,7 @@ export interface Walk {
  * seconds at most. A press changes what is on screen a moment later, and a counter caught half-way up is a
  * picture of nothing the product ever shows (the first walk kept "9 / 100점" beside the words "지금 10점").
  */
-async function settled(page: Page): Promise<Buffer> {
+export async function settled(page: Page): Promise<Buffer> {
   let last = await page.screenshot({ type: 'png' });
   for (let i = 0; i < 8; i++) {
     await page.waitForTimeout(250);
