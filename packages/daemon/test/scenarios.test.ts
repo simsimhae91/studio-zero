@@ -12,12 +12,13 @@ import { ScreenSpec, type Project } from '@studio-zero/protocol';
 import { ProjectArms } from '../src/arms/ProjectArms.ts';
 import { SupabaseStack } from '../src/arms/SupabaseStack.ts';
 import { samplePhoto } from '../src/qa/samplePhoto.ts';
-import { Backend, renderScenarioFeedback, walkScenarios } from '../src/qa/ScenarioRunner.ts';
+import { Backend, ScenarioRunner, renderScenarioFeedback, walkScenarios } from '../src/qa/ScenarioRunner.ts';
 import { resolveDockerBin } from '../src/sandbox/dockerBin.ts';
 import type { OrbStackManager } from '../src/sandbox/OrbStackManager.ts';
 import { checkScreenSpec, checkWorks } from '../src/scratch/ScreenSpec.ts';
 import { runCommand } from '../src/util/run.ts';
-import { sampleProject } from './helpers.ts';
+import { testConfig } from '../src/config.ts';
+import { sampleProject, tempDir } from './helpers.ts';
 
 /** A club's shared ledger, as small as a product with two kinds of people can be. */
 const PLAN = ScreenSpec.parse({
@@ -270,8 +271,15 @@ test('what a walk stands on is measured where it stands: a screen as it is first
     faint = false;
     const clean = await walk(true);
     assert.deepEqual(clean.looks.flatMap((look) => look.findings.filter((f) => f.severity !== 'minor' && f.category === 'contrast')), []);
-    // And a walk nobody asked to measure measures nothing.
-    assert.deepEqual((await walk(false)).looks, []);
+    // And a walk nobody asked to measure measures nothing, and keeps no record of where it went.
+    const unmeasured = await walk(false);
+    assert.deepEqual([unmeasured.looks, unmeasured.trails], [[], {}]);
+    // A walk says where each scenario went: the screens its person was on, and the step they were carrying out.
+    assert.deepEqual(clean.trails, { drinks: [{ screen: 'H-01', step: 'drink' }, { screen: 'H-01', step: 'result' }, { screen: 'R-01', step: 'result' }, { screen: 'R-01', step: 'share' }, { screen: 'R-01', step: 'photo' }] });
+    // Asked for one screen only (a small edit is measured where it changed): that one, and the trail is whole all the same.
+    const only = await walkScenarios({ browser, base, phone: devices['iPhone 15 Pro']!, spec: COUNTER_PLAN, backend: null, run: 'eeee7777', restart: async () => undefined, look: { template: 'mobile-expo', only: ['R-01'] } });
+    assert.deepEqual([only.walked, only.looks.map((look) => look.screen)], [1, ['R-01']]);
+    assert.deepEqual(only.trails, clean.trails);
   } finally {
     await browser.close().catch(() => undefined);
     await new Promise((resolve) => server.close(resolve));
@@ -295,6 +303,35 @@ test('the people a walk made are taken out again: a backend that will not let on
   const asked: string[] = [];
   assert.equal(await new Backend(info, async (script) => (asked.push(script), { exitCode: 0, stdout: '', stderr: '' })).forget('abcd1234'), null);
   assert.equal(asked.length, 1);
+});
+
+test('one walk a project at a time: a second walk of the same project waits, and another project\'s does not', async () => {
+  // With slots a small edit, a full check and a milestone can each want a walk of one project at once. They are
+  // people of one backend, and a full walk takes it down and up again.
+  const inside = new Map<string, number>();
+  const most = new Map<string, number>();
+  let together = 0;
+  let mostTogether = 0;
+  const sandboxes = {
+    readFile: async (project: Project) => {
+      inside.set(project.id, (inside.get(project.id) ?? 0) + 1);
+      most.set(project.id, Math.max(most.get(project.id) ?? 0, inside.get(project.id)!));
+      mostTogether = Math.max(mostTogether, ++together);
+      await new Promise((resolve) => setTimeout(resolve, 40));
+      inside.set(project.id, inside.get(project.id)! - 1);
+      together--;
+      throw new Error('no project file in this test');
+    },
+    waitForHttp: async () => false,
+    startProcess: async () => undefined,
+    processLog: async () => 'nothing listens',
+  } as unknown as OrbStackManager;
+  const runner = new ScenarioRunner({ config: testConfig(tempDir().dir), sandboxes, browser: {} as never, arms: { has: () => false, ensure: async () => null, rest: async () => undefined, sql: async () => ({ exitCode: 0, stdout: '', stderr: '' }) } as never });
+  const [one, other] = [sampleProject('duel'), sampleProject('ledger')];
+  const walks = await Promise.all([runner.run(one, COUNTER_PLAN), runner.run(one, COUNTER_PLAN), runner.run({ ...one, slot: 1 } as Project, COUNTER_PLAN), runner.run(other, COUNTER_PLAN)]);
+  assert.ok(walks.every((walk) => !walk.passed && /The dev server .* did not answer/.test(walk.problems[0]!)), 'each got as far as the dev server, which is not there');
+  assert.deepEqual([most.get(one.id), most.get(other.id)], [1, 1], 'never two walks inside one project, its slots included');
+  assert.equal(mostTogether, 2, 'and two projects walk side by side');
 });
 
 test('a screen is measured again in the state a press puts it in: a second button that comes with saving, and breaks its label, is found', async (t) => {
