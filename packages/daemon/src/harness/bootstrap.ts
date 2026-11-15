@@ -11,6 +11,7 @@ import { KeyedMutex } from '../util/core.ts';
 import { AX_DIR, AX_ENTRY, kitFiles } from './axKit.ts';
 import { MOBILE_KIT_DIR, MOBILE_KIT_ENTRY, mobileKitFiles } from './mobileKit.ts';
 import { PROJECT_FILE, defaultProjectFile } from './projectFile.ts';
+import { AGENT_FILE, CLAUDE_FILE, agentBlock, claudeFile, withBlock } from '../repo/agentFile.ts';
 import { THEME_FILE } from './prompts.ts';
 import type { SelfHosting } from './SelfHosting.ts';
 
@@ -76,7 +77,7 @@ export class WorkspaceProvisioner {
       }
       // One round trip answers every question; each file set is written only when it is missing. The sheet's
       // second line says which generator wrote it.
-      const present = await this.#sandboxes.exec(project, `test -f ${THEME_FILE} && echo theme; test -f ${AX_ENTRY} && echo kit; test -f ${MOBILE_KIT_ENTRY} && echo mobile; sed -n '2p' ${THEME_FILE} 2>/dev/null; true`, { timeoutSec: 15 });
+      const present = await this.#sandboxes.exec(project, `test -f ${THEME_FILE} && echo theme; test -f ${AX_ENTRY} && echo kit; test -f ${MOBILE_KIT_ENTRY} && echo mobile; grep -q 'studio-zero:begin' ${AGENT_FILE} 2>/dev/null && echo agents; sed -n '2p' ${THEME_FILE} 2>/dev/null; true`, { timeoutSec: 15 });
       const has = new Set(present.stdout.split('\n').map((line) => line.trim()));
       const added: string[] = [];
       if (!has.has('theme')) {
@@ -104,6 +105,15 @@ export class WorkspaceProvisioner {
         for (const file of await mobileKitFiles()) await this.#sandboxes.writeFile(project, `${MOBILE_KIT_DIR}/${file.path}`, file.content);
         added.push('mobile kit');
       }
+      if (!has.has('agents')) {
+        // What a session on a clone of this repository has to know to keep the studio's contract: a block of
+        // the repository's own AGENTS.md (whatever else that file says is kept), which CLAUDE.md brings in.
+        const read = async (file: string): Promise<string | null> => this.#sandboxes.readFile(project, file, 256 * 1024).then((got) => got.content, () => null);
+        await this.#sandboxes.writeFile(project, AGENT_FILE, withBlock((await read(AGENT_FILE)) ?? '', agentBlock(project)));
+        const claude = claudeFile(await read(CLAUDE_FILE));
+        if (claude !== null) await this.#sandboxes.writeFile(project, CLAUDE_FILE, claude);
+        added.push('agent instructions');
+      }
       // Unlike the kits, this file is the daemon's to keep right: it is rewritten whenever what the owner has
       // connected differs from what the branch holds, so a new connection reaches a branch made before it.
       if (this.#external) {
@@ -129,7 +139,7 @@ export class WorkspaceProvisioner {
         // on: after a task fails the workspace is back on the integration branch, where the engine's
         // .gitignore does not exist and its node_modules still lie. A commit of everything took 89,960 of
         // those files into a project's main branch (2026-11-14).
-        await this.#sandboxes.commitAll(project, has.has('theme') ? `chore: add the Studio Zero ${list}` : `chore: add Studio Zero ${list}`, [STUDIO_DIR, faceHome(project.template).dir]);
+        await this.#sandboxes.commitAll(project, has.has('theme') ? `chore: add the Studio Zero ${list}` : `chore: add Studio Zero ${list}`, [STUDIO_DIR, faceHome(project.template).dir, AGENT_FILE, CLAUDE_FILE]);
       }
       return info;
     });

@@ -1,5 +1,5 @@
 import { contract, typeStepNames } from '@studio-zero/design';
-import type { ProjectTemplate, Template } from '@studio-zero/protocol';
+import { isAdopted, rootOf, type Project, type ProjectTemplate, type Template } from '@studio-zero/protocol';
 import { EXTERNAL_ENV_FILE } from '../app/ExternalApis.ts';
 import { SUPPLIED_FACES } from '../qa/mockupFaces.ts';
 import { MIN_MOCKUPS, MOCKUP_ASSET_DIR, MOCKUP_DIR } from '../qa/MockupRenderer.ts';
@@ -262,6 +262,72 @@ You are working in a copy of the project that stands on its main branch. When yo
 - walk_scenario walks one scenario for you while you work. It tells you what the screen said and what was saved, and what was measured on each screen it stood on: use it to see whether a change to a layout did what you meant, since you cannot see the screen any other way.
 
 If the request cannot be met by a change of this size, change nothing and say why in your final message.`;
+
+/** How a screen and a step are marked so a walk can find them: said to whoever works on a product the studio did not build. */
+const MARKS = `The root of every screen carries data-screen with that screen's id in the plan (data-screen="H-01"). The control for press k of step S carries data-step="S:k" (k counts from 1), and what is on screen only once the step's outcome is true carries data-done="S". In React Native these are dataSet={{ screen: 'H-01' }}, dataSet={{ step: 'S:k' }} and dataSet={{ done: 'S' }}: dataSet reaches the web page only and is ignored on a device, so a mark changes nothing a user sees. A field among a step's presses is filled by the studio: it carries data-sample with what a real person would type there (with no sample the studio types 1, and a form that rightly refuses 1 stops the walk). A step is at most ${MAX_STEP_PRESSES} presses, fields included.`;
+
+/** What the studio measures on a screen a walk stands on, in a sentence: the part of the house's bar that needs no taste. */
+const MEASURED = `text contrast against WCAG AAA (${contract.contrast.text}:1, ${contract.contrast.largeText}:1 for large type), controls of ${contract.touchTargetPx}x${contract.touchTargetPx}px or more, no text cut off, nothing that scrolls sideways, and a button's or a tab's label on one line`;
+
+/**
+ * System prompt for a coding engine on a product that was built elsewhere and brought in. The house's prompt
+ * says how the studio builds (its theme, its kits, its backend, its handbook); none of that is in such a
+ * repository, and an engine told to build that way would rebuild a stranger's product in our image. What is
+ * left is the part of the contract that is about any product: it compiles, it loads, it can be walked, and
+ * what is measured on its screens. A constant for a project (its folder); nothing of the task is in it.
+ */
+export function adoptedSystemPrompt(root: string): string {
+  return `You are an engineer continuing a product that was built elsewhere and brought into Studio Zero, a studio whose owner hands off a request and comes back to a finished, verified change. Nobody is watching you work. The owner built this product, or had it built, and knows it better than you do: your work is read as a change to their code, on a branch they read before they merge it.
+
+Environment. You work inside this project's Linux sandbox (Debian, Node 24, npm and pnpm, git). The repository is at /workspace${root === '' ? ', which is your working directory' : `, and the product is in /workspace/${root}, which is your working directory: commands run there, and a path you give a file tool is relative to it (the rest of the repository is ../)`}. Its dependencies are installed as its lockfile has them; when you add one, use the package manager that lockfile belongs to, and the framework's own installer where it has one. The harness has put you on a task branch and commits your work when you finish, the whole repository: do not commit, switch branches or rewrite history. Do not start a dev server; the harness starts the command in .studio-zero/project.json (it must bind 0.0.0.0) and you keep that file's command, port and routes accurate. There is no device here: no simulator, no Xcode, no Android SDK. What only a device can show cannot be run, and you say so instead of guessing. The sandbox holds no credentials: never ask for a key, invent one or write one into a file. ${EXTERNAL_ENV_FILE}, when it is there, lists the outside services the owner has connected, each with a base URL and stand-in values to send where the provider wants its key.
+
+The product is its own. Before you change anything, read what it says of itself: AGENTS.md and CLAUDE.md (at the repository's root and beside the product), its README, and the code around what you are about to touch. Follow its stack, its structure, its naming, its design system and the voice of its copy. Do not bring in a framework, a styling system, a state library, a theme or a component kit it does not use. Do not restructure, rename, reformat or "modernise" what you were not asked about. Where the request leaves something open, decide it the way this codebase already decides such things, and say what you decided. Studio Zero's own theme, kits and backend are not in this repository and are not to be added to it.
+
+What a change is held to, here as in any product of the studio:
+- It compiles. The project's own type check (or, where it has none, its tests) runs in the sandbox when you stop, and a failure comes back to you as the tool's own output.
+- It loads. The running web target is opened in a headless browser, and uncaught exceptions, console errors and 5xx responses come back the same way.
+- It can be walked. ${SCREEN_SPEC_FILE}, when it is there, is the product's screen plan: its screens, and its scenarios as steps a browser carries out. ${MARKS} A control you move keeps its mark; a control you replace hands its mark on; a screen or a step you add is added to the plan in the same change, with its marks. Every scenario of the plan is walked when you stop, and the work is not accepted until each reaches its end. ${SCREEN_DOC_FILE} is written from the plan by the studio: never edit it.
+- It is measured. On each screen a walk stands on, at a phone's size and in each state a press puts it in: ${MEASURED}. What a screen was already found breaking before your change is the product as it came; what your change brings is yours.
+walk_scenario walks one scenario for you while you work, and tells you what the screen said at each step and what was measured on each screen it stood on. You cannot see a screen any other way: use it after a change to a layout, and do not stop on a scenario you have not seen reach its end.
+
+So before you stop, run the type check yourself and fix what it reports. The checks are the owner's safety net; do not weaken, skip or special-case them.
+
+While you work, do not narrate. Do not restate the request, lay out a numbered plan or describe what you are about to do: the owner sees each step as you take it. Say a line only when you change direction or hit something they need to know.
+
+Finishing. End with a short message for the owner, in the language the request was written in: what you changed, what you decided where the request was open, and anything left out and why, in plain sentences. No headers, no file-by-file inventory.
+
+${DATA_HANDLING_CONTRACT}`;
+}
+
+/** The system prompt a project's engines get: the house's for a product the studio builds, the one above for a product it was handed. */
+export function systemPromptFor(project: Pick<Project, 'template' | 'root' | 'adopted'>): string {
+  return isAdopted(project) ? adoptedSystemPrompt(rootOf(project)) : codingSystemPrompt(project.template);
+}
+
+/**
+ * A fit: the first task of a product that was brought in. The opposite of a draft's brief in every line: there
+ * is a product, and the work is to leave it exactly as it is while making it something the studio can run,
+ * walk and measure. A constant; the owner's notes go after it.
+ */
+export const ADOPT_BRIEF = `This is a fit. The product in this repository was built elsewhere and has just been brought into the studio. Nothing here can yet run it, walk it or measure it. Your task is to make that possible and to change nothing else: when you are done the product looks, reads and behaves exactly as it did, on every platform it runs on. Do not ask questions.
+
+In this order:
+
+1. Read the product. What it is for, who uses it, what its screens are, how a person moves between them, and where it keeps what a person enters. Its own documents and its tests (end-to-end flows, if it has them) say this better than the code alone.
+
+2. Make its web target run in this sandbox: the studio looks at a product in a browser. Write .studio-zero/project.json as { "dev": { "command", "port" }, "routes": ["/"], "states": [] }, the command binding 0.0.0.0 on port 3000, 5173 or 8081 (an Expo app: "npx expo start --web --port 8081"). If the product has no web target yet (an Expo app without react-native-web), add what the framework's own documentation says a web target needs, through its own installer so the versions match (npx expo install react-native-web react-dom @expo/metro-runtime), and nothing more. A module that exists only on a device (a share extension, a native clipboard or notification module, a widget) is stood in for on the web only: a .web.ts file beside it, or a platform check at the one place it is called, that does the nearest harmless thing. The native code path is not touched, and nothing is removed from the product. See that the bundle builds before you go on (an Expo app: npx expo export --platform web --output-dir /tmp/web-check).
+
+3. Write the screen plan of what exists: ${SCREEN_SPEC_FILE}, one JSON object. It describes the product as it is today, not as it should be: no screen, step or rule that is not in the code. "coreMoment" (one sentence: the one thing the product exists for a person to do); "screens" (each exactly { "id" such as "H-01", "name", "purpose": one line, "entry": ["where a person arrives from"], "elements": [], "states": [], "exceptions": [] }, the three lists left empty); "tasks" (the core flow: one to three things a person gets done, each { "id", "goal", "outcome", "screen" }); "events": []; and the four parts that say how it works:
+${SCREEN_SPEC_WORKS}
+A product nobody signs in to (what a person enters is kept on the device, or nothing is kept) gives "entry": null, "noAccounts" with the reason in a sentence, and "data": []. Its scenarios are walked by a visitor on a browser that has never opened it. One scenario a role, a second only where a person's way through truly differs, six at most. Choose what can be carried out in a browser from a fresh start with what the product itself offers (its sample or mock data): a step that needs a camera, a share sheet, a push notification or another app is left out of the plan, and you say so at the end. After the last step of a scenario the studio reloads the page and looks for that step's data-done again, so end each scenario on something that is there after a reload: what the product keeps, read back from where it keeps it, or what is on that route whenever it is opened.
+
+4. Mark the screens and the steps, so the plan can be walked. ${MARKS} Put a mark on the element that already is the control (the Pressable, the TextInput), not on a wrapper you add; where a component does not pass an unknown prop down to a native element, pass the mark through in the smallest way.
+
+5. Walk each scenario with walk_scenario until it reaches its end. Fix what stops a walk when it is the fit that is wrong: a mark, a sample, a step that is not what the product does. When it is the product that is wrong (a screen that fails on the web for a reason of its own, a flow that cannot be completed), do not repair the product: take that step or scenario out of the plan and tell the owner what you found.
+
+What a walk measures on the screens (${MEASURED}) is the product as it came. It is written down as where the product stands, and it is not yours to fix here: change no layout, colour, size or wording. If the product is written in TypeScript and has no "typecheck" script, add one (tsc --noEmit): it is the first thing every later change is checked by.
+
+Close with a short message for the owner: what now runs, the scenarios the plan has, what you had to add to the product and why, what you stood in for on the web, and what you left out of the plan and why.`;
 
 export const CONTINUED_BRIEF = `This task was stopped part-way: the subscription it runs on reached its usage limit. The limit has reset and the task has been started again. What was done before it stopped is committed on this branch and is in the workspace now. Read what is there first, then carry on from it. Do not start over and do not redo what is already done; finish what is missing.`;
 

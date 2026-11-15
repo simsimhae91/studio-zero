@@ -4,7 +4,15 @@ import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
+import type Anthropic from '@anthropic-ai/sdk';
+import type { Finding } from '@studio-zero/protocol';
 import { ConflictError } from '../src/app/errors.ts';
+import { ADOPT_BRIEF, DRAFT_BRIEF, adoptedSystemPrompt } from '../src/harness/prompts.ts';
+import type { ScenarioOutcome, ScenarioRunnerLike } from '../src/qa/ScenarioRunner.ts';
+import type { SmokeOutcome, SmokeRunner } from '../src/qa/SmokeTester.ts';
+import { hasBlock } from '../src/repo/agentFile.ts';
+import { readScreenSpec } from '../src/scratch/ScreenSpec.ts';
+import { sleep } from '../src/util/core.ts';
 import { detectStack, inspect, slugOf } from '../src/repo/Adoption.ts';
 import { runCommand, type RunResult } from '../src/util/run.ts';
 import { tempDir, testDaemon } from './helpers.ts';
@@ -181,6 +189,122 @@ test('a checkout that cannot be brought in leaves nothing behind', async () => {
     assert.equal(store.listProjects().some((p) => p.id === project.id), true);
     assert.equal(readFileSync(join(gate.pathOf(project), 'HEAD'), 'utf8').trim(), 'ref: refs/heads/main');
     await studio.settle();
+  } finally {
+    await d.cleanup();
+    mine.cleanup();
+  }
+});
+
+// ------------------------------------------------------------------ the fit
+
+type Block = Anthropic.Beta.BetaContentBlock;
+const use = (name: string, input: Record<string, unknown>): Block => ({ type: 'tool_use', id: `tu_${Math.random().toString(36).slice(2, 10)}`, name, input }) as Block;
+const say = (text: string): Block => ({ type: 'text', text, citations: null }) as Block;
+
+/** An engine that takes one scripted turn after another and keeps what it was sent. */
+function engine(turns: Block[][]): { sdk: Anthropic; sent: Anthropic.Beta.MessageCreateParams[] } {
+  const usage = { input_tokens: 1000, output_tokens: 200, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 };
+  const base = { id: 'msg', type: 'message', role: 'assistant', model: 'claude-opus-5-5', stop_details: null, stop_sequence: null, usage };
+  const sent: Anthropic.Beta.MessageCreateParams[] = [];
+  const sdk = {
+    beta: {
+      messages: {
+        stream: (params: Anthropic.Beta.MessageCreateParams) => {
+          sent.push(structuredClone(params));
+          const content = turns[Math.min(params.messages.filter((m) => m.role === 'assistant').length, turns.length - 1)]!;
+          return { finalMessage: async () => ({ ...base, content, stop_reason: content.some((b) => b.type === 'tool_use') ? 'tool_use' : 'end_turn' }) };
+        },
+        parse: async () => assert.fail('no structured call is made on the fast track'),
+      },
+    },
+  } as unknown as Anthropic;
+  return { sdk, sent };
+}
+
+/** The plan of the fixture product as it is: nobody signs in, what is added is kept on the device. */
+const FIT_PLAN = {
+  coreMoment: '링크를 담아 두고 값이 내리면 안다.',
+  screens: [
+    { id: 'H-01', name: '홈', purpose: '담아 둔 상품을 본다', entry: ['앱을 연다'], elements: [], states: [], exceptions: [] },
+    { id: 'A-01', name: '담기', purpose: '링크를 붙여 상품을 담는다', entry: ['H-01'], elements: [], states: [], exceptions: [] },
+  ],
+  tasks: [{ id: 'add', goal: '링크를 담는다', outcome: '담은 상품이 목록에 보인다', screen: 'A-01' }],
+  events: [],
+  roles: [{ id: 'shopper', name: '사는 사람', does: '링크를 담고 값을 본다' }],
+  entry: null,
+  noAccounts: '담은 것은 이 기기에만 둔다.',
+  scenarios: [{ id: 'add-one', role: 'shopper', after: null, steps: [{ id: 'add', screen: 'A-01', does: '링크를 붙여 담는다', saves: null, outcome: '담은 상품이 목록에 보인다' }] }],
+  data: [],
+};
+
+test('a fit is told what a fit is, its walk writes the project\'s first trails and ledger, and it ends on a branch with the note', async () => {
+  assert.ok(readScreenSpec(FIT_PLAN, { works: true, draft: true }).ok, 'the fixture plan holds');
+  const finding = { rule: 'type/broken-label', category: 'typography', severity: 'major', source: 'dom', viewport: 'iphone-15-pro', route: '/', message: 'the label "이미지로 저장" breaks over two lines', selector: null, bbox: null, fix: 'T7: keep it on one line.' } as unknown as Finding;
+  const walks: { scenarios: string[]; look: unknown }[] = [];
+  const scenarios: ScenarioRunnerLike = {
+    run: async (_project, spec, opts): Promise<ScenarioOutcome> => {
+      walks.push({ scenarios: spec.scenarios.map((s) => s.id), look: opts?.look ?? false });
+      return { passed: true, scenarios: 1, walked: 1, problems: [], logins: [], detail: '1 walked', durationMs: 7, looks: [{ screen: 'H-01', scenario: 'add-one', findings: [finding], png: null }], trails: { 'add-one': [{ screen: 'H-01', step: 'add' }, { screen: 'A-01', step: 'add' }] } };
+    },
+  };
+  const smoke: SmokeRunner = { run: async (): Promise<SmokeOutcome> => ({ passed: true, routes: ['/'], issues: [], detail: '1 route loaded without errors', durationMs: 5 }) };
+  const model = engine([
+    [use('write_file', { path: '.studio-zero/project.json', content: JSON.stringify({ dev: { command: 'npx expo start --web --port 8081', port: 8081 }, routes: ['/'], states: [] }) })],
+    [use('write_file', { path: 'docs/screens.json', content: JSON.stringify(FIT_PLAN) })],
+    [use('write_file', { path: 'src/home.tsx', content: 'export const title = "CreDeal";\nexport const screen = { screen: \'H-01\' };\n' })],
+    [say('웹 타깃이 돌고, 시나리오 하나(add-one)를 걸을 수 있습니다.')],
+  ]);
+  const d = await testDaemon({}, { anthropic: model.sdk, smoke, scenarios });
+  const mine = await checkout();
+  try {
+    await d.daemon.start();
+    d.daemon.evals.measureDraft = async () => null;
+    const { studio, sandboxes, store, gate, events } = d.daemon;
+    const { project } = await studio.adoptProject(OWNER, { path: mine.dir });
+    await studio.settle();
+    const main = (await mine.git('rev-parse', 'main')).stdout.trim();
+
+    const task = await studio.submitTask(OWNER, { projectId: project.id, kind: 'adopt', prompt: '결제 화면은 건드리지 않는다.' }, 'desktop');
+    for (let i = 0; i < 1500 && !['succeeded', 'failed', 'cancelled'].includes(studio.getTask(task.id).state); i++) await sleep(20);
+    const done = studio.getTask(task.id);
+    const trace = events.history({ taskId: task.id }, 0, 2000).map((e) => e.body);
+    assert.equal(done.state, 'succeeded', `${done.error}\n${trace.map((b) => JSON.stringify(b)).join('\n').slice(0, 4000)}`);
+
+    // Told what a fit is, in the voice for a product that is not ours, and not how the house starts one.
+    const first = model.sent[0]!;
+    assert.equal(typeof first.system === 'string' ? first.system : (first.system ?? []).map((part) => ('text' in part ? part.text : '')).join(''), adoptedSystemPrompt('app'));
+    const request = JSON.stringify(first.messages[0]!.content);
+    assert.ok(request.includes(ADOPT_BRIEF.slice(0, 80)));
+    assert.ok(!request.includes(DRAFT_BRIEF.slice(0, 60)));
+    assert.ok(request.includes('결제 화면은 건드리지 않는다.'), 'the owner\'s notes go with it');
+
+    // Walked whole and measured, and what was measured is the product as it came: recorded, said, held against nobody.
+    assert.deepEqual(walks, [{ scenarios: ['add-one'], look: true }]);
+    const gates = trace.flatMap((b) => (b.type === 'gate.result' ? [`${b.gate}:${b.passed}`] : []));
+    assert.ok(gates.includes('scenarios:true') && gates.includes('looks:true') && gates.includes('smoke:true'), gates.join(' '));
+    assert.ok(trace.some((b) => b.type === 'notice' && /들여온 그대로의 제품에 있던 결함 1건/.test(b.message)));
+    const kept = store.getWalks(project.id)!;
+    assert.deepEqual(kept.ledger['H-01']?.rules, ['type/broken-label']);
+    assert.deepEqual(kept.trails['add-one'], [{ screen: 'H-01', step: 'add' }, { screen: 'A-01', step: 'add' }]);
+    assert.equal(model.sent.length, 4, 'it was not sent back for what was measured');
+
+    // On its branch: the plan beside the product, the note at the repository's root. Main is as the owner left it.
+    const branch = done.branch!;
+    const show = async (path: string): Promise<string> => (await sandboxes.exec(project, `git show ${branch}:${path}`, { cwd: '/workspace' })).stdout;
+    assert.ok(readScreenSpec(JSON.parse(await show('app/docs/screens.json')), { works: true, draft: true }).ok);
+    const agents = await show('AGENTS.md');
+    assert.ok(hasBlock(agents));
+    assert.match(agents, /In `app\/`/);
+    assert.equal(await show('CLAUDE.md'), '@AGENTS.md\n');
+    assert.equal(await show('app/AGENTS.md'), 'This is an Expo app.\n', 'the product\'s own note is not touched');
+    assert.equal((await sandboxes.exec(project, 'git rev-parse main', { cwd: '/workspace' })).stdout.trim(), main);
+    assert.equal(done.landedCommit ?? null, null, 'a fit does not put itself on main');
+
+    // The branch is at the gate, so the owner reads it where they work.
+    for (let i = 0; i < 100 && !(await gate.branches(project)).some((b) => b.name === branch); i++) await sleep(50);
+    assert.equal((await mine.git('fetch', '-q', 'studio')).exitCode, 0);
+    assert.equal((await mine.git('show', `studio/${branch}:CLAUDE.md`)).stdout, '@AGENTS.md\n');
+    assert.equal((await studio.repoStatus(project.id)).planned, true);
   } finally {
     await d.cleanup();
     mine.cleanup();

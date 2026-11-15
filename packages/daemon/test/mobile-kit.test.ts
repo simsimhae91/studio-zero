@@ -59,7 +59,7 @@ test('a mobile project gets the kit in its first commit, keeps its own copy, and
     for (const path of ['index.ts', 'tokens.ts', 'MobileShell.tsx', 'README.md']) assert.ok(existsSync(join(kit, path)), path);
     assert.match(readFileSync(join(kit, 'index.ts'), 'utf8'), /from '\.\/MobileShell';/);
     const log = async (): Promise<string> => (await sandboxes.exec(garim, 'git log --format=%s')).stdout.trim();
-    assert.match(await log(), /^chore: add Studio Zero theme, project file, AX kit and mobile kit\n/);
+    assert.match(await log(), /^chore: add Studio Zero theme, project file, AX kit, mobile kit and agent instructions\n/);
     assert.equal((await sandboxes.exec(garim, 'git status --porcelain')).stdout, '');
 
     // The project changes its copy; provisioning again leaves it alone.
@@ -89,7 +89,7 @@ test('a web project is not given the mobile kit', async () => {
     d.daemon.store.insertProject(project);
     await d.daemon.provisioner.ensure(project);
     assert.equal(existsSync(join(d.workspace, MOBILE_KIT_DIR)), false);
-    assert.match((await d.daemon.sandboxes.exec(project, 'git log --format=%s')).stdout, /^chore: add Studio Zero theme, project file and AX kit\n/);
+    assert.match((await d.daemon.sandboxes.exec(project, 'git log --format=%s')).stdout, /^chore: add Studio Zero theme, project file, AX kit and agent instructions\n/);
   } finally {
     await d.cleanup();
   }

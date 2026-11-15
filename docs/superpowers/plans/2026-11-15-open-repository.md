@@ -146,8 +146,8 @@ withBlock(existing: string, block: string): string
 
 **Files:** `harness/prompts.ts`, `harness/Harness.ts`, `repo/agentFile.ts`, `harness/bootstrap.ts`, `cli.ts` (`fit`), tests `adoption.test.ts`, `agent-file.test.ts`
 
-- [ ] Test: `withBlock` replaces only its block and appends when there is none; `agentBlock` names the product folder, the plan and the remote; `a fit task is told what a fit is and not how to start a product`; `a fit task's walk writes the project's first trails and ledger and is not sent back for what it measured`; `a fit task leaves AGENTS.md with the block on its branch`; `a house project gets the agent file with its other studio files`.
-- [ ] Implement; commit.
+- [x] Test: `withBlock` replaces only its block and appends when there is none; `agentBlock` names the product folder, the plan and the remote; `a fit task is told what a fit is and not how to start a product`; `a fit task's walk writes the project's first trails and ledger and is not sent back for what it measured`; `a fit task leaves AGENTS.md with the block on its branch`; `a house project gets the agent file with its other studio files`.
+- [x] Implement; commit.
 
 ### Task 7: Desktop
 

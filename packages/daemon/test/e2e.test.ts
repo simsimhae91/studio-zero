@@ -276,7 +276,7 @@ test('one task, end to end: plan → execute → audit fails → repair → audi
 
     await studio.rollback(OWNER, project.id, task.baseCheckpointId!);
     assert.equal(await git('git rev-parse --abbrev-ref HEAD'), 'main');
-    assert.equal(await git('git log -1 --format=%s'), 'chore: add Studio Zero theme, project file and AX kit');
+    assert.equal(await git('git log -1 --format=%s'), 'chore: add Studio Zero theme, project file, AX kit and agent instructions');
     assert.ok(!existsSync(join(workspace, 'index.html')), 'the workspace is exactly as it was before the task');
     assert.equal(await git('git status --porcelain'), '');
   } finally {

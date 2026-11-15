@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { isStudioNote } from '../repo/agentFile.ts';
 import { textBlock, type ClaudeClient } from '../llm/ClaudeClient.ts';
 import { ORIENTATION, type ExtractedFile } from '../sandbox/extract.ts';
 import { DATA_HANDLING_CONTRACT, untrusted } from '../trust/dataBlock.ts';
@@ -168,7 +169,7 @@ export function locate(files: readonly ExtractedFile[], file: string, line: stri
  * product could be built around.
  */
 /** What is the project's own: the studio's kits and theme are in every project and say nothing of this one. */
-const ownFiles = (files: readonly ExtractedFile[]): ExtractedFile[] => files.filter((file) => !file.path.startsWith('.studio-zero/') && !file.path.startsWith('public/fonts/'));
+const ownFiles = (files: readonly ExtractedFile[]): ExtractedFile[] => files.filter((file) => !file.path.startsWith('.studio-zero/') && !file.path.startsWith('public/fonts/') && !isStudioNote(file.path, file.content));
 
 /** A project nothing has been built in yet. */
 export const isEmptyProject = (files: readonly ExtractedFile[]): boolean => ownFiles(files).every((file) => file.content === null);

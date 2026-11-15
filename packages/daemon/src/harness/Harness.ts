@@ -36,7 +36,7 @@ import type { EngineResult, EngineSession } from './engines/Engine.ts';
 import { countCompilerErrors, emptyRun, renderEvidence, type Ledger, type RunRecord } from './Ledger.ts';
 import type { LessonBook } from './LessonBook.ts';
 import { materialFor } from './handbook.ts';
-import { ANCHOR_BRIEF, CONTINUED_BRIEF, DEEP_DIVE_BRIEF, DRAFT_BRIEF, EDIT_BRIEF, MILESTONE_BRIEF, DRAW_ALL_BRIEF, IDEATION_BRIEF, IDEATION_REQUIRED_FILES, IDEATION_REVISION_BRIEF, PLAN_REVISION_BRIEF, PLANNER_SYSTEM_PROMPT, SCREEN_SPEC_RULES, codingSystemPrompt, directionBrief } from './prompts.ts';
+import { ADOPT_BRIEF, ANCHOR_BRIEF, CONTINUED_BRIEF, DEEP_DIVE_BRIEF, DRAFT_BRIEF, EDIT_BRIEF, MILESTONE_BRIEF, DRAW_ALL_BRIEF, IDEATION_BRIEF, IDEATION_REQUIRED_FILES, IDEATION_REVISION_BRIEF, PLAN_REVISION_BRIEF, PLANNER_SYSTEM_PROMPT, SCREEN_SPEC_RULES, systemPromptFor, directionBrief } from './prompts.ts';
 import { hashPlan, renderPlanMarkdown, type PlanGate } from './PlanGate.ts';
 import { chosenTheme, writeProjectTheme } from './themeSeed.ts';
 import type { ReflectionAgent } from './ReflectionAgent.ts';
@@ -44,6 +44,7 @@ import { PlanCritique, renderCritique, renderPatch, type Acceptance, type Sandwi
 import { foldListing } from './fileListing.ts';
 import { uncovered } from '../product/coverage.ts';
 import { PRODUCT_DOC_FILE, PRODUCT_MAP_FILE, renderProductMap } from '../product/ProductMap.ts';
+import { AGENT_FILE, CLAUDE_FILE, agentBlock, claudeFile, withBlock } from '../repo/agentFile.ts';
 import type { SelfHosting } from './SelfHosting.ts';
 import { copyBlock } from './TextSlopAuditor.ts';
 
@@ -324,11 +325,16 @@ export class Harness {
     // A build of a product is held to its screen plan as a product that works: who uses it, how they get in,
     // what each does and what is kept. A draft writes the short plan; it does not get to skip it.
     // What is taken from another repository is built as a build is: it is something the product now does.
-    const working = (initial.kind === 'build' || initial.kind === 'kirby_materialize') && this.#evals.usesBrowser(project.id) && variantOf(project.template) !== null;
+    // A product that was brought in is held to a plan only once it has one: the task that fits it writes it
+    // (`adopting`), and a build before that is not made to describe a product it was only asked to change. For
+    // a build after that, `specFor` is set below, when the workspace can be read.
+    const adopted = isAdopted(home);
+    const adopting = initial.kind === 'adopt';
+    const working = adopting ? this.#evals.usesBrowser(project.id) : !adopted && (initial.kind === 'build' || initial.kind === 'kirby_materialize') && this.#evals.usesBrowser(project.id) && variantOf(project.template) !== null;
     // A milestone of a product map: built on the map, its plan as wide as the map, each feature built so far walked.
     const mapped = initial.milestone === null || initial.milestone === undefined ? null : (this.#store.getRoadmap(project.id)?.map ?? null);
     const building: Building | null = mapped && mapped.milestones[initial.milestone ?? -1] ? { map: mapped, index: initial.milestone!, sentBack: false } : null;
-    const specFor: SpecDemand | null = design || working ? { works: working, draft, ...(building ? { wide: true } : {}) } : null;
+    let specFor: SpecDemand | null = design || working ? { works: working, draft, ...(building ? { wide: true } : {}) } : null;
     // The two cross-checks by another vendor's model go with a full build, unless the owner switched them off.
     const crossChecked = initial.kind === 'build' && !draft && this.#config.review.sandwich;
     const reviewerPref = ReviewerPref.nullable().catch(null).parse(initial.reviewerPref);
@@ -364,6 +370,8 @@ export class Harness {
         task = this.#finish(task, 'succeeded', { summary: await this.#fullCheck(project, task, signal) });
         return;
       }
+      // A build on a brought-in product that has been fitted: it has a plan, and is held to it as any build is.
+      if (adopted && !adopting && (task.kind === 'build' || task.kind === 'kirby_materialize') && this.#evals.usesBrowser(home.id) && (await this.#readSpec(project, { works: true, draft: true }))?.ok) specFor = { works: true, draft: true };
 
       // The engine is routed and opened when it is first needed. A resumed task needs one only if verification
       // finds something to repair.
@@ -371,7 +379,7 @@ export class Harness {
       const routed = async (): Promise<Awaited<ReturnType<ModelRouter['route']>>> => (route ??= await this.#router.route(task.kind, pickOf(task)));
       const open = async (): Promise<EngineSession> => {
         const decided = await routed();
-        return (engine.session ??= await decided.engine.open({ project, task, route: decided.candidate, system: codingSystemPrompt(project.template), signal, onWaiting }));
+        return (engine.session ??= await decided.engine.open({ project, task, route: decided.candidate, system: systemPromptFor(project), signal, onWaiting }));
       };
       // Sends a message to the engine. If the task's own budget runs out mid-way, the owner is asked whether to
       // extend it (an approval, so it reaches the phone) and the engine carries on from where it stopped.
@@ -405,7 +413,7 @@ export class Harness {
       /** One more conversation with the task's engine, beside the main one. */
       const openLane = async (lane: DirectionId): Promise<EngineSession> => {
         const decided = await routed();
-        const session = await decided.engine.open({ project, task, route: decided.candidate, system: codingSystemPrompt(project.template), signal, onWaiting, lane });
+        const session = await decided.engine.open({ project, task, route: decided.candidate, system: systemPromptFor(project), signal, onWaiting, lane });
         lanes.set(lane, session);
         return session;
       };
@@ -506,7 +514,7 @@ export class Harness {
         await open();
         // A design task that starts where a finished design already is (the owner sent it back with notes) revises it.
         const revising = ideation && (await this.#ideationDocuments(project)).length === 0;
-        result = await send(executeMessage(task, plan, lessons.text, { anchor, critique, references, revising, specOwed, template: project.template, continued, edit: editing !== null }));
+        result = await send(executeMessage(task, plan, lessons.text, { anchor, critique, references, revising, specOwed, template: project.template, continued, edit: editing !== null, adopted }));
         checkCancel();
         // A new design: its directions are drawn from the table the lead just wrote, each by an engine of its own.
         if (ideation && !revising) {
@@ -530,7 +538,7 @@ export class Harness {
           round += 1;
           phase('verify', round);
           const looked = ideation ? await this.#verifyIdeation(project, task, signal) : null;
-          const checked = looked ?? (await this.#verify(project, task, plan, signal, { design, spec: specFor, record, building, edit: editing }));
+          const checked = looked ?? (await this.#verify(project, task, plan, signal, { design, spec: specFor, record, building, edit: editing, adopting }));
           record.rounds = round;
           const failures = checked.failures;
           unverified = checked.unverified;
@@ -613,6 +621,8 @@ export class Harness {
         }
       }
 
+      // A fit ends with the note for whoever works on this repository outside the studio, on the same branch.
+      if (adopting) await this.#writeAgentFile(project);
       await this.#sandboxes.commitAll(project, commitSubject(task));
       // A small edit that passed goes onto main by itself. Main may have moved since it began (another edit
       // landed): it is then put on top, checked again there, and what fails there or collides goes back to the
@@ -623,7 +633,7 @@ export class Harness {
           const landing = await this.#slots!.land(project, branch, async () => {
             round += 1;
             phase('verify', round);
-            failedThere = (await this.#verify(project, task, plan, signal, { design, spec: specFor, record, building, edit: editing })).failures;
+            failedThere = (await this.#verify(project, task, plan, signal, { design, spec: specFor, record, building, edit: editing, adopting })).failures;
             return failedThere.length === 0;
           });
           checkCancel();
@@ -1087,7 +1097,7 @@ export class Harness {
     }
   }
 
-  async #verify(project: Project, task: Task, plan: Pick<Plan, 'auditRoutes'> | null, signal: AbortSignal, run: { design: boolean; spec: SpecDemand | null; record: RunRecord; building?: Building | null; edit?: Editing | null }): Promise<{ failures: Failure[]; unverified: string[]; waitingOn: string | null }> {
+  async #verify(project: Project, task: Task, plan: Pick<Plan, 'auditRoutes'> | null, signal: AbortSignal, run: { design: boolean; spec: SpecDemand | null; record: RunRecord; building?: Building | null; edit?: Editing | null; adopting?: boolean }): Promise<{ failures: Failure[]; unverified: string[]; waitingOn: string | null }> {
     const scope = { projectId: project.id, taskId: task.id };
     const record = run.record;
 
@@ -1150,12 +1160,15 @@ export class Harness {
         const planned = !this.#scenarios ? null : run.spec?.works ? await this.#readSpec(project, run.spec) : run.spec === null && variantOf(project.template) !== null ? await this.#readSpec(project, { works: true, draft: true }) : null;
         if (planned?.ok && planned.spec.scenarios.length > 0 && this.#scenarios) {
           try {
-            const walked = await this.#scenarios.run(project, planned.spec, { signal, look: !!run.building });
+            const walked = await this.#scenarios.run(project, planned.spec, { signal, look: !!run.building || !!run.adopting });
             this.#events.emit(scope, { type: 'gate.result', gate: 'scenarios', name: planned.spec.scenarios.map((scenario) => scenario.id).join(' '), passed: walked.passed, exitCode: null, durationMs: walked.durationMs, detail: walked.passed ? walked.detail : excerpt(renderScenarioFeedback(walked), 3000) });
             if (!walked.passed) return { failures: [{ name: 'scenarios', source: 'browser-page', detail: renderScenarioFeedback(walked) }], unverified: [], waitingOn: null };
             // It works. The screens its people stood on, signed in, are the ones the audit never opens: measured here.
             // Where this walk went and what it found is what a later small edit is checked by.
-            if (run.building) this.#rememberWalk(project.id, walked, await this.#headOf(project));
+            if (run.building || run.adopting) this.#rememberWalk(project.id, walked, await this.#headOf(project));
+            // A fit changes nothing a person sees, so what was measured is the product as it came: written down
+            // as where it stands (the line above), said to the owner, and held against nobody.
+            if (run.adopting) this.#saidAsItCame(project, task, walked);
             if (run.building && walked.looks && walked.looks.length > 0) {
               const found = await this.#walkedScreens(project, task, run.building, walked.looks);
               if (found) return { failures: [found], unverified: [], waitingOn: null };
@@ -1481,6 +1494,31 @@ export class Harness {
     };
   }
 
+  /** What a fit's walk measured on the product's screens, said once to the owner: it is theirs, as it came. */
+  #saidAsItCame(project: Place, task: Task, walked: ScenarioOutcome): void {
+    const looks = walked.looks ?? [];
+    const heavy = [...new Set(looks.flatMap((look) => look.findings.filter((finding) => finding.severity !== 'minor').map((finding) => debtLine(look.screen, look.scenario, finding))))];
+    const measured = new Set(looks.map((look) => look.screen)).size;
+    this.#events.emit({ projectId: project.id, taskId: task.id }, { type: 'gate.result', gate: 'looks', name: `${measured} screens`, passed: true, exitCode: null, durationMs: 0, detail: heavy.length === 0 ? `${measured} screens measured as the walk stood on them: nothing above minor` : `As the product came, written down as where it stands and held against nobody:\n${excerpt(heavy.join('\n'), 3000)}` });
+    this.#events.emit({ projectId: project.id, taskId: task.id }, { type: 'notice', level: 'info', message: heavy.length === 0 ? `화면 ${measured}장을 쟀고, 들여온 그대로의 제품에서 사소하지 않은 결함은 없었습니다.` : `화면 ${measured}장을 쟀습니다. 들여온 그대로의 제품에 있던 결함 ${heavy.length}건을 화면 기준으로 적었습니다(이 작업이 고칠 것이 아닙니다):\n${heavy.slice(0, 20).map((line) => `- ${line}`).join('\n')}` });
+  }
+
+  /**
+   * Writes the studio's block into the repository's AGENTS.md, and makes CLAUDE.md bring that file in: what a
+   * session on a clone of this repository has to know to keep the studio's contract (see `repo/agentFile.ts`).
+   * At the repository's root, wherever the product is. Best effort: a fit is not failed over a note.
+   */
+  async #writeAgentFile(project: Place): Promise<void> {
+    try {
+      const read = async (file: string): Promise<string | null> => this.#sandboxes.readFile(project, `${WORKSPACE_DIR}/${file}`, 256 * 1024).then((got) => got.content, () => null);
+      await this.#sandboxes.writeFile(project, `${WORKSPACE_DIR}/${AGENT_FILE}`, withBlock((await read(AGENT_FILE)) ?? '', agentBlock(project)));
+      const claude = claudeFile(await read(CLAUDE_FILE));
+      if (claude !== null) await this.#sandboxes.writeFile(project, `${WORKSPACE_DIR}/${CLAUDE_FILE}`, claude);
+    } catch (err) {
+      this.#log.warn({ projectId: project.id, err: errorMessage(err) }, 'the agent instructions could not be written');
+    }
+  }
+
   /**
    * Waits, before a small edit is walked, for a heavy task that has put migrations into the backend and not yet
    * merged them: the edit stands on main, and main's code against a schema that is ahead of it fails for a
@@ -1647,15 +1685,18 @@ function referenceBlock(ref: ReferenceCapture): string {
   return `Reference page ${ref.url} as measured in a browser. Read principles out of it; its numbers and assets are its own and are not to be carried across:\n${untrusted('browser-page', `${ref.title}\n${ref.summary}`, { url: ref.url })}`;
 }
 
-function executeMessage(task: Task, plan: Plan | null, lessonText: string, handed: { anchor: AnchorTable | null; critique: PlanCritique | null; references: readonly ReferenceCapture[]; revising?: boolean; specOwed?: string[] | null; template?: Project['template']; continued?: boolean; edit?: boolean } = { anchor: null, critique: null, references: [] }): string {
+function executeMessage(task: Task, plan: Plan | null, lessonText: string, handed: { anchor: AnchorTable | null; critique: PlanCritique | null; references: readonly ReferenceCapture[]; revising?: boolean; specOwed?: string[] | null; template?: Project['template']; continued?: boolean; edit?: boolean; adopted?: boolean } = { anchor: null, critique: null, references: [] }): string {
   // A draft's brief says how to start a product (a screen plan, sign-up, a backend). The studio's own repository
   // is a codebase with conventions: a quick change there is still held to its type check, tests and build, and
   // is not told to build any of that.
   // A small edit in a slot is one change to a product that is built: it is told that, and not how to start one.
-  const drafted = task.track === 'fast' && task.kind !== 'ideate' && handed.template !== 'studio-core' && !handed.edit;
+  // A product that was brought in is not a draft either, whatever track it runs on: it exists, and how the
+  // house starts a product (its plan, its backend, its handbook) is not how this one was made. Its first task
+  // is a fit, and that has a brief of its own.
+  const drafted = task.track === 'fast' && task.kind !== 'ideate' && handed.template !== 'studio-core' && !handed.edit && !handed.adopted;
   // A milestone of a product map is not a draft of a product: it is told how a slice of a whole one is built.
   const milestone = drafted && task.milestone !== null && task.milestone !== undefined;
-  const parts = [task.kind === 'ideate' ? (handed.revising ? IDEATION_REVISION_BRIEF : IDEATION_BRIEF) : '', handed.edit ? EDIT_BRIEF : milestone ? MILESTONE_BRIEF : drafted ? DRAFT_BRIEF : '', `The owner's request:\n${task.prompt}`];
+  const parts = [task.kind === 'ideate' ? (handed.revising ? IDEATION_REVISION_BRIEF : IDEATION_BRIEF) : '', task.kind === 'adopt' ? ADOPT_BRIEF : handed.edit ? EDIT_BRIEF : milestone ? MILESTONE_BRIEF : drafted ? DRAFT_BRIEF : '', `${task.kind === 'adopt' ? "The owner's notes" : "The owner's request"}:\n${task.prompt}`];
   if (handed.continued) parts.push(CONTINUED_BRIEF);
   if (plan) parts.push(`Plan drafted for this request (follow it unless the code shows it is wrong; say so if you deviate):\n${planText(plan)}`);
   // The table's cells were written by a model that had read reference pages, so they travel as data; the instruction to build to it is the harness's.

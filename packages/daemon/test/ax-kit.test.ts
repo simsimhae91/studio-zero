@@ -43,7 +43,7 @@ test('every provisioned project gets the kit once, in its first commit, and keep
     for (const path of ['index.ts', 'react/Blocks.tsx', 'README.md']) assert.ok(existsSync(join(kit, path)), path);
     assert.match(readFileSync(join(kit, 'index.ts'), 'utf8'), /export \* from '\.\/blocks';/);
     const log = async (): Promise<string> => (await d.daemon.sandboxes.exec(project, 'git log --format=%s')).stdout.trim();
-    assert.match(await log(), /^chore: add Studio Zero theme, project file and AX kit\n/);
+    assert.match(await log(), /^chore: add Studio Zero theme, project file, AX kit and agent instructions\n/);
     assert.equal((await d.daemon.sandboxes.exec(project, 'git status --porcelain')).stdout, '');
 
     // The project changes its copy; provisioning again leaves it alone.
