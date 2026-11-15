@@ -60,6 +60,11 @@ export const Contract = z.object({
   frozen: z.array(z.string().max(300)).max(60).default([]),
   frozenAt: z.string().nullable().default(null),
   createdAt: z.string(),
+  /**
+   * What whoever verified noticed that no claim covers: an error the page logged, a control too small to press,
+   * a number that does not add up. Nobody asked, and the owner would want to know.
+   */
+  noticed: z.array(z.object({ text: z.string().max(600), evidence: z.array(z.string().max(300)).max(6).default([]) })).max(30).default([]),
   /** Set when the work is closed: by whom, and with what left. */
   closedAt: z.string().nullable().default(null),
 });

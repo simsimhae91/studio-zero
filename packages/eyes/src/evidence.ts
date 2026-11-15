@@ -21,7 +21,10 @@ export function evidencePage(contract: Contract, folder: string, extra: { summar
   const count = (status: Claim['status']): number => contract.claims.filter((claim) => claim.status === status).length;
   const left = contract.claims.filter((claim) => claim.status !== 'proven');
   const verdict = count('refuted') > 0 ? '반증된 것이 있습니다' : count('unproven') > 0 ? '아직 보이지 않은 것이 있습니다' : count('unchecked') > 0 ? '보인 것은 전부 참이고, 확인하지 못한 것이 있습니다' : '전부 증명됐습니다';
-  const claims = contract.claims
+  // What needs the owner first: what was shown false, then what nobody showed, then what could not be checked.
+  const order: Record<Claim['status'], number> = { refuted: 0, unproven: 1, unchecked: 2, proven: 3 };
+  const claims = [...contract.claims]
+    .sort((a, b) => order[a.status] - order[b.status])
     .map(
       (claim) => `<section class="claim ${claim.status}">
   <header><span class="mark">${LABEL[claim.status]}</span><h2>${esc(claim.says)}</h2></header>
@@ -57,6 +60,7 @@ figure { margin: 0; display: flex; flex-direction: column; gap: 4px; max-width: 
 img { max-width: 100%; max-height: 520px; border: 1px solid var(--line); border-radius: 8px; background: var(--code) }
 figcaption { color: var(--muted); font-size: 12px; overflow-wrap: anywhere }
 ul { margin: 0; padding-left: 20px }
+main > section:not(.claim) { display: flex; flex-direction: column; gap: 12px }
 </style>
 <main>
   <p class="meta">계약 ${esc(contract.id)} · 레인 ${esc(contract.lane)}${contract.targets.length > 0 ? ` · ${esc(contract.targets.join(', '))}` : ''}${extra.took ? ` · ${esc(extra.took)}` : ''}</p>
@@ -65,6 +69,7 @@ ul { margin: 0; padding-left: 20px }
   <p class="counts"><span>증명 ${count('proven')}</span><span>반증 ${count('refuted')}</span><span>아직 ${count('unproven')}</span><span>확인 못 함 ${count('unchecked')}</span></p>
   ${extra.summary ? `<p class="note">${esc(extra.summary)}</p>` : ''}
   ${claims}
+  ${contract.noticed.length > 0 ? `<section><h2>계약에 없지만 눈에 띈 것</h2>${contract.noticed.map((item) => `<div class="claim"><p class="note">${esc(item.text)}</p>${item.evidence.length > 0 ? `<div class="shots">${item.evidence.map(picture).join('')}</div>` : ''}</div>`).join('')}</section>` : ''}
   ${left.length > 0 ? `<section><h2>남은 것</h2><ul>${left.map((claim) => `<li>${LABEL[claim.status]}: ${esc(claim.says)}${claim.note ? ` (${esc(claim.note)})` : ''}</li>`).join('')}</ul></section>` : ''}
   ${contract.notDoing.length > 0 ? `<section><h2>하지 않은 것</h2><ul>${contract.notDoing.map((line) => `<li>${esc(line)}</li>`).join('')}</ul></section>` : ''}
 </main>

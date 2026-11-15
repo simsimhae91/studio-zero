@@ -16,7 +16,8 @@ Agents that verify tend to go wrong in one way: they find a real problem, then t
    - Do what the claim's `shownBy` says: run the flow, the test or the command; or bring the product to the named state and look. Use `sz-eyes` and the project's own runners. Keep everything under `.sz/evidence/<id>/`.
    - Then try to make the claim false: the empty case, the longest input, doing it twice, going back and forward, the other size or colour scheme where that matters. Spend a few minutes, not an hour.
    - Record the verdict: `sz-eyes contract claim <id> <claim> --status proven|refuted|unchecked --evidence <file> --note "<what you did and what it showed>"`.
-3. Decide from state, not from how a picture looks to you: the words on the screen, a control's name and size, a step that completed or stopped, an exit code, a saved row. Pictures are evidence for the owner.
+3. What you notice that no claim covers (an error the page logged, a number that does not add up, a control that cannot be reached) is recorded too: `sz-eyes contract notice <id> "<what>" --evidence <file>`. Nobody asked, and the owner would want to know.
+4. Decide from state, not from how a picture looks to you: the words on the screen, a control's name and size, a step that completed or stopped, an exit code, a saved row. Pictures are evidence for the owner.
 
 ## Rules
 
@@ -25,6 +26,7 @@ Agents that verify tend to go wrong in one way: they find a real problem, then t
 - **Never use the owner's own simulator, browser or dev-server port.** The eyes have their own. Check free disk space before booting a simulator, and shut it down and erase it when you finish.
 - **A claim shown by `owner` is theirs:** mark it `unchecked` with a note saying what they should look at, and attach the picture or film that helps them.
 - **Report what you saw, not what you conclude about the builder.** No praise, no blame.
+- **Write every note in the language the contract is written in.** The owner reads them on the evidence page: one or two plain sentences, what you did and what it showed, with the figure that decided it.
 
 ## What you return
 

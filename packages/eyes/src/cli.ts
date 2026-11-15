@@ -28,6 +28,7 @@ const USAGE = `sz-eyes: launch what was built, look at it, operate it, and put w
   sz-eyes contract new <id> --lane S|M|L --request <text> [--target web]... --claim "<id>|<what will be true>|<kind>:<ref>"... [--not "<text>"]... [--risk "<text>"]... [--dir <project>]
   sz-eyes contract freeze <id> [--frozen <path>]... [--dir <project>]
   sz-eyes contract claim <id> <claim-id> --status proven|refuted|unchecked [--evidence <file under the evidence folder>]... [--note <text>] [--dir <project>]
+  sz-eyes contract notice <id> "<what was noticed that no claim covers>" [--evidence <file>]... [--dir <project>]
   sz-eyes contract show <id> [--dir <project>]           the contract as the owner reads it
   sz-eyes contract status [--dir <project>]              what open contracts still owe; exits 1 when anything is owed
   sz-eyes contract close <id> [--dir <project>]
@@ -179,6 +180,15 @@ async function main(argv: string[]): Promise<number> {
       Object.assign(claim, { status, evidence: [...new Set([...claim.evidence, ...a.all('--evidence')])], note: a.one('--note') ?? claim.note });
       writeContract(file, contract);
       out(`${claimId}: ${status}`);
+      return 0;
+    }
+    if (command === 'notice') {
+      const text = a.words.slice(1).join(' ').trim();
+      if (text === '') throw new EyesError('sz-eyes contract notice <id> "<what was noticed>" [--evidence <file>]');
+      const folder = evidenceFolder(project, id);
+      for (const path of a.all('--evidence')) if (!existsSync(join(folder, path))) throw new EyesError(`${join(folder, path)}: no such file. Evidence is a file under ${folder}`);
+      writeContract(file, { ...contract, noticed: [...contract.noticed, { text, evidence: a.all('--evidence') }] });
+      out('noted');
       return 0;
     }
     if (command === 'close') {

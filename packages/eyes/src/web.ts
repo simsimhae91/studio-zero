@@ -113,13 +113,33 @@ export async function lookAtWeb(url: string, opts: LookOptions = {}): Promise<Lo
     const pressable = elements.filter((e) => e.interactive);
     // A control's name as a person reads it: its label for assistive technology, or the words inside it (the
     // digest keeps an element's own text only, and a button's words are usually its children's).
-    const names = await page
-      .evaluate((selectors) => selectors.map((selector) => {
-        const el = document.querySelector(selector);
-        return el ? (el.getAttribute('aria-label') || (el as HTMLElement).innerText || el.getAttribute('title') || el.getAttribute('placeholder') || '').trim().replace(/\s+/g, ' ').slice(0, 60) : '';
-      }), pressable.map((e) => e.selector))
-      .catch(() => [] as string[]);
-    const controls = pressable.map((e, i): Control => ({ label: names[i] || e.text.trim(), role: e.role || e.tag, box: [Math.round(e.x), Math.round(e.y), Math.round(e.w), Math.round(e.h)], selector: e.selector }));
+    // And whether a person could press it at all: what lies under another screen (a router keeps the screen it
+    // came from mounted beneath) is in the page and not on it. So a control is asked for where it is drawn, not
+    // by its selector: two screens stacked have controls with the same selector, and the one a selector finds
+    // first is the one underneath. (The first verifier to use this was told the sign-in screen had a
+    // "이메일로 가입하기" button, and was not told of its "로그인" button.)
+    const CONTROL = 'button, a[href], input, select, textarea, summary, [role="button"], [role="link"], [role="tab"], [role="checkbox"], [role="radio"], [role="switch"], [role="menuitem"], [tabindex]:not([tabindex="-1"])';
+    const named = await page
+      .evaluate(({ boxes, control }) => boxes.map(({ x, y, w, h, selector }) => {
+        const nameOf = (el: Element): string => (el.getAttribute('aria-label') || (el as HTMLElement).innerText || el.getAttribute('title') || el.getAttribute('placeholder') || '').trim().replace(/\s+/g, ' ').slice(0, 60);
+        const [cx, cy] = [x - window.scrollX + w / 2, y - window.scrollY + h / 2];
+        if (cx < 0 || cy < 0 || cx > window.innerWidth || cy > window.innerHeight) {
+          // Below the screenful: it can be scrolled to, and the selector is all there is to ask by.
+          const el = document.querySelector(selector);
+          return { name: el ? nameOf(el) : '', reachable: el !== null && el.closest('[aria-hidden="true"], [inert]') === null };
+        }
+        const top = document.elementFromPoint(cx, cy);
+        const hit = top?.closest(control) ?? null;
+        return { name: hit ? nameOf(hit) : top ? nameOf(top) : '', reachable: hit !== null };
+      }), { boxes: pressable.map((e) => ({ x: e.x, y: e.y, w: e.w, h: e.h, selector: e.selector })), control: CONTROL })
+      .catch(() => [] as { name: string; reachable: boolean }[]);
+    const listed = new Set<string>();
+    const controls = pressable.flatMap((e, i): Control[] => {
+      if (named[i] && !named[i]!.reachable) return [];
+      const control: Control = { label: named[i]?.name || e.text.trim(), role: e.role || e.tag, box: [Math.round(e.x), Math.round(e.y), Math.round(e.w), Math.round(e.h)], selector: e.selector };
+      const key = `${control.label}|${control.box.join(',')}`;
+      return listed.has(key) ? [] : (listed.add(key), [control]);
+    });
 
     let screenshot: string | null = null;
     if (opts.out) {
