@@ -33,6 +33,16 @@ sz-eyes web look <url> [--size phone|tablet|desktop] [--dark] [--wait "<words>"]
 sz-eyes web do <url> --step "tap:<words>" --step "type:<field>=<text>" --step "wait:<words>" --step "see:<words>" --step "shot:<name>" --out <folder> --name <flow>
 ```
 
+A candidate for release or a live address is looked at the same way, and two more looks say what a public service must get right:
+
+```
+sz-eyes web live <url> [--commit <sha>]             # is it up, is it the version released (it says its commit at /healthz), what a person arriving trips on
+sz-eyes web leaks <url> [--path <path>]... --env <the file with the server's secrets>     # is anything that must stay on the server in what a browser is given
+sz-eyes web strangers <url> --as "<step>"... --other "<step>"... [--open <path>]...         # can one person get at what another stored
+```
+
+`strangers` is for any product where people have things of their own. `--as` signs a first person in and uses the product as them: open their things, make one, change one, remove one, and leave something in place that only they typed. `--other` signs a second person in. Everything the first person's browser asked of a server is then asked again as nobody and as the second person, and each change is tried by them first. A screen cannot show this fault: a screen only asks for what is its own. Paths that are meant to answer everyone are named with `--open`, each for a reason the spec gives. Never run it without `--reads-only` on an address people are using.
+
 `look` gives the words on the page, what can be pressed with names and sizes, what the page logged, and what was measured (contrast, touch targets, text cut off, sideways scroll, a label broken over two lines). `do` carries out steps as a person would and pictures what each press led to; it stops at the first step that cannot be done and says why. Add `--house` only for a product built on the studio's own design system.
 
 **iOS** (a simulator build; the map says where the app is and its bundle id):

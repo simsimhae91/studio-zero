@@ -56,7 +56,9 @@ export function evidencePage(contract: Contract, folder: string, extra: { summar
   const count = (status: Claim['status']): number => contract.claims.filter((claim) => claim.status === status).length;
   const left = contract.claims.filter((claim) => claim.status !== 'proven');
   const kept = extra.kept ?? null;
-  const verdict = count('refuted') > 0 ? '반증된 것이 있습니다' : kept && kept.broken.length > 0 ? '전부터 지키던 것이 깨졌습니다' : count('unproven') > 0 ? '아직 보이지 않은 것이 있습니다' : count('unchecked') > 0 ? '보인 것은 전부 참이고, 확인하지 못한 것이 있습니다' : '전부 증명됐습니다';
+  const release = contract.release;
+  const short = (sha: string): string => sha.slice(0, 7);
+  const verdict = release?.takenBack ? '되돌렸습니다' : count('refuted') > 0 ? '반증된 것이 있습니다' : kept && kept.broken.length > 0 ? '전부터 지키던 것이 깨졌습니다' : count('unproven') > 0 ? '아직 보이지 않은 것이 있습니다' : count('unchecked') > 0 ? '보인 것은 전부 참이고, 확인하지 못한 것이 있습니다' : '전부 증명됐습니다';
   // What needs the owner first: what was shown false, then what nobody showed, then what could not be checked.
   const order: Record<Claim['status'], number> = { refuted: 0, unproven: 1, unchecked: 2, proven: 3 };
   const claims = [...contract.claims]
@@ -70,13 +72,22 @@ export function evidencePage(contract: Contract, folder: string, extra: { summar
 </section>`,
     )
     .join('\n');
-  return `<title>증거 ${esc(contract.id)}</title>
+  // A release says first where it went and which version took whose place, and how it is taken back.
+  const where = release
+    ? `<section><p class="how">${esc(release.place)} · <code>${esc(release.url)}</code></p>
+  <p class="how">버전 ${release.previous ? `<code>${esc(short(release.previous))}</code> → ` : ''}<code>${esc(short(release.commit))}</code>${release.candidate ? ` · 내보내기 전에 본 곳 <code>${esc(release.candidate)}</code>` : ''}</p>
+  ${release.wayBack ? `<p class="how">되돌리는 길 <code>${esc(release.wayBack)}</code></p>` : ''}
+  ${release.takenBack ? `<p class="note">${esc(release.takenBack.note)}</p>` : ''}
+</section>`
+    : '';
+  return `<title>${release ? (release.candidate === null ? '점검' : '출하') : '증거'} ${esc(contract.id)}</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <style>${PAGE_STYLE}</style>
 <main>
-  <p class="meta">계약 ${esc(contract.id)} · 레인 ${esc(contract.lane)}${contract.targets.length > 0 ? ` · ${esc(contract.targets.join(', '))}` : ''}${extra.took ? ` · ${esc(extra.took)}` : ''}</p>
+  <p class="meta">${release ? (release.candidate === null ? '살아 있는 것 점검' : '출하') : '계약'} ${esc(contract.id)}${release ? '' : ` · 레인 ${esc(contract.lane)}`}${contract.targets.length > 0 ? ` · ${esc(contract.targets.join(', '))}` : ''}${extra.took ? ` · ${esc(extra.took)}` : ''}</p>
   <h1>${esc(contract.request)}</h1>
   <p class="verdict">${verdict}</p>
+  ${where}
   <p class="counts"><span>증명 ${count('proven')}</span><span>반증 ${count('refuted')}</span><span>아직 ${count('unproven')}</span><span>확인 못 함 ${count('unchecked')}</span></p>
   ${extra.summary ? `<p class="note">${esc(extra.summary)}</p>` : ''}
   ${claims}
@@ -93,7 +104,7 @@ export function evidencePage(contract: Contract, folder: string, extra: { summar
   ${contract.noticed.length > 0 ? `<section><h2>계약에 없지만 눈에 띈 것</h2>${contract.noticed.map((item) => `<div class="claim"><p class="note">${esc(item.text)}</p>${item.evidence.length > 0 ? `<div class="shots">${item.evidence.map(picture).join('')}</div>` : ''}</div>`).join('')}</section>` : ''}
   ${contract.amendments.length > 0 ? `<section><h2>얼린 뒤 고친 검사</h2><ul>${contract.amendments.map((a) => `<li><code>${esc(a.file)}</code> ${esc(a.why)}</li>`).join('')}</ul></section>` : ''}
   ${left.length > 0 ? `<section><h2>남은 것</h2><ul>${left.map((claim) => `<li>${LABEL[claim.status]}: ${esc(claim.says)}${claim.note ? ` (${esc(claim.note)})` : ''}</li>`).join('')}</ul></section>` : ''}
-  ${contract.notDoing.length > 0 ? `<section><h2>하지 않은 것</h2><ul>${contract.notDoing.map((line) => `<li>${esc(line)}</li>`).join('')}</ul></section>` : ''}
+  ${contract.notDoing.length > 0 ? `<section><h2>${release ? '이번에 보지 않은 것과 까닭' : '하지 않은 것'}</h2><ul>${contract.notDoing.map((line) => `<li>${esc(line)}</li>`).join('')}</ul></section>` : ''}
 </main>
 `;
 }

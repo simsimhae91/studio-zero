@@ -113,7 +113,9 @@ export function standing(projectDir: string): { stands: Standing[]; retired: Ret
   const stands: Standing[] = [];
   const retired: Retired[] = [];
   for (const contract of all) {
-    if (contract.closedAt === null) continue;
+    // A release's claims are about one version at one place: the next release shows them again. They are not
+    // promises that work on the product has to keep on a developer's machine.
+    if (contract.closedAt === null || contract.release !== null) continue;
     for (const claim of contract.claims) {
       if (claim.status !== 'proven') continue;
       const key = keyOf(contract.id, claim.id);
@@ -154,6 +156,7 @@ export function recordShown(projectDir: string, key: string, look: { status: Sho
 
 /** When a contract is closed, each claim it proved starts standing, stamped with the files as they are now. */
 export function stampClosed(projectDir: string, contract: Contract, at: string): void {
+  if (contract.release !== null) return;
   const ledger = readLedger(projectDir);
   for (const claim of contract.claims) if (claim.status === 'proven') ledger.shown[keyOf(contract.id, claim.id)] = Shown.parse({ status: 'holds', at, note: '', during: contract.id, files: fingerprints(projectDir, watched(contract, claim)) });
   writeLedger(projectDir, ledger);

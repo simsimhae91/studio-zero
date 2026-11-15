@@ -1,14 +1,20 @@
 #!/usr/bin/env node
+import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 import { BACKLOG_FILE, addToBacklog, doneInBacklog, leftBy, openBacklog } from './backlog.ts';
 import { CONTRACTS_DIR, EVIDENCE_DIR, ClaimStatus, Contract, Lane, ShownBy, openContracts, owed, readContract, renderContract, writeContract } from './contract.ts';
+import { engineEnv, findTool, hostedSupabaseCall } from './engine.ts';
 import { writeEvidencePage } from './evidence.ts';
 import { changedSinceFrozen, fingerprint, fingerprints } from './fingerprint.ts';
 import { Status, addSaid, latestRound, newRound, noteSaid, readRound, renderRound, writeRoundPage } from './feedback.ts';
 import { EyesError, installApp, restSimulator, runFlow, screenText, screenshot, spareSimulator } from './ios.ts';
+import { downloadsOf, filesOf, leakReport, renderLeaks } from './leaks.ts';
+import { lookAtLive, renderLive } from './live.ts';
 import { freePort } from './port.ts';
+import { GATE_LINES, lastRelease, releaseContract, releases, renderReleases, type Gate } from './release.ts';
 import { reviewWeb } from './review.ts';
+import { renderStrangers, strangers } from './strangers.ts';
 import { Shown, brokenDuring, keptFor, ledgerProblem, recordShown, renderStanding, stampClosed, standing, standingSummary } from './standing.ts';
 import { SIZES, lookAtWeb, renderLook, renderWalk, walkWeb, type Size } from './web.ts';
 
@@ -27,6 +33,25 @@ const USAGE = `sz-eyes: launch what was built, look at it, operate it, and put w
         open the running product in a window for the owner: they use it as usual, press 말하기, point at what
         they mean and say it. Ends when they press 끝내기 or close the window, and prints what they said, with
         what each was about and a picture of that moment. Run it in the background and wait for it to end
+
+  sz-eyes web leaks <url> [--path <path>]... [--env <file>]... [--json]      (or: sz-eyes web leaks --dir <built folder> [--env <file>]...)
+        read everything a browser is given at those addresses (pages, scripts, styles, API answers, source maps),
+        or every file of a built folder, and look for what must stay on the server: the exact values of the
+        secrets in the given dotenv files, and the shapes of keys that open something. A value found is never
+        printed. Exits 1 when anything leaks
+
+  sz-eyes web strangers <url> --as "<step>"... [--other "<step>"...] [--mark "<words only the first person's data holds>"]...
+        [--open <path>]... [--as-header "name: value"]... [--other-header "name: value"]... [--reads-only] [--json]
+        can one person get at what another stored? Uses the product as a first person (--as: sign in, then open,
+        make and change something of their own), keeps everything their browser asked of a server, and asks for
+        the same again as nobody (no session) and as a second person (--other: the steps that sign them in).
+        What the first person typed and the second did not marks their data. --open names paths meant to answer
+        everyone. On an address people are using, --reads-only. Exits 1 on a finding, or when nothing could be asked
+
+  sz-eyes web live <url> [--commit <sha>] [--at /healthz] [--json]
+        ask a service where people reach it: is it up, is it the version that was released (it says its commit
+        at --at), is it served as a public service has to be, and what would a person arriving trip on.
+        Exits 1 when it is not the service as released
 
   sz-eyes ios spare [--type "iPhone 17"]                 the eyes' own simulator, made and booted with no window; prints its id
   sz-eyes ios install <udid> <path.app> --bundle-id <id> [--metro <port>]
@@ -66,6 +91,21 @@ const USAGE = `sz-eyes: launch what was built, look at it, operate it, and put w
   sz-eyes backlog [--dir <project>]                      what is written down as known and not done (${BACKLOG_FILE})
   sz-eyes backlog add "<one line, in the owner's language>" [--from "<where it came from>"] [--dir <project>]
   sz-eyes backlog done "<some words of the line>" --by "<the contract or commit that ended it>" [--dir <project>]
+
+  sz-eyes release new --place <name> --url <where people reach it> --commit <sha> --candidate <where the version about to go out answers>
+        --check "<how what stands is shown again on the candidate>" --strangers "<how it is shown that others' data cannot be seen>"
+        --backup "<...>" --way-back "<the command that puts the previous version back>" --walk "<the one thing, done on what is live>"
+        --errors "<what prints the errors recorded since>" [--data "<...>"] [--kept "<...>"] [--previous <sha>] [--env <file>]...
+        [--without "<line>|<why it does not apply>"]... [--claim "<id>|<what will be true>|<kind>:<ref>"]... [--frozen <path>]... [--dir <project>]
+        the release gate as a frozen contract: the same lines for every release, each shown ("<kind>:<ref>" or a
+        bare command) or waived with a reason the owner reads. Lines: ${GATE_LINES.join(', ')}.
+        The rc- lines are shown before the switch, the live- lines after it; verdicts with sz-eyes contract claim
+  sz-eyes release check --place <name> [--dir <project>]  a look at what is live now: the live- lines of the last release there, as a new contract
+  sz-eyes release back <id> --note "<what was put back and what answers now>" [--dir <project>]   the release was taken back
+  sz-eyes release list [--dir <project>]                 what was released where, and what should be answering now
+
+  sz-eyes docker <args>...                               the container engine on this machine, reached without touching the owner's settings
+  sz-eyes supabase <args>...                             the Supabase stack that runs on this machine for this project (never a hosted one)
 
   sz-eyes port                                           a port nothing listens on, from the machine: start what you
         launch on it (PORT=$(sz-eyes port)), keep its process id ($!), and end it by that id. Never choose a
@@ -141,6 +181,131 @@ async function main(argv: string[]): Promise<number> {
     const walk = await walkWeb(url, steps, { size, dark: a.has('--dark'), house: a.has('--house'), ...(a.one('--wait') ? { waitFor: a.one('--wait')! } : {}), ...(a.one('--out') ? { out: resolve(a.one('--out')!) } : {}), ...(a.one('--name') ? { name: a.one('--name')! } : {}) });
     out(a.has('--json') ? JSON.stringify(walk, null, 2) : renderWalk(walk, steps.length));
     return walk.passed ? 0 : 1;
+  }
+  if (area === 'web' && command === 'leaks') {
+    const a = parse(rest, ['--json']);
+    const dir = a.one('--dir');
+    const url = a.words[0];
+    if (!dir && !url) throw new EyesError('sz-eyes web leaks <url> [--path <path>]... [--env <file>]...   or   sz-eyes web leaks --dir <built folder> [--env <file>]...');
+    let report;
+    try {
+      if (dir) report = leakReport(filesOf(resolve(dir)), a.all('--env').map((file) => resolve(file)));
+      else {
+        const served = await downloadsOf(url!, a.all('--path'));
+        if (served.files.length === 0) throw new Error(`nothing was downloaded from ${url}: is it up?`);
+        report = leakReport(served.files, a.all('--env').map((file) => resolve(file)), { strays: served.strays, maps: served.maps });
+      }
+    } catch (err) {
+      throw new EyesError(err instanceof Error ? err.message.split('\n')[0]! : String(err));
+    }
+    out(a.has('--json') ? JSON.stringify(report, null, 2) : renderLeaks(report, dir ? resolve(dir) : url!));
+    return report.leaks.length > 0 ? 1 : 0;
+  }
+  if (area === 'web' && command === 'strangers') {
+    const a = parse(rest, ['--json', '--reads-only']);
+    const url = a.words[0];
+    if (!url || a.all('--as').length === 0) throw new EyesError('sz-eyes web strangers <url> --as "<step>"... [--other "<step>"...]: the steps sign a first person in and use the product as them');
+    const headers = (flag: string): Record<string, string> => Object.fromEntries(a.all(flag).map((text) => [text.slice(0, text.indexOf(':')).trim().toLowerCase(), text.slice(text.indexOf(':') + 1).trim()]));
+    const report = await strangers(url, { as: a.all('--as'), other: a.all('--other'), asHeaders: headers('--as-header'), otherHeaders: headers('--other-header'), marks: a.all('--mark'), open: a.all('--open'), readsOnly: a.has('--reads-only') }).catch((err: unknown) => {
+      throw new EyesError(`the product could not be used at ${url}: ${err instanceof Error ? err.message.split('\n')[0] : String(err)}`);
+    });
+    out(a.has('--json') ? JSON.stringify(report, null, 2) : renderStrangers(report, url));
+    return report.findings.length > 0 || report.stopped !== null || report.reads + report.changes === 0 ? 1 : 0;
+  }
+  if (area === 'web' && command === 'live') {
+    const a = parse(rest, ['--json']);
+    const url = a.words[0];
+    if (!url) throw new EyesError('sz-eyes web live <url> [--commit <sha>] [--at /healthz]');
+    const look = await lookAtLive(url, { ...(a.one('--commit') ? { commit: a.one('--commit')! } : {}), ...(a.one('--at') ? { at: a.one('--at')! } : {}) });
+    out(a.has('--json') ? JSON.stringify(look, null, 2) : renderLive(look));
+    return look.problems.length > 0 ? 1 : 0;
+  }
+  if (area === 'docker' || area === 'supabase') {
+    const args = argv.slice(1);
+    const tool = findTool(area);
+    if (!tool) throw new EyesError(area === 'docker' ? 'no container engine was found on this machine (OrbStack or Docker)' : 'the Supabase command line was not found: brew install supabase/tap/supabase');
+    if (area === 'supabase') {
+      const hosted = hostedSupabaseCall(args);
+      if (hosted) throw new EyesError(`not passed on: ${hosted}. This door opens only on the stack that runs on this machine. A hosted project is the owner's and is reached with their own \`supabase\`, by the steps of a release (sz:ship).`);
+    }
+    const ran = spawnSync(tool, args, { stdio: 'inherit', env: engineEnv() });
+    return ran.status ?? 1;
+  }
+  if (area === 'release') {
+    const a = parse(rest, []);
+    const project = resolve(a.one('--dir') ?? '.');
+    const now = new Date().toISOString();
+    const git = (...args: string[]): { ok: boolean; text: string } => {
+      const ran = spawnSync('git', ['-C', project, ...args], { encoding: 'utf8' });
+      return { ok: ran.status === 0, text: `${ran.stdout ?? ''}`.trimEnd() };
+    };
+    if (command === 'list') {
+      out(renderReleases(project));
+      return 0;
+    }
+    if (command === 'back') {
+      const id = a.words[0];
+      const note = (a.one('--note') ?? '').trim();
+      if (!id || note.length < 12) throw new EyesError('sz-eyes release back <id> --note "<what was put back and what answers now>"');
+      const file = contractFile(project, id);
+      if (!existsSync(file)) throw new EyesError(`no such release: ${id}`);
+      const contract = readContract(file);
+      if (!contract.release || contract.release.candidate === null) throw new EyesError(`${id} is not a release`);
+      if (contract.release.takenBack) throw new EyesError(`${id} was already taken back at ${contract.release.takenBack.at}`);
+      writeContract(file, { ...contract, release: { ...contract.release, takenBack: { at: now, note } }, closedAt: contract.closedAt ?? now });
+      addToBacklog(project, [{ text: `출하 ${id}(${contract.release.commit.slice(0, 7)})를 되돌렸다: ${note}`, from: id }]);
+      out(`taken back: ${id}. ${lastRelease(project, contract.release.place) ? `What should answer at ${contract.release.place} now: ${lastRelease(project, contract.release.place)!.release!.commit.slice(0, 7)}` : `Nothing released to ${contract.release.place} stands now`}. Written to ${BACKLOG_FILE}.`);
+      return 0;
+    }
+    const place = a.one('--place');
+    if (!place) throw new EyesError('which place: --place <the name the map gives where the product runs for people>');
+    const open = openContracts(project).map((entry) => entry.contract);
+    const openRelease = open.find((c) => c.release?.place === place);
+    if (openRelease) throw new EyesError(`${openRelease.id} is still open for ${place}: finish it (sz-eyes contract close ${openRelease.id}) or take it back (sz-eyes release back ${openRelease.id} --note ...) first`);
+    const extraClaims = a.all('--claim').map((text) => {
+      const [claimId = '', says = '', how = ''] = text.split('|').map((part) => part.trim());
+      const at = how.indexOf(':');
+      return { id: claimId, says, shownBy: ShownBy.parse({ kind: how.slice(0, at), ref: how.slice(at + 1).trim() }) };
+    });
+    const frozen = a.all('--frozen');
+    const missing = frozen.filter((path) => !existsSync(join(project, path)));
+    if (missing.length > 0) throw new EyesError(`not there to freeze: ${missing.join(', ')}`);
+    const idFree = (wanted: string): string => {
+      for (let n = 1; ; n++) {
+        const id = n === 1 ? wanted : `${wanted}-${n}`;
+        if (!existsSync(contractFile(project, id))) return id;
+      }
+    };
+    let contract: Contract;
+    if (command === 'check') {
+      const last = lastRelease(project, place);
+      if (!last) throw new EyesError(`nothing released to ${place} stands, so there is nothing to look at again. Releases: ${renderReleases(project)}`);
+      const kept = (id: string): boolean => id.startsWith('live-') && id !== 'live-kept';
+      contract = { ...last, id: idFree(`live-${now.slice(0, 10)}`), request: `${place}에 살아 있는 것 점검 (${last.release!.commit.slice(0, 7)}, ${last.id}로 내보낸 것)`, claims: last.claims.filter((claim) => kept(claim.id)).map((claim) => ({ ...claim, status: 'unproven', evidence: [], note: '' })), notDoing: last.notDoing.filter((line) => kept(line)), noticed: [], amendments: [], frozenAt: now, createdAt: now, closedAt: null, release: { ...last.release!, candidate: null, previous: null } };
+    } else if (command === 'new') {
+      const url = a.one('--url');
+      const given = a.one('--commit');
+      const candidate = a.one('--candidate');
+      if (!url || !given || !candidate) throw new EyesError('sz-eyes release new --place <name> --url <where people reach it> --commit <sha> --candidate <where the version about to go out answers> ... (sz-eyes help)');
+      const notProven = open.filter((c) => c.release === null);
+      if (notProven.length > 0) throw new EyesError(`work is still open: ${notProven.map((c) => c.id).join(', ')}. A release goes out from work that is closed: what it holds has been proven, or it is not in the release.`);
+      const commit = git('rev-parse', '--verify', `${given}^{commit}`);
+      if (!commit.ok) throw new EyesError(`${given} is not a commit of ${project}: a release names the commit that goes out`);
+      // Each line is two status letters, a space, and the path.
+      const dirty = git('status', '--porcelain', '--', '.', ':(exclude).sz').text.split('\n').filter((line) => line.trim() !== '');
+      if (dirty.length > 0) throw new EyesError(`there are changes that are in no commit (${dirty.slice(0, 5).map((line) => line.slice(3)).join(', ')}${dirty.length > 5 ? ', ...' : ''}). What goes out is a commit: commit them or put them aside, or what answers will not be ${commit.text.slice(0, 7)}.`);
+      const without = new Map(a.all('--without').map((text) => [text.slice(0, Math.max(0, text.indexOf('|'))).trim() || text.trim(), text.includes('|') ? text.slice(text.indexOf('|') + 1) : ''] as const));
+      const g: Gate = { place, url, commit: commit.text, previous: a.one('--previous') ?? lastRelease(project, place)?.release!.commit ?? null, candidate, check: a.one('--check') ?? null, strangers: a.one('--strangers') ?? null, data: a.one('--data') ?? null, backup: a.one('--backup') ?? null, wayBack: a.one('--way-back') ?? null, walk: a.one('--walk') ?? null, errors: a.one('--errors') ?? null, kept: a.one('--kept') ?? null, env: a.all('--env') };
+      try {
+        contract = releaseContract(project, idFree(`release-${releases(project).filter((c) => c.release!.candidate !== null).length + 1}`), g, { without, claims: extraClaims, frozen, now });
+      } catch (err) {
+        throw new EyesError(err instanceof Error ? err.message : String(err));
+      }
+    } else throw new EyesError('sz-eyes release new|check|back|list (sz-eyes help)');
+    const file = contractFile(project, contract.id);
+    writeContract(file, Contract.parse(contract));
+    out(`${file}\n\n${renderContract(Contract.parse(contract))}\nIt is frozen. ${contract.release!.candidate === null ? 'Have each line shown on what is live' : 'Have the rc- lines shown on the candidate before the switch, and the live- lines on what people reach after it'}: sz-eyes contract claim ${contract.id} <line> --status ...`);
+    return 0;
   }
   if (area === 'web' && command === 'review') {
     const a = parse(rest, ['--dark']);

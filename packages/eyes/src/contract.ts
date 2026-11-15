@@ -47,6 +47,28 @@ export type Claim = z.infer<typeof Claim>;
  * of those will be shown, what is deliberately not done, and what could go wrong. Whoever builds does not edit
  * it once it is frozen, nor the flows and tests it points at: a claim is proven by someone else, on the product.
  */
+/**
+ * A contract that is a release: a version of the product put where people reach it. Its claims are the release
+ * gate (`release.ts`), not something to build. They are about one version at one place at one time, so they do
+ * not join the promises the product keeps: the next release, or a look at what is live, shows them again.
+ */
+export const Release = z.object({
+  /** The name the map gives the place the product runs for people. */
+  place: z.string().min(1).max(60),
+  /** Where people reach it. */
+  url: z.string().max(400),
+  /** Where the version that is about to go out answers before it does, or null for a look at what is already live. */
+  candidate: z.string().max(400).nullable().default(null),
+  /** The commit that goes out, and the one it takes the place of. */
+  commit: z.string().max(60),
+  previous: z.string().max(60).nullable().default(null),
+  /** The command that puts the previous version back. */
+  wayBack: z.string().max(600).default(''),
+  /** Set when the release was taken back: what was done and what answers now. */
+  takenBack: z.object({ at: z.string(), note: z.string().max(1200) }).nullable().default(null),
+});
+export type Release = z.infer<typeof Release>;
+
 export const Contract = z.object({
   id: z.string().regex(/^[a-z0-9][a-z0-9-]{2,60}$/),
   request: z.string().min(1).max(4000),
@@ -78,6 +100,8 @@ export const Contract = z.object({
    * standing, and this work must keep it true.
    */
   supersedes: z.array(z.object({ contract: z.string().max(61), claim: z.string().max(31), why: z.string().min(8).max(600), at: z.string().nullable().default(null) })).max(30).default([]),
+  /** Set when the contract is a release (or a look at what is live), with where and which version. */
+  release: Release.nullable().default(null),
   /** Set when the work is closed: by whom, and with what left. */
   closedAt: z.string().nullable().default(null),
 });
@@ -133,8 +157,20 @@ const MARK: Record<ClaimStatus, string> = { proven: '증명됨', refuted: '반�
 export function renderContract(contract: Contract): string {
   const list = (title: string, items: string[]): string => `## ${title}\n\n${items.join('\n')}`;
   const blocks = [
-    `# 계약 ${contract.id} (레인 ${contract.lane})`,
-    [`요청: ${contract.request}`, ...(contract.targets.length > 0 ? [`대상: ${contract.targets.join(', ')}`] : [])].join('\n'),
+    contract.release ? `# ${contract.release.candidate === null ? '살아 있는 것 점검' : '출하'} ${contract.id}` : `# 계약 ${contract.id} (레인 ${contract.lane})`,
+    [
+      `요청: ${contract.request}`,
+      ...(contract.targets.length > 0 ? [`대상: ${contract.targets.join(', ')}`] : []),
+      ...(contract.release
+        ? [
+            `곳: ${contract.release.place} (${contract.release.url})`,
+            `버전: ${contract.release.previous ? `${contract.release.previous.slice(0, 7)} → ` : ''}${contract.release.commit.slice(0, 7)}`,
+            ...(contract.release.candidate ? [`내보내기 전에 보는 곳(후보): ${contract.release.candidate}`] : []),
+            ...(contract.release.wayBack ? [`되돌리는 길: \`${contract.release.wayBack}\``] : []),
+            ...(contract.release.takenBack ? [`되돌림: ${contract.release.takenBack.note}`] : []),
+          ]
+        : []),
+    ].join('\n'),
     list('끝났을 때 참인 것', contract.claims.map((claim) => `- [${MARK[claim.status]}] **${claim.id}** ${claim.says}\n  - 보이는 방법: ${claim.shownBy.kind} \`${claim.shownBy.ref}\`${claim.note ? `\n  - ${claim.note}` : ''}`)),
     ...(contract.notDoing.length > 0 ? [list('하지 않는 것', contract.notDoing.map((line) => `- ${line}`))] : []),
     ...(contract.supersedes.length > 0 ? [list('이 작업으로 물러나는 약속', contract.supersedes.map((s) => `- \`${s.contract}/${s.claim}\`: ${s.why}${addedLate(contract, s) ? ' (얼린 뒤에 적힘)' : ''}`))] : []),

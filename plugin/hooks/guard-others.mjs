@@ -6,53 +6,12 @@
 // answering there, took pictures of it as its own, and then ended it. It belonged to another project.
 // Exit 2 refuses the command and says what to do instead.
 
-let input = '';
-for await (const chunk of process.stdin) input += chunk;
-let call;
-try {
-  call = JSON.parse(input);
-} catch {
-  process.exit(0);
-}
-const command = call?.tool_input?.command;
-if (typeof command !== 'string' || command.trim() === '') process.exit(0);
+import { readCommand, runs, START } from './shell.mjs';
 
-const SHELL = /(^|[\s;&|(])(ba|z|da|k)?sh\b/;
-
-/**
- * What a shell would run, without the text it only carries: a here-document that is not fed to a shell (a commit
- * message, a file being written) and quoted words with no command inside them. A commit that says "not with
- * pkill" is not a pkill.
- */
-function runs(text) {
-  const bare = text.replace(/<<-?\s*(['"]?)([A-Za-z_][A-Za-z0-9_]*)\1[^\n]*\n[\s\S]*?\n[ \t]*\2[ \t]*(?=\n|$)/g, (whole, _quote, _tag, at) => {
-    const before = text.slice(text.lastIndexOf('\n', at - 1) + 1, at);
-    return new RegExp(`${SHELL.source}[^|;&]*$`).test(before) ? whole : whole.slice(0, whole.indexOf('\n'));
-  });
-  let kept = '';
-  for (let i = 0; i < bare.length; i++) {
-    const char = bare[i];
-    if (char === '\\' && i + 1 < bare.length) {
-      kept += bare[++i];
-      continue;
-    }
-    if (char !== "'" && char !== '"') {
-      kept += char;
-      continue;
-    }
-    let end = i + 1;
-    while (end < bare.length && bare[end] !== char) end += char === '"' && bare[end] === '\\' ? 2 : 1;
-    const inside = bare.slice(i + 1, end);
-    // Kept when a shell will run it: the script handed to `sh -c` or `eval`, or a string with a command in it.
-    const handed = /(^|[\s;&|(])((ba|z|da|k)?sh\s+(-\w+\s+)*-\w*c|eval)\s*$/.test(kept);
-    if (handed || (char === '"' && /\$\(|`/.test(inside))) kept += ` ${inside} `;
-    i = end;
-  }
-  return kept;
-}
+const command = await readCommand();
+if (command === null) process.exit(0);
 
 const text = runs(command);
-const START = '(^|[\\s;&|(`])';
 const which = [
   [new RegExp(`${START}(sudo\\s+)?(pkill|killall)\\b`), 'every process a name or a pattern fits'],
   [/\blsof\b[^;\n]*\|[^;\n]*\bkill\b/, 'whatever is listening on a port'],

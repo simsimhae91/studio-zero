@@ -70,6 +70,17 @@ export function openBrowser(): Promise<Browser> {
 }
 
 /**
+ * Lets go of a browser the eyes opened. Chrome takes about six seconds to exit after it is told to (measured
+ * here, whatever it was started with), and a flow that looks twenty times paid that twenty times. Nothing is
+ * read from it after this, so it is told to close and not waited for beyond a moment: it finishes exiting on
+ * its own, and when this process ends first, the browser is ended with it.
+ */
+export async function closeBrowser(browser: Browser): Promise<void> {
+  const closing = browser.close().catch(() => undefined);
+  await Promise.race([closing, new Promise((done) => setTimeout(done, 250).unref())]);
+}
+
+/**
  * Opens a page as a person would meet it and says what is there: the words, what can be pressed and how big it
  * is, what the page logged, and what was measured on it. The measurement is the universal one by default (text
  * that can be read, controls that can be pressed, nothing cut off or pushed off the side): true of any product.
@@ -163,7 +174,7 @@ export async function lookAtWeb(url: string, opts: LookOptions = {}): Promise<Lo
     };
   } finally {
     await context.close();
-    if (!opts.browser) await browser.close();
+    if (!opts.browser) await closeBrowser(browser);
   }
 }
 
@@ -234,21 +245,55 @@ async function settled(page: Page): Promise<Buffer> {
 
 const isSelector = (target: string): boolean => /^[.#[]|^data-|>>|^css=|^text=/.test(target);
 
-/** What a person would point at with these words: the control named so, else whatever shows them. */
+/** The controls a person could mean by these words. */
+const controlsNamed = (page: Page, target: string): ReturnType<Page['locator']> =>
+  page.getByRole('button', { name: target }).or(page.getByRole('link', { name: target })).or(page.getByRole('tab', { name: target })).or(page.getByRole('checkbox', { name: target }));
+
+/** Anything on the page that these words name or show: for waiting until it is there, or gone. */
 function pointAt(page: Page, target: string): ReturnType<Page['locator']> {
   if (isSelector(target)) return page.locator(target).first();
-  return page
-    .getByRole('button', { name: target })
-    .or(page.getByRole('link', { name: target }))
-    .or(page.getByRole('tab', { name: target }))
-    .or(page.getByRole('checkbox', { name: target }))
-    .or(page.getByText(target, { exact: false }))
-    .first();
+  return controlsNamed(page, target).or(page.getByText(target, { exact: false })).first();
+}
+
+/**
+ * What a person would press with these words: the control named so, else whatever shows them. A row whose
+ * words, read together, are the same as the name of a button inside it comes first on the page; a person
+ * means the button.
+ */
+async function toPress(page: Page, target: string, patience: number): Promise<ReturnType<Page['locator']>> {
+  if (isSelector(target)) return page.locator(target).first();
+  const any = pointAt(page, target);
+  await any.waitFor({ state: 'visible', timeout: patience });
+  const controls = controlsNamed(page, target).filter({ visible: true });
+  return (await controls.count()) > 0 ? controls.first() : any;
 }
 
 function field(page: Page, target: string): ReturnType<Page['locator']> {
   if (isSelector(target)) return page.locator(target).first();
   return page.getByLabel(target).or(page.getByPlaceholder(target)).or(page.getByRole('textbox', { name: target })).first();
+}
+
+/** Carries out one step on a page. Returns why it could not be done, in a line, or null when it was. */
+export async function doStep(page: Page, step: Step, patience = 10_000): Promise<string | null> {
+  const at = step.indexOf(':');
+  const [verb, rest] = at === -1 ? [step, ''] : [step.slice(0, at), step.slice(at + 1)];
+  try {
+    if (verb === 'tap') await (await toPress(page, rest, patience)).click({ timeout: patience });
+    else if (verb === 'type') {
+      const eq = rest.indexOf('=');
+      if (eq === -1) throw new Error('a type step is type:<field>=<text>');
+      await field(page, rest.slice(0, eq)).fill(rest.slice(eq + 1), { timeout: patience });
+    } else if (verb === 'press') await page.keyboard.press(rest);
+    else if (verb === 'wait') await pointAt(page, rest).waitFor({ state: 'visible', timeout: patience });
+    else if (verb === 'gone') await pointAt(page, rest).waitFor({ state: 'hidden', timeout: patience });
+    else if (verb === 'see') {
+      if (!(await pointAt(page, rest).isVisible().catch(() => false))) throw new Error(`"${rest}" is not on screen`);
+    } else if (verb === 'go') await page.goto(new URL(rest, page.url()).toString(), { waitUntil: 'load', timeout: 30_000 });
+    else if (verb !== 'shot') throw new Error(`no such step: ${verb}. Steps are tap, type, press, wait, gone, see, shot, go`);
+    return null;
+  } catch (err) {
+    return (err instanceof Error ? err.message : String(err)).split('\n')[0]!.slice(0, 240);
+  }
 }
 
 /**
@@ -271,23 +316,7 @@ export async function walkWeb(url: string, steps: readonly Step[], opts: LookOpt
         for (const step of steps) {
           const at = step.indexOf(':');
           const [verb, rest] = at === -1 ? [step, ''] : [step.slice(0, at), step.slice(at + 1)];
-          let why: string | null = null;
-          try {
-            if (verb === 'tap') await pointAt(page, rest).click({ timeout: patience });
-            else if (verb === 'type') {
-              const eq = rest.indexOf('=');
-              if (eq === -1) throw new Error('a type step is type:<field>=<text>');
-              await field(page, rest.slice(0, eq)).fill(rest.slice(eq + 1), { timeout: patience });
-            } else if (verb === 'press') await page.keyboard.press(rest);
-            else if (verb === 'wait') await pointAt(page, rest).waitFor({ state: 'visible', timeout: patience });
-            else if (verb === 'gone') await pointAt(page, rest).waitFor({ state: 'hidden', timeout: patience });
-            else if (verb === 'see') {
-              if (!(await pointAt(page, rest).isVisible().catch(() => false))) throw new Error(`"${rest}" is not on screen`);
-            } else if (verb === 'go') await page.goto(new URL(rest, page.url()).toString(), { waitUntil: 'load', timeout: 30_000 });
-            else if (verb !== 'shot') throw new Error(`no such step: ${verb}. Steps are tap, type, press, wait, gone, see, shot, go`);
-          } catch (err) {
-            why = (err instanceof Error ? err.message : String(err)).split('\n')[0]!.slice(0, 240);
-          }
+          const why = await doStep(page, step, patience);
           let screenshot: string | null = null;
           if (opts.out && (verb === 'shot' || why !== null || verb === 'tap' || verb === 'go')) {
             mkdirSync(opts.out, { recursive: true });
@@ -301,7 +330,7 @@ export async function walkWeb(url: string, steps: readonly Step[], opts: LookOpt
     });
     return { url, size, passed: results.length === steps.length && results.every((r) => r.ok), steps: results, end };
   } finally {
-    if (!opts.browser) await browser.close();
+    if (!opts.browser) await closeBrowser(browser);
   }
 }
 
