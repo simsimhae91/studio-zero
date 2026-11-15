@@ -434,7 +434,7 @@ test('a milestone whose checks still fail is tried once more by itself, then sto
 
 test('a builder can have one scenario walked while it works: with the ones it follows, briefly, and told what the walk found', async () => {
   const asked: { ids: string[]; brief: boolean; look: boolean }[] = [];
-  let outcome: Pick<ScenarioOutcome, 'passed' | 'problems'> = { passed: true, problems: [] };
+  let outcome: Pick<ScenarioOutcome, 'passed' | 'problems' | 'looks'> = { passed: true, problems: [] };
   const scenarios: ScenarioRunnerLike = {
     run: async (_project, spec, opts): Promise<ScenarioOutcome> => {
       asked.push({ ids: spec.scenarios.map((scenario) => scenario.id), brief: opts?.brief === true, look: opts?.look === true });
@@ -464,16 +464,26 @@ test('a builder can have one scenario walked while it works: with the ones it fo
     const reached = await walk('ranking');
     assert.equal(reached.isError, false);
     assert.match(reached.content, /<untrusted-data id="[0-9a-f]{24}" source="browser-page" tool="walk_scenario">\nScenario "ranking" reached its end \(walked after "matching"\), and its last outcome was still on screen after a reload\.\n/);
-    assert.deepEqual(asked, [{ ids: ['matching', 'ranking'], brief: true, look: false }]);
+    assert.deepEqual(asked, [{ ids: ['matching', 'ranking'], brief: true, look: true }]);
 
     // What the walk found comes back whole, as what a page and a backend said.
     outcome = { passed: false, problems: ['Scenario "meal-log" (같이 사는 사람), step 2 "log" (설거지 20분을 적는다): 1 marked control was pressed and nothing carrying data-done="log" came on screen. The screen said: "저장하지 못했어요" Rows made or changed by then: logs (1) [{"id":7,"minutes":null}]'] };
     const stopped = await walk('meal-log');
     assert.equal(stopped.isError, true);
     assert.match(stopped.content, /The studio walked the plan's scenarios on the running build as new people: 0 of 1 reached the end\.\n- Scenario "meal-log"[\s\S]*Rows made or changed by then: logs \(1\) \[\{"id":7,"minutes":null\}\]/);
-    assert.deepEqual(asked.at(-1), { ids: ['meal-log'], brief: true, look: false });
+    assert.deepEqual(asked.at(-1), { ids: ['meal-log'], brief: true, look: true });
     assert.match((await walk('rankng')).content, /The plan has no scenario "rankng"\. Its scenarios are: onboarding, meal-log, matching, ranking, meal-photo\./);
     assert.equal(asked.length, 2);
+
+    // And what was measured on the screens it stood on: a builder cannot see a layout any other way.
+    const finding = { rule: 'type/broken-label', category: 'typography', severity: 'major', message: '"기록하기" is broken onto 2 lines inside its control.', fix: 'T7: give it the width of its words.' };
+    outcome = { passed: true, problems: [], looks: [{ screen: 'H-01', scenario: 'meal-log', png: null, findings: [finding, { ...finding, rule: 'type/line-height', severity: 'minor' }] }, { screen: 'M-01', scenario: 'meal-log', png: null, findings: [] }] as unknown as ScenarioOutcome['looks'] };
+    const measured = await walk('meal-log');
+    assert.equal(measured.isError, false);
+    assert.match(measured.content, /Scenario "meal-log" reached its end, and its last outcome was still on screen after a reload\.\nThe screens it stood on \(H-01, M-01\) were measured at the size walked, in each state a press put them in\. Above minor:\n- Screen H-01, major, type\/broken-label: "기록하기" is broken onto 2 lines inside its control\. T7: give it the width of its words\.\n/);
+    assert.ok(!measured.content.includes('type/line-height'), 'what is minor is not put before a builder at work');
+    outcome = { passed: true, problems: [], looks: [{ screen: 'H-01', scenario: 'meal-log', png: null, findings: [] }] as unknown as ScenarioOutcome['looks'] };
+    assert.match((await walk('meal-log')).content, /The screens it stood on \(H-01\) were measured at the size walked, in each state a press put them in: nothing above minor\./);
   } finally {
     await d.cleanup();
   }

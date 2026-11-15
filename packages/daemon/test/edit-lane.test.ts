@@ -295,12 +295,17 @@ test('a full check walks main with no engine, and writes down where the walk wen
   }
 });
 
-test('an edit answers for what it brings to a screen: a finding the screen already had on main is let be, a new one sends it back', async () => {
+test('an edit answers for the screen it changes: what it brings sends it back, and what the screen already had is put to it once, with the measurement', async () => {
   const had = major('type/broken-label', '"적기" is broken onto 2 lines inside its control.');
   const brought = major('responsive/clipped-text', '"오늘 한 일 적기" is cut off inside its box.');
   let editWalks = 0;
   const r = await rig(
-    (request, turn, last) => (turn === 0 ? [use('write_file', { path: 'src/screens/Home.tsx', content: HOME })] : last.includes('Check "looks" failed') ? [use('write_file', { path: 'src/screens/Home.tsx', content: `${HOME}// room for the label\n` })] : [say('고쳤습니다.')]),
+    (request, turn, last) => {
+      if (turn === 0) return [use('write_file', { path: 'src/screens/Home.tsx', content: HOME })];
+      if (last.includes('your edit brought them')) return [use('write_file', { path: 'src/screens/Home.tsx', content: `${HOME}// room for the label\n` })];
+      if (last.includes('This is put to you once')) return [say('적기 버튼의 줄바꿈은 요청과 무관하고 이 수정으로는 고칠 수 없어 남겨 둡니다.')];
+      return [say('고쳤습니다.')];
+    },
     (call) => {
       if (!call.brief) return { looks: [look('H-01', 'first', [had]), look('S-01', 'fix')], trails: { first: [{ screen: 'H-01', step: 'log' }] } };
       editWalks++;
@@ -314,14 +319,23 @@ test('an edit answers for what it brings to a screen: a finding the screen alrea
     const edit = await r.submit('inline_edit', '오늘 장부의 적기 버튼 글자를 "오늘 한 일 적기"로');
     await finished(studio, edit.id);
     assert.equal(studio.getTask(edit.id).state, 'succeeded', r.why(edit.id));
-    assert.deepEqual(r.gates(edit.id), ['scope:true', 'scenarios:true', 'looks:false', 'scope:true', 'scenarios:true', 'looks:true']);
-    const [sentBack, passed] = bodies(r.trace(edit.id), 'gate.result').filter((g) => g.gate === 'looks');
-    assert.match(sentBack!.detail, /^Screen H-01 \(scenario "first"\), major, responsive\/clipped-text: "오늘 한 일 적기" is cut off inside its box\. T7: fix it\.$/);
-    assert.equal(passed!.detail, '1 screen the edit changed, measured as the walk stood on it: nothing above minor that is this edit\'s, besides 1 already recorded on main');
-    const repair = JSON.stringify(r.model.sent.find((p) => JSON.stringify(p.messages.at(-1)).includes('Check \\"looks\\" failed'))!.messages.at(-1));
-    assert.ok(repair.includes('responsive/clipped-text') && !repair.includes('type/broken-label'), 'sent back for what it brought, not for what was there');
-    // Landed, and the ledger still says what main's home screen is found breaking.
+    // Three rounds of looking: what it brought, then what was there before it (once), then through.
+    assert.deepEqual(r.gates(edit.id).filter((gate) => gate.startsWith('looks')), ['looks:false', 'looks:false', 'looks:true']);
+    const [first, second, third] = bodies(r.trace(edit.id), 'gate.result').filter((g) => g.gate === 'looks');
+    assert.match(first!.detail, /^Screen H-01 \(scenario "first"\), major, responsive\/clipped-text: "오늘 한 일 적기" is cut off inside its box\. T7: fix it\.$/);
+    assert.match(second!.detail, /^Screen H-01 \(scenario "first"\), major, type\/broken-label: "적기" is broken onto 2 lines inside its control\. T7: fix it\.$/);
+    assert.equal(third!.detail, '1 screen the edit changed, measured as the walk stood on it: nothing above minor that is this edit\'s, besides 1 the screen already had on main, put to the edit once and still there');
+    const sent = r.model.sent.map((p) => JSON.stringify(p.messages.at(-1)));
+    const forBrought = sent.find((m) => m.includes('your edit brought them'))!;
+    assert.ok(forBrought.includes('responsive/clipped-text') && !forBrought.includes('type/broken-label'), 'first for what it brought, and only that');
+    const forOld = sent.find((m) => m.includes('This is put to you once'))!;
+    assert.ok(forOld.includes('type/broken-label') && forOld.includes('before your edit') && !forOld.includes('responsive/clipped-text'));
+    assert.equal(sent.filter((m) => m.includes('This is put to you once')).length, 1, 'once');
+    // It lands, and what its screen is still found breaking is said to the owner and kept in the ledger.
     assert.equal(await git(project, 'git rev-parse main'), studio.getTask(edit.id).landedCommit);
+    const warned = bodies(r.trace(edit.id), 'notice').find((n) => n.level === 'warn');
+    assert.equal(warned?.message, 'main에 들어갔지만, 고친 화면에서 잰 결함 1건이 그대로 남아 있습니다:\n- H-01 화면 (시나리오 first) · 큰 결함 · type/broken-label: "적기" is broken onto 2 lines inside its control.');
+    assert.match(studio.getTask(edit.id).summary ?? '', /Not verified: still measured on the screens this changed: H-01 화면 \(시나리오 first\) · 큰 결함 · type\/broken-label/);
     assert.deepEqual(r.store.getWalks(project.id)!.ledger['H-01']?.rules, ['type/broken-label']);
   } finally {
     await r.cleanup();

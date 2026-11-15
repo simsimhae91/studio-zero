@@ -259,7 +259,7 @@ You are working in a copy of the project that stands on its main branch. When yo
 - Do not change the backend. supabase/ is not yours here and apply_schema is refused: the database is one for the whole project. A change that needs the schema is not a small edit; make no change and say so in your final message.
 - Do not change docs/screens.json unless the request is about the plan itself.
 - What you change has to hold on the screen: a button's or a tab's label on one line, no text cut off, nothing that scrolls sideways, contrast and touch targets as the handbook has them. Look at the state the change shows in (after the press that brings it up), not only at the screen as it opens.
-- walk_scenario walks one scenario for you while you work, and tells you what the screen said and what was saved.
+- walk_scenario walks one scenario for you while you work. It tells you what the screen said and what was saved, and what was measured on each screen it stood on: use it to see whether a change to a layout did what you meant, since you cannot see the screen any other way.
 
 If the request cannot be met by a change of this size, change nothing and say why in your final message.`;
 

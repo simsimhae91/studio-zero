@@ -269,9 +269,15 @@ export class Toolbox {
           for (let id: string | null | undefined = input.scenario; id && byId.has(id) && !wanted.has(id); id = byId.get(id)!.after?.trim()) wanted.add(id);
           const chain = read.spec.scenarios.filter((scenario) => wanted.has(scenario.id));
           try {
-            const outcome = await walker.run(ctx.project, { ...read.spec, scenarios: chain }, { ...(ctx.signal ? { signal: ctx.signal } : {}), brief: true });
-            if (outcome.passed) return { text: `Scenario "${input.scenario}" reached its end${chain.length > 1 ? ` (walked after ${chain.slice(0, -1).map((scenario) => `"${scenario.id}"`).join(', ')})` : ''}, and its last outcome was still on screen after a reload.`, ok: true, exitCode: null };
-            return { text: renderScenarioFeedback(outcome), ok: false, exitCode: null };
+            // Measured as it goes: a change to how a screen is laid out cannot be seen from here any other way.
+            // (The first quick fixes on a real product widened a button's box, said its label "should now fit",
+            // and were measured afterwards with the label still on two lines.)
+            const outcome = await walker.run(ctx.project, { ...read.spec, scenarios: chain }, { ...(ctx.signal ? { signal: ctx.signal } : {}), brief: true, look: true });
+            const heavy = [...new Set((outcome.looks ?? []).flatMap((look) => look.findings.filter((finding) => finding.severity !== 'minor').map((finding) => `- Screen ${look.screen}, ${finding.severity}, ${finding.rule}: ${finding.message}${finding.fix ? ` ${finding.fix}` : ''}`)))];
+            const screens = [...new Set((outcome.looks ?? []).map((look) => look.screen))];
+            const measured = screens.length === 0 ? '' : heavy.length === 0 ? `\nThe screens it stood on (${screens.join(', ')}) were measured at the size walked, in each state a press put them in: nothing above minor.` : `\nThe screens it stood on (${screens.join(', ')}) were measured at the size walked, in each state a press put them in. Above minor:\n${heavy.slice(0, 20).join('\n')}`;
+            if (outcome.passed) return { text: `Scenario "${input.scenario}" reached its end${chain.length > 1 ? ` (walked after ${chain.slice(0, -1).map((scenario) => `"${scenario.id}"`).join(', ')})` : ''}, and its last outcome was still on screen after a reload.${measured}`, ok: true, exitCode: null };
+            return { text: `${renderScenarioFeedback(outcome)}${measured}`, ok: false, exitCode: null };
           } catch (err) {
             if (ctx.signal?.aborted) throw err;
             return { text: `The studio could not walk it this time (${errorMessage(err)}). That says nothing about the product; carry on, it is walked when you stop.`, ok: false, exitCode: null };

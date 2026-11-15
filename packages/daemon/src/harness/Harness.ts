@@ -183,6 +183,10 @@ interface Editing {
   /** The trails of the last walk, when it walked every scenario. */
   trails: ScenarioOutcome['trails'] | null;
   looksRounds: number;
+  /** Whether what its screens already had on main has been put to it: it is, once. */
+  oldSentBack: boolean;
+  /** What its screens were still found breaking when it was let through, in the owner's language. */
+  left: string[];
 }
 
 /** How long a small edit's walk waits for a heavy task that has changed the schema and not yet merged it. */
@@ -292,7 +296,7 @@ export class Harness {
     // and everything below that is handed `project` (the tools, the dev server, the walk) works there.
     const light = this.#slots !== null && isLight(initial, this.#slots.perProject);
     let project: Place = home;
-    const editing: Editing | null = light && initial.kind === 'inline_edit' ? { scope: null, measured: new Map(), trails: null, looksRounds: 0 } : null;
+    const editing: Editing | null = light && initial.kind === 'inline_edit' ? { scope: null, measured: new Map(), trails: null, looksRounds: 0, oldSentBack: false, left: [] } : null;
     const scope = { projectId: home.id, taskId: initial.id };
     const ideation = initial.kind === 'ideate';
     const draft = initial.track === 'fast' || light;
@@ -625,6 +629,11 @@ export class Harness {
             task = this.#store.updateTask(task.id, { landedCommit: landing.commit });
             this.#events.emit(scope, { type: 'task.landed', commit: landing.commit, into: INTEGRATION_BRANCH });
             this.#rememberEdit(home.id, editing, landing.commit);
+            // On main, and not clean: what the changed screens are still found breaking is the owner's to know.
+            if (editing.left.length > 0) {
+              this.#events.emit(scope, { type: 'notice', level: 'warn', message: `main에 들어갔지만, 고친 화면에서 잰 결함 ${editing.left.length}건이 그대로 남아 있습니다:\n${editing.left.map((line) => `- ${line}`).join('\n')}` });
+              unverified = [...unverified, `still measured on the screens this changed: ${editing.left.join(' | ')}`];
+            }
             break;
           }
           if (landing.why === 'nothing') {
@@ -1432,8 +1441,16 @@ export class Harness {
     const heavy = looks.flatMap((look) => look.findings.filter((finding) => finding.severity !== 'minor').map((finding) => ({ look, finding })));
     for (const look of looks) edit.measured.set(look.screen, [...new Set([...(edit.measured.get(look.screen) ?? []), ...look.findings.filter((finding) => finding.severity !== 'minor').map((finding) => finding.rule)])]);
     const known = (screen: string, rule: string): boolean => ledger[screen]?.rules.includes(rule) ?? false;
-    const lines = [...new Set(heavy.filter((h) => !known(h.look.screen, h.finding.rule)).map(({ look, finding }) => `Screen ${look.screen} (scenario "${look.scenario}"), ${finding.severity}, ${finding.rule}: ${finding.message}${finding.selector ? ` At ${finding.selector}.` : ''}${finding.fix ? ` ${finding.fix}` : ''}`))];
-    const kept = new Set(heavy.filter((h) => known(h.look.screen, h.finding.rule)).map((h) => `${h.look.screen}|${h.finding.rule}`)).size;
+    const said = ({ look, finding }: (typeof heavy)[number]): string => `Screen ${look.screen} (scenario "${look.scenario}"), ${finding.severity}, ${finding.rule}: ${finding.message}${finding.selector ? ` At ${finding.selector}.` : ''}${finding.fix ? ` ${finding.fix}` : ''}`;
+    const brought = [...new Set(heavy.filter((h) => !known(h.look.screen, h.finding.rule)).map(said))];
+    const old = heavy.filter((h) => known(h.look.screen, h.finding.rule));
+    // What the screen already had is put to the edit once, with the measurement: the first real quick fixes were
+    // asked to mend exactly such findings, did not, and went onto main as done because the finding was "known".
+    // An edit that is about something else is not held to it a second time; what is left is said to the owner.
+    const putOld = brought.length === 0 && old.length > 0 && !edit.oldSentBack;
+    const lines = putOld ? [...new Set(old.map(said))] : brought;
+    edit.left = brought.length === 0 && !putOld ? [...new Set(old.map(({ look, finding }) => debtLine(look.screen, look.scenario, finding)))] : [];
+    const kept = new Set(old.map((h) => `${h.look.screen}|${h.finding.rule}`)).size;
     const measured = new Set(looks.map((look) => look.screen)).size;
     this.#events.emit({ projectId: project.id, taskId: task.id }, {
       type: 'gate.result',
@@ -1442,13 +1459,21 @@ export class Harness {
       passed: lines.length === 0,
       exitCode: null,
       durationMs: 0,
-      detail: lines.length === 0 ? `${measured} ${measured === 1 ? 'screen' : 'screens'} the edit changed, measured as the walk stood on ${measured === 1 ? 'it' : 'them'}: nothing above minor that is this edit's${kept > 0 ? `, besides ${kept} already recorded on ${INTEGRATION_BRANCH}` : ''}` : excerpt(lines.join('\n'), 3000),
+      detail: lines.length === 0 ? `${measured} ${measured === 1 ? 'screen' : 'screens'} the edit changed, measured as the walk stood on ${measured === 1 ? 'it' : 'them'}: nothing above minor that is this edit's${kept > 0 ? `, besides ${kept} the screen already had on ${INTEGRATION_BRANCH}, put to the edit once and still there` : ''}` : excerpt(lines.join('\n'), 3000),
     });
     if (lines.length === 0) return null;
+    if (putOld) {
+      edit.oldSentBack = true;
+      return {
+        name: 'looks',
+        source: 'browser-page',
+        detail: `Every scenario walked reached its end. The studio then measured the screens this edit changed, signed in, at the size they were walked at, in each state the walk put them in. These are measurements, not opinions. The screen was already found breaking these on ${INTEGRATION_BRANCH} before your edit, and with your edit it still is. If any of them is what you were asked to fix, it is not fixed yet: the measurement is the test, and walk_scenario gives you the same measurement while you work. Fix each in the code of the screen it names. One that is no part of what you were asked and cannot be mended by a small change may be left: say which, and why, in your final message. This is put to you once.\n${lines.map((line) => `- ${line}`).join('\n')}`,
+      };
+    }
     return {
       name: 'looks',
       source: 'browser-page',
-      detail: `Every scenario walked reached its end. The studio then measured the screens this edit changed, signed in, at the size they were walked at, in each state the walk put them in. These are measurements, not opinions, and none of them is among what the screen was last recorded breaking on ${INTEGRATION_BRANCH}. Fix each in the code of the screen it names, and change nothing about how the scenarios are walked:\n${lines.map((line) => `- ${line}`).join('\n')}`,
+      detail: `Every scenario walked reached its end. The studio then measured the screens this edit changed, signed in, at the size they were walked at, in each state the walk put them in. These are measurements, not opinions, and none of them is among what the screen was last recorded breaking on ${INTEGRATION_BRANCH}: your edit brought them. Fix each in the code of the screen it names, and change nothing about how the scenarios are walked:\n${lines.map((line) => `- ${line}`).join('\n')}`,
     };
   }
 
