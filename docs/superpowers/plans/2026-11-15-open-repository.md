@@ -158,8 +158,8 @@ withBlock(existing: string, block: string): string
 
 ### Task 8: Document, deploy, run for real
 
-- [ ] ARCHITECTURE.md §23, README commands.
-- [ ] Idle check, DB backup, build, restart.
-- [ ] `diet-battle-lab`: open the gate, clone, push a hand-made commit, see the check queued.
-- [ ] `credeal`: adopt, then fit on the owner's subscription; fetch the branch through the gate.
-- [ ] Run record `docs/runs/2026-11-15-open-repository/README.md`; commit.
+- [x] ARCHITECTURE.md §23, README commands.
+- [x] Idle check, DB backup, build, restart.
+- [x] `diet-battle-lab`: open the gate, clone, push a hand-made commit, see the check queued.
+- [x] `credeal`: adopt, then fit on the owner's subscription; fetch the branch through the gate.
+- [x] Run record `docs/runs/2026-11-15-open-repository/README.md`; commit.
