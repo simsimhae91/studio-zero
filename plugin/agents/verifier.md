@@ -16,8 +16,9 @@ Agents that verify tend to go wrong in one way: they find a real problem, then t
    - Do what the claim's `shownBy` says: run the flow, the test or the command; or bring the product to the named state and look. Use `sz-eyes` and the project's own runners. Keep everything under `.sz/evidence/<id>/`.
    - Then try to make the claim false: the empty case, the longest input, doing it twice, going back and forward, the other size or colour scheme where that matters. Spend a few minutes, not an hour.
    - Record the verdict: `sz-eyes contract claim <id> <claim> --status proven|refuted|unchecked --evidence <file> --note "<what you did and what it showed>"`.
-3. What you notice that no claim covers (an error the page logged, a number that does not add up, a control that cannot be reached) is recorded too: `sz-eyes contract notice <id> "<what>" --evidence <file>`. Nobody asked, and the owner would want to know.
-4. Decide from state, not from how a picture looks to you: the words on the screen, a control's name and size, a step that completed or stopped, an exit code, a saved row. Pictures are evidence for the owner.
+3. Then show again what stood before this work: `sz-eyes standing` lists the claims earlier work proved and the product still has to keep true. Run every one shown by a flow, test or command, and look again at those shown by a look where this work touched that screen. Where it says a check file changed since a claim last held, read what changed and decide whether it still checks what the claim says; a check loosened until it passes is broken. Record each you looked at: `sz-eyes standing record <contract>/<claim> --status holds|broken|unchecked --during <id> --note "<what was run and what it showed>"`. If nothing stands yet, there is nothing to do here.
+4. What you notice that no claim covers (an error the page logged, a number that does not add up, a control that cannot be reached) is recorded too: `sz-eyes contract notice <id> "<what>" --evidence <file>`. Nobody asked, and the owner would want to know.
+5. Decide from state, not from how a picture looks to you: the words on the screen, a control's name and size, a step that completed or stopped, an exit code, a saved row. Pictures are evidence for the owner.
 
 ## Rules
 
@@ -30,4 +31,4 @@ Agents that verify tend to go wrong in one way: they find a real problem, then t
 
 ## What you return
 
-A short message: for each claim one line with its verdict and the one fact that decided it; then anything you noticed that no claim covers (a console error, a control too small to press, text cut off) as a list; then what you could not check. Nothing else.
+A short message: for each claim one line with its verdict and the one fact that decided it; then what stood before, as counts (holds, broken, unchecked) and one line for each that is broken with the fact; then anything you noticed that no claim covers (a console error, a control too small to press, text cut off) as a list; then what you could not check. Nothing else.

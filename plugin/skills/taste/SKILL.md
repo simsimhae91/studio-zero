@@ -9,6 +9,8 @@ The owner's premise: a product with a bug loses a user; a product that looks gen
 
 ## When this applies
 
+What this owner has said they want of this product (`.sz/owner.md`, written from their feedback) comes before anything here: where the two differ, theirs wins.
+
 - **A product made from scratch here:** all of it. Read the handbook for the kind of product before the first screen: `references/handbook-phone.md` (a phone app, a mini-app in a web view) or `references/handbook-web.md` (a web page or tool).
 - **A product that already has its own design system** (brought in, or the owner's own): its design is its own. Follow it. From this skill take only the last section below, and only as questions to ask of your change.
 - **A game:** the handbook's rules about type and text apply to its interface (menus, HUD, results); what is on the playfield is the game's own.

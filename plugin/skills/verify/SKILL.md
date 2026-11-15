@@ -41,6 +41,17 @@ Check free disk space first (`df -h /System/Volumes/Data`): a simulator's first 
 
 **Anything else** (a game, a desktop app, a CLI): use what the map names: the project's test runner, a headless run that prints state, a screenshot command. Prefer a check that exposes state (a game that can print its state and step its clock) to one that needs a picture judged.
 
+## What stood before
+
+A product that has been worked on before keeps promises, and a change is not done until they are shown again:
+
+```
+sz-eyes standing                      # every claim earlier work proved, how each is shown, when it last held, which check files changed since
+sz-eyes standing record <contract>/<claim> --status holds|broken|unchecked --during <the contract being verified> --note "<what was run and what it showed>"
+```
+
+Run every standing claim that a flow, test or command shows (the project's whole check command in one go where it has one), and look again at the ones shown by a look where this work touched that screen. Where it says a check file changed since the claim last held, read the change (`git diff`, `git log -p -- <file>`) and decide whether the file still checks what the claim says: a check that was loosened so that it passes is `broken`, whatever it prints. Record every one you looked at. A standing claim that the work's own contract replaces is no longer listed.
+
 ## Recording a verdict
 
 ```

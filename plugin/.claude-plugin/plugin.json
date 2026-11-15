@@ -1,6 +1,6 @@
 {
   "name": "sz",
-  "description": "Studio Zero on Claude Code: work is agreed as a contract sized to the task, built, then proven on the running product by someone who did not build it, and handed to the owner as one page of evidence.",
+  "description": "Studio Zero on Claude Code: work is agreed as a contract sized to the task, built, then proven on the running product by someone who did not build it, and handed to the owner as one page of evidence. What was proven stays true as the product changes, and the owner's feedback is made concrete, done and shown.",
   "version": "0.1.0",
   "author": { "name": "Studio Zero" },
   "license": "UNLICENSED",

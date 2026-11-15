@@ -17,13 +17,14 @@ This is minutes of reading, not a rewrite. Change no product code, add no depend
    - *launch*: how it is built and started (dev server and port; the built app and its bundle id; the game's run command).
    - *look and operate*: `sz-eyes web look|do <url>` for a page; `sz-eyes ios ...` with the app path and bundle id for a simulator build; for anything else, the command that shows it.
    - *checks it already has*: the type check, unit tests, end-to-end flows (Maestro, Playwright, XCUITest, GUT...), each with the command that runs it and how long it takes if the scripts say.
-4. **Where its scripts write.** Open every script and flow you list and note any absolute path or any path outside the repository that it writes to. A flow that writes to an absolute path is run only from a copy (`sz-eyes ios flow` does that).
-5. **Its own rules.** The conventions that a change must keep (naming, structure, design system, copy voice, commit style), each with where it is written down or where you saw it.
-6. **What you could not find out.** Say it. An honest "unknown" is worth more than a guess that the next session trusts.
+4. **Where it runs, what it keeps, and what it knows of its use.** Where it is deployed and how a release is made and taken back. Where what people enter is kept (a file, a database), how a copy of it is taken, and how its shape is changed (migrations). Where failures and use are recorded (a log, an error tracker, counts). "Nowhere" is an answer worth writing: looking after the product (`sz:tend`) starts from it.
+5. **Where its scripts write.** Open every script and flow you list and note any absolute path or any path outside the repository that it writes to. A flow that writes to an absolute path is run only from a copy (`sz-eyes ios flow` does that).
+6. **Its own rules.** The conventions that a change must keep (naming, structure, design system, copy voice, commit style), each with where it is written down or where you saw it.
+7. **What you could not find out.** Say it. An honest "unknown" is worth more than a guess that the next session trusts.
 
 ## Write `.sz/map.md`
 
-At most 120 lines, in the owner's language, in this order: 무엇인가 · 대상과 띄우는 법 · 보는 법과 누르는 법 · 이미 있는 검사 · 이 저장소의 규칙 · 스크립트가 쓰는 곳 · 모르는 것. Commands in code spans, exactly as they are run. No history, no praise, nothing that will be false next week.
+At most 140 lines, in the owner's language, in this order: 무엇인가 · 대상과 띄우는 법 · 보는 법과 누르는 법 · 이미 있는 검사 · 배포와 데이터 · 오류와 사용이 보이는 곳 · 이 저장소의 규칙 · 스크립트가 쓰는 곳 · 모르는 것. Commands in code spans, exactly as they are run. No history, no praise, nothing that will be false next week.
 
 Then add one line to `.sz/progress.md` (create it): the date, "지도를 씀", and what is unknown.
 
