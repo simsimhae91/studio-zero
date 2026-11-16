@@ -499,6 +499,69 @@ test('a port is taken from the machine, not chosen', async () => {
   server.close();
 });
 
+test('what is owed is said once in a session, and again only when it has changed', () => {
+  const project = mkdtempSync(join(tmpdir(), 'eyes-owed-'));
+  const hook = fileURLToPath(new URL('../../../plugin/hooks/stop-owed.mjs', import.meta.url));
+  const session = `test-${process.pid}-${Date.now()}`;
+  const stop = (id: string | undefined): { code: number | null; said: string } => {
+    const run = spawnSync(process.execPath, [hook], { encoding: 'utf8', input: JSON.stringify({ cwd: project, ...(id ? { session_id: id } : {}) }) });
+    return { code: run.status, said: run.stderr };
+  };
+  try {
+    assert.equal(eyes(project, 'contract', 'new', 'm1-accounts', '--lane', 'M', '--request', '계정', '--claim', 'signup|가입하면 홈에 닉네임이 보인다|command:true', '--claim', 'stays|껐다 켜도 로그인돼 있다|command:true').code, 0);
+    assert.equal(eyes(project, 'contract', 'freeze', 'm1-accounts').code, 0);
+
+    const first = stop(session);
+    assert.equal(first.code, 2);
+    assert.match(first.said, /Before you stop: contract m1-accounts[\s\S]*signup: not shown yet[\s\S]*stays: not shown yet/);
+    assert.equal(stop(session).code, 0, 'the same list is not said a second time in the session');
+    assert.equal(stop(`${session}-other`).code, 2, 'another session has not been told');
+
+    assert.equal(eyes(project, 'contract', 'claim', 'm1-accounts', 'signup', '--status', 'proven', '--note', '돌려서 봤다').code, 0);
+    const changed = stop(session);
+    assert.equal(changed.code, 2, 'the list changed: it is said again');
+    assert.doesNotMatch(changed.said, /signup: not shown yet/);
+    assert.equal(stop(session).code, 0);
+
+    assert.equal(stop(undefined).code, 2, 'with no session to remember it for, it is said every time, as before');
+  } finally {
+    rmSync(project, { recursive: true, force: true });
+    for (const id of [session, `${session}-other`]) rmSync(join(tmpdir(), `sz-owed-${id}`), { force: true });
+  }
+});
+
+test('a contract most of which nobody looked at does not close, unless the owner says to close it as it is', () => {
+  const project = mkdtempSync(join(tmpdir(), 'eyes-unlooked-'));
+  try {
+    assert.equal(eyes(project, 'contract', 'new', 'm1-accounts', '--lane', 'M', '--request', '계정', '--claim', 'private|남의 프로필은 못 읽는다|command:true', '--claim', 'signup|가입하면 홈에 닉네임이 보인다|flow:e2e/signup.yaml', '--claim', 'stays|껐다 켜도 로그인돼 있다|flow:e2e/stays.yaml', '--claim', 'feel|대결 앱으로 보인다|owner:첫 화면 사진').code, 0);
+    assert.equal(eyes(project, 'contract', 'freeze', 'm1-accounts').code, 0);
+    assert.equal(eyes(project, 'contract', 'claim', 'm1-accounts', 'private', '--status', 'proven', '--note', 'DB 테스트 6/6').code, 0);
+    for (const claim of ['signup', 'stays']) assert.equal(eyes(project, 'contract', 'claim', 'm1-accounts', claim, '--status', 'unchecked', '--note', '앱 빌드가 없어 돌리지 못함').code, 0);
+    assert.equal(eyes(project, 'contract', 'claim', 'm1-accounts', 'feel', '--status', 'unchecked', '--note', '주인이 볼 것').code, 0);
+
+    // Two of the three claims that could have been looked at were not: the owner's own claim is not counted.
+    const refused = eyes(project, 'contract', 'close', 'm1-accounts');
+    assert.notEqual(refused.code, 0);
+    assert.match(refused.text, /was not looked at: 2 of its 3 claims are unchecked:[\s\S]*signup: 앱 빌드가 없어 돌리지 못함[\s\S]*does not close on claims nobody looked at/);
+    assert.doesNotMatch(refused.text, /feel:/);
+
+    // One of them shown: one of three is left, and it closes as before.
+    assert.equal(eyes(project, 'contract', 'claim', 'm1-accounts', 'signup', '--status', 'proven', '--note', '흐름 통과').code, 0);
+    assert.match(eyes(project, 'contract', 'close', 'm1-accounts').text, /^closed: m1-accounts/);
+
+    // The owner may say to close one as it is; their words stay on the record.
+    assert.equal(eyes(project, 'contract', 'new', 'm2-steps', '--lane', 'M', '--request', '걸음', '--claim', 'reads|걸음 수가 보인다|flow:e2e/steps.yaml').code, 0);
+    assert.equal(eyes(project, 'contract', 'freeze', 'm2-steps').code, 0);
+    assert.equal(eyes(project, 'contract', 'claim', 'm2-steps', 'reads', '--status', 'unchecked', '--note', '실기기가 있어야 함').code, 0);
+    assert.notEqual(eyes(project, 'contract', 'close', 'm2-steps').code, 0);
+    assert.match(eyes(project, 'contract', 'close', 'm2-steps', '--accepted', '기기는 내가 나중에 볼게').text, /^closed: m2-steps/);
+    assert.match(readFileSync(join(project, '.sz/contracts/m2-steps.json'), 'utf8'), /closed with 1 of 1 claims not looked at, on the owner's word: \\"기기는 내가 나중에 볼게\\"/);
+    assert.match(readFileSync(join(project, '.sz/backlog.md'), 'utf8'), /closed with 1 of 1 claims not looked at/, 'it is also left where the next work is picked from');
+  } finally {
+    rmSync(project, { recursive: true, force: true });
+  }
+});
+
 test('the owner’s verdict on what was left for them is taken in their words, after the work is closed', () => {
   const project = mkdtempSync(join(tmpdir(), 'eyes-judged-'));
   try {

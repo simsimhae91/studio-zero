@@ -1,7 +1,7 @@
 export const meta = {
   name: 'build',
   description: 'Build a product, or grow one that exists, to the end, unattended: a spec (new, or the existing one extended), then for each milestone a frozen contract, the build, a verification by an agent that did not build it which also shows again what stood before, fixes, and a page of evidence. Milestones follow one another unless the plan puts some side by side: those are built at the same time in folders of their own, brought together, and everything that stands is shown again on the product as joined',
-  whenToUse: 'A new product, or a change of several features to a product that already has a spec (lane L), after the owner has been put the questions only they can answer (three at most, each a choice they can tap) and has asked for it to run to the end without them. Typing the command is not an answer to those questions: ask first, then start it with asked and answers.',
+  whenToUse: 'A new product, or a change of several features to a product that already has a spec (lane L), after the owner has been put the questions only they can answer (a few, each a choice they can tap) and has asked for it to run to the end without them. Typing the command is not an answer to those questions: ask first, then start it with asked and answers.',
   phases: [
     { title: 'Plan', detail: 'the spec and its milestones, each with the claims that make it done' },
     { title: 'Build', detail: 'a milestone, or several side by side in folders of their own: contract, oracle, code' },
@@ -21,7 +21,7 @@ const answers = args && typeof args.answers === 'string' ? args.answers.trim() :
 const asked = args && (args.asked === 'owner' || args.asked === 'away') ? args.asked : ''
 const maxMilestones = args && Number.isInteger(args.maxMilestones) ? args.maxMilestones : 6
 if (request === '') return { error: 'give args: { request: "<what to build, in the owner\'s words>", asked: "owner" | "away", answers?: "<what the owner chose, word for word>" }' }
-if (asked === '') return { error: 'not started: say whether the owner was asked. Before this runs, put to the owner what only they can answer, as the sz:work skill says: three questions at most, each a choice they can tap (the AskUserQuestion tool). Then start again with asked: "owner" and what they chose, word for word, in answers. Only if they said to go on without questions, or nobody is in the session to answer: asked: "away".' }
+if (asked === '') return { error: 'not started: say whether the owner was asked. Before this runs, put to the owner what only they can answer, as the sz:work skill says: a few questions, each a choice they can tap (the AskUserQuestion tool). Then start again with asked: "owner" and what they chose, word for word, in answers. Only if they said to go on without questions, or nobody is in the session to answer: asked: "away".' }
 if (asked === 'owner' && answers === '') return { error: 'asked: "owner" needs answers: what the owner chose, word for word' }
 
 const TOOLS = 'The command `sz-eyes` is on your PATH (the sz plugin\'s). Load the skills you need with the Skill tool: `sz:work` (how work is sized, contracted and closed), `sz:verify` (how a product is launched, looked at and operated, and what counts as evidence), `sz:taste` (how a screen is put together, for anything a person looks at in a product made here), `sz:backend` (what a product stands on: where it runs for people, what holds its accounts and its data, and what that must prove), `sz:ship` (what a product needs before it can be put where people reach it), `sz:game` (when the product is a game or moves by itself: how it is built to be asked what it is doing, and proven with its time held), `sz:trial` (whether a person would pay: stand-ins for the people it is for use it the whole way), `sz:worth` (the case for the service: who it is for, what they use instead, and the rows of the whole job that say how deep it has to be).'
@@ -103,8 +103,8 @@ const BUILT = {
   properties: {
     contractId: { type: 'string' },
     summary: { type: 'string', description: 'what was built, in three sentences at most' },
-    launch: { type: 'string', description: 'the exact command that starts the product now, and the address or app it is seen at' },
-    blocked: { type: 'string', description: 'empty unless the milestone could not be built at all: then what stopped it' },
+    launch: { type: 'string', description: 'the exact command that starts the product now, as you ran it and saw it start, and the address or app it is seen at' },
+    blocked: { type: 'string', description: 'empty unless the milestone could not be built at all, or could not be started for a reason outside the product (a download that does not arrive, a tool that is not on this machine): then what stopped it, with the figure' },
     disputes: {
       type: 'array',
       description: 'frozen checks you found to be wrong about how they check (not the product being wrong): each with the file and exactly what is wrong. Empty when there are none.',
@@ -112,6 +112,15 @@ const BUILT = {
     },
   },
   required: ['contractId', 'summary', 'launch'],
+}
+const STARTED = {
+  type: 'object',
+  properties: {
+    launch: { type: 'string', description: 'the exact command that starts the product now, as you ran it and saw it start, and the address or app it is seen at' },
+    summary: { type: 'string', description: 'what you had to do to make it start, in two sentences at most; empty if it started as said' },
+    blocked: { type: 'string', description: 'empty unless it could not be started for a reason outside the product: then what stopped it, with the figure' },
+  },
+  required: ['launch'],
 }
 const VERDICT = {
   type: 'object',
@@ -151,7 +160,7 @@ ${request}
 ${asked === 'owner' ? `What the owner answered when asked beforehand, in their words:\n${answers}` : 'The owner was not asked anything beforehand. Where the request leaves something open that only they could say (who it is for, how it should feel, accounts, keys, money), take the conservative answer and list it under "decided". Wherever you write this down (the spec, the progress line), say that they were not asked: never that they did not answer.' + (answers ? `\nNotes from the session that started this run (its own words, not the owner's):\n${answers}` : '')}
 
 If \`.sz/spec.md\` already exists, the product has been worked on before. Read it, the contracts under \`.sz/contracts/\` (\`sz-eyes contract status\`, \`sz-eyes contract show <id>\`), \`.sz/progress.md\`, \`.sz/backlog.md\`, \`git log\` and \`sz-eyes standing\` (what earlier work proved and the product has to keep true). Do not plan again what is done and do not rewrite the spec's history. Then it is one of two cases, or both:
-- **Continue** (mode "continue"): an earlier run stopped before finishing what the spec has, and the request asks for that. Return the spec's milestones with their claims as the contracts and the spec have them, each with its "state": "closed" (its contract is closed), "built" (its contract is frozen and its code is committed, and it was not verified to the end: give "contractId", "launch", and under "disputes" any frozen check the earlier run reported as wrong about how it checks) or "todo". The order of the milestones that are not built yet is decided afresh by the rule under "The order" below: some of them may go side by side now even if the spec lists them in a line (give them "after").
+- **Continue** (mode "continue"): an earlier run stopped before finishing what the spec has, and the request asks for that. Return the spec's milestones with their claims as the contracts and the spec have them, each with its "state": "closed" (its contract is closed), "built" (its contract is frozen and its code is committed, and it was not verified to the end: give "contractId", "launch", and under "disputes" any frozen check the earlier run reported as wrong about how it checks) or "todo". A milestone whose code was written and that nobody has seen run is still "built" (say under "launch" how it is meant to be started, and that it has not been): this run starts it, and fixes what keeps it from starting, before anyone looks at it. The order of the milestones that are not built yet is decided afresh by the rule under "The order" below: some of them may go side by side now even if the spec lists them in a line (give them "after").
 - **Extend** (mode "extend"): the request asks for something the spec does not have, or for something to work differently. Amend \`.sz/spec.md\` so that it describes the product as it will be: change the lines that become false, add the new features to the order they are built in under new milestone names. Return the milestones that are not closed yet plus the new ones (state "todo"), with ids no contract has used. For each new milestone, besides its claims:
   - If \`git worktree list\` shows folders under \`.sz/trees/\`, an earlier run built milestones side by side and stopped before bringing them together: for each such milestone whose contract exists, state "built" (or "closed" if its contract is closed there) and "where": that folder's whole path.
   - "supersedes": the standing claims that will stop being true because what was asked has changed, each with the reason. Be exact: a standing claim you do not list stays a promise, and the milestone must keep it true. Prefer a change that keeps old promises (a new choice whose default is the old behaviour) to one that replaces them.
@@ -163,6 +172,7 @@ Write no product code. Add a line to \`.sz/progress.md\` and commit \`.sz/\` if 
 Write \`.sz/spec.md\` in the owner's language: what the product is and for whom, the one thing it must do well, its features in the order they will be built, how it is launched and looked at, and what is deliberately not built. Then cut the work into ${Math.min(maxMilestones, 6)} milestones at most:
 - If the owner had a case made for this service (\`sz-eyes worth show\` lists one: who it is for, what they use instead, the rows of the whole job), the spec is cut from it: the product is for the person and the moment of its \`who\` line; the first milestone delivers the row of kind \`edge\` whole; the rows of kind \`stake\` (what two or more of the things people already use have in common) are all in a milestone or named in the spec as deliberately not built, with the reason; rows of kind \`more\` wait. Name in each milestone the rows it covers, by their ids. If there is no case, plan without one: making a case is done only when the owner asks for it.
 - The first milestone is the thinnest slice that runs end to end and can be launched and looked at: one real thing a person can do, saved or computed for real. Not scaffolding alone.
+- For an app on a phone, the first milestone begins with the empty app running on a simulator: the scaffold, the native install and the first build are made and the app is opened before any screen of the product is written, and \`.sz/map.md\` says exactly how it was done. A first native build is where the hours go (downloads, caches, the packager), and it is found out with an empty app, not with a milestone of screens waiting behind it. Say so in what the milestone builds.
 - Every milestone leaves the product working. A later milestone never depends on something a milestone before it left broken.
 - **The order.** A line is the default: each milestone after the one before it, and you leave "after" out. Put milestones side by side (give them the same "after") only when every one of these is true of each of them: it does not change the shape of what is stored and does not touch accounts or who may do what (such a milestone is "alone": true and has nothing beside it); it adds screens, routes and modules of its own, and where it changes a file the others also change, it adds to a list there (a route table, a menu, an export) and does not rewrite the same lines; none of its claims needs what another of the group builds. Say under "touches" what each of them changes. The first milestone always has nothing beside it. Three side by side at most. When in doubt, a line: milestones built side by side are each proven in a folder of their own, and are shown again together only after they are brought into one, which costs a look each time and a repair when the guess was wrong.
 - A product people use is more than a screen: where it keeps what a person enters, what happens when there is nothing yet, when something fails, the second time someone comes. Put those in the milestones where they belong, not at the end.
@@ -197,7 +207,26 @@ async function milestone(m, n, before, where) {
   const claims = m.claims.map((c) => `- ${c.id} | ${c.says} | ${c.kind}:${c.ref}`).join('\n')
   const replaces = (m.supersedes || []).map((r) => `- ${r.contract}/${r.claim} | ${r.why}`).join('\n')
 
-  const built = m.state === 'built' && m.contractId && m.launch ? { contractId: m.contractId, summary: 'built in an earlier run', launch: m.launch, disputes: m.disputes || [] } : await agent(
+  // A milestone an earlier run built is started before anyone looks at it. (One was handed to its verifier with
+  // code that had never run: the app's first build was still to be made, the verifier waited on a download for 36
+  // minutes, and what kept the app from opening was found later by nobody whose work it was.)
+  const resumed = Boolean(m.state === 'built' && m.contractId && m.launch)
+  const started = !resumed
+    ? null
+    : await agent(
+        `A milestone of this product was built by an earlier run and has not been verified to the end. Before anyone looks at it, start it. ${GROUND}${SAND} ${TOOLS}${PLACE}
+
+Milestone "${m.title}" (${m.id}), contract \`${m.contractId}\` (read it: \`sz-eyes contract show ${m.contractId}\`). It is said to be launched like this: ${m.launch}
+
+1. Commit what the earlier run left uncommitted, if it belongs to this milestone.
+2. Start the product that way and see it running: its first screen in a browser, or for a phone app the build installed and opened on a simulator of your own (\`sz:verify\` says how, and what a first build of a phone app needs).
+3. If it does not start, the cause is yours to find and to fix in the product. Do not edit the contract or the flows and tests it froze, and record no verdicts. Commit the fix, and correct \`.sz/map.md\` if how it is launched has changed.
+4. If it cannot be started for a reason outside the product (a download that does not arrive, a tool that is not on this machine), do not wait on it: a download or a build that shows nothing new for a minute is stopped, and you say what stopped it under "blocked", with the figure.
+
+Stop what you started, and return the exact command that starts it now.`,
+        { label: `start:${m.id}`, phase: 'Build', schema: STARTED, ...effort('build') },
+      )
+  const built = resumed ? (started ? { contractId: m.contractId, summary: started.summary || 'built in an earlier run', launch: started.launch || m.launch, blocked: started.blocked || '', disputes: m.disputes || [] } : null) : await agent(
     `You are building milestone ${n} of ${milestones.length} of a product, with nobody watching. ${GROUND}${SAND} ${TOOLS}${PLACE}
 
 Milestone "${m.title}" (${m.id}): ${m.builds}
@@ -217,14 +246,14 @@ Do this, in order:
 2. Write the oracle first: every flow or test file a claim points at, in the project's own format, before the code it checks. They must fail now for the right reason.${replaces ? ' The flow or test a replaced promise was proven by is rewritten now to say the new truth (or removed if nothing of it remains), and frozen with this contract; every other flow and test of earlier work stays exactly as it is.' : ''}
 3. Run each of those files once before freezing, to see that it runs and fails for the right reason (the product is not there yet), not for a mistake in the file. Then freeze: \`sz-eyes contract freeze ${m.id} --frozen <each of those files>\`. From here you edit neither the contract nor those files. If you later find that a frozen file is itself wrong about how it checks (a quoting error, a selector that names nothing), do not work around it and do not stop: finish the build, and list it under "disputes" with the file and exactly what is wrong; someone who did not build this will settle it. If a claim is wrong about what was asked, build what you can and say so in "blocked".
 4. Build the milestone. For anything a person looks at, load \`sz:taste\` first. If it changes the shape of what is stored, it carries over what is already there (on start, or by a command the map names): data written by the version before must still open. Run the project's checks (type check, tests, the flows of earlier milestones) as you go and leave them passing.
-5. Make sure the product starts with one command and say exactly which, and where it is seen. ${where ? 'If this milestone changed how it is launched, say so in "summary" (the map is corrected when the milestones are brought together).' : 'If this milestone changed how it is launched, correct \`.sz/map.md\`.'}
+5. Start the product yourself with one command and see it running before you return: its first screen in a browser, or for a phone app the build installed and opened on a simulator of your own (\`sz:verify\` says how, and what a first build of a phone app needs). Say exactly which command, and where it is seen. A milestone that has never run is not built: what stops it from starting is yours to fix here, not the verifier's to find. If it cannot be started for a reason outside the product (a download that does not arrive, a tool that is not on this machine), do not wait on it (a download or a build that shows nothing new for a minute is stopped) and say what stopped it under "blocked". ${where ? 'If this milestone changed how it is launched, say so in "summary" (the map is corrected when the milestones are brought together).' : 'If this milestone changed how it is launched, correct \`.sz/map.md\`.'}
 6. Commit the work on the current branch with a message that says what the milestone built.
 
 Do not judge your own claims and do not record verdicts: someone who did not build this will operate it. Do not leave a server running.`,
     { label: `build:${m.id}`, phase: 'Build', schema: BUILT, ...effort('build') },
   )
   if (!built || (built.blocked && built.blocked.trim() !== '')) {
-    stopped = `milestone "${m.title}" could not be built: ${built ? built.blocked : 'the builder did not answer'}`
+    stopped = `milestone "${m.title}" ${resumed ? 'was built by an earlier run and could not be started' : 'could not be built'}: ${built ? built.blocked : 'the builder did not answer'}${built ? '. If what stopped it is outside the product, tell the owner what it is and ask how to get past it: that is theirs to choose.' : ''}`
     log(stopped)
     return { entry: null, stopped }
   }
@@ -300,7 +329,7 @@ Find the cause of each in the product and fix it there. Do not edit the contract
   const closed = await agent(
     `Close milestone "${m.title}" of the project in ${here}. ${TOOLS}${PLACE}
 1. \`sz-eyes evidence ${built.contractId}\` writes the evidence page; note its path.
-2. ${verdict.refuted.length + (verdict.broken || []).length === 0 ? `\`sz-eyes contract close ${built.contractId}\` (it also writes what the verifier noticed and what could not be checked to \`.sz/backlog.md\`).` : 'Leave the contract open: it has claims shown false, or broke what stood before it.'}
+2. ${verdict.refuted.length + (verdict.broken || []).length === 0 ? `\`sz-eyes contract close ${built.contractId}\` (it also writes what the verifier noticed and what could not be checked to \`.sz/backlog.md\`). It refuses when most of the claims were not looked at: then do not pass \`--accepted\` (that is the owner's to say), leave the contract open, and return "closed": false with what it said under "why".` : 'Leave the contract open: it has claims shown false, or broke what stood before it.'}
 3. ${where ? 'If this milestone made a line of \`.sz/map.md\` or \`.sz/spec.md\` false (how it is launched, where it keeps things, what it does), do not edit them here: return under "corrections" each such line and what it should say now.' : 'If this milestone made a line of \`.sz/map.md\` or \`.sz/spec.md\` false (how it is launched, where it keeps things, what it does), correct that line.'} If the project has a case (\`sz-eyes worth show\`) and the contract is closed, mark each row of the whole job that a claim proven here covers: \`sz-eyes worth row <case> <row> --ours have --by ${built.contractId}/<claim>\`. Only rows a proven claim shows; the rest stay as they are.
 4. Read \`sz-eyes backlog\`. For each open line that this milestone has ended (the thing it names is built or fixed now, and a claim proven here or a commit of this milestone shows it), run \`sz-eyes backlog done "<some words of the line>" --by "${built.contractId}/<claim>, or the commit"\`. Tick only what is shown to be ended; a line that is half done stays open.
 5. Add one line to \`.sz/progress.md\` in the owner's language: the date, the milestone, how many claims are proven, refuted and unchecked, how many promises of earlier work were shown again and whether any broke or was replaced, anything the verifier noticed that the owner should know, and what comes next. The figures are these, as the verifier returned them: ${verdict.proven.length} proven, ${verdict.refuted.length} refuted, ${verdict.unchecked.length} unchecked${verdict.stood === undefined ? '' : `; of what stood before this milestone, ${verdict.stood} hold`}, ${(verdict.broken || []).length} broken, ${(m.supersedes || []).length} replaced. Use them in the line and in the commit message; do not count again from \`sz-eyes standing\`, which after closing also counts this milestone's own claims.

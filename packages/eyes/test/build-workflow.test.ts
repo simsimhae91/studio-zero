@@ -58,6 +58,48 @@ test('the workflow does not start until it is told whether the owner was asked',
   assert.ok(away.logs.some((l) => /the owner was not asked beforehand/.test(l)));
 });
 
+test('a milestone an earlier run built is started before anyone looks at it, and a run does not go on past one that was not looked at', async () => {
+  const resumedPlan = () => ({
+    mode: 'continue',
+    summary: 's',
+    milestones: [
+      { id: 'm1', title: 'M1 계정', builds: 'b', claims: [claim('one'), claim('two')], state: 'built', contractId: 'm1-accounts', launch: 'npx expo run:ios (never run yet)' },
+      { id: 'm2', title: 'M2 대결', builds: 'b', claims: [claim('one'), claim('two')] },
+    ],
+  });
+  const proven = () => ({ proven: ['one', 'two'], refuted: [], unchecked: [] });
+
+  // It starts: the verifier is given the command that was seen to work, not the one that was only written down.
+  const ran = await run({ request: '이어서' }, { plan: resumedPlan, start: () => ({ launch: 'sz-eyes ios install $udid ios/build/app.app', summary: 'auth 라우트의 무한 루프를 고쳤다' }), build: built, verify: proven, close: closed });
+  const labels = ran.calls.map((c) => c.label);
+  assert.deepEqual(labels.slice(0, 4), ['plan', 'start:m1', 'verify:m1', 'close:m1']);
+  assert.ok(!labels.includes('build:m1'), 'what was built is not built again');
+  assert.match(ran.calls.find((c) => c.label === 'start:m1')!.prompt, /If it does not start, the cause is yours to find and to fix in the product/);
+  assert.match(ran.calls.find((c) => c.label === 'verify:m1')!.prompt, /launched like this: sz-eyes ios install \$udid ios\/build\/app\.app/);
+  assert.ok(labels.includes('build:m2'));
+
+  // It cannot be started for a reason outside it: nobody waits, nobody verifies, nothing is built on top.
+  const stuck = await run({ request: '이어서' }, { plan: resumedPlan, start: () => ({ launch: '', blocked: 'pod install이 2KB/s로 받다 멈춤' }), build: built, verify: proven, close: closed });
+  assert.deepEqual(stuck.calls.map((c) => c.label), ['plan', 'start:m1']);
+  assert.match(stuck.result.stopped, /was built by an earlier run and could not be started: pod install이 2KB\/s로 받다 멈춤.*tell the owner what it is and ask/);
+
+  // The contract tool refuses to close a milestone most of which was not looked at: the run stops there.
+  const unseen = await run(
+    { request: '이어서' },
+    { plan: resumedPlan, start: () => ({ launch: 'x' }), build: built, verify: () => ({ proven: ['one'], refuted: [], unchecked: [{ id: 'two', why: '앱 빌드가 없음' }] }), close: () => ({ report: 'r.html', closed: false, why: 'contract m1-accounts was not looked at: 6 of its 7 claims are unchecked' }) },
+  );
+  assert.ok(!unseen.calls.some((c) => c.label === 'build:m2'), 'the next milestone is not built on one that was not looked at');
+  assert.match(unseen.result.stopped, /did not close: contract m1-accounts was not looked at/);
+  assert.match(unseen.calls.find((c) => c.label === 'close:m1')!.prompt, /do not pass `--accepted` \(that is the owner's to say\)/);
+});
+
+test('a builder is told to start what it built, and a phone app begins as an empty app that runs', async () => {
+  const { calls } = await run({ request: '다이어트 배틀 앱' }, { plan: plan('m1'), build: built, verify: () => ({ proven: ['one', 'two'], refuted: [], unchecked: [] }), close: closed });
+  assert.match(calls.find((c) => c.label === 'build:m1')!.prompt, /Start the product yourself with one command and see it running before you return/);
+  assert.match(calls.find((c) => c.label === 'build:m1')!.prompt, /A milestone that has never run is not built/);
+  assert.match(calls.find((c) => c.label === 'plan')!.prompt, /For an app on a phone, the first milestone begins with the empty app running on a simulator/);
+});
+
 test('the workflow tells every agent how to launch and end things on a machine it shares', async () => {
   const { calls, result } = await run({ request: '운영 준비' }, { plan: plan('m5'), build: built, verify: () => ({ proven: ['one', 'two'], refuted: [], unchecked: [], stood: 25, noticed: [] }), close: closed });
   assert.equal(result.stopped, null);

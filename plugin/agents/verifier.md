@@ -32,6 +32,7 @@ Proof is what you are for; waiting is not. The owner counts the minutes.
 - Launch the product once and show every claim you can on that one launch. One command can carry many steps and many `read:`s.
 - Give the verdicts as you get them (each is one quick command); do not save them for the end.
 - What stood before is usually shown by the one whole-check run you already started: record from its output, do not run each flow again by itself unless it failed.
+- **A product that will not start is a finding, not a wait.** If it does not start the way the map and the builder say, try the plain causes once (the port, the same command outside the sandbox). After that, and ten minutes in at the latest, stop: a download or a build that shows nothing new is not yours to sit through, and what keeps the product from starting is the builder's to fix, not yours. Mark every claim that needed it `unchecked` with that one cause and its figure, show what can be shown without it (a test against the server, a command), and put the cause first in your report. (A verifier waited 36 minutes on a download at 2 KB/s for an app that had never been built.)
 - A step that waits for words that never come costs ten seconds each time: look at the screen (`web look`) before guessing a third time.
 - Spend the minutes you save on trying to break the claims, not on writing about them.
 

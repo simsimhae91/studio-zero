@@ -3,7 +3,7 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 import { BACKLOG_FILE, addToBacklog, doneInBacklog, leftBy, openBacklog } from './backlog.ts';
-import { CONTRACTS_DIR, EVIDENCE_DIR, ClaimStatus, Contract, Lane, ShownBy, localDay, openContracts, owed, readContract, renderContract, writeContract } from './contract.ts';
+import { CONTRACTS_DIR, EVIDENCE_DIR, ClaimStatus, Contract, Lane, ShownBy, localDay, notLookedAt, openContracts, owed, readContract, renderContract, writeContract } from './contract.ts';
 import { ElectronError, renderAppLook, renderAppWalk, walkElectron } from './electron.ts';
 import { CiteError, seeQuote } from './cite.ts';
 import { Basis, LineId, LineStatus, Objection, Other, addAsk as addWorthAsk, addCite, addObjection, allCases, answerObjection, caseFolder, hearAsk, newCase, readCase, renderCase, renderCases, setCall, setLine, setOther, setOwner, setRow, standingOf, unanswered, weighCite, writeCasePage, writeCasesPage } from './worth.ts';
@@ -100,7 +100,7 @@ const USAGE = `sz-eyes: launch what was built, look at it, operate it, and put w
   sz-eyes contract frozen <id> [--dir <project>]         the files it froze and whether each is still as it was frozen; exits 1 when one changed
   sz-eyes contract show <id> [--dir <project>]           the contract as the owner reads it
   sz-eyes contract status [--dir <project>]              what open contracts still owe; exits 1 when anything is owed
-  sz-eyes contract close <id> [--dir <project>]
+  sz-eyes contract close <id> [--accepted "<the owner's words>"] [--dir <project>]   # refuses when most claims were not looked at
   sz-eyes evidence <id> [--summary <text>] [--took <text>] [--dir <project>]   writes ${EVIDENCE_DIR}/<id>/report.html
 
   sz-eyes standing [--summary|--json] [--dir <project>]
@@ -980,8 +980,15 @@ async function main(argv: string[]): Promise<number> {
       if (owes.length > 0) throw new EyesError(`contract ${id} still owes:\n${owes.map((line) => `  - ${line}`).join('\n')}`);
       const also = alsoOwed(project, contract);
       if (also.length > 0) throw new EyesError(`contract ${id} is not closed yet:\n${also.map((line) => `  - ${line}`).join('\n')}\nWhat stood before and broke: fix the product so it holds again (then \`sz-eyes standing record <key> --status holds\`), or, if what was asked has changed, the arbiter records which claim this work replaces.`);
+      const gap = notLookedAt(contract);
+      const accepted = (a.one('--accepted') ?? '').trim();
+      if (gap.most && accepted === '') {
+        throw new EyesError(
+          `contract ${id} was not looked at: ${gap.unseen.length} of its ${gap.of} claims are unchecked:\n${gap.unseen.map((claim) => `  - ${claim.id}: ${claim.note ?? 'no note'}`).join('\n')}\nA contract does not close on claims nobody looked at, and nothing is built on top of it. Get the product running and have them shown: what stops it from starting is the builder's to fix. If what stops it is outside the product (a download that does not arrive, a key, a device), tell the owner what it is and ask. Only when the owner says to close it as it is: --accepted "<their words>".`,
+        );
+      }
       const at = new Date().toISOString();
-      const closed = { ...contract, closedAt: at };
+      const closed = { ...contract, closedAt: at, ...(gap.most ? { noticed: [...contract.noticed, { text: `closed with ${gap.unseen.length} of ${gap.of} claims not looked at, on the owner's word: "${accepted}"`, evidence: [] }] } : {}) };
       // Its proven claims are stamped first: a contract is never left closed with nothing to say when its
       // claims last held. From here they stand, and what it left is written where the next work is picked from.
       stampClosed(project, closed, at);

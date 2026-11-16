@@ -153,6 +153,18 @@ export function owed(contract: Contract): string[] {
   return lines;
 }
 
+/**
+ * How much of a contract nobody looked at: its claims marked unchecked, leaving out those that are the owner's
+ * to judge. When that is more than half of what could have been looked at, the contract is not closed: one was
+ * closed with 1 claim of 8 looked at, because the app's first build never arrived, and the next milestone was
+ * started on top of it.
+ */
+export function notLookedAt(contract: Contract): { unseen: Claim[]; of: number; most: boolean } {
+  const lookable = contract.claims.filter((claim) => claim.shownBy.kind !== 'owner');
+  const unseen = lookable.filter((claim) => claim.status === 'unchecked');
+  return { unseen, of: lookable.length, most: unseen.length * 2 > lookable.length };
+}
+
 const minutes = (from: string, to: string): number => Math.max(0, Math.round((Date.parse(to) - Date.parse(from)) / 60_000));
 
 /**
