@@ -66,7 +66,7 @@ sz-eyes ios look <udid> --out <folder> --name <state>
 sz-eyes ios rest <udid> --erase                     # when done: a booted simulator holds gigabytes
 ```
 
-Check free disk space first (`df -h /System/Volumes/Data`): a simulator's first boot takes about 3 GB. If there is not room, say so and mark the claim `unchecked`. A React Native debug build needs its packager running on the port given to `--metro`, started from a clone or worktree, never on the owner's own port.
+Check free disk space first (`df -h /System/Volumes/Data`): a simulator's first boot takes about 3 GB. If there is not room, say so and mark the claim `unchecked`. A React Native debug build needs its packager running on the port given to `--metro`, started from a clone or worktree, never on the owner's own port. The first `pod install` of a React Native app downloads prebuilt archives of a few hundred megabytes, and by default asks a mirror first that can be very slow (measured 2026-11-16 from Korea: about 80 KB/s from `repo.reactnative.dev`, about 450 KB/s from Maven Central, on a line that does 12 MB/s). Run it outside the sandbox with `RCT_REACT_NATIVE_MAVEN_MIRROR_ENABLED=false`, React Native's own switch for taking them from Maven Central only. If a build still cannot be had in reasonable time, do not close the work on claims nobody looked at: say what is being waited for and ask the owner.
 
 **A desktop app built on Electron** (the map says its folder, what must be built first, and the variables below):
 
