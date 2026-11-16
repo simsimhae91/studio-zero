@@ -1,6 +1,6 @@
 ---
 name: tend
-description: Use when the owner asks how a product (or all of their products) is doing, what to do with it next, or to look after it, keep it healthy or grow it ("돌봐줘", "점검해줘", "뭘 더 하면 좋을까", "고도화"), and for the regular look at a product that is live. Checks that what was proven still holds, looks at what fails for people, how it is used and what they say, walks it as a newcomer, checks what it stands on, and leaves a ranked list of what to do next, each with evidence. Fixes what broke; proposes the rest.
+description: Use only when the owner asks for it, by the command /sz:tend or in words that ask for exactly this: a look over a product or all of their products ("돌봐줘", "점검해줘", "전부 어떻게 돼 가나 봐 줘"). A passing question about what to do next is answered from the files, not by starting this. Checks that what was proven still holds, looks at what fails for people, how it is used and what they say, walks it as a newcomer, checks what it stands on, and leaves a ranked list of what to do next, each with evidence. Fixes what broke; proposes the rest.
 ---
 
 # Tend: look after a product that lives

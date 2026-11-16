@@ -1,6 +1,6 @@
 ---
 name: ship
-description: Use when the owner asks to release, deploy, publish or launch a product, or to put it online ("출하해", "배포해 줘", "올려 줘", "라이브로"), to take a release back, or to look at what is live. Gets the product ready for the place it will run for people, rehearses the version that is about to go out, puts it there with the place's own commands, has it proven on what people reach by an agent that did not build it, and takes it back when it is not right.
+description: Use only when the owner asks for it, by the command /sz:ship or in words that ask for exactly this: to release, deploy, publish or launch a product ("출하해", "배포해 줘", "올려 줘", "라이브로"), to take a release back, or to look at what is live. Also read by whoever builds a product for what it needs before it can go out; reading it releases nothing. Gets the product ready for the place it will run for people, rehearses the version that is about to go out, puts it there with the place's own commands, has it proven on what people reach by an agent that did not build it, and takes it back when it is not right.
 ---
 
 # Ship: put it where people reach it, and prove what answers there

@@ -66,7 +66,7 @@ Prefer checks the project already has (its e2e flows, its tests) over new ones. 
 
 ## 4. L: ask, plan, then milestones
 
-**A request to charge for the product, or to make it "production", is first a question of whether a person would pay.** Run `sz:trial` before planning features: what its stand-ins could not get to, had no reason to come back for, or would not pay for is the feature list, and the payment itself comes last.
+**A request to charge for the product, or to make it "production", is first a question of whether a person would pay.** Plan what makes it worth paying for (what a person cannot yet get to, has no reason to come back for) before the plumbing that takes the money, and put the payment itself last. Do not start a trial for this: say in one line that `/sz:trial` would have stand-ins use it and show what stands between a person and paying, and go on with what was asked.
 
 **If the owner had a case made for this service** (`.sz/worth/`, by `sz:worth`, which runs only when they ask for it), the plan is cut from its rows: the edge first, then the stakes. Without one, plan as below; do not make a case, and do not propose one, unless they ask whether the thing is worth building.
 

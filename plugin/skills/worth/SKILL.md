@@ -1,6 +1,6 @@
 ---
 name: worth
-description: Use only when the owner asks for it: what to build, whether an idea or a product is worth building, launching or charging for, which of several ideas to take, how deep it is next to what people already use ("뭘 만들까", "아이템 찾아줘", "이거 돈 될까", "지을 만한가", "출시할 만한가", "어떤 서비스를 출시할지", "경쟁 제품이랑 비교해 줘", "깊이 판단해 줘"). Never run unasked, and never a step that building waits for. Makes the case for a service as fixed lines, each shown from the world by quotations the harness reads again on their pages; has someone who did not write it read every quotation and try to knock the case down; says how deep the product has to be next to what people already use; and ends with a call and with what only real people can answer.
+description: Use only when the owner asks for it, by the command /sz:worth or in words that ask for exactly this: what to build, whether an idea or a product is worth building, launching or charging for, which of several ideas to take, how deep it is next to what people already use ("뭘 만들까", "아이템 찾아줘", "이거 돈 될까", "지을 만한가", "출시할 만한가", "어떤 서비스를 출시할지", "경쟁 제품이랑 비교해 줘", "깊이 판단해 줘"). Never run unasked, and never a step that building waits for. Makes the case for a service as fixed lines, each shown from the world by quotations the harness reads again on their pages; has someone who did not write it read every quotation and try to knock the case down; says how deep the product has to be next to what people already use; and ends with a call and with what only real people can answer.
 ---
 
 # Worth: is this the thing to build

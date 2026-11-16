@@ -1,13 +1,13 @@
 ---
 name: trial
-description: Use when the owner asks whether the product is worth paying for, wants it tried as an end user or walked through as a user would ("유저 입장에서 써 봐", "end user proxy", "시나리오 완주해 줘", "돈 낼 만한 서비스인가", "뭐가 더 필요할까", "테스트 유저가 없어"), and first of all when they say they want to take money for it or take it to production. Stand-ins for the people it is for use the product the whole way, coming back on later days and reaching the moment it asks for money, and what stands between a person and paying comes out ranked, with the screens that show it.
+description: Use only when the owner asks for it, by the command /sz:trial or in words that ask for exactly this: the product tried or walked through as its users would ("유저 입장에서 써 봐", "end user proxy", "시나리오 완주해 줘", "대역으로 써 보고 돈 낼 만한지 봐 줘"). Wanting to charge for a product or take it to production is not a request for a trial, and nothing else starts one. Stand-ins for the people it is for use the product the whole way, coming back on later days and reaching the moment it asks for money, and what stands between a person and paying comes out ranked, with the screens that show it.
 ---
 
 # Trial: would a person pay for this
 
 The checkout does not sell a product. A person pays when the thing has already given them something, they have a reason to come back, and what is behind the price is worth more to them than what they use today. An owner who says "I want to charge for this" is asking first whether that is true, and when it is not, what would make it so. Building the payment before knowing is the commonest way to finish a product nobody buys.
 
-**The trial is run, not offered.** When the owner asks what the product needs before it can be charged for, the answer is what the trial finds. A list written from your own judgement, with the hosting and the payment company at the top, is the answer they did not want: it says how to take money and not whether anyone would give it. (The first session that was asked this built a checkout; the first one given this skill wrote such a list in a minute and offered the trial at the end, as an option.) Do not ask whether to run it and do not leave it as a suggestion: say in one line that stand-ins will now use the product and about how long that takes, and start. The owner is usually not there to answer, and this is the work they asked for.
+**It starts when the owner asks for it, and then it is run, not described.** A trial takes several agents and minutes; the owner decides when one is worth that, by the command or by asking for exactly this. It is not started because they said something near it ("이거 돈 받고 싶은데"), and not as a step of other work. Once it is asked for: do not answer from your own judgement and do not ask again whether to run it. Say in one line that stand-ins will now use the product and about how long that takes, and start.
 
 People to try it on are hard to find, and each can be spent once. So before any of them: stand-ins use the product the whole way. A stand-in finds where a person is stopped, confused or left with nothing. It cannot know whether they would want it. The trial says which is which, and ends with what to ask the real people.
 
@@ -71,10 +71,10 @@ And what only real people can tell, as the questions to put to the first of them
 4. What only real people can tell.
 5. If nobody reached wanting what is behind the price: say plainly that building the payment now would sell nothing, and what would have to be true first.
 
-When the owner asked for a list of what is needed to charge for it or to go to production, the list is this, in this order and proportion: first what the trial found, in the page's order, each with its evidence; then, short and marked as what follows once someone would pay, what putting it online and taking money themselves need (from `sz:ship` and the Money part of `sz:backend`: a place to run, backups, the notices the law asks for, the payment company), with the part that is the owner's own (a registration, a contract). Never the second part alone, and never first.
+When the trial was asked for in order to know what the product needs before it is charged for, the list is this, in this order and proportion: first what the trial found, in the page's order, each with its evidence; then, short and marked as what follows once someone would pay, what putting it online and taking money themselves need (from `sz:ship` and the Money part of `sz:backend`), with the part that is the owner's own (a registration, a contract).
 
 Each finding goes to the backlog (`sz-eyes backlog add "<it> [S|M|L]" --from "써 보기 <date>"`). What the owner says to the page is `sz:feedback`; "1, 2, 3 해" is `sz:work` for each, or the `sz:build` workflow for several.
 
-## When the request was "I want to charge for this"
+## After it
 
-Run the trial before anything is built for taking money. The plumbing (`sz:backend`, Money) is built when someone in the trial reached the price wanting what is behind it, or when the owner, having read the page, says to build it anyway. That is theirs to say.
+What to build is the owner's to say. If nobody in the trial reached the price wanting what is behind it, say plainly that building the payment now would sell nothing; if they say to build it anyway, build it.

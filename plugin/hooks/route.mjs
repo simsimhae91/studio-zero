@@ -19,10 +19,14 @@ const said = String(call?.prompt ?? '').trim();
 // A command of the tool itself, or a word of assent, asks for nothing new.
 if (said === '' || said.startsWith('/') || said.length < 6) process.exit(0);
 const mapped = existsSync(join(call?.cwd ?? process.cwd(), '.sz', 'map.md'));
+// Two things are kept apart. How work that was asked for is done follows from the request itself: that is what
+// loading the plugin chose. A stage of its own (a trial, a case, a release, a look-over, a build to the end)
+// takes many agents and minutes to hours, so it starts only when the owner asks for that stage: nothing they
+// say in passing is taken as asking for one.
 process.stdout.write(
   `${
     mapped
-      ? 'sz: if this asks to build, change or fix something in the product, load the sz:work skill first and follow it: it sizes the work (a small fix is done at once and shown before and after; a feature is agreed as claims and proven by an agent that did not build it).'
-      : 'sz: this project has no map yet (.sz/map.md). If this asks to build, change or fix something, load the sz:onboard skill first (minutes of reading, no product code changed), then the sz:work skill, and follow them: work is sized, a small fix is shown before and after, a feature is proven by an agent that did not build it.'
-  } Only when the owner asks for it in so many words (what to build, whether this is worth building or launching, which of several ideas to take, how it stands next to what people already use): sz:worth, which makes the case from the world. It is never run unasked and never a step before building. If the owner is reacting to the product or to work shown to them: sz:feedback. Whether it is worth paying for, trying it as its users would, or wanting to charge for it or take it to production: sz:trial first (run the trial; do not answer from judgement and do not offer it as an option), before anything is built or listed for taking money. How it is doing, or what to do next: sz:tend. Putting it where people reach it: sz:ship. A question that changes nothing is answered as usual.\n`,
+      ? 'sz: if this asks to build, change or fix something in the product, load the sz:work skill first and follow it (a small fix is done at once and shown before and after; a feature is agreed as claims and proven by an agent that did not build it).'
+      : 'sz: this project has no map yet (.sz/map.md). If this asks to build, change or fix something, load the sz:onboard skill first (minutes of reading, no product code changed), then sz:work, and follow them.'
+  } If the owner is reacting to work shown to them or to the product: sz:feedback. A stage of its own starts only when the owner asks for that stage, by its command or in words that ask for exactly it: /sz:trial (stand-ins use the product as its people), /sz:worth (is this the thing to build), /sz:ship (release), /sz:tend (look the product over), and the sz:build workflow (build to the end, when they say to run it to the end with a workflow). Never start one because what they said is related to it, and never as a step of something else: if one would answer what they are asking, do what they asked in the ordinary way and say in one line which command would go further. A question is answered as a question.\n`,
 );
