@@ -8,6 +8,14 @@ description: Use when a claim about software has to be shown true on the running
 
 A claim is unproven until something shows it. "The code looks right" shows nothing. A passing test shows what the test checks. Operating the product shows what a person will meet.
 
+## When the session has a command sandbox
+
+The owner may run their sessions with Claude Code's command sandbox on. Nothing that opens a browser, a desktop app, a simulator or Docker can start inside it, and no setting of the sandbox changes that (it was tried). `sz-eyes` says so when that is what stopped it (and exits 3). From then on, in this session and in every agent you start, run these outside the sandbox **from the first try** (`dangerouslyDisableSandbox: true` on the Bash call): every `sz-eyes web`, `sz-eyes electron`, `sz-eyes ios` and `sz-eyes docker` command, `sz-eyes worth cite`, and the project's own flows and tests that open a browser. Starting the product itself, unit tests and everything else stay inside. Tell an agent you start that this session is sandboxed, so that it does not lose a try finding out.
+
+If the call outside the sandbox is refused, nobody was there to approve it. Stop and tell the owner exactly that, and that looking at the product needs one of three things from them: sessions in auto mode (the unsandboxed call is then reviewed and let through without them), their approval when asked, or the sandbox turned off for this project (`/sandbox`). Do not go on to judge by reading the code instead.
+
+A look the sandbox stopped is not a look. It is never a verdict on the product, and a claim is never left `unchecked` for it without the note saying that the sandbox was the reason and what the owner can do.
+
 ## What counts
 
 - **State over pictures.** Decide by what can be read exactly: the words on the screen, the controls and their sizes, a flow's steps, a command's exit, a row that was saved. A vision model misses most subtle visual defects; do not call a layout right because a screenshot looks fine to you.

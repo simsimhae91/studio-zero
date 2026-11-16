@@ -9,6 +9,8 @@ A project is a folder. Before work is done in one, there is a map of it: what it
 
 This is minutes of reading, not a rewrite. Change no product code, add no dependency, add no marks. The project's own grain comes first: its tests, its end-to-end flows, its scripts, its conventions.
 
+If `sz-eyes` says the session's command sandbox stopped a browser or an app from starting, write that in the map where it says how the product is looked at ("this owner's sessions are sandboxed: the eyes and the flows that open a browser run outside it"), so that the next session does not find it out again.
+
 ## Steps
 
 1. **What it says of itself.** Read README, AGENTS.md / CLAUDE.md (root and beside each product), package manifests, CI files, and the top of the test and e2e folders. Read `git log --oneline -30` for what has been happening.

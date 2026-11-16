@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { chromium, type Page } from 'playwright-core';
 import { z } from 'zod';
 import { About, addSaid, readRound, type Round } from './feedback.ts';
-import { SIZES, type Size } from './web.ts';
+import { SIZES, type Size, stoppedBySandbox } from './web.ts';
 
 export interface ReviewOptions {
   size?: Size;
@@ -24,7 +24,9 @@ const Payload = z.object({ said: z.string().min(1).max(4000), about: About.nulla
  */
 export async function reviewWeb(url: string, folder: string, opts: ReviewOptions = {}): Promise<Round> {
   const at = SIZES[opts.size ?? 'phone'];
-  const browser = await chromium.launch({ channel: 'chrome', headless: opts.headless ?? false });
+  const browser = await chromium.launch({ channel: 'chrome', headless: opts.headless ?? false }).catch((err: unknown) => {
+    throw stoppedBySandbox(err) ?? err;
+  });
   try {
     const context = await browser.newContext({ ...at.context, colorScheme: opts.dark ? 'dark' : 'light' });
     let finish: () => void = () => undefined;
