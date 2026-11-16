@@ -126,8 +126,8 @@ What it showed:
    address open to the wrong person). The owner can look from the moment the product is built; closing it is
    what takes the time. This is the largest cost left in the process.
 
-Across the four first passes built this way (D, E1, E2, V1, V2 counted as five; E1 never closed): the whole
-product stood at 47 to 65 minutes, and closed at 100 to 161.
+Across the five first passes built whole (D, E1, E2, V1, V2): the product stood at 47 to 65 minutes. Four
+closed, at 100 to 161 minutes; one (E1) stopped open.
 
 ## Not measured
 
