@@ -139,6 +139,15 @@ test('a new product is planned twice: its first cut alone, and what comes after 
   assert.ok(!broke.calls.some((c) => c.label === 'plan:after'));
   assert.deepEqual(broke.result.notBuilt, ['대결 깊이', '폰에서']);
 
+  // A run that takes up a product whose first cut never closed: the first cut again, then the plan after it.
+  const resumed = await run(
+    { request: '이어서' },
+    { plan: (_c: Call, nth: number) => (nth === 0 ? { mode: 'continue', summary: 's', milestones: [{ ...cut, first: true }], later: [{ title: '대결 깊이', what: 'w' }] } : { mode: 'continue', summary: 's', milestones: [{ ...cut, state: 'closed' }, deep('m2')] }), build: built, verify: proven, close: closed },
+  );
+  assert.deepEqual(resumed.calls.map((c) => c.label), ['plan', 'build:m1', 'verify:m1', 'close:m1', 'plan:after', 'build:m2', 'verify:m2', 'close:m2']);
+  assert.match(resumed.calls.find((c) => c.label === 'build:m1')!.prompt, /This milestone is the product's first cut/);
+  assert.ok(resumed.logs.some((l) => /^continuing\. First cut: 첫 판\. After it, planned when it stands: 대결 깊이/.test(l)), resumed.logs.join('\n'));
+
   // A product with nothing after its first cut is built from one plan.
   const small = await run({ request: 'x' }, { plan: () => ({ mode: 'new', summary: 's', milestones: [cut] }), build: built, verify: proven, close: closed });
   assert.deepEqual(small.calls.map((c) => c.label), ['plan', 'build:m1', 'verify:m1', 'close:m1']);
