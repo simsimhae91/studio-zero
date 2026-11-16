@@ -1,11 +1,13 @@
 ---
 name: worth
-description: Use when the owner asks what to build, whether an idea or a product is worth building, launching or charging for, which of several ideas to take, how it stands next to what people already use, or says a product lacks depth ("뭘 만들까", "아이템 찾아줘", "이거 돈 될까", "출시할 만한가", "어떤 서비스를 출시할지", "경쟁 제품이랑 비교해 줘", "깊이가 부족해"), and before the plan of any new product. Makes the case for a service as fixed lines, each shown from the world by quotations the harness reads again on their pages; has someone who did not write it read every quotation and try to knock the case down; says how deep the product has to be next to what people already use; and ends with a call and with what only real people can answer.
+description: Use only when the owner asks for it: what to build, whether an idea or a product is worth building, launching or charging for, which of several ideas to take, how deep it is next to what people already use ("뭘 만들까", "아이템 찾아줘", "이거 돈 될까", "지을 만한가", "출시할 만한가", "어떤 서비스를 출시할지", "경쟁 제품이랑 비교해 줘", "깊이 판단해 줘"). Never run unasked, and never a step that building waits for. Makes the case for a service as fixed lines, each shown from the world by quotations the harness reads again on their pages; has someone who did not write it read every quotation and try to knock the case down; says how deep the product has to be next to what people already use; and ends with a call and with what only real people can answer.
 ---
 
 # Worth: is this the thing to build
 
 Building is cheap now, so which service is built matters more than how many. A product can be proven line by line to do what was agreed and still be something nobody would pay for; a harness that only proves the first has no edge. So the case for a service is held to what a contract is held to: fixed lines, each a claim that is shown or is not, evidence a person can check in half a minute, and a reader who did not write it.
+
+**This runs when the owner asks for it, and only then.** It is not a gate before building: a request to build is built (`sz:work`), with or without a case, and nobody is told their product lacks one.
 
 Four things are true of every case and are not negotiable:
 
@@ -37,7 +39,7 @@ Two kinds of buyer are held to two standards. **People spending their own money:
 ## 1. Two ways in
 
 **The owner has no idea yet, or several** ("뭘 만들까"): a hunt (2), then a case for what survives (3).
-**The owner has an idea, or a product** ("이거 돈 될까", "돈 받고 싶다", "깊이가 부족해"): a case for it (3). For a product that exists, read `.sz/map.md` and `.sz/spec.md` first and write the service line from what the product is, not from what it hopes to be.
+**The owner has an idea, or a product** ("이거 돈 될까", "출시할 만한가", "깊이 판단해 줘"): a case for it (3). For a product that exists, read `.sz/map.md` and `.sz/spec.md` first and write the service line from what the product is, not from what it hopes to be.
 
 Ask the owner first only what they alone know, three questions at most: the job in a sentence (for whom, in what moment) and what they would be up against, if they have a view; whose trouble they see up close and where they can speak to people (a community, an audience, a marketplace account); what they will not build or run. Their answers are ground of their own (`--basis owner`, their words in `--note`). They then read a table and a call, not a blank page. If they are away, go on without, and say which lines stand on nothing of theirs.
 
@@ -117,6 +119,8 @@ Then `sz-eyes worth call <id> go|narrow|no --why "..."` (it refuses "go" while a
 A "go" is ground to build, not a sale. Say which you would do next and why: the cheapest test that takes money, or the first milestone. The decision is the owner's. When they say it, in any words: `sz-eyes worth owner <id> --call build|not|later --said "<their words>"`. If they say build against a "no", build: record their words, and waive the lines that were not shown with that as the reason.
 
 ## 7. After a "build"
+
+A case that exists is used; none of this asks for one to be made.
 
 - The plan (`sz:work`, the L lane, or the `sz:build` workflow) is cut from the rows: the first milestone is the edge, end to end, for the person and the moment of `who`; each later one makes one group of stakes whole (not a thin version of all of them); `more` waits. The `edge` goes into the first contract as the number it was stated as.
 - A trial (`sz:trial`) takes its people from the `who`, `gap` and `switch` quotations, their words on the cards, and sets them to choose between this and what they use today. What it finds goes to `does` and `returns` with `--basis stand-in`.
