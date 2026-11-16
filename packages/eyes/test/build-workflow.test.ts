@@ -93,11 +93,55 @@ test('a milestone an earlier run built is started before anyone looks at it, and
   assert.match(unseen.calls.find((c) => c.label === 'close:m1')!.prompt, /do not pass `--accepted` \(that is the owner's to say\)/);
 });
 
-test('a builder is told to start what it built, and a phone app begins as an empty app that runs', async () => {
+test('a builder is told to start what it built, and a phone app is shown in a browser until the pass that puts it on the phone', async () => {
   const { calls } = await run({ request: '다이어트 배틀 앱' }, { plan: plan('m1'), build: built, verify: () => ({ proven: ['one', 'two'], refuted: [], unchecked: [] }), close: closed });
   assert.match(calls.find((c) => c.label === 'build:m1')!.prompt, /Start the product yourself with one command and see it running before you return/);
   assert.match(calls.find((c) => c.label === 'build:m1')!.prompt, /A milestone that has never run is not built/);
-  assert.match(calls.find((c) => c.label === 'plan')!.prompt, /For an app on a phone, the first milestone begins with the empty app running on a simulator/);
+  const planned = calls.find((c) => c.label === 'plan')!.prompt;
+  assert.match(planned, /it is built so that the same app runs in a browser, and until the last pass it is shown there, at phone size/);
+  assert.match(planned, /Only when the toolkit cannot run in a browser does the first cut begin with the empty app running on a simulator/);
+});
+
+test('a new product is planned twice: its first cut alone, and what comes after it once that stands', async () => {
+  const cut = { id: 'm1', title: '첫 판', builds: '온 제품을 가장 얇게', claims: [claim('one'), claim('two')] };
+  const deep = (id: string) => ({ id, title: `깊이 ${id}`, builds: 'b', claims: [claim('one'), claim('two')] });
+  const proven = () => ({ proven: ['one', 'two'], refuted: [], unchecked: [] });
+  const twice = (second: unknown) => (_call: Call, nth: number) =>
+    nth === 0 ? { mode: 'new', summary: 's', milestones: [cut], later: [{ title: '대결 깊이', what: '빈 상태와 실패' }, { title: '폰에서', what: '네이티브 빌드' }] } : second;
+
+  const ran = await run({ request: '다이어트 배틀 앱' }, { plan: twice({ mode: 'continue', summary: 's', milestones: [{ ...cut, state: 'closed' }, deep('m2'), deep('m3')] }), build: built, verify: proven, close: closed });
+  assert.deepEqual(ran.calls.map((c) => c.label), ['plan', 'build:m1', 'verify:m1', 'close:m1', 'plan:after', 'build:m2', 'verify:m2', 'close:m2', 'build:m3', 'verify:m3', 'close:m3']);
+  const first = ran.calls.find((c) => c.label === 'plan')!.prompt;
+  assert.match(first, /\*\*The first cut\*\* is the one milestone you return: the whole product at its thinnest, working/);
+  assert.match(first, /Nothing pretends/);
+  assert.doesNotMatch(first, /This run has just built and closed the product's first cut/);
+  assert.match(ran.calls.find((c) => c.label === 'build:m1')!.prompt, /This milestone is the product's first cut[\s\S]*Build the frame before the areas[\s\S]*Do not polish one area before every area exists/);
+  assert.doesNotMatch(ran.calls.find((c) => c.label === 'build:m2')!.prompt, /This milestone is the product's first cut/);
+  assert.match(ran.calls.find((c) => c.label === 'plan:after')!.prompt, /This run has just built and closed the product's first cut[\s\S]*go through every area of it once before you write a claim[\s\S]*what the owner has said since the first cut comes before the spec/);
+  assert.ok(ran.logs.some((l) => /After it, planned when it stands: 대결 깊이 \/ 폰에서/.test(l)), ran.logs.join('\n'));
+  assert.ok(ran.logs.some((l) => /^FIRST CUT READY\. The whole product can be looked at now: PORT=\$\(sz-eyes port\) node server\.mjs\. Every screen: r\.html/.test(l)), ran.logs.join('\n'));
+  assert.ok(ran.logs.some((l) => /planned after the first cut: 2 milestone\(s\): 깊이 m2 \/ 깊이 m3/.test(l)));
+  assert.equal(ran.result.stopped, null);
+  assert.deepEqual(ran.result.milestones.map((m: { id: string }) => m.id), ['m1', 'm2', 'm3']);
+  assert.deepEqual(ran.result.notBuilt, []);
+
+  // A planner that returns the later work as milestones at once: only the first cut is built from that plan.
+  const eager = await run({ request: 'x' }, { plan: (_c: Call, nth: number) => (nth === 0 ? { mode: 'new', summary: 's', milestones: [cut, deep('m2'), deep('m3')] } : { mode: 'continue', summary: 's', milestones: [deep('m9')] }), build: built, verify: proven, close: closed });
+  assert.deepEqual(eager.calls.map((c) => c.label), ['plan', 'build:m1', 'verify:m1', 'close:m1', 'plan:after', 'build:m9', 'verify:m9', 'close:m9']);
+
+  // Nothing comes back from the second plan: the first cut stands, the run says what is still listed.
+  const alone = await run({ request: 'x' }, { plan: twice({ mode: 'continue', summary: 's', milestones: [{ ...cut, state: 'closed' }] }), build: built, verify: proven, close: closed });
+  assert.match(alone.result.stopped, /the first cut is closed, and what comes after it was not planned[\s\S]*Still listed: 대결 깊이 \/ 폰에서/);
+  assert.deepEqual(alone.result.milestones.map((m: { id: string }) => m.id), ['m1']);
+
+  // The first cut does not close: nothing after it is planned, and what was listed is reported as not built.
+  const broke = await run({ request: 'x' }, { plan: twice(null), build: built, fix: () => ({ fixed: [] }), verify: () => ({ proven: ['one'], refuted: [{ id: 'two', fact: '합계가 0' }], unchecked: [] }), close: () => ({ report: 'r.html', closed: false, line: 'l' }) });
+  assert.ok(!broke.calls.some((c) => c.label === 'plan:after'));
+  assert.deepEqual(broke.result.notBuilt, ['대결 깊이', '폰에서']);
+
+  // A product with nothing after its first cut is built from one plan.
+  const small = await run({ request: 'x' }, { plan: () => ({ mode: 'new', summary: 's', milestones: [cut] }), build: built, verify: proven, close: closed });
+  assert.deepEqual(small.calls.map((c) => c.label), ['plan', 'build:m1', 'verify:m1', 'close:m1']);
 });
 
 test('the workflow tells every agent how to launch and end things on a machine it shares', async () => {
@@ -138,7 +182,7 @@ test('a milestone whose contract would not close is where the run stops, whateve
 });
 
 // ---- milestones side by side
-const graph = (...ms: { id: string; after?: string[]; alone?: boolean }[]) => () => ({ mode: 'new', summary: 's', milestones: ms.map((m) => ({ id: m.id, title: `title ${m.id}`, builds: 'b', claims: [claim('one'), claim('two')], ...(m.after ? { after: m.after } : {}), ...(m.alone ? { alone: true } : {}) })) });
+const graph = (...ms: { id: string; after?: string[]; alone?: boolean }[]) => () => ({ mode: 'continue', summary: 's', milestones: ms.map((m) => ({ id: m.id, title: `title ${m.id}`, builds: 'b', claims: [claim('one'), claim('two')], ...(m.after ? { after: m.after } : {}), ...(m.alone ? { alone: true } : {}) })) });
 const proven = () => ({ proven: ['one', 'two'], refuted: [], unchecked: [], stood: 4, noticed: [] });
 const staged = ({ label }: Call) => ({ folders: label.split(':')[1]!.split('+').map((id) => ({ id, where: `/p/.sz/trees/${id}` })) });
 const joinedAll = ({ label }: Call) => ({ merged: label.split(':')[1]!.split('+'), conflicted: [] });
