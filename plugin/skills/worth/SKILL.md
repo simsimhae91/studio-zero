@@ -34,7 +34,7 @@ Four things are true of every case and are not negotiable:
 
 `sz-eyes worth show <id>` prints a case as it stands and what is still between it and "go". The commands refuse a standing the ground does not carry; do not go round them. A line that cannot be shown is the finding.
 
-Two kinds of buyer are held to two standards. **People spending their own money:** they already spend on this job at or above the price meant, and `runs` assumes that of those who try something free about two in a hundred pay. **Small businesses:** there is a trace of what the failure costs them (a lost booking, an hour a day) and a line they already pay for; the price is anchored on that cost, not on what an app usually costs.
+Two kinds of buyer are held to two standards. **People spending their own money:** they already spend on this job at or above the price meant. What share of those who try a free part go on to pay is not known until real people are asked: `runs` says the share it assumes, as an assumption, with where the figure is from (`tests.md`: of products with a free part, two to five in a hundred), and what happens at half of it. **Small businesses:** there is a trace of what the failure costs them (a lost booking, an hour a day) and a line they already pay for; the price is anchored on that cost, not on what an app usually costs.
 
 ## 1. Two ways in
 

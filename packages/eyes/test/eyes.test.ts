@@ -563,3 +563,25 @@ test('a look straight after a press sees what the press did, with no picture kep
     server.close();
   }
 });
+
+test('a choice drawn as a chip is pressed where a person presses it, though an invisible input lies over its words', async () => {
+  // Two stand-ins reported that a product's chips could not be pressed. They could: the eyes refused to press
+  // words that an unseen input covered, which is how such a choice is usually built.
+  const server = createServer((_req, res) => {
+    res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+    res.end(`<!doctype html><title>자리</title><style>label{position:relative;display:inline-block;margin:8px}label input{position:absolute;inset:0;opacity:0;margin:0;width:100%;height:100%}label span{display:inline-block;padding:10px 16px;border:1px solid #999;border-radius:99px}</style>
+<label><input type="radio" name="o" value="결혼식"><span>결혼식</span></label><label><input type="radio" name="o" value="장례식"><span>장례식</span></label><button disabled>만들기</button>`);
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const address = server.address();
+    const url = `http://127.0.0.1:${typeof address === 'object' && address ? address.port : 0}/`;
+    const walk = await walkWeb(url, ['tap:장례식', 'expect:document.querySelector("input[value=장례식]").checked === true', 'tap:결혼식', 'expect:document.querySelector("input[value=결혼식]").checked === true']);
+    assert.equal(walk.passed, true, walk.steps.map((s) => s.why).join(' '));
+    // What cannot be pressed for another reason is still said to be so.
+    const dead = await walkWeb(url, ['tap:만들기'], { stepTimeoutMs: 1_500 });
+    assert.equal(dead.passed, false);
+  } finally {
+    server.close();
+  }
+});

@@ -7,6 +7,7 @@ if [ ! -d .sz ]; then
   echo "The sz harness is loaded in this session: the owner chose its way of working. This project has no map yet. Before the first request to build, change or fix something, load the sz:onboard skill and write .sz/map.md (minutes of reading; it changes no product code), then handle the request with the sz:work skill."
   exit 0
 fi
+echo "Speak to the owner in the language they write in, the short lines while work is under way included."
 if [ -f .sz/map.md ]; then
   echo "This project has a Studio Zero map at .sz/map.md$( [ -f .sz/progress.md ] && echo ' and a progress log at .sz/progress.md (its last lines are where work stands)' ). Read them before working. Use the sz:work skill for any request to build, change or fix something, and sz:feedback when the owner reacts to the product or to work shown to them."
 else

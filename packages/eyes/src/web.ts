@@ -310,7 +310,23 @@ export async function doStep(page: Page, step: Step, patience = 10_000, more: { 
     else await page.waitForTimeout(ms);
   };
   try {
-    if (verb === 'tap') await (await toPress(page, rest, patience)).click({ timeout: patience });
+    if (verb === 'tap') {
+      const target = await toPress(page, rest, patience);
+      try {
+        await target.click({ timeout: Math.min(patience, 2_500) });
+      } catch (err) {
+        // Something lies over the words: a choice drawn as a chip is an invisible input over its label. A person
+        // presses the place, and what is on top takes the press; so does this. Anything else that held the
+        // press back (not there yet, not enabled) is waited for as before.
+        if (!(err instanceof Error) || !err.message.includes('intercepts pointer events')) await target.click({ timeout: patience });
+        else {
+          await target.scrollIntoViewIfNeeded({ timeout: 2_000 }).catch(() => undefined);
+          const box = await target.boundingBox();
+          if (!box) throw err;
+          await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+        }
+      }
+    }
     else if (verb === 'type') {
       const eq = rest.indexOf('=');
       if (eq === -1) throw new Error('a type step is type:<field>=<text>');
