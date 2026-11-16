@@ -129,10 +129,28 @@ What it showed:
 Across the five first passes built whole (D, E1, E2, V1, V2): the product stood at 47 to 65 minutes. Four
 closed, at 100 to 161 minutes; one (E1) stopped open.
 
+## How the night ended
+
+At 04:14 the three sessions still running (V1, V2 and E2) all ended with the same line: "You've hit your weekly
+limit · resets Nov 18 at 9am (Asia/Seoul)". The runs of that night had used up the week's allowance of the
+owner's subscription. A one-word request to Opus and to Sonnet at 07:03 was answered, so what the limit still
+holds back, and whether anything since has been charged beyond the plan, is for the owner to read on their
+usage page: I did not start another run.
+
+Where each stood then:
+
+- V1 (parcel): the first pass closed at 161; then two milestones side by side under the assembled branch
+  ("mend": what the verifiers had noticed, and "stores-wide"), staged at 173, closed at 202 and 238, joined
+  without a conflict, and every standing claim shown again on the joined product (13.5 minutes). 28 claims
+  proven in three contracts, one left for the owner. 10,500 lines.
+- V2 (diet battle): the first pass closed at 134 and "mend" at 237 (7 of 7); the next milestone was being
+  built. 26 claims proven in two contracts, one left for the owner.
+- E2 (diet battle, the round before): four contracts closed by 337 (the first pass, a daily duel, talk between
+  rivals, records), a fifth with 5 of 6 proven.
+
 ## Not measured
 
 - The milestone that puts a phone app on the phone, under this process.
-- Side by side under the assembled branch (it ran on the two branches before it).
 - A product of another kind (a game, a desktop app).
 - What the owner's eye makes of products built whole at once. They are kept in the session scratchpad under
   `cut/`, each with its evidence pages.
