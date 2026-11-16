@@ -682,14 +682,15 @@ window.__game = { state: () => ({ x: Math.round(s.x), score: s.score, started: s
   }
 });
 
-test('each thing the owner says is told which way of working fits it, and a project with no map is told where to start', () => {
+test('work that is asked for is told the harness\'s way of doing it, a stage of its own starts only when asked for, and a project with no map is told where to start', () => {
   const route = (prompt: string, cwd: string): string => spawnSync(process.execPath, [join(HERE, '../../../plugin/hooks/route.mjs')], { encoding: 'utf8', input: JSON.stringify({ prompt, cwd }) }).stdout;
   const project = mkdtempSync(join(tmpdir(), 'eyes-route-'));
   try {
     // The owner's first real use: a project nobody had mapped, a plain request, and no skill of the plugin loaded.
-    assert.match(route('인원수에 0을 넣으면 Infinity원이 나오는데 고쳐줘', project), /^sz: this project has no map yet[\s\S]*sz:onboard skill first[\s\S]*then the sz:work skill[\s\S]*sz:feedback[\s\S]*sz:tend[\s\S]*sz:ship/);
-    // What the owner asked first in that session: to charge for the product. It was answered with a checkout.
-    assert.match(route('이거 프러덕션으로 돈 받고싶은데 필요한 기능목록 정의하고 구현해줘.', project), /wanting to charge for it or take it to production: sz:trial first \(run the trial; do not answer from judgement and do not offer it as an option\)/);
+    assert.match(route('인원수에 0을 넣으면 Infinity원이 나오는데 고쳐줘', project), /^sz: this project has no map yet[\s\S]*sz:onboard skill first[\s\S]*then sz:work[\s\S]*sz:feedback/);
+    // How asked work is done follows from the request. A stage of its own (a trial, a case, a release, a
+    // look-over) starts only when the owner asks for that stage: what they say in passing starts none.
+    assert.match(route('이거 프러덕션으로 돈 받고싶은데 필요한 기능목록 정의하고 구현해줘.', project), /A stage of its own starts only when the owner asks for that stage, by its command or in words that ask for exactly it: \/sz:trial[\s\S]*\/sz:worth[\s\S]*\/sz:ship[\s\S]*\/sz:tend[\s\S]*Never start one because what they said is related to it, and never as a step of something else[\s\S]*say in one line which command would go further/);
     mkdirSync(join(project, '.sz'));
     writeFileSync(join(project, '.sz/map.md'), '# 지도\n');
     const mapped = route('숫자가 좀 작은 느낌이에요', project);
