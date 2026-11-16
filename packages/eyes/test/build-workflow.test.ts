@@ -19,6 +19,8 @@ async function run(args: unknown, answers: Record<string, Answer>): Promise<{ re
   const agent = async (prompt: string, opts: { label: string; effort?: string }): Promise<unknown> => {
     calls.push({ prompt, label: opts.label, ...(opts.effort ? { effort: opts.effort } : {}) });
     const key = Object.keys(answers).find((k) => opts.label.startsWith(k));
+    // Nobody set a claim aside unless the test says so: the ruling on claims still false finds the product wrong.
+    if (!key && opts.label.startsWith('rule:')) return { disputed: [] };
     if (!key) throw new Error(`no answer for ${opts.label}`);
     const nth = seen.get(key) ?? 0;
     seen.set(key, nth + 1);
@@ -91,6 +93,51 @@ test('a milestone an earlier run built is started before anyone looks at it, and
   assert.ok(!unseen.calls.some((c) => c.label === 'build:m2'), 'the next milestone is not built on one that was not looked at');
   assert.match(unseen.result.stopped, /did not close: contract m1-accounts was not looked at/);
   assert.match(unseen.calls.find((c) => c.label === 'close:m1')!.prompt, /do not pass `--accepted` \(that is the owner's to say\)/);
+});
+
+test('a claim whose own words are wrong is set aside for the owner, and the run goes on', async () => {
+  const table = (extra: Record<string, Answer>) => ({
+    plan: plan('m1', 'm2'),
+    build: built,
+    close: closed,
+    ...extra,
+  });
+  // The fixer says one claim cannot be made true; someone who built nothing reads the source and sets it aside.
+  const ran = await run(
+    { request: 'x' },
+    table({
+      verify: ({ label }: Call, nth: number) => (label === 'verify:m1' ? { proven: [], refuted: [{ id: 'one', fact: '착한택배가 X로 나옴' }, { id: 'two', fact: '합계가 0' }], unchecked: [] } : label === 'verify:m1:again' ? { proven: ['two'], refuted: [], unchecked: [] } : { proven: ['one', 'two'], refuted: [], unchecked: [], nth }),
+      fix: () => ({ fixed: ['two'], notFixed: ['one: 공식 안내는 80cm라 약속대로는 만들 수 없음'] }),
+      rule: () => ({ disputed: [{ id: 'one', ruling: '약속은 100cm, 세븐일레븐 안내는 80cm' }], productWrong: [] }),
+    }),
+  );
+  assert.deepEqual(ran.calls.map((c) => c.label).slice(0, 8), ['plan', 'build:m1', 'verify:m1', 'fix:m1:1', 'rule:m1', 'verify:m1:again', 'close:m1', 'build:m2']);
+  const ruling = ran.calls.find((c) => c.label === 'rule:m1')!.prompt;
+  assert.match(ruling, /one: 착한택배가 X로 나옴[\s\S]*one: 공식 안내는 80cm라 약속대로는 만들 수 없음/);
+  assert.match(ruling, /when in doubt it is this one[\s\S]*sz-eyes contract dispute m1 <claim id> --ruling/);
+  assert.doesNotMatch(ran.calls.find((c) => c.label === 'verify:m1:again')!.prompt, /shown false before: one/, 'what was set aside is not looked at again');
+  assert.match(ran.calls.find((c) => c.label === 'verify:m1:again')!.prompt, /These claims of the contract were shown false before: two\./);
+  assert.equal(ran.result.stopped, null);
+  assert.deepEqual(ran.result.forOwner, ['m1/one: 약속은 100cm, 세븐일레븐 안내는 80cm']);
+  assert.deepEqual(ran.result.milestones[0].proven, ['two']);
+  assert.ok(ran.logs.some((l) => /claim "one" is set aside for the owner/.test(l)));
+
+  // Two fixes and still false, the fixer said nothing: it is ruled on once at the end, and when the product is wrong the run stops as before.
+  const wrong = await run(
+    { request: 'x' },
+    table({ verify: () => ({ proven: ['one'], refuted: [{ id: 'two', fact: '합계가 0' }], unchecked: [] }), fix: () => ({ fixed: [] }), close: () => ({ report: 'r.html', closed: false, line: 'l' }) }),
+  );
+  assert.deepEqual(wrong.calls.map((c) => c.label), ['plan', 'build:m1', 'verify:m1', 'fix:m1:1', 'verify:m1:again', 'fix:m1:2', 'verify:m1:again', 'rule:m1:last', 'close:m1']);
+  assert.match(wrong.result.stopped, /still has 1 claim\(s\) shown false/);
+  assert.deepEqual(wrong.result.forOwner, []);
+
+  // The only false claim is set aside by the last ruling: the milestone closes and the next is built.
+  const freed = await run(
+    { request: 'x' },
+    table({ verify: ({ label }: Call) => (label.startsWith('verify:m1') ? { proven: ['one'], refuted: [{ id: 'two', fact: '액체가 확인 필요로 나옴' }], unchecked: [] } : { proven: ['one', 'two'], refuted: [], unchecked: [] }), fix: () => ({ fixed: [] }), rule: () => ({ disputed: [{ id: 'two', ruling: '출처가 없는 기준' }] }) }),
+  );
+  assert.ok(freed.calls.some((c) => c.label === 'build:m2'));
+  assert.equal(freed.result.stopped, null);
 });
 
 test('a builder is told to start what it built, and a phone app is shown in a browser until the pass that puts it on the phone', async () => {

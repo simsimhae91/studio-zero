@@ -77,5 +77,8 @@ export function leftBy(contract: Contract): { text: string; from: string }[] {
     ...contract.claims
       .filter((claim) => claim.status === 'unchecked')
       .map((claim) => ({ text: `${claim.shownBy.kind === 'owner' ? '주인이 볼 것' : '확인 못 함'}: ${claim.says}${claim.note ? `: ${claim.note}` : ''}`, from: `계약 ${contract.id}` })),
+    ...contract.claims
+      .filter((claim) => claim.status === 'disputed')
+      .map((claim) => ({ text: `주인이 정할 것: ${claim.says}${claim.note ? `: ${claim.note}` : ''}`, from: `계약 ${contract.id}` })),
   ];
 }

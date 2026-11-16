@@ -100,6 +100,7 @@ const USAGE = `sz-eyes: launch what was built, look at it, operate it, and put w
   sz-eyes contract frozen <id> [--dir <project>]         the files it froze and whether each is still as it was frozen; exits 1 when one changed
   sz-eyes contract show <id> [--dir <project>]           the contract as the owner reads it
   sz-eyes contract status [--dir <project>]              what open contracts still owe; exits 1 when anything is owed
+  sz-eyes contract dispute <id> <claim-id> --ruling "<what the claim says, what is so, where that is read>" [--evidence <file>]...   a claim found false whose own words are wrong: set aside for the owner, words unchanged
   sz-eyes contract add-check <id> --frozen <file>...     a check written after the freeze by whoever verified the claim: held from now on like the rest
   sz-eyes contract close <id> [--accepted "<the owner's words>"] [--dir <project>]   # refuses when most claims were not looked at
   sz-eyes evidence <id> [--summary <text>] [--took <text>] [--dir <project>]   writes ${EVIDENCE_DIR}/<id>/report.html
@@ -894,6 +895,23 @@ async function main(argv: string[]): Promise<number> {
       out(`frozen: ${id}. Whoever builds it does not edit ${file}${contract.frozen.length + a.all('--frozen').length > 0 ? ' or the files it names' : ''}.`);
       return 0;
     }
+    if (command === 'dispute') {
+      // A claim found false whose own words are what is wrong. Its words stay as they were agreed; it is set
+      // aside for the owner with the ruling, and it no longer stops the work from being closed.
+      if (contract.frozenAt === null || contract.closedAt !== null) throw new EyesError(`a dispute is recorded on a contract that is frozen and open; ${id} is ${contract.closedAt !== null ? 'closed' : 'not frozen yet'}`);
+      const claim = contract.claims.find((c) => c.id === a.words[1]);
+      if (!claim) throw new EyesError(`contract ${id} has no claim "${a.words[1] ?? ''}". Its claims: ${contract.claims.map((c) => c.id).join(', ')}`);
+      if (claim.status !== 'refuted') throw new EyesError(`${id}/${claim.id} is ${claim.status}: a dispute is about a claim that was looked at and found false. Have it verified first.`);
+      const ruling = (a.one('--ruling') ?? '').replace(/\s+/g, ' ').trim();
+      if (ruling.length < 30) throw new EyesError('sz-eyes contract dispute <id> <claim-id> --ruling "<what the claim says, what is so, and where that is read (the address, the sentence)>" [--evidence <file>]...');
+      const folder = evidenceFolder(project, id);
+      const shown = a.all('--evidence').map((path) => evidencePath(project, id, path));
+      for (const path of shown) if (!existsSync(join(folder, path))) throw new EyesError(`${join(folder, path)}: no such file. Evidence is a file under ${folder}, named from there`);
+      Object.assign(claim, { status: 'disputed', note: `약속의 문구가 사실과 다름: ${ruling}`, evidence: [...new Set([...claim.evidence, ...shown])], at: new Date().toISOString() });
+      writeContract(file, contract);
+      out(`${id}/${claim.id}: disputed. Its words are unchanged and it does not stand; it waits for the owner (sz-eyes contract judged ${id} ${claim.id} --verdict yes|no --said "<their words>": yes = the claim was wrong, no = the product must do what it says).`);
+      return 0;
+    }
     if (command === 'add-check') {
       // A contract frozen with its claims and without their checks: the check for a claim is written by whoever
       // verifies it, on the product as it stands, and from then on it is held like any other frozen file. Files
@@ -932,7 +950,8 @@ async function main(argv: string[]): Promise<number> {
       const claimId = a.words[1];
       const claim = contract.claims.find((c) => c.id === claimId);
       if (!claim) throw new EyesError(`contract ${id} has no claim "${claimId ?? ''}". Its claims: ${contract.claims.map((c) => c.id).join(', ')}`);
-      if (claim.shownBy.kind !== 'owner') throw new EyesError(`${id}/${claim.id} is shown by ${claim.shownBy.kind}, not left for the owner to judge: it is shown by running it (${claim.shownBy.ref})`);
+      const disputed = claim.status === 'disputed';
+      if (claim.shownBy.kind !== 'owner' && !disputed) throw new EyesError(`${id}/${claim.id} is shown by ${claim.shownBy.kind}, not left for the owner to judge: it is shown by running it (${claim.shownBy.ref})`);
       if (contract.frozenAt === null) throw new EyesError(`contract ${id} is not agreed yet (not frozen): there is nothing built to judge`);
       const verdict = a.one('--verdict');
       const said = (a.one('--said') ?? '').replace(/\s+/g, ' ').trim();
@@ -941,6 +960,22 @@ async function main(argv: string[]): Promise<number> {
       const day = localDay(at.toISOString());
       const key = `${id}/${claim.id}`;
       if (contract.closedAt !== null) needLedger(project);
+      if (disputed) {
+        // Yes: the claim's words were wrong; it is retired as it stands, with their word on it. No: the product
+        // is to do what the claim says, so it is false again and goes to the list of what is left.
+        Object.assign(claim, { status: verdict === 'yes' ? 'disputed' : 'refuted', note: `${claim.note} / 주인이 정함 (${day}): "${said}"`, at: at.toISOString() });
+        writeContract(file, contract);
+        const done: string[] = [];
+        try {
+          doneInBacklog(project, `주인이 정할 것: ${claim.says.replace(/\s+/g, ' ').trim()}`, `주인의 판단 ${day}: "${said}"`);
+          done.push(`its line in ${BACKLOG_FILE} is ticked`);
+        } catch {
+          // No line yet (the contract is still open), or the owner edited it by hand.
+        }
+        if (verdict === 'no' && addToBacklog(project, [{ text: `주인이 약속대로 하라고 함: ${claim.says}: "${said}"`, from: `계약 ${id}` }]) > 0) done.push(`what they said is written to ${BACKLOG_FILE}`);
+        out(`${key}: ${verdict === 'yes' ? 'the owner agrees the claim was wrong; it is retired' : 'the owner wants it as written; it is false again and the product has to change'}${done.length > 0 ? ` (${done.join('; ')})` : ''}`);
+        return 0;
+      }
       Object.assign(claim, { status: verdict === 'yes' ? 'proven' : 'refuted', note: `주인이 봄 (${day}): "${said}"`, at: at.toISOString() });
       writeContract(file, contract);
       const did: string[] = [];

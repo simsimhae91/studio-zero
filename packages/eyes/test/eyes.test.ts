@@ -515,6 +515,29 @@ test('every call to Maestro brings a driver port of its own, so the simulator na
   }
 });
 
+test('a claim found false whose own words are wrong is set aside for the owner: it does not stand, and it does not stop the close', () => {
+  const project = mkdtempSync(join(tmpdir(), 'eyes-dispute-'));
+  try {
+    assert.equal(eyes(project, 'contract', 'new', 'first-pass', '--lane', 'M', '--request', '첫 판', '--claim', 'path|90cm 상자는 착한택배가 된다|command:true', '--claim', 'keeps|다시 와도 기록이 남는다|command:true').code, 0);
+    assert.equal(eyes(project, 'contract', 'freeze', 'first-pass').code, 0);
+    assert.match(eyes(project, 'contract', 'dispute', 'first-pass', 'path', '--ruling', '약속은 100cm라고 하지만 세븐일레븐 공식 안내는 80cm 이하').text, /is unproven: a dispute is about a claim that was looked at and found false/);
+    assert.equal(eyes(project, 'contract', 'claim', 'first-pass', 'path', '--status', 'refuted', '--note', '90cm에서 X로 나옴').code, 0);
+    assert.equal(eyes(project, 'contract', 'claim', 'first-pass', 'keeps', '--status', 'proven', '--note', '돌려서 봤다').code, 0);
+    assert.match(eyes(project, 'contract', 'close', 'first-pass').text, /still owes[\s\S]*path: shown to be false/);
+    assert.match(eyes(project, 'contract', 'dispute', 'first-pass', 'path', '--ruling', '짧음').text, /sz-eyes contract dispute <id> <claim-id> --ruling/);
+    assert.match(eyes(project, 'contract', 'dispute', 'first-pass', 'path', '--ruling', '약속은 100cm라고 하지만 세븐일레븐 공식 안내(https://example.com/guide)는 "세 변의 합 80cm 이하"').text, /first-pass\/path: disputed\. Its words are unchanged and it does not stand/);
+    assert.match(eyes(project, 'contract', 'show', 'first-pass').text, /\[주인이 정할 것\] \*\*path\*\* 90cm 상자는 착한택배가 된다/);
+    assert.match(eyes(project, 'contract', 'close', 'first-pass').text, /^closed: first-pass \(1 line\(s\) added/);
+    assert.match(readFileSync(join(project, '.sz/backlog.md'), 'utf8'), /주인이 정할 것: 90cm 상자는 착한택배가 된다: 약속의 문구가 사실과 다름/);
+    assert.match(eyes(project, 'standing', '--summary').text, /^1 claim\(s\)/, 'only what was proven stands');
+    // The owner agrees: it is retired with their word, and its line in the list is ticked.
+    assert.match(eyes(project, 'contract', 'judged', 'first-pass', 'path', '--verdict', 'yes', '--said', '맞아 80이 맞음').text, /the owner agrees the claim was wrong; it is retired \(its line in .*backlog\.md is ticked\)/);
+    assert.match(eyes(project, 'standing', '--summary').text, /^1 claim\(s\)/);
+  } finally {
+    rmSync(project, { recursive: true, force: true });
+  }
+});
+
 test('a check written by whoever verified is held by the frozen contract from then on, and only ever added', () => {
   const project = mkdtempSync(join(tmpdir(), 'eyes-addcheck-'));
   try {

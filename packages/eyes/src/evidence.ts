@@ -44,7 +44,7 @@ ul { margin: 0; padding-left: 20px }
 main > section:not(.claim) { display: flex; flex-direction: column; gap: 12px }
 `;
 
-const LABEL: Record<Claim['status'], string> = { proven: '증명됨', refuted: '반증됨', unproven: '아직 안 보임', unchecked: '확인 못 함' };
+const LABEL: Record<Claim['status'], string> = { proven: '증명됨', refuted: '반증됨', unproven: '아직 안 보임', unchecked: '확인 못 함', disputed: '주인이 정할 것' };
 
 /**
  * The one page the owner reads: what was asked, each thing that was claimed with whether it was shown and the
@@ -59,9 +59,9 @@ export function evidencePage(contract: Contract, folder: string, extra: { summar
   const release = contract.release;
   const took = timeline(contract);
   const short = (sha: string): string => sha.slice(0, 7);
-  const verdict = release?.takenBack ? '되돌렸습니다' : count('refuted') > 0 ? '반증된 것이 있습니다' : kept && kept.broken.length > 0 ? '전부터 지키던 것이 깨졌습니다' : count('unproven') > 0 ? '아직 보이지 않은 것이 있습니다' : count('unchecked') > 0 ? '보인 것은 전부 참이고, 확인하지 못한 것이 있습니다' : '전부 증명됐습니다';
+  const verdict = release?.takenBack ? '되돌렸습니다' : count('refuted') > 0 ? '반증된 것이 있습니다' : kept && kept.broken.length > 0 ? '전부터 지키던 것이 깨졌습니다' : count('unproven') > 0 ? '아직 보이지 않은 것이 있습니다' : count('disputed') > 0 ? '약속의 문구가 사실과 달라 주인이 정할 것이 있습니다' : count('unchecked') > 0 ? '보인 것은 전부 참이고, 확인하지 못한 것이 있습니다' : '전부 증명됐습니다';
   // What needs the owner first: what was shown false, then what nobody showed, then what could not be checked.
-  const order: Record<Claim['status'], number> = { refuted: 0, unproven: 1, unchecked: 2, proven: 3 };
+  const order: Record<Claim['status'], number> = { refuted: 0, disputed: 1, unproven: 2, unchecked: 3, proven: 4 };
   const claims = [...contract.claims]
     .sort((a, b) => order[a.status] - order[b.status])
     .map(
@@ -92,7 +92,7 @@ export function evidencePage(contract: Contract, folder: string, extra: { summar
   <p class="verdict">${verdict}</p>
   ${where}
   ${took ? `<p class="counts"><span>모두 ${took.all}분</span><span>${release ? '준비' : '무엇이 끝인지 정하기'} ${took.agreeing}분</span><span>${release ? '후보 띄우기' : '만들기'} ${took.building}분</span><span>증명 ${took.proving}분</span>${took.closing === null ? '' : `<span>닫기 ${took.closing}분</span>`}</p>` : ''}
-  <p class="counts"><span>증명 ${count('proven')}</span><span>반증 ${count('refuted')}</span><span>아직 ${count('unproven')}</span><span>확인 못 함 ${count('unchecked')}</span></p>
+  <p class="counts"><span>증명 ${count('proven')}</span><span>반증 ${count('refuted')}</span><span>아직 ${count('unproven')}</span><span>확인 못 함 ${count('unchecked')}</span>${count('disputed') > 0 ? `<span>주인이 정할 것 ${count('disputed')}</span>` : ''}</p>
   ${extra.summary ? `<p class="note">${esc(extra.summary)}</p>` : ''}
   ${claims}
   ${

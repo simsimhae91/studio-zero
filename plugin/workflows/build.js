@@ -198,6 +198,7 @@ What holds for every milestone, this one and those planned later:
 - A product people use is more than a screen: where it keeps what a person enters, what happens when there is nothing yet, when something fails, the second time someone comes. Each milestone after the first cut carries these for its own area; they are not left for the end.
 - A product that lives is looked after: from the first milestone it writes down what failed (a log the owner can read) and counts the one thing it is for (started, finished), and \`.sz/map.md\` says where. Without that nobody can tell later whether it works for people.
 - A product is made to be put where people reach it. Choose what it stands on with \`sz:backend\` and say in the spec which and why, in two lines. From the first milestone: its settings come from the environment (no secret and no address of this machine in the code), \`/healthz\` answers with the commit it was built from, and every flow runs against the address in \`SZ_URL\` when given one and starts a server of its own only when not. If people have accounts in it, one milestone's claims say that one person cannot read or change what another stored, and neither can someone not signed in, shown by a flow with two people.
+- A claim does not state as true a fact about the world that nobody has read from its source. Where the request gives one (a limit, a price, a rule of somebody else's service), the claim says that the product follows the source and shows it with the day it was read, and the spec keeps the request's figure as what the owner wrote. A claim that repeats such a figure cannot be made true if the source says otherwise, and the work stops on it.
 - A milestone after the first pass has 3 to 7 claims. A claim is something true of the running product that can be shown: with the figure, the words on the screen, the state. Each says how it is shown: a flow file or test that will be written before the code (name the file, in the project's own format), a look at a named screen in a named state, or a command. One claim says what the milestone must not break. What only a person can judge is one claim shown by "owner".
 - Do not write product code in this step. Add a line to \`.sz/progress.md\` saying the spec is written, and commit \`.sz/\`.
 
@@ -348,10 +349,38 @@ Do not judge your own claims and do not record verdicts: someone who did not bui
     return all
   }
   let verdict = await lookTogether()
+  // A claim can be false because its own words are wrong: it repeats a fact about the world that the source
+  // gives otherwise. No fix makes it true, and only the owner may change what was agreed. It is set aside for
+  // them by someone who built nothing, with where the fact is read, and the work goes on. (Two of four runs on
+  // one request stopped for the night on one such claim each; one of them had tried to fix the product twice.)
+  const setAside = []
+  const rule = async (said) => {
+    const open = verdict.refuted
+    if (open.length === 0) return
+    const ruled = await agent(
+      `Claims of contract \`${built.contractId}\` of the project in ${here} were shown false on the running product by someone who did not build it.${PLACE}${SAND} ${TOOLS} The product is launched like this: ${built.launch}.
+
+The claims shown false, each with what happened instead:
+${open.map((r) => `- ${r.id}: ${r.fact}`).join('\n')}
+${said ? `What the one who was fixing them said could not be made true without changing what was asked:\n${said}` : ''}
+
+For each, decide which it is. You built nothing and you take nobody's word: read the contract (\`sz-eyes contract show ${built.contractId}\`), look at the product, and open the source yourself.
+- **The product is wrong.** It can do what the claim says and does not. Leave the claim as it is: this is the common case, and when in doubt it is this one.
+- **The claim's own words are wrong.** They state as true a fact about the world (a limit, a price, a rule of somebody else's service) that its own source gives otherwise, or something that cannot be true together with another claim, and the product follows the source. Then record it, and change nothing else: \`sz-eyes contract dispute ${built.contractId} <claim id> --ruling "<what the claim says; what is so; where that is read: the address and the sentence>"\`. The claim's words stay as they were agreed, and the owner decides.
+
+Change no product code, no flow, no test and no claim. Return what you decided for each.`,
+      { label: `rule:${m.id}${said ? '' : ':last'}`, phase: 'Verify', agentType: 'sz:arbiter', ...effort('verify'), schema: { type: 'object', properties: { disputed: { type: 'array', items: { type: 'object', properties: { id: { type: 'string' }, ruling: { type: 'string', description: 'what the claim says, what is so, and where that is read' } }, required: ['id', 'ruling'] } }, productWrong: { type: 'array', items: { type: 'string' } } }, required: ['disputed'] } },
+    )
+    const aside = ((ruled && ruled.disputed) || []).filter((d) => open.some((r) => r.id === d.id))
+    if (aside.length === 0) return
+    setAside.push(...aside)
+    verdict = { ...verdict, refuted: verdict.refuted.filter((r) => !aside.some((d) => d.id === r.id)) }
+    for (const d of aside) log(`${m.title}: claim "${d.id}" is set aside for the owner (its words are wrong, not the product): ${d.ruling.slice(0, 200)}`)
+  }
   for (let round = 1; round <= 2 && verdict && verdict.refuted.length + (verdict.broken || []).length > 0; round++) {
     const wrong = verdict.refuted.map((r) => `- ${r.id}: ${r.fact}`).join('\n') || '(none)'
     const broke = (verdict.broken || []).map((b) => `- ${b.key}: ${b.fact}`).join('\n')
-    await agent(
+    const mended = await agent(
       `You are fixing a product so that claims shown false on it become true. ${GROUND}${SAND} ${TOOLS}${PLACE}
 
 Contract \`${built.contractId}\` (read it: \`sz-eyes contract show ${built.contractId}\`). The product is launched like this: ${built.launch}.
@@ -362,6 +391,9 @@ ${broke ? `And these were true before this work and are not now (each is a promi
 Find the cause of each in the product and fix it there. Do not edit the contract, the flows or the tests it names, or those of earlier work, and do not record verdicts. Check that what was already true still is (run the project's checks). Commit the fix. If a claim cannot be made true without changing what was asked, change nothing for it and say why.`,
       { label: `fix:${m.id}:${round}`, phase: 'Build', ...effort('build'), schema: { type: 'object', properties: { fixed: { type: 'array', items: { type: 'string' } }, notFixed: { type: 'array', items: { type: 'string' } } }, required: ['fixed'] } },
     )
+    // What the fixer says cannot be made true is ruled on before anyone looks again: a claim set aside is not looked at twice more.
+    if (mended && Array.isArray(mended.notFixed) && mended.notFixed.length > 0) await rule(mended.notFixed.join('\n'))
+    if (verdict.refuted.length + (verdict.broken || []).length === 0) break
     const again = await verify({ claims: verdict.refuted.map((r) => r.id), standing: (verdict.broken || []).map((b) => b.key), noticed: verdict.noticed || [] })
     if (!again) break
     // A claim keeps its earlier verdict unless this look gave it a new one: what was shown false and was not
@@ -382,6 +414,7 @@ Find the cause of each in the product and fix it there. Do not edit the contract
       noticed: again.noticed === undefined ? verdict.noticed || [] : again.noticed,
     }
   }
+  if (verdict && verdict.refuted.length > 0) await rule('')
   if (verdict && (verdict.sandbox || '').trim() !== '') {
     stopped = `milestone "${m.title}" was built and could not be looked at: the session's command sandbox stopped the browser and the call outside it was refused (${verdict.sandbox.trim().slice(0, 200)}). Nothing is known to be wrong with the product. The owner chooses one: run sessions in auto mode, approve the unsandboxed command when asked, or turn the sandbox off for this project (/sandbox); then ask to continue.`
     log(stopped)
@@ -399,13 +432,13 @@ Find the cause of each in the product and fix it there. Do not edit the contract
 2. ${verdict.refuted.length + (verdict.broken || []).length === 0 ? `\`sz-eyes contract close ${built.contractId}\` (it also writes what the verifier noticed and what could not be checked to \`.sz/backlog.md\`). It refuses when most of the claims were not looked at: then do not pass \`--accepted\` (that is the owner's to say), leave the contract open, and return "closed": false with what it said under "why".` : 'Leave the contract open: it has claims shown false, or broke what stood before it.'}
 3. ${where ? 'If this milestone made a line of \`.sz/map.md\` or \`.sz/spec.md\` false (how it is launched, where it keeps things, what it does), do not edit them here: return under "corrections" each such line and what it should say now.' : 'If this milestone made a line of \`.sz/map.md\` or \`.sz/spec.md\` false (how it is launched, where it keeps things, what it does), correct that line.'} If the project has a case (\`sz-eyes worth show\`) and the contract is closed, mark each row of the whole job that a claim proven here covers: \`sz-eyes worth row <case> <row> --ours have --by ${built.contractId}/<claim>\`. Only rows a proven claim shows; the rest stay as they are.
 4. Read \`sz-eyes backlog\`. For each open line that this milestone has ended (the thing it names is built or fixed now, and a claim proven here or a commit of this milestone shows it), run \`sz-eyes backlog done "<some words of the line>" --by "${built.contractId}/<claim>, or the commit"\`. Tick only what is shown to be ended; a line that is half done stays open.
-5. Add one line to \`.sz/progress.md\` in the owner's language: the date, the milestone, how many claims are proven, refuted and unchecked, how many promises of earlier work were shown again and whether any broke or was replaced, anything the verifier noticed that the owner should know, and what comes next. The figures are these, as the verifier returned them: ${verdict.proven.length} proven, ${verdict.refuted.length} refuted, ${verdict.unchecked.length} unchecked${verdict.stood === undefined ? '' : `; of what stood before this milestone, ${verdict.stood} hold`}, ${(verdict.broken || []).length} broken, ${(m.supersedes || []).length} replaced. Use them in the line and in the commit message; do not count again from \`sz-eyes standing\`, which after closing also counts this milestone's own claims.
+5. Add one line to \`.sz/progress.md\` in the owner's language: the date, the milestone, how many claims are proven, refuted and unchecked, and each claim set aside for the owner with what they have to decide, how many promises of earlier work were shown again and whether any broke or was replaced, anything the verifier noticed that the owner should know, and what comes next. The figures are these, as the verifier returned them: ${verdict.proven.length} proven, ${verdict.refuted.length} refuted, ${verdict.unchecked.length} unchecked${verdict.stood === undefined ? '' : `; of what stood before this milestone, ${verdict.stood} hold`}, ${(verdict.broken || []).length} broken, ${(m.supersedes || []).length} replaced. Use them in the line and in the commit message; do not count again from \`sz-eyes standing\`, which after closing also counts this milestone's own claims.
 6. Commit \`.sz/\` (the contract, the evidence, the standing record, the backlog, the progress line)${where ? ', on this folder\'s own branch' : ''}.
 Change no product code.`,
     { label: `close:${m.id}`, phase: 'Close', schema: CLOSED, ...effort('close') },
   )
   const broken = verdict.broken || []
-  const entry = { id: m.id, title: m.title, contractId: built.contractId, launch: built.launch, proven: verdict.proven, refuted: verdict.refuted, unchecked: verdict.unchecked, broken, stood: verdict.stood === undefined ? null : verdict.stood, replaced: m.supersedes || [], noticed: verdict.noticed || [], report: closed ? closed.report : null, corrections: (closed && closed.corrections) || [] }
+  const entry = { id: m.id, title: m.title, contractId: built.contractId, launch: built.launch, setAside, proven: verdict.proven.filter((id) => !setAside.some((d) => d.id === id)), refuted: verdict.refuted, unchecked: verdict.unchecked, broken, stood: verdict.stood === undefined ? null : verdict.stood, replaced: m.supersedes || [], noticed: verdict.noticed || [], report: closed ? closed.report : null, corrections: (closed && closed.corrections) || [] }
   log(`${m.title}: ${verdict.proven.length} proven, ${verdict.refuted.length} refuted, ${verdict.unchecked.length} unchecked${verdict.stood === undefined ? '' : `; of what stood before, ${verdict.stood} hold and ${broken.length} broke`}`)
 
   // Nothing is built on a milestone that is known to be broken: the owner is told where it stands instead. The
@@ -643,6 +676,8 @@ return {
   milestones: done,
   // What was built side by side: which milestones, which came into the project's folder, and how many promises held on the product as joined.
   joins,
+  // Claims whose own words turned out wrong about the world: set aside, not changed. Each is the owner's to settle (sz-eyes contract judged <contract> <claim> --verdict yes|no --said "...").
+  forOwner: done.flatMap((d) => (d.setAside || []).map((a) => `${d.contractId}/${a.id}: ${a.ruling}`)),
   notBuilt: [...milestones.filter((m) => !done.some((d) => d.id === m.id)).map((m) => m.title), ...(more ? later : [])],
   stopped,
 }

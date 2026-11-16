@@ -28,9 +28,14 @@ export const ShownBy = z.object({ kind: z.enum(['flow', 'test', 'look', 'command
 
 /**
  * `unproven` is where every claim starts and where it stays until someone shows otherwise. `unchecked`: it
- * could not be checked here (no device, no way to see it), and that is said instead of assumed.
+ * could not be checked here (no device, no way to see it), and that is said instead of assumed. `disputed`:
+ * the product does not do what the claim says, and someone who built nothing found that it is the claim's own
+ * words that are wrong (about a fact of the world, read from its source), not the product. Its words are not
+ * changed and it does not stand: it waits for the owner, and the rest of the work goes on. (Two of four runs
+ * on one request stopped for the night on one such claim each: the request had said a limit was 100cm, and the
+ * carrier's own page says 80.)
  */
-export const ClaimStatus = z.enum(['unproven', 'proven', 'refuted', 'unchecked']);
+export const ClaimStatus = z.enum(['unproven', 'proven', 'refuted', 'unchecked', 'disputed']);
 export type ClaimStatus = z.infer<typeof ClaimStatus>;
 
 export const Claim = z.object({
@@ -182,7 +187,7 @@ export function timeline(contract: Contract): { agreeing: number; building: numb
 /** A promise retired after the contract was agreed: not part of what was agreed, so the owner is shown it as such. */
 export const addedLate = (contract: Contract, entry: { at: string | null }): boolean => contract.frozenAt !== null && entry.at !== null && entry.at > contract.frozenAt;
 
-const MARK: Record<ClaimStatus, string> = { proven: '증명됨', refuted: '반증됨', unproven: '아직', unchecked: '확인 못 함' };
+const MARK: Record<ClaimStatus, string> = { proven: '증명됨', refuted: '반증됨', unproven: '아직', unchecked: '확인 못 함', disputed: '주인이 정할 것' };
 
 /** A contract as the owner reads it, in their language. */
 export function renderContract(contract: Contract): string {
