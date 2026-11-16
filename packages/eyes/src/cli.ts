@@ -21,7 +21,7 @@ import { heldSecrets, ownersVault, parseRun, runWithSecrets, setSecret } from '.
 import { GATE_LINES, lastRelease, releaseContract, releases, renderReleases, type Gate } from './release.ts';
 import { reviewWeb } from './review.ts';
 import { renderStrangers, strangers } from './strangers.ts';
-import { Shown, brokenDuring, keptFor, ledgerProblem, recordShown, renderStanding, stampClosed, standing, standingSummary } from './standing.ts';
+import { Shown, brokenDuring, keptFor, ledgerProblem, recordShown, renderStanding, stampClosed, standing, standingSummary, mendLedger, STANDING_FILE } from './standing.ts';
 import { Felt, TrialFinding, TrialKind, Verdict, addAsk, addFinding, addNote, addPersona, latestTrial, newTrial, readTrial, renderTrial, setVerdict, unfinished, writeTrialPage, setCanary } from './trial.ts';
 import { SIZES, lookAtWeb, renderLook, renderWalk, walkWeb, type Size, SandboxError } from './web.ts';
 
@@ -105,6 +105,7 @@ const USAGE = `sz-eyes: launch what was built, look at it, operate it, and put w
   sz-eyes standing [--summary|--json] [--dir <project>]
         every claim earlier work proved and the product still has to keep true, with how each is shown, when it
         was last shown to hold, and which of its check files changed since; exits 1 when one is recorded broken
+  sz-eyes standing mend [--dir <project>]                during a git merge that conflicts in the record of standing claims: keeps the looks of both sides (the later where both looked at one claim)
   sz-eyes standing record <contract>/<claim> --status holds|broken|unchecked --note "<what was run and what it showed>" [--during <contract being worked on>] [--dir <project>]
 
   sz-eyes feedback new "<the owner's words>" [--round <folder>] [--dir <project>]
@@ -568,8 +569,16 @@ async function main(argv: string[]): Promise<number> {
     }
   }
   if (area === 'standing') {
-    const a = parse(command === 'record' ? rest : argv.slice(1), ['--summary', '--json']);
+    const a = parse(command === 'record' || command === 'mend' ? rest : argv.slice(1), ['--summary', '--json']);
     const project = resolve(a.one('--dir') ?? '.');
+    if (command === 'mend') {
+      try {
+        out(`${STANDING_FILE}: the looks of both sides kept, ${mendLedger(project)} claim(s). Add it and conclude the merge; then show the claims again on the merged product`);
+      } catch (err) {
+        throw new EyesError(err instanceof Error ? err.message : String(err));
+      }
+      return 0;
+    }
     if (command === 'record') {
       const key = a.words[0];
       const note = (a.one('--note') ?? '').trim();

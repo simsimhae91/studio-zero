@@ -600,3 +600,43 @@ test('a browser the command sandbox stopped is said to be that, with what to do,
   // Anything else that stops a browser is left as it is.
   for (const other of ['browserType.launch: Chromium distribution "chrome" is not found at /Applications/Google Chrome.app', 'page.goto: net::ERR_CONNECTION_REFUSED at http://127.0.0.1:1/', 'Timeout 30000ms exceeded']) assert.equal(stoppedBySandbox(new Error(other)), null, other);
 });
+
+test('two lines of work that each looked at what stands are brought together without losing a look of either', () => {
+  // Milestones built side by side each close a contract and each look again at earlier claims: git cannot merge
+  // the record of that by itself, and "keep both sides by hand" is what a session left alone gets wrong.
+  const project = mkdtempSync(join(tmpdir(), 'eyes-mend-'));
+  const git = (...args: string[]): string => {
+    const run = spawnSync('git', args, { cwd: project, encoding: 'utf8', env: { ...process.env, GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@example.test', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@example.test' } });
+    return `${run.stdout}${run.stderr}`;
+  };
+  const ledger = (shown: Record<string, { status: string; at: string; note?: string }>): void => {
+    mkdirSync(join(project, '.sz'), { recursive: true });
+    writeFileSync(join(project, '.sz/standing.json'), `${JSON.stringify({ shown: Object.fromEntries(Object.entries(shown).map(([k, v]) => [k, { note: '', during: null, files: {}, ...v }])) }, null, 2)}\n`);
+  };
+  try {
+    git('init', '-q', '-b', 'main');
+    ledger({ 'm1/a': { status: 'holds', at: '2026-11-16T01:00:00.000Z' }, 'm1/b': { status: 'holds', at: '2026-11-16T01:00:00.000Z' } });
+    git('add', '-A');
+    git('commit', '-q', '-m', 'm1');
+    git('checkout', '-q', '-b', 'sz/m2');
+    ledger({ 'm1/a': { status: 'holds', at: '2026-11-16T02:00:00.000Z', note: 'm2 중에 다시 봄' }, 'm1/b': { status: 'holds', at: '2026-11-16T02:00:00.000Z' }, 'm2/x': { status: 'holds', at: '2026-11-16T02:10:00.000Z' } });
+    git('commit', '-q', '-am', 'm2');
+    git('checkout', '-q', 'main');
+    git('checkout', '-q', '-b', 'sz/m3');
+    ledger({ 'm1/a': { status: 'holds', at: '2026-11-16T02:05:00.000Z', note: 'm3 중에 다시 봄' }, 'm1/b': { status: 'broken', at: '2026-11-16T02:30:00.000Z', note: 'm3가 깼다' }, 'm3/y': { status: 'holds', at: '2026-11-16T02:20:00.000Z' } });
+    git('commit', '-q', '-am', 'm3');
+    git('checkout', '-q', 'main');
+    git('merge', '-q', '--no-ff', 'sz/m2', '-m', 'm2');
+    assert.match(eyes(project, 'standing', 'mend').text, /not in a merge with two sides to keep/);
+    assert.match(git('merge', '--no-ff', 'sz/m3', '-m', 'm3'), /CONFLICT/);
+    assert.match(eyes(project, 'standing', '--summary').text, /cannot be read/);
+    const mended = eyes(project, 'standing', 'mend');
+    assert.match(mended.text, /the looks of both sides kept, 4 claim\(s\)/);
+    const shown = JSON.parse(readFileSync(join(project, '.sz/standing.json'), 'utf8')).shown as Record<string, { status: string; note: string }>;
+    assert.deepEqual(Object.keys(shown), ['m1/a', 'm1/b', 'm2/x', 'm3/y']);
+    assert.equal(shown['m1/a']!.note, 'm3 중에 다시 봄', 'where both looked, the later look');
+    assert.equal(shown['m1/b']!.status, 'broken', 'a later look that found it broken is not lost to an earlier one that did not');
+  } finally {
+    rmSync(project, { recursive: true, force: true });
+  }
+});

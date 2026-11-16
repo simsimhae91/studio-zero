@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { z } from 'zod';
@@ -61,6 +62,34 @@ function writeLedger(projectDir: string, ledger: Ledger): void {
   mkdirSync(dirname(file), { recursive: true });
   const sorted = Object.fromEntries(Object.entries(ledger.shown).sort(([a], [b]) => a.localeCompare(b)));
   writeFileSync(file, `${JSON.stringify(Ledger.parse({ shown: sorted }), null, 2)}\n`);
+}
+
+/**
+ * Two lines of work that each looked at standing claims, and each closed a contract, leave a merge conflict in
+ * the record when they are brought together (milestones built side by side, two branches of a team). Neither
+ * side's looks are thrown away: the record of both is every claim either has, and where both looked at the
+ * same claim, the later look. A look that found a claim broken is never replaced by an earlier one that found
+ * it holding, and nothing here says a claim holds on the merged product: that is shown again after the merge.
+ *
+ * Reads the two sides from git (the file as "ours" and as "theirs" during a merge) and writes the result.
+ * Says how many claims it kept. Throws when the project is not in such a merge.
+ */
+export function mendLedger(projectDir: string): number {
+  const side = (stage: 2 | 3): Ledger | null => {
+    const shown = spawnSync('git', ['show', `:${stage}:${STANDING_FILE}`], { cwd: projectDir, encoding: 'utf8' });
+    if (shown.status !== 0) return null;
+    return Ledger.parse(JSON.parse(shown.stdout));
+  };
+  const ours = side(2);
+  const theirs = side(3);
+  if (!ours && !theirs) throw new Error(`${STANDING_FILE} is not in a merge with two sides to keep (git has no "ours" and "theirs" of it). If it has conflict marks from somewhere else, keep the entries of both sides by hand`);
+  const merged: Ledger = { shown: { ...(ours?.shown ?? {}) } };
+  for (const [key, look] of Object.entries(theirs?.shown ?? {})) {
+    const mine = merged.shown[key];
+    if (!mine || look.at > mine.at) merged.shown[key] = look;
+  }
+  writeLedger(projectDir, merged);
+  return Object.keys(merged.shown).length;
 }
 
 export const keyOf = (contract: string, claim: string): string => `${contract}/${claim}`;

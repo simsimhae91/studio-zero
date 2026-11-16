@@ -69,3 +69,108 @@ test('a milestone whose contract would not close is where the run stops, whateve
   assert.match(result.stopped, /did not close: a frozen file changed/);
   assert.equal(calls.some((c) => c.label === 'build:m2'), false);
 });
+
+// ---- milestones side by side
+const graph = (...ms: { id: string; after?: string[]; alone?: boolean }[]) => () => ({ mode: 'new', summary: 's', milestones: ms.map((m) => ({ id: m.id, title: `title ${m.id}`, builds: 'b', claims: [claim('one'), claim('two')], ...(m.after ? { after: m.after } : {}), ...(m.alone ? { alone: true } : {}) })) });
+const proven = () => ({ proven: ['one', 'two'], refuted: [], unchecked: [], stood: 4, noticed: [] });
+const staged = ({ label }: Call) => ({ folders: label.split(':')[1]!.split('+').map((id) => ({ id, where: `/p/.sz/trees/${id}` })) });
+const joinedAll = ({ label }: Call) => ({ merged: label.split(':')[1]!.split('+'), conflicted: [] });
+const held = (stood: number) => () => ({ proven: [], refuted: [], unchecked: [], broken: [], held: [], stood });
+const labels = (calls: Call[]): string[] => calls.map((c) => c.label);
+
+test('milestones the plan puts side by side are built in folders of their own, brought together, and everything that stands is shown again before anything is built on them', async () => {
+  const { result, calls, logs } = await run(
+    { request: '택배 비교' },
+    {
+      plan: graph({ id: 'm1' }, { id: 'm2', after: ['m1'] }, { id: 'm3', after: ['m1'] }, { id: 'm4', after: ['m2', 'm3'] }),
+      stage: staged,
+      build: built,
+      verify: proven,
+      close: ({ label }) => ({ report: 'r.html', closed: true, line: 'l', ...(label === 'close:m2' ? { corrections: ['지도: 띄우는 명령이 npm start에서 npm run serve로'] } : {}) }),
+      join: joinedAll,
+      gate: held(12),
+    },
+  );
+  assert.equal(result.stopped, null);
+  const order = labels(calls);
+  // The first has nothing beside it; the two after it start together; the last waits for both and for the look at them joined.
+  assert.deepEqual(order.slice(0, 5), ['plan', 'build:m1', 'verify:m1', 'close:m1', 'stage:m2+m3']);
+  assert.ok(order.indexOf('build:m3') < order.indexOf('verify:m2'), 'both are being built before either is verified');
+  assert.ok(order.indexOf('join:m2+m3') > Math.max(order.indexOf('close:m2'), order.indexOf('close:m3')));
+  assert.deepEqual(order.slice(order.indexOf('join:m2+m3')), ['join:m2+m3', 'gate:m2+m3', 'build:m4', 'verify:m4', 'close:m4']);
+  const prompt = (label: string): string => calls.find((c) => c.label === label)!.prompt;
+  for (const label of ['build:m2', 'verify:m3', 'close:m2']) assert.match(prompt(label), /Yours is `\/p\/\.sz\/trees\/m[23]`: a git worktree[\s\S]*cd \/p\/\.sz\/trees\/m[23] &&[\s\S]*Do not edit `\.sz\/map\.md` or `\.sz\/spec\.md`/, label);
+  for (const label of ['build:m1', 'verify:m1', 'build:m4']) assert.doesNotMatch(prompt(label), /\.sz\/trees/, `${label} is built in the project's own folder`);
+  assert.match(prompt('stage:m2+m3'), /\.git\/info\/exclude[\s\S]*merge=union[\s\S]*git worktree add \.sz\/trees\/<id> -b sz\/<id>[\s\S]*Never copy what the product stored/);
+  assert.match(prompt('join:m2+m3'), /git merge --no-ff sz\/<id>[\s\S]*sz-eyes standing mend[\s\S]*git merge --abort[\s\S]*\[지도: 띄우는 명령이 npm start에서 npm run serve로\]/);
+  assert.match(prompt('gate:m2+m3'), /Nobody has seen them together\. There is no new claim to prove\.[\s\S]*Show again every claim that stands[\s\S]*--during m3/);
+  assert.deepEqual(result.milestones.map((m: { id: string }) => m.id), ['m1', 'm2', 'm3', 'm4']);
+  assert.deepEqual(result.joins, [{ ids: ['m2', 'm3'], merged: ['m2', 'm3'], notMerged: [], stood: 12, broken: [], noticed: [] }]);
+  assert.ok(logs.some((line) => /side by side: title m2 \/ title m3/.test(line)) && logs.some((line) => /brought together: m2, m3; 12 promise\(s\) hold/.test(line)));
+});
+
+test('a line stays a line: with no order given, with one milestone ready at a time, when one is marked alone, and when the owner asks for it', async () => {
+  const answers = { stage: staged, build: built, verify: proven, close: closed, join: joinedAll, gate: held(6) };
+  const line = await run({ request: 'x' }, { ...answers, plan: graph({ id: 'm1' }, { id: 'm2' }, { id: 'm3' }) });
+  assert.deepEqual(labels(line.calls).filter((l) => /^(stage|join|gate)/.test(l)), []);
+  assert.deepEqual(labels(line.calls).filter((l) => l.startsWith('build')), ['build:m1', 'build:m2', 'build:m3']);
+  // Nothing is built beside the first milestone of a product, whatever the plan says.
+  const eager = await run({ request: 'x' }, { ...answers, plan: graph({ id: 'm1', after: [] }, { id: 'm2', after: [] }, { id: 'm3', after: [] }) });
+  assert.deepEqual(labels(eager.calls).slice(0, 5), ['plan', 'build:m1', 'verify:m1', 'close:m1', 'stage:m2+m3']);
+  // One that changes what everything stands on goes first and alone; the others then go together.
+  const alone = await run({ request: 'x' }, { ...answers, plan: graph({ id: 'm1' }, { id: 'm2', after: ['m1'] }, { id: 'm3', after: ['m1'], alone: true }, { id: 'm4', after: ['m1'] }) });
+  const order = labels(alone.calls).filter((l) => /^(stage|build)/.test(l));
+  assert.deepEqual(order.slice(0, 2), ['build:m1', 'stage:m2+m4']);
+  assert.ok(order.indexOf('build:m3') > order.indexOf('build:m4'), 'the one that must be alone waits for the group and is then built in the project\'s folder');
+  assert.doesNotMatch(alone.calls.find((c) => c.label === 'build:m3')!.prompt, /\.sz\/trees/);
+  assert.equal(alone.result.stopped, null);
+  // The owner can have a line whatever the plan says.
+  const forced = await run({ request: 'x', side: 1 }, { ...answers, plan: graph({ id: 'm1' }, { id: 'm2', after: ['m1'] }, { id: 'm3', after: ['m1'] }) });
+  assert.deepEqual(labels(forced.calls).filter((l) => /^(stage|join|gate)/.test(l)), []);
+  // Folders of their own could not be made: they are built one after another, and nothing is lost.
+  const nofolders = await run({ request: 'x' }, { ...answers, plan: graph({ id: 'm1' }, { id: 'm2', after: ['m1'] }, { id: 'm3', after: ['m1'] }), stage: () => ({ folders: [], problem: 'a branch sz/m2 is left from an earlier run' }) });
+  assert.equal(nofolders.result.stopped, null);
+  assert.deepEqual(labels(nofolders.calls).filter((l) => /^(join|gate)/.test(l)), []);
+  assert.ok(nofolders.logs.some((l) => /built in a line after all: a branch sz\/m2 is left/.test(l)));
+  assert.deepEqual(nofolders.result.milestones.map((m: { id: string }) => m.id), ['m1', 'm2', 'm3']);
+});
+
+test('what does not merge is brought up to date by a builder and then shown again with the rest; what breaks when joined is fixed or stops the run', async () => {
+  const base = { plan: graph({ id: 'm1' }, { id: 'm2', after: ['m1'] }, { id: 'm3', after: ['m1'] }, { id: 'm4', after: ['m2', 'm3'] }), stage: staged, build: built, verify: proven, close: closed };
+  // A conflict in the product's own files: nobody settles it in passing.
+  const conflict = await run({ request: 'x' }, { ...base, join: ({ label }) => (label === 'join:m2+m3' ? { merged: ['m2'], conflicted: [{ id: 'm3', files: ['src/routes.js'] }] } : { merged: ['m3'], conflicted: [] }), resolve: () => ({ settled: '두 경로를 모두 남김' }), gate: held(12) });
+  const order = labels(conflict.calls);
+  assert.deepEqual(order.slice(order.indexOf('join:m2+m3'), order.indexOf('build:m4')), ['join:m2+m3', 'resolve:m3', 'join:m3:again', 'gate:m2+m3']);
+  assert.match(conflict.calls.find((c) => c.label === 'resolve:m3')!.prompt, /no longer merges into it: src\/routes\.js[\s\S]*cd \/p\/\.sz\/trees\/m3 &&[\s\S]*Do not change a flow or a test that a contract froze/);
+  assert.equal(conflict.result.stopped, null);
+  assert.deepEqual(conflict.result.joins[0].merged, ['m2', 'm3']);
+  // It still does not merge: the run stops and says where the work is. Nothing is built on half a product.
+  const stuck = await run({ request: 'x' }, { ...base, join: ({ label }) => (label === 'join:m2+m3' ? { merged: ['m2'], conflicted: [{ id: 'm3', files: ['src/routes.js'] }] } : { merged: [], conflicted: [{ id: 'm3', files: ['src/routes.js'] }] }), resolve: () => ({ settled: '', cannot: '둘이 같은 주소를 다르게 쓴다' }), gate: held(8) });
+  assert.match(stuck.result.stopped, /"title m3" were built and closed on their own branch and could not be brought into the project's folder[\s\S]*\/p\/\.sz\/trees\/m3/);
+  assert.deepEqual(stuck.result.notBuilt, ['title m4']);
+  assert.ok(labels(stuck.calls).includes('gate:m2+m3'), 'what did come in is still shown again');
+
+  // Proven apart, broken together: fixed, looked at again, and only then built on.
+  const broke = { proven: [], refuted: [], unchecked: [], broken: [{ key: 'm2/one', fact: '메뉴에 m3의 항목이 m2의 항목을 덮는다' }], held: [], stood: 11 };
+  const mended = await run({ request: 'x' }, { ...base, join: joinedAll, mend: () => ({ fixed: ['m2/one'] }), gate: (_c, nth) => (nth === 0 ? broke : held(12)()) });
+  const after = labels(mended.calls);
+  assert.deepEqual(after.slice(after.indexOf('gate:m2+m3'), after.indexOf('build:m4')), ['gate:m2+m3', 'mend:m2+m3:1', 'gate:m2+m3:again']);
+  assert.match(mended.calls.find((c) => c.label === 'mend:m2+m3:1')!.prompt, /Each was proven alone\. Together, these promises do not hold[\s\S]*m2\/one: 메뉴에 m3의 항목이/);
+  assert.match(mended.calls.find((c) => c.label === 'gate:m2+m3:again')!.prompt, /second look, after a fix\. These promises did not hold when the milestones were brought together: m2\/one/);
+  assert.equal(mended.result.stopped, null);
+  const still = await run({ request: 'x' }, { ...base, join: joinedAll, mend: () => ({ fixed: [] }), gate: () => broke });
+  assert.match(still.result.stopped, /each proven alone and, brought together, 1 promise\(s\) do not hold after two fixes: m2\/one/);
+  assert.deepEqual(still.result.notBuilt, ['title m4']);
+  assert.deepEqual(labels(still.calls).filter((l) => l.startsWith('mend')), ['mend:m2+m3:1', 'mend:m2+m3:2']);
+
+  // One of the group does not come through: the other is still brought in and shown again, then the run stops.
+  const refuted = { proven: ['one'], refuted: [{ id: 'two', fact: '링크를 열면 빈 화면' }], unchecked: [] };
+  const half = await run({ request: 'x' }, { ...base, verify: ({ label }) => (label.startsWith('verify:m3') ? refuted : proven()), fix: () => ({ fixed: [] }), join: joinedAll, gate: held(8) });
+  assert.match(half.result.stopped, /"title m3" still has 1 claim\(s\) shown false/);
+  assert.ok(labels(half.calls).includes('join:m2') && labels(half.calls).includes('gate:m2'), 'the one that came through is not left on a branch');
+  assert.deepEqual(half.result.notBuilt, ['title m4']);
+  assert.deepEqual(half.result.milestones.map((m: { id: string; refuted: unknown[] }) => [m.id, m.refuted.length]), [['m1', 0], ['m2', 0], ['m3', 1]]);
+  // The sandbox stopped the look at the joined product: said as that.
+  const sand = await run({ request: 'x' }, { ...base, join: joinedAll, gate: () => ({ proven: [], refuted: [], unchecked: [], sandbox: 'Run outside of the sandbox' }) });
+  assert.match(sand.result.stopped, /brought together and could not be looked at: the session's command sandbox/);
+});
