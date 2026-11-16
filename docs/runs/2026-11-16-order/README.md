@@ -86,10 +86,53 @@ What it showed:
    one verifier with ready flows took 17.5. The builder saved about as much. What was bought is strictness.
 3. **A phone app shown in a browser** had its battle screen up at 49 minutes.
 
-## The assembled process, and what still runs
+How round 2 ended: E2's first pass closed at 136 minutes with 17 of 18 claims proven (the last is the owner's
+to judge), after two rounds of mending; its next milestone closed at 220. E1 stopped at 152 with its first pass
+open on one claim: its builder had kept the request's 100 cm for one carrier and written "the owner's word" as
+its source, the verifier refused that as a source, and nothing could mend it without overturning what the
+owner had written. That made three stops in five runs of this request on the same wrong figure.
 
-Branch `next` puts together: the first pass whole and in one stretch (D), flows written by whoever verifies
-and three verifiers at once (E), a claim whose own words are wrong set aside for the owner instead of stopping
-the run, side by side by default after the first pass, and a cheaper plan after the first pass. Two runs of it
-(the parcel request and the diet-battle request) were started at 23:50; their figures are added below when
-they end.
+## The assembled process: two more runs
+
+Branch `next` puts together: the first pass whole and in one stretch (D); flows written by whoever verifies and
+three verifiers at once (E); a claim whose own words are wrong set aside for the owner instead of stopping the
+run, and a plan that does not write the request's figures about the world into claims; side by side by default
+after the first pass; the plan after the first pass reading what the verifiers left. Started 23:50.
+
+| | V1: parcel | V2: diet battle |
+|---|---|---|
+| Plan | 9.8 | 7.8 |
+| Claims | 18 | 20 |
+| Core path could be seen | 52 | **37** |
+| Whole product built | **65** (8,100 lines) | **47** (5,700 lines) |
+| First verdicts | 86: 15 proven, 2 refuted | 76: 17 proven, 2 refuted |
+| First pass closed | 161: 17 of 18 | 134: 19 of 20 |
+| Plan after the first pass | | 9.9 (it had been 13 to 18) |
+
+What it showed:
+
+1. **The stop on the wrong figure did not come back.** V1's spec keeps the request's figures under "as the
+   owner's request has them" and the product follows the sources.
+2. **The ruling on claims the fixer cannot make true ran for the first time, and found the product wrong both
+   times**: in V2 a photo of a weigh-in could be opened by anyone who had ever been in a battle with its
+   owner (found by a verifier opening the address as a stranger), and a 12-letter name was cut off. Nothing
+   was set aside; both were mended. The way out that the ruling offers was not taken where it did not belong.
+3. **A new stop, mended the same night.** V1's workflow stopped at 132 with one claim false: every fault had
+   been mended, and two pictures in the evidence folder still showed the product from before. The verifier
+   was right to refuse. The session took the pictures again by itself and the pass closed at 161. Whoever
+   fixes a claim shown by pictures is now told to take them again.
+4. **From built to closed is the long part**: 87 and 96 minutes of verifying, mending and verifying again,
+   each look 14 to 21 minutes, for faults that were real and small (labels cut off inside a drawing, an
+   address open to the wrong person). The owner can look from the moment the product is built; closing it is
+   what takes the time. This is the largest cost left in the process.
+
+Across the four first passes built this way (D, E1, E2, V1, V2 counted as five; E1 never closed): the whole
+product stood at 47 to 65 minutes, and closed at 100 to 161.
+
+## Not measured
+
+- The milestone that puts a phone app on the phone, under this process.
+- Side by side under the assembled branch (it ran on the two branches before it).
+- A product of another kind (a game, a desktop app).
+- What the owner's eye makes of products built whole at once. They are kept in the session scratchpad under
+  `cut/`, each with its evidence pages.
