@@ -24,7 +24,9 @@ async function run(args: unknown, answers: Record<string, Answer>): Promise<{ re
     seen.set(key, nth + 1);
     return answers[key]!({ prompt, label: opts.label }, nth);
   };
-  const result = await new AsyncFunction('agent', 'phase', 'log', 'args', SOURCE)(agent, () => {}, (line: string) => logs.push(line), args);
+  // Every run says whether the owner was asked beforehand; the tests that are not about that run as "away".
+  const given = args && typeof args === 'object' && !('asked' in args) ? { asked: 'away', ...args } : args;
+  const result = await new AsyncFunction('agent', 'phase', 'log', 'args', SOURCE)(agent, () => {}, (line: string) => logs.push(line), given);
   return { result, calls, logs };
 }
 
@@ -32,6 +34,29 @@ const claim = (id: string) => ({ id, says: `${id} is true`, kind: 'test', ref: `
 const plan = (...ids: string[]) => () => ({ mode: 'extend', summary: 's', milestones: ids.map((id) => ({ id, title: `title ${id}`, builds: 'b', claims: [claim('one'), claim('two')] })) });
 const built = ({ label }: Call) => ({ contractId: label.split(':')[1], summary: 'built', launch: 'PORT=$(sz-eyes port) node server.mjs' });
 const closed = () => ({ report: 'r.html', closed: true, line: 'l' });
+
+test('the workflow does not start until it is told whether the owner was asked', async () => {
+  const table = { plan: plan('m1', 'm2'), build: built, verify: () => ({ proven: ['one', 'two'], refuted: [], unchecked: [] }), close: closed };
+
+  const silent = await run({ request: '택배 비교', asked: undefined }, table);
+  assert.match(silent.result.error, /not started: say whether the owner was asked/);
+  assert.match(silent.result.error, /AskUserQuestion/);
+  assert.equal(silent.calls.length, 0, 'no agent runs before that is said');
+
+  const own = await run({ request: '택배 비교', asked: 'owner' }, table);
+  assert.match(own.result.error, /needs answers/, 'the session\'s own answers cannot pass as the owner\'s by being left out');
+
+  const chose = await run({ request: '택배 비교', asked: 'owner', answers: '계정: 필요 (거래 내역 저장)' }, table);
+  const planned = chose.calls.find((c) => c.label === 'plan')!.prompt;
+  assert.match(planned, /What the owner answered when asked beforehand, in their words:\n계정: 필요/);
+  assert.ok(chose.logs.some((l) => /planned from what the owner answered; 2 milestone\(s\) to go, expect about 40 to 60 minutes/.test(l)), chose.logs.join('\n'));
+
+  const away = await run({ request: '택배 비교', asked: 'away', answers: '계정 없음으로 정함' }, table);
+  const alone = away.calls.find((c) => c.label === 'plan')!.prompt;
+  assert.match(alone, /The owner was not asked anything beforehand/);
+  assert.match(alone, /its own words, not the owner's\):\n계정 없음으로 정함/, 'what the session decided is passed on as the session\'s, never as the owner\'s');
+  assert.ok(away.logs.some((l) => /the owner was not asked beforehand/.test(l)));
+});
 
 test('the workflow tells every agent how to launch and end things on a machine it shares', async () => {
   const { calls, result } = await run({ request: '운영 준비' }, { plan: plan('m5'), build: built, verify: () => ({ proven: ['one', 'two'], refuted: [], unchecked: [], stood: 25, noticed: [] }), close: closed });

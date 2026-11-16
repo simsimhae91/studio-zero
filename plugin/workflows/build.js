@@ -1,7 +1,7 @@
 export const meta = {
   name: 'build',
   description: 'Build a product, or grow one that exists, to the end, unattended: a spec (new, or the existing one extended), then for each milestone a frozen contract, the build, a verification by an agent that did not build it which also shows again what stood before, fixes, and a page of evidence. Milestones follow one another unless the plan puts some side by side: those are built at the same time in folders of their own, brought together, and everything that stands is shown again on the product as joined',
-  whenToUse: 'A new product, or a change of several features to a product that already has a spec (lane L), after the owner has answered what only they can answer and has asked for it to run to the end without them.',
+  whenToUse: 'A new product, or a change of several features to a product that already has a spec (lane L), after the owner has been put the questions only they can answer (three at most, each a choice they can tap) and has asked for it to run to the end without them. Typing the command is not an answer to those questions: ask first, then start it with asked and answers.',
   phases: [
     { title: 'Plan', detail: 'the spec and its milestones, each with the claims that make it done' },
     { title: 'Build', detail: 'a milestone, or several side by side in folders of their own: contract, oracle, code' },
@@ -10,14 +10,19 @@ export const meta = {
   ],
 }
 
-// args: { request: string, answers?: string, maxMilestones?: number, side?: 1|2|3, effort?: string | object }
-// `request` is the owner's words. `answers` is what they said to the questions asked before this run (or the
-// conservative answers taken for them, marked as such). The run asks nobody anything: what is open is decided
-// conservatively and written down.
+// args: { request: string, asked: 'owner' | 'away', answers?: string, maxMilestones?: number, side?: 1|2|3, effort?: string | object }
+// `request` is the owner's words. `asked` says whether the owner was put the questions only they can answer
+// before this run: 'owner' = they were, and `answers` holds what they chose, word for word; 'away' = they said to
+// go on without questions, or nobody is in the session. The run asks nobody anything, and it does not start
+// until it is told which. (In the owner's first run a session skipped the questions, passed answers it had
+// written itself, and the owner found out from the spec: "뭐야 질문 다섯개가 어디있었어요".)
 const request = args && typeof args.request === 'string' ? args.request.trim() : ''
 const answers = args && typeof args.answers === 'string' ? args.answers.trim() : ''
+const asked = args && (args.asked === 'owner' || args.asked === 'away') ? args.asked : ''
 const maxMilestones = args && Number.isInteger(args.maxMilestones) ? args.maxMilestones : 6
-if (request === '') return { error: 'give args: { request: "<what to build, in the owner\'s words>", answers?: "<what the owner answered>" }' }
+if (request === '') return { error: 'give args: { request: "<what to build, in the owner\'s words>", asked: "owner" | "away", answers?: "<what the owner chose, word for word>" }' }
+if (asked === '') return { error: 'not started: say whether the owner was asked. Before this runs, put to the owner what only they can answer, as the sz:work skill says: three questions at most, each a choice they can tap (the AskUserQuestion tool). Then start again with asked: "owner" and what they chose, word for word, in answers. Only if they said to go on without questions, or nobody is in the session to answer: asked: "away".' }
+if (asked === 'owner' && answers === '') return { error: 'asked: "owner" needs answers: what the owner chose, word for word' }
 
 const TOOLS = 'The command `sz-eyes` is on your PATH (the sz plugin\'s). Load the skills you need with the Skill tool: `sz:work` (how work is sized, contracted and closed), `sz:verify` (how a product is launched, looked at and operated, and what counts as evidence), `sz:taste` (how a screen is put together, for anything a person looks at in a product made here), `sz:backend` (what a product stands on: where it runs for people, what holds its accounts and its data, and what that must prove), `sz:ship` (what a product needs before it can be put where people reach it), `sz:game` (when the product is a game or moves by itself: how it is built to be asked what it is doing, and proven with its time held), `sz:trial` (whether a person would pay: stand-ins for the people it is for use it the whole way), `sz:worth` (the case for the service: who it is for, what they use instead, and the rows of the whole job that say how deep it has to be).'
 // Whether the session runs its commands inside a sandbox is found out once, when the work is planned, and every
@@ -143,7 +148,7 @@ const plan = await agent(
 The owner's request:
 ${request}
 
-${answers ? `What the owner answered when asked beforehand:\n${answers}` : 'The owner was not asked anything beforehand. Where the request leaves something open that only they could say (who it is for, how it should feel, accounts, keys, money), take the conservative answer and list it under "decided". Wherever you write this down (the spec, the progress line), say that they were not asked: never that they did not answer.'}
+${asked === 'owner' ? `What the owner answered when asked beforehand, in their words:\n${answers}` : 'The owner was not asked anything beforehand. Where the request leaves something open that only they could say (who it is for, how it should feel, accounts, keys, money), take the conservative answer and list it under "decided". Wherever you write this down (the spec, the progress line), say that they were not asked: never that they did not answer.' + (answers ? `\nNotes from the session that started this run (its own words, not the owner's):\n${answers}` : '')}
 
 If \`.sz/spec.md\` already exists, the product has been worked on before. Read it, the contracts under \`.sz/contracts/\` (\`sz-eyes contract status\`, \`sz-eyes contract show <id>\`), \`.sz/progress.md\`, \`.sz/backlog.md\`, \`git log\` and \`sz-eyes standing\` (what earlier work proved and the product has to keep true). Do not plan again what is done and do not rewrite the spec's history. Then it is one of two cases, or both:
 - **Continue** (mode "continue"): an earlier run stopped before finishing what the spec has, and the request asks for that. Return the spec's milestones with their claims as the contracts and the spec have them, each with its "state": "closed" (its contract is closed), "built" (its contract is frozen and its code is committed, and it was not verified to the end: give "contractId", "launch", and under "disputes" any frozen check the earlier run reported as wrong about how it checks) or "todo". The order of the milestones that are not built yet is decided afresh by the rule under "The order" below: some of them may go side by side now even if the spec lists them in a line (give them "after").
@@ -172,7 +177,12 @@ Return the plan.`,
 if (!plan || !Array.isArray(plan.milestones) || plan.milestones.length === 0) return { error: 'no plan came back' }
 if (plan.sandboxed === true) SAND = IN_SANDBOX
 const milestones = plan.milestones.slice(0, maxMilestones)
+// How long to expect is said before the first milestone: 20 to 30 minutes each is what a small web product took
+// with building at "high" (docs/runs/2026-11-16-speed). An owner who is told nothing learns the length of a run
+// by waiting through it.
+const ahead = milestones.filter((m) => m.state !== 'closed').length
 log(`${plan.mode === 'extend' ? 'spec extended' : plan.mode === 'continue' ? 'continuing' : 'spec written'}: ${milestones.length} milestone(s): ${milestones.map((m) => m.title).join(' / ')}`)
+log(`${asked === 'owner' ? 'planned from what the owner answered' : 'the owner was not asked beforehand: what was open is decided conservatively and listed in the spec'}; ${ahead} milestone(s) to go, expect about ${ahead * 20} to ${ahead * 30} minutes (a phone app's first build adds its own)`)
 
 // ------------------------------------------------------------------ one milestone, from its contract to its close
 // `where` is null when it is built in the project's own folder, with nothing beside it. When it is built beside
