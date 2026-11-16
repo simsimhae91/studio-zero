@@ -388,7 +388,7 @@ Someone who did not build it operated the product and found these claims false:
 ${wrong}
 ${broke ? `And these were true before this work and are not now (each is a promise of earlier work: \`sz-eyes standing\` shows how it is checked):\n${broke}` : ''}
 
-Find the cause of each in the product and fix it there. Do not edit the contract, the flows or the tests it names, or those of earlier work, and do not record verdicts. Check that what was already true still is (run the project's checks). Commit the fix. If a claim cannot be made true without changing what was asked, change nothing for it and say why.`,
+Find the cause of each in the product and fix it there. Where a claim is shown by pictures kept in the evidence folder (a look the owner will go through), take those pictures again from the product as you leave it: a picture from before your fix shows the fault you mended, and the claim is false again for that alone. Do not edit the contract, the flows or the tests it names, or those of earlier work, and do not record verdicts. Check that what was already true still is (run the project's checks). Commit the fix. If a claim cannot be made true without changing what was asked, change nothing for it and say why.`,
       { label: `fix:${m.id}:${round}`, phase: 'Build', ...effort('build'), schema: { type: 'object', properties: { fixed: { type: 'array', items: { type: 'string' } }, notFixed: { type: 'array', items: { type: 'string' } } }, required: ['fixed'] } },
     )
     // What the fixer says cannot be made true is ruled on before anyone looks again: a claim set aside is not looked at twice more.

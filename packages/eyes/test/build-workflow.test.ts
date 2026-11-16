@@ -115,6 +115,7 @@ test('a claim whose own words are wrong is set aside for the owner, and the run 
   const ruling = ran.calls.find((c) => c.label === 'rule:m1')!.prompt;
   assert.match(ruling, /one: 착한택배가 X로 나옴[\s\S]*one: 공식 안내는 80cm라 약속대로는 만들 수 없음/);
   assert.match(ruling, /when in doubt it is this one[\s\S]*sz-eyes contract dispute m1 <claim id> --ruling/);
+  assert.match(ran.calls.find((c) => c.label === 'fix:m1:1')!.prompt, /take those pictures again from the product as you leave it/);
   assert.doesNotMatch(ran.calls.find((c) => c.label === 'verify:m1:again')!.prompt, /shown false before: one/, 'what was set aside is not looked at again');
   assert.match(ran.calls.find((c) => c.label === 'verify:m1:again')!.prompt, /These claims of the contract were shown false before: two\./);
   assert.equal(ran.result.stopped, null);
