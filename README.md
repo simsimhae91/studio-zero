@@ -81,11 +81,13 @@ claude --plugin-dir <이 저장소>/plugin
 - 써 보기: 웹과 Electron. 스킬 이름 없는 요청에서 스스로 붙었고, 대역 셋이 며칠치를 썼다.
 - 지을 만한가: 한국의 공개 페이지에서 인용을 모으고 기계로 확인하고 반박까지.
 - 지나가는 말에는 단계가 시작되지 않는 것.
+- 명령 샌드박스를 켠 채(자동 모드) 빌드 워크플로가 끝까지 도는 것. 같은 마일스톤을 추론 강도만 바꿔 지은 시간(xhigh 21~23분, high 11분, 판정 같음).
 
 아직 아닌 것:
 
 - 공개 배포, 계정이 있는 제품의 출하, 모바일 스토어.
 - 브라우저 확장, 실제 게임 빌드, 결제 순간까지 가는 대역.
+- 마일스톤을 나란히 짓는 것: 구현되어 있고 청할 때만 켜진다. 실제로 나란히 돈 적은 없다.
 - 아무 생각 없이 시작하는 사냥("뭘 만들까"), "짓자"로 끝나는 근거.
 - 판정이 맞았는지. 근거가 어디까지 있는지를 말할 뿐이고, 팔리는지는 진짜 사람만 답한다.
 - 이 하네스가 만든 서비스가 돈을 번 적은 없다.
@@ -122,7 +124,7 @@ deploy/install-launch-agent.sh                    # 로그인할 때 데몬이 �
 
 ```bash
 pnpm typecheck
-pnpm test              # 468개. 22개는 옵트인이다. Chrome, Docker, 실제 세션이 필요한 것은 없으면 건너뛴다
+pnpm test              # 474개. 22개는 옵트인이다. Chrome, Docker, 실제 세션이 필요한 것은 없으면 건너뛴다
 
 SZ_TEST_ELECTRON_BIN=<Electron 실행 파일> node --test --test-name-pattern="built on Electron" packages/eyes/test/ship.test.ts
 SZ_TEST_REAL_KEYCHAIN=1 pnpm test   # 임시 키체인으로 실제 Keychain 왕복 (옵트인)
