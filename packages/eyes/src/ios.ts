@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { freePort } from './port.ts';
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { basename, dirname, extname, isAbsolute, join, relative, resolve } from 'node:path';
 import { stoppedBySandbox } from './web.ts';
@@ -76,9 +77,19 @@ export async function screenshot(udid: string, file: string, run: CommandRunner 
   return file;
 }
 
+/**
+ * Maestro's driver on a simulator answers on a port of the Mac itself, 22087 unless told otherwise, whichever
+ * simulator it runs on. With two simulators booted, a call for one was answered by the driver of the other: a
+ * look at a spare simulator returned the words of the app another session was verifying. So every call brings a
+ * port of its own, and the simulator named is the one that answers.
+ */
+async function ownDriver(udid: string): Promise<string[]> {
+  return ['--driver-host-port', String(await freePort()), '--device', udid];
+}
+
 /** What is on the simulator's screen as Maestro reads it: the words, and what can be pressed, in reading order. */
 export async function screenText(udid: string, run: CommandRunner = runCommand): Promise<{ texts: string[]; ids: string[] }> {
-  const res = await sh(run, 'maestro', ['--device', udid, 'hierarchy'], 120_000);
+  const res = await sh(run, 'maestro', [...(await ownDriver(udid)), 'hierarchy'], 120_000);
   const start = res.stdout.indexOf('{');
   if (res.exitCode !== 0 || start === -1) throw new EyesError(`the screen could not be read: ${(res.stderr || res.stdout).trim().slice(-300)}`);
   const texts: string[] = [];
@@ -155,7 +166,7 @@ export async function runFlow(udid: string, flow: string, opts: { out: string; e
   const video = opts.video ? join(opts.out, `${name}.mp4`) : null;
   const recorder = video ? spawn('xcrun', ['simctl', 'io', udid, 'recordVideo', '--codec=h264', '--force', video], { stdio: 'ignore' }) : null;
   const started = Date.now();
-  const res = await run('maestro', ['--device', udid, 'test', ...Object.entries(opts.env ?? {}).flatMap(([key, value]) => ['-e', `${key}=${value}`]), copy], { cwd: dirname(copy), timeoutMs: (opts.timeoutSec ?? 600) * 1000, maxOutputBytes: 8 * 1024 * 1024 });
+  const res = await run('maestro', [...(await ownDriver(udid)), 'test', ...Object.entries(opts.env ?? {}).flatMap(([key, value]) => ['-e', `${key}=${value}`]), copy], { cwd: dirname(copy), timeoutMs: (opts.timeoutSec ?? 600) * 1000, maxOutputBytes: 8 * 1024 * 1024 });
   if (recorder) {
     // The recorder writes its file when it is interrupted, not when it is killed.
     recorder.kill('SIGINT');

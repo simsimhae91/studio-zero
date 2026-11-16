@@ -17,7 +17,7 @@ import { reviewWeb } from '../src/review.ts';
 import { SandboxError, stoppedBySandbox, walkWeb } from '../src/web.ts';
 import { brokenDuring, keptFor, recordShown, stampClosed, standing } from '../src/standing.ts';
 import { evidencePage } from '../src/evidence.ts';
-import { quarantineFlow } from '../src/ios.ts';
+import { quarantineFlow, screenText } from '../src/ios.ts';
 
 const contract = (): Contract =>
   Contract.parse({
@@ -497,6 +497,22 @@ test('a port is taken from the machine, not chosen', async () => {
   const server = createServer(() => {});
   await new Promise<void>((done, fail) => server.once('error', fail).listen(port, '127.0.0.1', done));
   server.close();
+});
+
+test('every call to Maestro brings a driver port of its own, so the simulator named is the one that answers', async () => {
+  const seen: string[][] = [];
+  const run = async (command: string, args: string[]) => {
+    seen.push([command, ...args]);
+    return { exitCode: 0, stdout: 'noise before\n{ "attributes": { "text": "로그인" }, "children": [{ "attributes": { "accessibilityText": "코드 받기", "resource-id": "send" } }] }', stderr: '', timedOut: false };
+  };
+  const first = await screenText('AAAA-1111', run as never);
+  await screenText('BBBB-2222', run as never);
+  assert.deepEqual(first, { texts: ['로그인', '코드 받기'], ids: ['send'] });
+  for (const [k, udid] of [[0, 'AAAA-1111'], [1, 'BBBB-2222']] as const) {
+    const [command, flag, port, device, named, verb] = seen[k]!;
+    assert.deepEqual([command, flag, device, named, verb], ['maestro', '--driver-host-port', '--device', udid, 'hierarchy']);
+    assert.ok(Number(port) > 1024 && Number(port) !== 22087, `a port of its own, not Maestro's shared default: ${port}`);
+  }
 });
 
 test('what is owed is said once in a session, and again only when it has changed', () => {
