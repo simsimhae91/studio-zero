@@ -591,12 +591,14 @@ test('a browser the command sandbox stopped is said to be that, with what to do,
   const chrome = 'browserType.launch: Failed to create a ProcessSingleton for your profile directory. This usually means that the profile is already in use by another instance of Chromium.\nCall log:\n  - [pid=50117][err] [1116/115316.341144:ERROR:chrome/browser/process_singleton_posix.cc:1046] Failed to create socket directory.';
   const shell = '[1116/115411.150850:FATAL:base/apple/mach_port_rendezvous_mac.cc:159] Check failed: kr == KERN_SUCCESS. bootstrap_check_in org.chromium.Chromium.MachPortRendezvousServer.51335: Permission denied (1100)';
   const opened = 'browserType.launch: Target page, context or browser has been closed\n[pid=58984][err] [58984:51786177:1116/115843.805162:FATAL:base/mac/mac_util.mm:379] Check failed: . : Operation not permitted (1)';
-  for (const text of [chrome, shell, opened]) {
+  const simctl = 'could not list the simulators: }) because we are not connected to CoreSimulatorService. 2026-11-16 15:32:06.681 simctl[47880:52719603] Error Domain=NSPOSIXErrorDomain Code=61 "Connection refused" UserInfo={NSLocalizedDescription=CoreSimulatorService connection became invalid.';
+  for (const text of [chrome, shell, opened, simctl]) {
     const said = stoppedBySandbox(new Error(text));
     assert.ok(said instanceof SandboxError, text.slice(0, 60));
     assert.match(said.message, /ran inside the session's command sandbox[\s\S]*Nothing is wrong with the product[\s\S]*dangerouslyDisableSandbox: true[\s\S]*from the first try[\s\S]*auto mode[\s\S]*\/sandbox[\s\S]*not a verdict on any claim/);
   }
   assert.match(stoppedBySandbox(new Error(shell), 'the app')!.message, /^the app could not start/);
+  assert.match(stoppedBySandbox(new Error(simctl), 'the simulator')!.message, /^the simulator could not start because this command ran inside the session's command sandbox/);
   // Anything else that stops a browser is left as it is.
   for (const other of ['browserType.launch: Chromium distribution "chrome" is not found at /Applications/Google Chrome.app', 'page.goto: net::ERR_CONNECTION_REFUSED at http://127.0.0.1:1/', 'Timeout 30000ms exceeded']) assert.equal(stoppedBySandbox(new Error(other)), null, other);
 });

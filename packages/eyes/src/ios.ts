@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { basename, dirname, extname, isAbsolute, join, relative, resolve } from 'node:path';
+import { stoppedBySandbox } from './web.ts';
 import { runCommand, type CommandRunner, type RunResult } from '@studio-zero/daemon/src/util/run.ts';
 
 /** The simulator the eyes use: their own, by this name, so that none of the owner's simulators is ever booted, wiped or installed on. */
@@ -12,7 +13,12 @@ export class EyesError extends Error {}
 const sh = (run: CommandRunner, file: string, args: string[], timeoutMs = 120_000): Promise<RunResult> => run(file, args, { timeoutMs, maxOutputBytes: 16 * 1024 * 1024 });
 const must = async (run: CommandRunner, what: string, file: string, args: string[], timeoutMs?: number): Promise<string> => {
   const res = await sh(run, file, args, timeoutMs);
-  if (res.exitCode !== 0) throw new EyesError(`${what}: ${(res.stderr || res.stdout).trim().split('\n').slice(-3).join(' ').slice(0, 400)}`);
+  if (res.exitCode !== 0) {
+    // Inside a session's command sandbox the simulator's service cannot be reached: said as that, not as a fault.
+    const sandbox = stoppedBySandbox(new Error(`${res.stderr}\n${res.stdout}`), 'the simulator');
+    if (sandbox) throw sandbox;
+    throw new EyesError(`${what}: ${(res.stderr || res.stdout).trim().split('\n').slice(-3).join(' ').slice(0, 400)}`);
+  }
   return res.stdout;
 };
 

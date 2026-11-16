@@ -88,14 +88,14 @@ const CLOCK_START = Date.UTC(2026, 0, 1, 0, 0, 0);
  */
 export class SandboxError extends Error {}
 
-const SANDBOXED = /ProcessSingleton|Failed to create socket directory|bootstrap_check_in[^\n]*Permission denied|MachPortRendezvous|mac_util\.mm[^\n]*Operation not permitted/;
+const SANDBOXED = /ProcessSingleton|Failed to create socket directory|bootstrap_check_in[^\n]*Permission denied|MachPortRendezvous|mac_util\.mm[^\n]*Operation not permitted|CoreSimulatorService connection became invalid|not connected to CoreSimulatorService/;
 
 /** The error to give instead, when what stopped a browser or an app from starting was the command sandbox; else null. */
 export function stoppedBySandbox(err: unknown, what = 'the browser'): SandboxError | null {
   const text = err instanceof Error ? err.message : String(err);
   if (!SANDBOXED.test(text)) return null;
   return new SandboxError(
-    `${what} could not start because this command ran inside the session's command sandbox, which refuses a system service every browser needs (no setting of the sandbox opens it). Nothing is wrong with the product. Run the same command again outside the sandbox: set dangerouslyDisableSandbox: true on the Bash call, and do so from the first try for every command that opens a browser, a desktop app, a simulator or Docker. If that call is refused, nobody was there to approve it: stop and tell the owner that looking at the product needs one of three things from them: sessions in auto mode, their approval of the unsandboxed command, or the sandbox turned off for this project (/sandbox). A look the sandbox stopped is not a verdict on any claim.`,
+    `${what} could not start because this command ran inside the session's command sandbox, which refuses a system service it needs (no setting of the sandbox opens it). Nothing is wrong with the product. Run the same command again outside the sandbox: set dangerouslyDisableSandbox: true on the Bash call, and do so from the first try for every command that opens a browser, a desktop app, a simulator or Docker. If that call is refused, nobody was there to approve it: stop and tell the owner that looking at the product needs one of three things from them: sessions in auto mode, their approval of the unsandboxed command, or the sandbox turned off for this project (/sandbox). A look the sandbox stopped is not a verdict on any claim.`,
   );
 }
 

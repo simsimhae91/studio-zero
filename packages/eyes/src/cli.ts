@@ -75,7 +75,8 @@ const USAGE = `sz-eyes: launch what was built, look at it, operate it, and put w
         --days-later <n> starts it believing it is n days from now (its main process and every window): with
         the same --data, that is a person coming back the next morning or a week on
 
-  sz-eyes ios spare [--type "iPhone 17"]                 the eyes' own simulator, made and booted with no window; prints its id
+  sz-eyes ios spare [--type "iPhone 17"] [--name <n>]    the eyes' own simulator, made and booted with no window; prints its id.
+        --name gives one of its own to work that is done beside other work (two products on one simulator overwrite each other)
   sz-eyes ios install <udid> <path.app> --bundle-id <id> [--metro <port>]
         put a built app on it, fresh (a React Native debug build is told which packager to load from)
   sz-eyes ios flow <udid> <flow.yaml> --out <folder> [--video] [-e KEY=VALUE]...
@@ -530,7 +531,7 @@ async function main(argv: string[]): Promise<number> {
   if (area === 'ios') {
     const a = parse(rest, ['--video', '--erase']);
     if (command === 'spare') {
-      out(await spareSimulator(a.one('--type') ? { type: a.one('--type')! } : {}));
+      out(await spareSimulator({ ...(a.one('--type') ? { type: a.one('--type')! } : {}), ...(a.one('--name') ? { name: a.one('--name')! } : {}) }));
       return 0;
     }
     const udid = a.words[0];

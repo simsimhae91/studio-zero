@@ -59,7 +59,7 @@ A look waits for the page to load and then, for four seconds at most, for it to 
 **iOS** (a simulator build; the map says where the app is and its bundle id):
 
 ```
-sz-eyes ios spare                                   # the eyes' own simulator; prints its id. Never use one of the owner's.
+sz-eyes ios spare [--name <n>]                      # the eyes' own simulator; prints its id. Never use one of the owner's. --name: one of its own for work done beside other work
 sz-eyes ios install <udid> <path.app> --bundle-id <id> [--metro <port>]
 sz-eyes ios flow <udid> <flow.yaml> --out <folder> --video      # Maestro; the project's own flow, or one you write for this claim
 sz-eyes ios look <udid> --out <folder> --name <state>
