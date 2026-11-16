@@ -10,7 +10,7 @@ export const meta = {
   ],
 }
 
-// args: { request: string, answers?: string, maxMilestones?: number }
+// args: { request: string, answers?: string, maxMilestones?: number, side?: 1|2|3, effort?: string | object }
 // `request` is the owner's words. `answers` is what they said to the questions asked before this run (or the
 // conservative answers taken for them, marked as such). The run asks nobody anything: what is open is decided
 // conservatively and written down.
@@ -28,15 +28,19 @@ const MAYBE_SANDBOX = ' If `sz-eyes` says the session\'s command sandbox stopped
 let SAND = MAYBE_SANDBOX
 const GROUND = 'You are working in the project\'s folder. Read `.sz/map.md` first (if there is none, load `sz:onboard` and write it), then `.sz/spec.md`, `.sz/owner.md` (what the owner has said they want of this product: it comes before your own taste) and the last lines of `.sz/progress.md` if they exist. Follow the project\'s own rules as the map lists them. Other work of the owner\'s runs on this machine. Never use their simulator, browser profile or dev-server ports: a headless browser, the eyes\' own simulator, and for anything you launch a port taken from the machine (`PORT=$(sz-eyes port)`), never a number you chose. Before you look at what you launched, make sure it is yours that answers (your process is alive and the page is this product). End every server you start, by the process id you kept (`pid=$!` ... `kill $pid`): never by its port and never by its name, because what holds a port you wanted is somebody else\'s.'
 
-// How hard each kind of agent thinks. Unless said, each thinks as hard as the session it runs in. The owner's
-// sessions think at their highest setting, and a milestone's builder then takes about half again as long as at
-// "high" for the same verdicts (one pair of runs, 2026-11-16): which stage is worth what is theirs to set.
-// args.effort: one word for the builders ("high"), or { plan, build, verify, close, join } each a word.
+// How hard each kind of agent thinks. Most of a milestone's time is its builder thinking: on the same milestone
+// a builder at the highest setting took 21 to 23 minutes and one at "high" 11, for the same verdicts, whichever
+// model it was (three runs, 2026-11-16, docs/runs/2026-11-16-speed). The owner chose, that day: the plan and the
+// verification think as hard as the session (a wrong plan costs everything after it, and verification is the
+// last door); building and fixing at "high"; closing, staging and joining, which are mechanical, at "low".
+// args.effort overrides: one word for the builders, or { plan, build, verify, close, join } each a word
+// ("session" for as hard as the session).
 const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max']
-const DEFAULT_EFFORT = {}
+const DEFAULT_EFFORT = { build: 'high', close: 'low', join: 'low' }
 const effort = (stage) => {
   const said = args && args.effort
   const word = typeof said === 'string' ? (stage === 'build' ? said : undefined) : said && typeof said === 'object' ? said[stage] : undefined
+  if (word === 'session') return {}
   const chosen = EFFORTS.includes(word) ? word : DEFAULT_EFFORT[stage]
   return chosen ? { effort: chosen } : {}
 }
@@ -139,7 +143,7 @@ const plan = await agent(
 The owner's request:
 ${request}
 
-${answers ? `What the owner answered when asked beforehand:\n${answers}` : 'The owner was not asked anything beforehand. Where the request leaves something open that only they could say (who it is for, how it should feel, accounts, keys, money), take the conservative answer and list it under "decided".'}
+${answers ? `What the owner answered when asked beforehand:\n${answers}` : 'The owner was not asked anything beforehand. Where the request leaves something open that only they could say (who it is for, how it should feel, accounts, keys, money), take the conservative answer and list it under "decided". Wherever you write this down (the spec, the progress line), say that they were not asked: never that they did not answer.'}
 
 If \`.sz/spec.md\` already exists, the product has been worked on before. Read it, the contracts under \`.sz/contracts/\` (\`sz-eyes contract status\`, \`sz-eyes contract show <id>\`), \`.sz/progress.md\`, \`.sz/backlog.md\`, \`git log\` and \`sz-eyes standing\` (what earlier work proved and the product has to keep true). Do not plan again what is done and do not rewrite the spec's history. Then it is one of two cases, or both:
 - **Continue** (mode "continue"): an earlier run stopped before finishing what the spec has, and the request asks for that. Return the spec's milestones with their claims as the contracts and the spec have them, each with its "state": "closed" (its contract is closed), "built" (its contract is frozen and its code is committed, and it was not verified to the end: give "contractId", "launch", and under "disputes" any frozen check the earlier run reported as wrong about how it checks) or "todo". The order of the milestones that are not built yet is decided afresh by the rule under "The order" below: some of them may go side by side now even if the spec lists them in a line (give them "after").
@@ -320,7 +324,9 @@ Change no product code.`,
 // the project's folder; and because two things proven apart are not yet proven together, every claim that
 // stands is shown again on the product as joined before anything is built on it.
 const beside = typeof parallel === 'function' ? parallel : (thunks) => Promise.all(thunks.map((thunk) => thunk().catch(() => null)))
-let side = Math.max(1, Math.min(3, Number.isFinite(Number(args && args.side)) ? Math.floor(Number(args.side)) : 3))
+// Until milestones side by side have been run for real and measured, a line is what happens unless asked:
+// args.side = 2 or 3 lets the plan's groups be built together.
+let side = Math.max(1, Math.min(3, Number.isFinite(Number(args && args.side)) ? Math.floor(Number(args.side)) : 1))
 const ids = new Set(milestones.map((m) => m.id))
 const afterOf = (m) => {
   const at = milestones.indexOf(m)
