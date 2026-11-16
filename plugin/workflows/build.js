@@ -1,7 +1,7 @@
 export const meta = {
   name: 'build',
   description: 'Build a product, or grow one that exists, to the end, unattended: a spec (new, or the existing one extended), then for each milestone a frozen contract, the build, a verification by an agent that did not build it which also shows again what stood before, fixes, and a page of evidence. Milestones follow one another unless the plan puts some side by side: those are built at the same time in folders of their own, brought together, and everything that stands is shown again on the product as joined',
-  whenToUse: 'A new product, or a change of several features to a product that already has a spec (lane L), after the owner has been put the questions only they can answer (a few, each a choice they can tap) and has asked for it to run to the end without them. Typing the command is not an answer to those questions: ask first, then start it with asked and answers (args is an object: { request, asked, answers }). For a new product, right after starting it, start in the background a wait for its first cut to stand (until [ -n "$(sz-eyes standing --summary)" ]; do sleep 20; done); when that returns, start the product as .sz/map.md says and tell the owner its address and where the page with every screen is: they see the whole product then, not when everything is finished.',
+  whenToUse: 'A new product, or a change of several features to a product that already has a spec (lane L), after the owner has been put the questions only they can answer (a few, each a choice they can tap) and has asked for it to run to the end without them. Typing the command is not an answer to those questions: ask first, then start it with asked and answers (args is an object: { request, asked, answers }). For a new product, right after starting it, start in the background a wait for its first pass to stand (until [ -n "$(sz-eyes standing --summary)" ]; do sleep 20; done); when that returns, start the product as .sz/map.md says and tell the owner its address and where the page with every screen is: they see the whole product then, not when everything is finished.',
   phases: [
     { title: 'Plan', detail: 'the spec and its milestones, each with the claims that make it done' },
     { title: 'Build', detail: 'a milestone, or several side by side in folders of their own: contract, oracle, code' },
@@ -69,8 +69,8 @@ const PLAN = {
     decided: { type: 'array', items: { type: 'string' }, description: 'what the request and the answers left open and how you decided it' },
     later: {
       type: 'array',
-      description: 'only while the product\'s first cut is not closed: what comes after it, a line each, in the order it should be done (depth where the product earns its keep, then the other areas, then what makes it safe to give to people). No claims: these are planned when the first cut stands.',
-      items: { type: 'object', properties: { title: { type: 'string' }, what: { type: 'string', description: 'one or two sentences: what a person will have then that the first cut does not give them' } }, required: ['title', 'what'] },
+      description: 'only while the product\'s first pass is not closed: what comes after it, a line each, in the order it should be done (depth where the product earns its keep, then the other areas, then what makes it safe to give to people). No claims: these are planned when the first pass stands.',
+      items: { type: 'object', properties: { title: { type: 'string' }, what: { type: 'string', description: 'one or two sentences: what a person will have then that the first pass does not give them' } }, required: ['title', 'what'] },
     },
     milestones: {
       type: 'array',
@@ -92,7 +92,7 @@ const PLAN = {
           alone: { type: 'boolean', description: 'true when nothing may be built beside it: it changes the shape of what is stored, or accounts and who may do what, or what every other milestone stands on' },
           touches: { type: 'array', items: { type: 'string' }, description: 'for a milestone built beside others: the screens, routes, stored tables and files it will change' },
           where: { type: 'string', description: 'only for a milestone that is built: the folder under .sz/trees/ it was built in, when an earlier run built it beside others and stopped before bringing them together' },
-          first: { type: 'boolean', description: 'true for the product\'s first cut while it is not closed: the one milestone of a new product, or, when an earlier run stopped before it closed, that same milestone again' },
+          first: { type: 'boolean', description: 'true for the product\'s first pass while it is not closed: the one milestone of a new product, or, when an earlier run stopped before it closed, that same milestone again' },
           state: { type: 'string', enum: ['todo', 'built', 'closed'], description: 'todo unless this run continues an earlier one: built = its code and frozen contract exist and it has not been verified to the end; closed = its contract is closed' },
           contractId: { type: 'string', description: 'for a milestone that is built or closed: the id of its contract' },
           launch: { type: 'string', description: 'for a milestone that is built: the exact command that starts the product and where it is seen' },
@@ -157,11 +157,11 @@ const CLOSED = {
 
 // ------------------------------------------------------------------ Plan
 phase('Plan')
-// A new product is planned twice: its first cut alone, and, when that stands, what comes after it. Claims for
+// A new product is planned twice: its first pass alone, and, when that stands, what comes after it. Claims for
 // work that stands on a product nobody has seen are guesses, and the owner's first look is worth more than they are.
 const AFTER = `
 
-This run has just built and closed the product's first cut. Plan now what comes after it (you will find yourself in the case "Continue" below). Start the product and go through every area of it once before you write a claim (\`.sz/map.md\` says how it is started and looked at): you are planning from what is there, not from what the spec guessed. Read \`.sz/owner.md\` and the newest lines of \`.sz/backlog.md\` first: what the owner has said since the first cut comes before the spec.`
+This run has just built and closed the product's first pass. Plan now what comes after it (you will find yourself in the case "Continue" below). You are planning from what is there, not from what the spec guessed: go through the pictures of every area and what its verifiers noticed (the first pass's evidence folder under \`.sz/evidence/\`, the newest lines of \`.sz/backlog.md\`), and start the product yourself only where they leave a question (\`.sz/map.md\` says how). Read \`.sz/owner.md\` first: what the owner has said since the first pass comes before the spec. What the verifiers noticed and nobody has mended goes into the first milestone you plan.`
 const planIt = (stage) => agent(
   `You are planning a product (or a large change to one) that will then be built milestone by milestone with nobody watching. ${GROUND}${SAND} ${TOOLS}${stage === 'after' ? AFTER : ''}
 
@@ -171,7 +171,7 @@ ${request}
 ${asked === 'owner' ? `What the owner answered when asked beforehand, in their words:\n${answers}` : 'The owner was not asked anything beforehand. Where the request leaves something open that only they could say (who it is for, how it should feel, accounts, keys, money), take the conservative answer and list it under "decided". Wherever you write this down (the spec, the progress line), say that they were not asked: never that they did not answer.' + (answers ? `\nNotes from the session that started this run (its own words, not the owner's):\n${answers}` : '')}
 
 If \`.sz/spec.md\` already exists, the product has been worked on before. Read it, the contracts under \`.sz/contracts/\` (\`sz-eyes contract status\`, \`sz-eyes contract show <id>\`), \`.sz/progress.md\`, \`.sz/backlog.md\`, \`git log\` and \`sz-eyes standing\` (what earlier work proved and the product has to keep true). Do not plan again what is done and do not rewrite the spec's history. Then it is one of two cases, or both:
-- **Continue** (mode "continue"): an earlier run stopped before finishing what the spec has, and the request asks for that. Return the spec's milestones with their claims as the contracts and the spec have them, each with its "state": "closed" (its contract is closed), "built" (its contract is frozen and its code is committed, and it was not verified to the end: give "contractId", "launch", and under "disputes" any frozen check the earlier run reported as wrong about how it checks) or "todo". A milestone whose code was written and that nobody has seen run is still "built" (say under "launch" how it is meant to be started, and that it has not been): this run starts it, and fixes what keeps it from starting, before anyone looks at it. If the product's first cut is not closed yet (an earlier run stopped before it was), return it with "first": true and list what the spec has after it under "later", without claims: that is planned when the first cut stands. Once the first cut is closed, what the spec lists as coming after it and has no contract yet is planned now: write each as a milestone into the spec and return it as "todo" with its claims, ${Math.max(1, maxMilestones - 1)} at most, the rest left listed for a later run. The order of the milestones that are not built yet is decided afresh by the rule under "The order" below: some of them may go side by side now even if the spec lists them in a line (give them "after").
+- **Continue** (mode "continue"): an earlier run stopped before finishing what the spec has, and the request asks for that. Return the spec's milestones with their claims as the contracts and the spec have them, each with its "state": "closed" (its contract is closed), "built" (its contract is frozen and its code is committed, and it was not verified to the end: give "contractId", "launch", and under "disputes" any frozen check the earlier run reported as wrong about how it checks) or "todo". A milestone whose code was written and that nobody has seen run is still "built" (say under "launch" how it is meant to be started, and that it has not been): this run starts it, and fixes what keeps it from starting, before anyone looks at it. If the product's first pass is not closed yet (an earlier run stopped before it was), return it with "first": true and list what the spec has after it under "later", without claims: that is planned when the first pass stands. Once the first pass is closed, what the spec lists as coming after it and has no contract yet is planned now: write each as a milestone into the spec and return it as "todo" with its claims, ${Math.max(1, maxMilestones - 1)} at most, the rest left listed for a later run. The order of the milestones that are not built yet is decided afresh by the rule under "The order" below: some of them may go side by side now even if the spec lists them in a line (give them "after").
 - **Extend** (mode "extend"): the request asks for something the spec does not have, or for something to work differently. Amend \`.sz/spec.md\` so that it describes the product as it will be: change the lines that become false, add the new features to the order they are built in under new milestone names. Return the milestones that are not closed yet plus the new ones (state "todo"), with ids no contract has used. For each new milestone, besides its claims:
   - If \`git worktree list\` shows folders under \`.sz/trees/\`, an earlier run built milestones side by side and stopped before bringing them together: for each such milestone whose contract exists, state "built" (or "closed" if its contract is closed there) and "where": that folder's whole path.
   - "supersedes": the standing claims that will stop being true because what was asked has changed, each with the reason. Be exact: a standing claim you do not list stays a promise, and the milestone must keep it true. Prefer a change that keeps old promises (a new choice whose default is the old behaviour) to one that replaces them.
@@ -191,11 +191,11 @@ Write \`.sz/spec.md\` in the owner's language: what the product is and for whom,
 **Hardening** comes after it. List under "later", a line each, what makes the product safe to give to people (signing in through other services, deleting an account, one person unable to reach another's data, the phone itself, what the law asks), and anything in the request that is too uncertain or too large for the first pass, said as that. Give these no claims: they are planned when the first pass stands and has been looked at. ${Math.max(1, Math.min(maxMilestones, 6) - 1)} lines at most.
 
 What holds for every milestone, this one and those planned later:
-- If the owner had a case made for this service (\`sz-eyes worth show\` lists one: who it is for, what they use instead, the rows of the whole job), the spec is cut from it: the product is for the person and the moment of its \`who\` line; the first cut carries the row of kind \`edge\` furthest, and the first milestone after it delivers that row whole; the rows of kind \`stake\` (what two or more of the things people already use have in common) are all in a milestone or named in the spec as deliberately not built, with the reason; rows of kind \`more\` wait. Name in each milestone the rows it covers, by their ids. If there is no case, plan without one: making a case is done only when the owner asks for it.
-- An app for the phone made with a toolkit that also runs in a browser (Expo and React Native do): it is built so that the same app runs in a browser, and until the last pass it is shown there, at phone size, where a look takes seconds. What only a phone has (what the app keeps when it is closed and opened again, coming back from another app after signing in, the camera, health data, notifications, the keyboard over a button) gets a plain fallback in the browser, and is named in the line "on the phone" under "later": that milestone makes the native build and shows those things, and the main path once, on a simulator. (A first native build took four hours before one screen was seen, and most of what it found was its own toolchain.) Only when the toolkit cannot run in a browser does the first cut begin with the empty app running on a simulator, before any screen of the product is written.
+- If the owner had a case made for this service (\`sz-eyes worth show\` lists one: who it is for, what they use instead, the rows of the whole job), the spec is cut from it: the product is for the person and the moment of its \`who\` line; the first pass carries the row of kind \`edge\` furthest, and the first milestone after it delivers that row whole; the rows of kind \`stake\` (what two or more of the things people already use have in common) are all in a milestone or named in the spec as deliberately not built, with the reason; rows of kind \`more\` wait. Name in each milestone the rows it covers, by their ids. If there is no case, plan without one: making a case is done only when the owner asks for it.
+- An app for the phone made with a toolkit that also runs in a browser (Expo and React Native do): it is built so that the same app runs in a browser, and until the last pass it is shown there, at phone size, where a look takes seconds. What only a phone has (what the app keeps when it is closed and opened again, coming back from another app after signing in, the camera, health data, notifications, the keyboard over a button) gets a plain fallback in the browser, and is named in the line "on the phone" under "later": that milestone makes the native build and shows those things, and the main path once, on a simulator. (A first native build took four hours before one screen was seen, and most of what it found was its own toolchain.) Only when the toolkit cannot run in a browser does the first pass begin with the empty app running on a simulator, before any screen of the product is written.
 - Every milestone leaves the product working. A later milestone never depends on something a milestone before it left broken.
 - **The order.** A line is the default: each milestone after the one before it, and you leave "after" out. Put milestones side by side (give them the same "after") only when every one of these is true of each of them: it does not change the shape of what is stored and does not touch accounts or who may do what (such a milestone is "alone": true and has nothing beside it); it adds screens, routes and modules of its own, and where it changes a file the others also change, it adds to a list there (a route table, a menu, an export) and does not rewrite the same lines; none of its claims needs what another of the group builds. Say under "touches" what each of them changes. The first milestone always has nothing beside it. Three side by side at most. When in doubt, a line: milestones built side by side are each proven in a folder of their own, and are shown again together only after they are brought into one, which costs a look each time and a repair when the guess was wrong.
-- A product people use is more than a screen: where it keeps what a person enters, what happens when there is nothing yet, when something fails, the second time someone comes. Each milestone after the first cut carries these for its own area; they are not left for the end.
+- A product people use is more than a screen: where it keeps what a person enters, what happens when there is nothing yet, when something fails, the second time someone comes. Each milestone after the first pass carries these for its own area; they are not left for the end.
 - A product that lives is looked after: from the first milestone it writes down what failed (a log the owner can read) and counts the one thing it is for (started, finished), and \`.sz/map.md\` says where. Without that nobody can tell later whether it works for people.
 - A product is made to be put where people reach it. Choose what it stands on with \`sz:backend\` and say in the spec which and why, in two lines. From the first milestone: its settings come from the environment (no secret and no address of this machine in the code), \`/healthz\` answers with the commit it was built from, and every flow runs against the address in \`SZ_URL\` when given one and starts a server of its own only when not. If people have accounts in it, one milestone's claims say that one person cannot read or change what another stored, and neither can someone not signed in, shown by a flow with two people.
 - A claim does not state as true a fact about the world that nobody has read from its source. Where the request gives one (a limit, a price, a rule of somebody else's service), the claim says that the product follows the source and shows it with the day it was read, and the spec keeps the request's figure as what the owner wrote. A claim that repeats such a figure cannot be made true if the source says otherwise, and the work stops on it.
@@ -208,9 +208,9 @@ Return the plan.`,
 let plan = await planIt('start')
 if (!plan || !Array.isArray(plan.milestones) || plan.milestones.length === 0) return { error: 'no plan came back' }
 if (plan.sandboxed === true) SAND = IN_SANDBOX
-// Of a new product only the first cut is built from this plan; what comes after it is planned when it stands.
-// The first milestone of a new product is its first cut, marked or not; in a run that takes up a product whose
-// first cut never closed, it is the one the plan marks.
+// Of a new product only the first pass is built from this plan; what comes after it is planned when it stands.
+// The first milestone of a new product is its first pass, marked or not; in a run that takes up a product whose
+// first pass never closed, it is the one the plan marks.
 const marked = plan.milestones.findIndex((m) => m.first === true && m.state !== 'closed')
 const cutAt = marked >= 0 ? marked : plan.mode === 'new' ? 0 : -1
 const fresh = cutAt >= 0
@@ -223,8 +223,8 @@ let more = later.length > 0
 const ahead = milestones.filter((m) => m.state !== 'closed').length
 const whose = asked === 'owner' ? 'planned from what the owner answered' : 'the owner was not asked beforehand: what was open is decided conservatively and listed in the spec'
 if (fresh) {
-  log(`${plan.mode === 'new' ? 'spec written' : 'continuing'}. First cut: ${milestones[cutAt].title}${more ? `. After it, planned when it stands: ${later.join(' / ')}` : ''}`)
-  log(`${whose}; the whole product can be looked at when the first cut closes`)
+  log(`${plan.mode === 'new' ? 'spec written' : 'continuing'}. First pass: ${milestones[cutAt].title}${more ? `. After it, planned when it stands: ${later.join(' / ')}` : ''}`)
+  log(`${whose}; the whole product can be looked at when the first pass closes`)
 } else {
   log(`${plan.mode === 'extend' ? 'spec extended' : 'continuing'}: ${milestones.length} milestone(s): ${milestones.map((m) => m.title).join(' / ')}`)
   log(`${whose}; ${ahead} milestone(s) to go, expect about ${ahead * 20} to ${ahead * 30} minutes (a phone app's native build adds its own)`)
@@ -463,9 +463,11 @@ Change no product code.`,
 // the project's folder; and because two things proven apart are not yet proven together, every claim that
 // stands is shown again on the product as joined before anything is built on it.
 const beside = typeof parallel === 'function' ? parallel : (thunks) => Promise.all(thunks.map((thunk) => thunk().catch(() => null)))
-// Until milestones side by side have been run for real and measured, a line is what happens unless asked:
-// args.side = 2 or 3 lets the plan's groups be built together.
-let side = Math.max(1, Math.min(3, Number.isFinite(Number(args && args.side)) ? Math.floor(Number(args.side)) : 1))
+// What the plan puts side by side is built side by side, three at once at most; args.side = 1 keeps a line.
+// Run for real twice on 2026-11-16 (docs/runs/2026-11-16-order): a pair, and three at once. Both met conflicts
+// when brought together (a table of routes, the map), both were settled by an agent and every claim that stood
+// was shown again on the product as joined. Against a line they took a quarter to two fifths less time.
+let side = Math.max(1, Math.min(3, Number.isFinite(Number(args && args.side)) ? Math.floor(Number(args.side)) : 3))
 let ids = new Set(milestones.map((m) => m.id))
 const afterOf = (m) => {
   const at = milestones.indexOf(m)
@@ -583,13 +585,13 @@ while (!stopped) {
   const rest = milestones.filter((m) => !done.some((d) => d.id === m.id))
   if (rest.length === 0) {
     if (!more) break
-    // The first cut stands: what comes after it is planned now, from the product as it is.
+    // The first pass stands: what comes after it is planned now, from the product as it is.
     more = false
     phase('Plan')
     const next = await planIt('after')
     const todo = next && Array.isArray(next.milestones) ? next.milestones.filter((m) => m.state !== 'closed' && !done.some((d) => d.id === m.id)) : []
     if (todo.length === 0) {
-      stopped = `the first cut is closed, and what comes after it was not planned (${next ? 'the plan came back with nothing to build' : 'nobody answered'}): start again to go on. Still listed: ${later.join(' / ')}`
+      stopped = `the first pass is closed, and what comes after it was not planned (${next ? 'the plan came back with nothing to build' : 'nobody answered'}): start again to go on. Still listed: ${later.join(' / ')}`
       log(stopped)
       break
     }
@@ -597,7 +599,7 @@ while (!stopped) {
     ids = new Set(milestones.map((m) => m.id))
     plan = { ...plan, decided: [...(plan.decided || []), ...(next.decided || [])] }
     const left = milestones.length - done.length
-    log(`planned after the first cut: ${left} milestone(s): ${todo.slice(0, left).map((m) => m.title).join(' / ')}; expect about ${left * 20} to ${left * 30} minutes in a line`)
+    log(`planned after the first pass: ${left} milestone(s): ${todo.slice(0, left).map((m) => m.title).join(' / ')}; expect about ${left * 20} to ${left * 30} minutes in a line`)
     continue
   }
   let ready = rest.filter((m) => afterOf(m).every((id) => closedIds.has(id)))
@@ -624,7 +626,7 @@ while (!stopped) {
     if (r.entry) done.push(r.entry)
     if (r.stopped) { stopped = r.stopped; break }
     closedIds.add(first.id)
-    if (first.first && r.entry) log(`FIRST CUT READY. The whole product can be looked at now: ${r.entry.launch}. Every screen: ${r.entry.report || `.sz/evidence/${r.entry.contractId}/`}`)
+    if (first.first && r.entry) log(`FIRST PASS READY. The whole product can be looked at now: ${r.entry.launch}. Every screen: ${r.entry.report || `.sz/evidence/${r.entry.contractId}/`}`)
     continue
   }
 

@@ -146,10 +146,10 @@ test('a builder is told to start what it built, and a phone app is shown in a br
   assert.match(calls.find((c) => c.label === 'build:m1')!.prompt, /A milestone that has never run is not built/);
   const planned = calls.find((c) => c.label === 'plan')!.prompt;
   assert.match(planned, /it is built so that the same app runs in a browser, and until the last pass it is shown there, at phone size/);
-  assert.match(planned, /Only when the toolkit cannot run in a browser does the first cut begin with the empty app running on a simulator/);
+  assert.match(planned, /Only when the toolkit cannot run in a browser does the first pass begin with the empty app running on a simulator/);
 });
 
-test('a new product is planned twice: its first cut alone, and what comes after it once that stands', async () => {
+test('a new product is planned twice: its first pass alone, and what comes after it once that stands', async () => {
   const cut = { id: 'm1', title: '첫 판', builds: '온 제품을 가장 얇게', claims: [claim('one'), claim('two')] };
   const deep = (id: string) => ({ id, title: `깊이 ${id}`, builds: 'b', claims: [claim('one'), claim('two')] });
   const proven = () => ({ proven: ['one', 'two'], refuted: [], unchecked: [] });
@@ -162,7 +162,7 @@ test('a new product is planned twice: its first cut alone, and what comes after 
   assert.match(first, /\*\*The first pass\*\* is the one milestone you return: the whole product, at the quality it will be used at, built in one stretch/);
   assert.match(first, /a flow \(name the file it will be kept in: whoever verifies writes it\), a test of what is pure rule \(written before the code\)/);
   assert.match(first, /Nothing pretends/);
-  assert.doesNotMatch(first, /This run has just built and closed the product's first cut/);
+  assert.doesNotMatch(first, /This run has just built and closed the product's first pass/);
   const firstBuild = ran.calls.find((c) => c.label === 'build:m1')!.prompt;
   assert.match(firstBuild, /This milestone is the product's first pass: all of it, in one stretch, by you/);
   assert.match(firstBuild, /commit with a message that begins \\?"look:\\?"/);
@@ -173,36 +173,36 @@ test('a new product is planned twice: its first cut alone, and what comes after 
   assert.match(laterBuild, /Write the oracle first: every flow or test file a claim points at/, 'work on a product that stands keeps its checks before its code');
   assert.match(ran.calls.find((c) => c.label === 'verify:m1')!.prompt, /The flows of this contract have not been written[\s\S]*sz-eyes contract add-check m1 --frozen/);
   assert.doesNotMatch(ran.calls.find((c) => c.label === 'verify:m2')!.prompt, /The flows of this contract have not been written/);
-  assert.match(ran.calls.find((c) => c.label === 'plan:after')!.prompt, /This run has just built and closed the product's first cut[\s\S]*go through every area of it once before you write a claim[\s\S]*what the owner has said since the first cut comes before the spec/);
+  assert.match(ran.calls.find((c) => c.label === 'plan:after')!.prompt, /This run has just built and closed the product's first pass[\s\S]*go through the pictures of every area and what its verifiers noticed[\s\S]*what the owner has said since the first pass comes before the spec/);
   assert.ok(ran.logs.some((l) => /After it, planned when it stands: 대결 깊이 \/ 폰에서/.test(l)), ran.logs.join('\n'));
-  assert.ok(ran.logs.some((l) => /^FIRST CUT READY\. The whole product can be looked at now: PORT=\$\(sz-eyes port\) node server\.mjs\. Every screen: r\.html/.test(l)), ran.logs.join('\n'));
-  assert.ok(ran.logs.some((l) => /planned after the first cut: 2 milestone\(s\): 깊이 m2 \/ 깊이 m3/.test(l)));
+  assert.ok(ran.logs.some((l) => /^FIRST PASS READY\. The whole product can be looked at now: PORT=\$\(sz-eyes port\) node server\.mjs\. Every screen: r\.html/.test(l)), ran.logs.join('\n'));
+  assert.ok(ran.logs.some((l) => /planned after the first pass: 2 milestone\(s\): 깊이 m2 \/ 깊이 m3/.test(l)));
   assert.equal(ran.result.stopped, null);
   assert.deepEqual(ran.result.milestones.map((m: { id: string }) => m.id), ['m1', 'm2', 'm3']);
   assert.deepEqual(ran.result.notBuilt, []);
 
-  // A planner that returns the later work as milestones at once: only the first cut is built from that plan.
+  // A planner that returns the later work as milestones at once: only the first pass is built from that plan.
   const eager = await run({ request: 'x' }, { plan: (_c: Call, nth: number) => (nth === 0 ? { mode: 'new', summary: 's', milestones: [cut, deep('m2'), deep('m3')] } : { mode: 'continue', summary: 's', milestones: [deep('m9')] }), build: built, verify: proven, close: closed });
   assert.deepEqual(eager.calls.map((c) => c.label), ['plan', 'build:m1', 'verify:m1', 'close:m1', 'plan:after', 'build:m9', 'verify:m9', 'close:m9']);
 
-  // Nothing comes back from the second plan: the first cut stands, the run says what is still listed.
+  // Nothing comes back from the second plan: the first pass stands, the run says what is still listed.
   const alone = await run({ request: 'x' }, { plan: twice({ mode: 'continue', summary: 's', milestones: [{ ...cut, state: 'closed' }] }), build: built, verify: proven, close: closed });
-  assert.match(alone.result.stopped, /the first cut is closed, and what comes after it was not planned[\s\S]*Still listed: 대결 깊이 \/ 폰에서/);
+  assert.match(alone.result.stopped, /the first pass is closed, and what comes after it was not planned[\s\S]*Still listed: 대결 깊이 \/ 폰에서/);
   assert.deepEqual(alone.result.milestones.map((m: { id: string }) => m.id), ['m1']);
 
-  // The first cut does not close: nothing after it is planned, and what was listed is reported as not built.
+  // The first pass does not close: nothing after it is planned, and what was listed is reported as not built.
   const broke = await run({ request: 'x' }, { plan: twice(null), build: built, fix: () => ({ fixed: [] }), verify: () => ({ proven: ['one'], refuted: [{ id: 'two', fact: '합계가 0' }], unchecked: [] }), close: () => ({ report: 'r.html', closed: false, line: 'l' }) });
   assert.ok(!broke.calls.some((c) => c.label === 'plan:after'));
   assert.deepEqual(broke.result.notBuilt, ['대결 깊이', '폰에서']);
 
-  // A run that takes up a product whose first cut never closed: the first cut again, then the plan after it.
+  // A run that takes up a product whose first pass never closed: the first pass again, then the plan after it.
   const resumed = await run(
     { request: '이어서' },
     { plan: (_c: Call, nth: number) => (nth === 0 ? { mode: 'continue', summary: 's', milestones: [{ ...cut, first: true }], later: [{ title: '대결 깊이', what: 'w' }] } : { mode: 'continue', summary: 's', milestones: [{ ...cut, state: 'closed' }, deep('m2')] }), build: built, verify: proven, close: closed },
   );
   assert.deepEqual(resumed.calls.map((c) => c.label), ['plan', 'build:m1', 'verify:m1', 'close:m1', 'plan:after', 'build:m2', 'verify:m2', 'close:m2']);
   assert.match(resumed.calls.find((c) => c.label === 'build:m1')!.prompt, /This milestone is the product's first pass/);
-  assert.ok(resumed.logs.some((l) => /^continuing\. First cut: 첫 판\. After it, planned when it stands: 대결 깊이/.test(l)), resumed.logs.join('\n'));
+  assert.ok(resumed.logs.some((l) => /^continuing\. First pass: 첫 판\. After it, planned when it stands: 대결 깊이/.test(l)), resumed.logs.join('\n'));
 
   // A first pass with many claims is looked at by three verifiers at once, each with claims and a copy of the product of its own.
   const many = Array.from({ length: 10 }, (_, k) => claim(`c${k + 1}`));
@@ -230,7 +230,7 @@ test('a new product is planned twice: its first cut alone, and what comes after 
   assert.deepEqual([...entry.proven].sort(), ['c1', 'c2', 'c3', 'c5', 'c6', 'c7', 'c9'], 'a verdict counts only from the verifier that was given the claim (c9 from the first is not taken), and c7 is proven after its fix');
   assert.deepEqual(entry.unchecked.map((u: { id: string }) => u.id).sort(), ['c10', 'c4', 'c8'], 'a claim its verifier said nothing about has not been looked at');
 
-  // A product with nothing after its first cut is built from one plan.
+  // A product with nothing after its first pass is built from one plan.
   const small = await run({ request: 'x' }, { plan: () => ({ mode: 'new', summary: 's', milestones: [cut] }), build: built, verify: proven, close: closed });
   assert.deepEqual(small.calls.map((c) => c.label), ['plan', 'build:m1', 'verify:m1', 'close:m1']);
 });
@@ -311,7 +311,7 @@ test('milestones the plan puts side by side are built in folders of their own, b
   assert.ok(logs.some((line) => /side by side: title m2 \/ title m3/.test(line)) && logs.some((line) => /brought together: m2, m3; 12 promise\(s\) hold/.test(line)));
 });
 
-test('a line stays a line: with no order given, with one milestone ready at a time, when one is marked alone, and when the owner asks for it', async () => {
+test('a line stays a line: with no order given, with one milestone ready at a time, when one is marked alone, and when the owner asks for a line', async () => {
   const answers = { stage: staged, build: built, verify: proven, close: closed, join: joinedAll, gate: held(6) };
   const line = await run({ request: 'x' }, { ...answers, plan: graph({ id: 'm1' }, { id: 'm2' }, { id: 'm3' }) });
   assert.deepEqual(labels(line.calls).filter((l) => /^(stage|join|gate)/.test(l)), []);
@@ -326,8 +326,10 @@ test('a line stays a line: with no order given, with one milestone ready at a ti
   assert.ok(order.indexOf('build:m3') > order.indexOf('build:m4'), 'the one that must be alone waits for the group and is then built in the project\'s folder');
   assert.doesNotMatch(alone.calls.find((c) => c.label === 'build:m3')!.prompt, /\.sz\/trees/);
   assert.equal(alone.result.stopped, null);
-  // Side by side has not been run for real yet: unless asked for, the plan's groups are built in a line.
-  const forced = await run({ request: 'x' }, { ...answers, plan: graph({ id: 'm1' }, { id: 'm2', after: ['m1'] }, { id: 'm3', after: ['m1'] }) });
+  // What the plan puts side by side is built side by side unless the owner asks for a line.
+  const together = await run({ request: 'x' }, { ...answers, plan: graph({ id: 'm1' }, { id: 'm2', after: ['m1'] }, { id: 'm3', after: ['m1'] }) });
+  assert.deepEqual(labels(together.calls).filter((l) => /^stage/.test(l)), ['stage:m2+m3']);
+  const forced = await run({ request: 'x', side: 1 }, { ...answers, plan: graph({ id: 'm1' }, { id: 'm2', after: ['m1'] }, { id: 'm3', after: ['m1'] }) });
   assert.deepEqual(labels(forced.calls).filter((l) => /^(stage|join|gate)/.test(l)), []);
   // Folders of their own could not be made: they are built one after another, and nothing is lost.
   const nofolders = await run({ request: 'x', side: 3 }, { ...answers, plan: graph({ id: 'm1' }, { id: 'm2', after: ['m1'] }, { id: 'm3', after: ['m1'] }), stage: () => ({ folders: [], problem: 'a branch sz/m2 is left from an earlier run' }) });
