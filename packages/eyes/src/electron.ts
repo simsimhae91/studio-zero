@@ -3,7 +3,7 @@ import { createRequire } from 'node:module';
 import { homedir, tmpdir } from 'node:os';
 import { join, resolve, sep } from 'node:path';
 import { _electron, type ElectronApplication, type Page } from 'playwright-core';
-import { describePage, doStep, renderLook, settled, type Look, type Step, type StepResult } from './web.ts';
+import { describePage, doStep, renderLook, settled, type Look, type Step, type StepResult, stoppedBySandbox } from './web.ts';
 
 /**
  * Eyes and hands for a desktop app built on Electron: the app is started from its folder, its windows are
@@ -162,6 +162,8 @@ async function open(folder: string, opts: ElectronOptions): Promise<{ app: Elect
     app = await _electron.launch({ executablePath: bin, args: [...first, folder, `--user-data-dir=${data}`, '--disable-features=MacWebContentsOcclusion,CalculateNativeWinOcclusion', ...(opts.args ?? []).map(put)], cwd: folder, env: { ...(process.env as Record<string, string>), ...Object.fromEntries(Object.entries(opts.env ?? {}).map(([name, value]) => [name, put(value)])) }, timeout: opts.timeoutMs ?? 30_000 });
   } catch (err) {
     if (!kept) rmSync(data, { recursive: true, force: true });
+    const sandbox = stoppedBySandbox(err, 'the app');
+    if (sandbox) throw sandbox;
     throw new ElectronError(`the app in ${folder} did not start: ${(err instanceof Error ? err.message : String(err)).split('\n')[0]!.slice(0, 300)}. Is it built (the map's build command), and does its package.json name its main file?`);
   }
   app.process().stderr?.on('data', (chunk: Buffer) => {

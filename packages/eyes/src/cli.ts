@@ -23,7 +23,7 @@ import { reviewWeb } from './review.ts';
 import { renderStrangers, strangers } from './strangers.ts';
 import { Shown, brokenDuring, keptFor, ledgerProblem, recordShown, renderStanding, stampClosed, standing, standingSummary } from './standing.ts';
 import { Felt, TrialFinding, TrialKind, Verdict, addAsk, addFinding, addNote, addPersona, latestTrial, newTrial, readTrial, renderTrial, setVerdict, unfinished, writeTrialPage, setCanary } from './trial.ts';
-import { SIZES, lookAtWeb, renderLook, renderWalk, walkWeb, type Size } from './web.ts';
+import { SIZES, lookAtWeb, renderLook, renderWalk, walkWeb, type Size, SandboxError } from './web.ts';
 
 const USAGE = `sz-eyes: launch what was built, look at it, operate it, and put what was seen on one page
 
@@ -779,6 +779,7 @@ async function main(argv: string[]): Promise<number> {
         return 0;
       }
     } catch (err) {
+      if (err instanceof SandboxError) throw err;
       const issues = (err as { issues?: { path: (string | number)[]; message: string }[] }).issues;
       throw new EyesError(Array.isArray(issues) ? `${issues.map((issue) => `${issue.path.join('.') || 'a value'}: ${issue.message}`).join('; ')} (sz-eyes help shows each flag and the words it takes)` : err instanceof Error ? err.message : String(err));
     }
@@ -976,6 +977,7 @@ main(process.argv.slice(2)).then(
   (code) => process.exit(code),
   (err: unknown) => {
     process.stderr.write(`sz-eyes: ${err instanceof Error ? err.message : String(err)}\n`);
-    process.exit(err instanceof EyesError ? 1 : 2);
+    // 3: the session's command sandbox stopped it, which says nothing about the product. A flow can tell it apart.
+    process.exit(err instanceof SandboxError ? 3 : err instanceof EyesError ? 1 : 2);
   },
 );

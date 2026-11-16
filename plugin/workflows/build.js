@@ -20,7 +20,7 @@ const maxMilestones = args && Number.isInteger(args.maxMilestones) ? args.maxMil
 if (request === '') return { error: 'give args: { request: "<what to build, in the owner\'s words>", answers?: "<what the owner answered>" }' }
 
 const TOOLS = 'The command `sz-eyes` is on your PATH (the sz plugin\'s). Load the skills you need with the Skill tool: `sz:work` (how work is sized, contracted and closed), `sz:verify` (how a product is launched, looked at and operated, and what counts as evidence), `sz:taste` (how a screen is put together, for anything a person looks at in a product made here), `sz:backend` (what a product stands on: where it runs for people, what holds its accounts and its data, and what that must prove), `sz:ship` (what a product needs before it can be put where people reach it), `sz:game` (when the product is a game or moves by itself: how it is built to be asked what it is doing, and proven with its time held), `sz:trial` (whether a person would pay: stand-ins for the people it is for use it the whole way), `sz:worth` (the case for the service: who it is for, what they use instead, and the rows of the whole job that say how deep it has to be).'
-const GROUND = 'You are working in the project\'s folder. Read `.sz/map.md` first (if there is none, load `sz:onboard` and write it), then `.sz/spec.md`, `.sz/owner.md` (what the owner has said they want of this product: it comes before your own taste) and the last lines of `.sz/progress.md` if they exist. Follow the project\'s own rules as the map lists them. Other work of the owner\'s runs on this machine. Never use their simulator, browser profile or dev-server ports: a headless browser, the eyes\' own simulator, and for anything you launch a port taken from the machine (`PORT=$(sz-eyes port)`), never a number you chose. Before you look at what you launched, make sure it is yours that answers (your process is alive and the page is this product). End every server you start, by the process id you kept (`pid=$!` ... `kill $pid`): never by its port and never by its name, because what holds a port you wanted is somebody else\'s.'
+const GROUND = 'If `sz-eyes` says the session\'s command sandbox stopped it (or `.sz/map.md` says this owner\'s sessions are sandboxed), run every command that opens a browser, a desktop app, a simulator or Docker outside the sandbox from the first try (`dangerouslyDisableSandbox: true` on the Bash call; the `sz:verify` skill says which). If that call is refused, do not judge the product by reading its code instead: say in what you return that the sandbox stopped the look. You are working in the project\'s folder. Read `.sz/map.md` first (if there is none, load `sz:onboard` and write it), then `.sz/spec.md`, `.sz/owner.md` (what the owner has said they want of this product: it comes before your own taste) and the last lines of `.sz/progress.md` if they exist. Follow the project\'s own rules as the map lists them. Other work of the owner\'s runs on this machine. Never use their simulator, browser profile or dev-server ports: a headless browser, the eyes\' own simulator, and for anything you launch a port taken from the machine (`PORT=$(sz-eyes port)`), never a number you chose. Before you look at what you launched, make sure it is yours that answers (your process is alive and the page is this product). End every server you start, by the process id you kept (`pid=$!` ... `kill $pid`): never by its port and never by its name, because what holds a port you wanted is somebody else\'s.'
 
 const CLAIM = {
   type: 'object',
@@ -90,6 +90,7 @@ const VERDICT = {
     held: { type: 'array', items: { type: 'string' }, description: 'claims of earlier work (<contract>/<claim>) that were shown again in this look and hold' },
     stood: { type: 'number', description: 'how many claims of earlier work hold after this look, counting those shown before' },
     noticed: { type: 'array', items: { type: 'string' }, description: 'what no claim covers and the owner would want to know' },
+    sandbox: { type: 'string', description: 'empty unless the session\'s command sandbox stopped you from looking at the product and the call outside it was refused: then the exact refusal' },
   },
   required: ['proven', 'refuted', 'unchecked'],
 }
@@ -242,6 +243,12 @@ Find the cause of each in the product and fix it there. Do not edit the contract
       // The second look was handed what the first noticed and returns what of it is still so, plus what is new.
       noticed: again.noticed === undefined ? verdict.noticed || [] : again.noticed,
     }
+  }
+  if (verdict && (verdict.sandbox || '').trim() !== '') {
+    stopped = `milestone "${m.title}" was built and could not be looked at: the session's command sandbox stopped the browser and the call outside it was refused (${verdict.sandbox.trim().slice(0, 200)}). Nothing is known to be wrong with the product. The owner chooses one: run sessions in auto mode, approve the unsandboxed command when asked, or turn the sandbox off for this project (/sandbox); then ask to continue.`
+    log(stopped)
+    done.push({ id: m.id, title: m.title, contractId: built.contractId, proven: verdict.proven, refuted: verdict.refuted, unchecked: m.claims.filter((c) => !verdict.proven.includes(c.id)).map((c) => ({ id: c.id, why: 'the command sandbox stopped the look' })), noticed: verdict.noticed || [], report: null })
+    break
   }
   if (!verdict) {
     stopped = `milestone "${m.title}" was built and could not be verified (the verifier did not answer)`

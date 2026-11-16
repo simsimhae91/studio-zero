@@ -79,9 +79,33 @@ const GLANCE_MS = 2_000;
 /** Where a held clock starts: a fixed moment, so that a date a product shows is the same on every run. */
 const CLOCK_START = Date.UTC(2026, 0, 1, 0, 0, 0);
 
+/**
+ * A session can be set to run its commands inside a sandbox (Claude Code's, macOS Seatbelt). No browser starts
+ * in it: every Chromium registers a system service as it starts, the sandbox refuses that, and no setting of the
+ * sandbox opens it (tried with every allowance its settings have). A session that met this wrote "error" in
+ * its notes and warned that claims might stay unchecked; nothing was wrong with the product. So the failure is
+ * recognised here and said for what it is, with what to do about it.
+ */
+export class SandboxError extends Error {}
+
+const SANDBOXED = /ProcessSingleton|Failed to create socket directory|bootstrap_check_in[^\n]*Permission denied|MachPortRendezvous|mac_util\.mm[^\n]*Operation not permitted/;
+
+/** The error to give instead, when what stopped a browser or an app from starting was the command sandbox; else null. */
+export function stoppedBySandbox(err: unknown, what = 'the browser'): SandboxError | null {
+  const text = err instanceof Error ? err.message : String(err);
+  if (!SANDBOXED.test(text)) return null;
+  return new SandboxError(
+    `${what} could not start because this command ran inside the session's command sandbox, which refuses a system service every browser needs (no setting of the sandbox opens it). Nothing is wrong with the product. Run the same command again outside the sandbox: set dangerouslyDisableSandbox: true on the Bash call, and do so from the first try for every command that opens a browser, a desktop app, a simulator or Docker. If that call is refused, nobody was there to approve it: stop and tell the owner that looking at the product needs one of three things from them: sessions in auto mode, their approval of the unsandboxed command, or the sandbox turned off for this project (/sandbox). A look the sandbox stopped is not a verdict on any claim.`,
+  );
+}
+
 /** The Chrome that is on this machine, with no window. Nothing of the owner's own browser is touched: a fresh profile every time. */
-export function openBrowser(): Promise<Browser> {
-  return chromium.launch({ channel: 'chrome', headless: true });
+export async function openBrowser(): Promise<Browser> {
+  try {
+    return await chromium.launch({ channel: 'chrome', headless: true });
+  } catch (err) {
+    throw stoppedBySandbox(err) ?? err;
+  }
 }
 
 /**

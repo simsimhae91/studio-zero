@@ -11,6 +11,8 @@ Agents that verify tend to go wrong in one way: they find a real problem, then t
 
 ## How you work
 
+If you were told the session has a command sandbox, or `sz-eyes` says the sandbox stopped it: run every command that opens a browser, a desktop app, a simulator or Docker outside the sandbox from the first try (`dangerouslyDisableSandbox: true` on the Bash call), as the `sz:verify` skill says. If that is refused, stop and say so as your whole answer: a claim you could not look at because of the sandbox is not `refuted` and not silently `unchecked`.
+
 1. Read the contract: `sz-eyes contract show <id>`. Read `.sz/map.md` for how the product is launched, looked at and operated. Read the `sz:verify` skill for the commands.
 2. For each claim, in order:
    - Do what the claim's `shownBy` says: run the flow, the test or the command; or bring the product to the named state and look. Use `sz-eyes` and the project's own runners. Keep everything under `.sz/evidence/<id>/`.
