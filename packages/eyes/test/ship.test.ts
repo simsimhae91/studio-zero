@@ -801,6 +801,16 @@ test('a trial keeps who tried the product, what became of each, and what stands 
     assert.doesNotMatch(page, /아직 끝나지 않은 기록/);
     assert.match(page, /data:image\/png;base64/, 'the screen at a step is inside the page');
     assert.match(eyes(project, 'trial', 'show').text, /chongmu: 동창회 총무[\s\S]*\[첫날\] 좋음[\s\S]*between a person and paying, first to deal with first:\n  1\. \[block, seen, S\]/);
+    // A card made of real people's words, a choice against what they use today, coming back only because told
+    // to, and a fault planted on purpose: each is said where the owner reads the trial. A "yes" is never a forecast.
+    assert.match(page, /대역이 한 말은 예측이 아닙니다[\s\S]*진짜 사람의 글 없이 만든 카드/);
+    assert.equal(t('person', 'chongmu', '--who', '동창회 총무, 단톡방에서 정산 얘기가 나온 직후', '--instead', '카톡에 숫자를 직접 적는다 (무료, 매번 10분)', '--voice', '정산할 때마다 누가 냈는지 카톡을 다 뒤져요', '--voice', '엑셀로 하다가 한 명 빼먹어서 다시 했어요', '--model', 'sonnet').code, 0);
+    assert.match(t('verdict', 'chongmu', '--reached', 'yes', '--returned', 'sometimes', '--pay', 'no', '--why', '정산은 끝났다').text, /returned/);
+    assert.equal(t('verdict', 'chongmu', '--reached', 'yes', '--returned', 'no-pull', '--pay', 'no', '--choice', 'back', '--tell', '모임 돈 나누는 계산기', '--why', '정산은 끝났고 카톡보다 빨랐지만 다음 달에 다시 열 까닭은 화면에 없었다').code, 0);
+    assert.match(t('canary', '--planted', '짧음', '--found', 'no').text, /--planted/);
+    assert.equal(t('canary', '--planted', '링크로 들어온 사람의 "저장" 버튼에서 글자를 뺐다', '--found', 'no').code, 0);
+    eyes(project, 'trial', 'page');
+    assert.match(readFileSync(join(folder, 'report.html'), 'utf8'), /심어 둔 흠\(링크로 들어온 사람의[\s\S]*찾지 못했습니다. 여기 찾은 것이 적다고 문제가 적다는 뜻이 아닙니다[\s\S]*시켜서만 다시 옴[\s\S]*쓰던 것으로 돌아간다[\s\S]*진짜 사람의 글 2개로 만든 카드 · sonnet[\s\S]*친구에게 한 줄로: "모임 돈 나누는 계산기"/);
     // A second trial of the same day is a second folder, and the latest.
     assert.match(eyes(project, 'trial', 'new').text.trim(), /-2$/);
     assert.match(latestTrial(project)!, /-2$/);

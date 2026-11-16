@@ -5,6 +5,7 @@ import { EVIDENCE_DIR, SZ_DIR, allContracts, owed, type Contract } from './contr
 import { PAGE_STYLE, esc } from './evidence.ts';
 import { lastRelease, releases } from './release.ts';
 import { ledgerProblem, standing } from './standing.ts';
+import { allCases, depthOf, standingWord } from './worth.ts';
 
 /**
  * One person looks after many products. What each of them needs to know first is not in any one project: what
@@ -28,6 +29,8 @@ export interface ProductView {
   waiting: { text: string; page: string | null }[];
   /** The rest of what is written down as known and not done. */
   left: string[];
+  /** The case for it as a service, where one was made: where it stands and how many of the stakes it has. */
+  worth: { id: string; standing: string; service: string; stakes: number; have: number }[];
   /** The last line of its progress record. */
   last: string;
   /** Its most recent evidence pages, newest first. */
@@ -90,6 +93,7 @@ export function viewOf(dir: string): ProductView | null {
       ...lines.filter((line) => OWNER.test(line)).map((line) => ({ text: line.replace(OWNER, '').replace(/\s*\(계약 [a-z0-9-]+\)\s*$/, ''), page: page(/\(계약 ([a-z0-9-]+)\)\s*$/.exec(line)?.[1] ?? '') })),
     ],
     left: lines.filter((line) => !OWNER.test(line)),
+    worth: allCases(dir).map(({ case: value }) => ({ id: value.id, standing: standingWord(value), service: value.service, stakes: depthOf(value).stakes, have: depthOf(value).have })),
     last: read(join(sz, 'progress.md')).trim().split('\n').filter((line) => line.trim() !== '').at(-1)?.replace(/^-\s*/, '').slice(0, 260) ?? '',
     pages: contracts
       .filter((contract) => page(contract.id) !== null)
@@ -123,6 +127,7 @@ export function renderOverview(products: readonly ProductView[]): string {
   for (const p of products) {
     lines.push(`${p.name}  (${p.dir})`, `  ${p.says}`);
     lines.push(`  약속 ${p.stands}개${p.broken.length > 0 ? `, 깨짐 ${p.broken.length}` : ''} · 남은 일 ${p.left.length} · 기다리는 것 ${p.waiting.length}${p.open.length > 0 ? ` · 열린 일: ${p.open.map((o) => `${o.id}(${o.owes})`).join(', ')}` : ''}`);
+    for (const w of p.worth) lines.push(`  근거 ${w.id}: ${w.standing}${w.stakes > 0 ? ` · 기본기 ${w.stakes}개 중 ${w.have}개 있음` : ''}`);
     if (p.problem) lines.push(`  ${p.problem}`);
     for (const l of p.live) lines.push(`  살아 있는 곳 ${l.place}: ${l.url} · ${l.commit.slice(0, 7)} (${day(l.releasedAt)} ${l.release})${l.checked ? ` · 마지막 점검 ${day(l.checked.at)} ${l.checked.verdict}` : ' · 내보낸 뒤 점검한 적 없음'}`);
     if (p.live.length === 0) lines.push('  아직 어디에도 내놓지 않음');

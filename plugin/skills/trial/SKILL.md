@@ -15,11 +15,13 @@ Read `.sz/map.md` (how the product is opened and operated), `.sz/spec.md` or the
 
 ## 1. Who
 
-Write two or three people, from who the product itself says it is for. Each: who they are and the moment they arrive in (what they were just doing, what they want right now); what they use for this today (a product is compared with that, never with nothing); what would have to be true for them to pay. One of them is the doubter: someone it is said to be for who gets by fine without it. Not demographics: a moment.
+Write two or three people, from who the product itself says it is for. Each: who they are and the moment they arrive in (what they were just doing, what they want right now); what they use for this today and what that costs them in money or minutes (a product is compared with that, never with nothing); what would have to be true for them to pay. One of them is the doubter: someone it is said to be for who gets by fine without it. Not demographics: a moment. The three differ in their moment and in what they use today, not in their names.
+
+**A card is made of real people's words.** A stand-in given five things that people in that place actually wrote behaves measurably more like them than one given a description. If the project has a case (`sz-eyes worth show`), take them from its `who`, `gap` and `switch` quotations. If not, find them first (a store's low ratings of what they use today, a thread where they ask each other): a `sz:scout` agent does it in minutes. A card with none is marked on the page as made of no one's words, and what it guessed is read as lighter.
 
 ```
 F=$(sz-eyes trial new)
-sz-eyes trial person $F <id> --who "..." --instead "..." --pays-if "..."
+sz-eyes trial person $F <id> --who "..." --instead "<what, and what it costs>" --pays-if "..." --voice "<their words>" --voice "..." --model opus|sonnet
 ```
 
 Tell the owner the people in three lines and go on. They correct you if you have the wrong ones; that correction is worth having.
@@ -36,7 +38,9 @@ Work out, and give each stand-in as exact commands:
 
 ## 3. Let them use it
 
-Start one `sz:user` agent for each person, with their card, the commands above, and the trial's folder. Tell them nothing about how the product is built, what it is supposed to do, or what you hope they find. They may run side by side when each has a product of its own.
+Start one `sz:user` agent for each person, with their card (the voices in it, word for word), the price they will be asked, the commands above, and the trial's folder. Tell them nothing about how the product is built, what it is supposed to do, or what you hope they find, and nothing of each other. They may run side by side when each has a product of its own. Give them different models in turn (`model: opus`, then `sonnet`, and say which with `--model` on the card): two models that both meet a thing are worth more than one model meeting it three times.
+
+**Plant one fault, where a person has a copy of the code of their own** (a worktree, or a desktop app's data folder): something on the main path a person would trip on (a button with its words removed, a failure that says nothing, an entry that is broken on the second day). Tell nobody. Afterwards: `sz-eyes trial canary $F --planted "<what>" --found yes|no`. A run that walks past a fault it was handed found little because it sees little, and the page says so.
 
 ## 4. Check what they found
 
@@ -53,13 +57,15 @@ sz-eyes trial finding $F "<what, as the owner would say it, with the figure or t
 
 `seen` happened on the product. `guessed` is the stand-in's reading of how a person would take it: keep those, and never dress one as the other.
 
-And what only real people can tell, as the questions to put to the first of them (`sz-eyes trial ask $F "..."`): whether they have the problem at all, what they would pay, what they would tell a friend it is.
+**Read what they said the way the evidence says to.** Stand-ins judge more kindly than people, more alike, and buy more readily. A "no" with its reason is worth acting on. A "yes" is not evidence that anyone will pay, and their verdicts are never added up ("two of three would pay" is not a sentence the page or you may say). Whether they would come back is not known to them either: what is known is what the product did on the later days (was their work there, did anything reach them, was there more than on the first day), and that is what a `return` finding says.
+
+And what only real people can tell, as the questions to put to the first of them (`sz-eyes trial ask $F "..."`). Make them from every guess, every place the stand-ins disagreed, and the strongest reason one gave for "no"; ask about what the person did, never what they would do ("지난번에 이걸 할 때 무엇을 썼고, 얼마나 걸렸나요"). Put each question to one stand-in first: one that draws a vague or a flattering answer is rewritten or dropped.
 
 ## 5. Show it
 
 `sz-eyes trial page $F` writes the page (it says so while anything is missing: every person has later days and a verdict; there are findings; there are questions for real people). Give the owner the path and one screen:
 
-1. Each person in a line: got the one thing or not, came back or not, would pay or not, and the one reason.
+1. Each person in a line: got the one thing or not, what brought them back or that nothing did, what they chose at the price (pay, the free part, back to what they used, neither), and the reason in their words. Not a count of them.
 2. The five things most worth doing, in the order of the page (blocks, return, worth, pay), each with its picture and size.
 3. **What you would build first, and why.** One thing, two at most.
 4. What only real people can tell.

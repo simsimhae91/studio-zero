@@ -5,6 +5,8 @@ import { basename, dirname, join, resolve } from 'node:path';
 import { BACKLOG_FILE, addToBacklog, doneInBacklog, leftBy, openBacklog } from './backlog.ts';
 import { CONTRACTS_DIR, EVIDENCE_DIR, ClaimStatus, Contract, Lane, ShownBy, localDay, openContracts, owed, readContract, renderContract, writeContract } from './contract.ts';
 import { ElectronError, renderAppLook, renderAppWalk, walkElectron } from './electron.ts';
+import { CiteError, seeQuote } from './cite.ts';
+import { Basis, LineId, LineStatus, Objection, Other, addAsk as addWorthAsk, addCite, addObjection, allCases, answerObjection, caseFolder, hearAsk, newCase, readCase, renderCase, renderCases, setCall, setLine, setOther, setOwner, setRow, standingOf, unanswered, weighCite, writeCasePage, writeCasesPage } from './worth.ts';
 import { engineEnv, findTool, hostedSupabaseCall } from './engine.ts';
 import { writeEvidencePage } from './evidence.ts';
 import { changedSinceFrozen, fingerprint, fingerprints } from './fingerprint.ts';
@@ -20,7 +22,7 @@ import { GATE_LINES, lastRelease, releaseContract, releases, renderReleases, typ
 import { reviewWeb } from './review.ts';
 import { renderStrangers, strangers } from './strangers.ts';
 import { Shown, brokenDuring, keptFor, ledgerProblem, recordShown, renderStanding, stampClosed, standing, standingSummary } from './standing.ts';
-import { Felt, TrialFinding, TrialKind, Verdict, addAsk, addFinding, addNote, addPersona, latestTrial, newTrial, readTrial, renderTrial, setVerdict, unfinished, writeTrialPage } from './trial.ts';
+import { Felt, TrialFinding, TrialKind, Verdict, addAsk, addFinding, addNote, addPersona, latestTrial, newTrial, readTrial, renderTrial, setVerdict, unfinished, writeTrialPage, setCanary } from './trial.ts';
 import { SIZES, lookAtWeb, renderLook, renderWalk, walkWeb, type Size } from './web.ts';
 
 const USAGE = `sz-eyes: launch what was built, look at it, operate it, and put what was seen on one page
@@ -114,13 +116,42 @@ const USAGE = `sz-eyes: launch what was built, look at it, operate it, and put w
         the page the owner reads after a round: each thing said, with the pictures in <round>/<n>/ (before-*, after-*)
 
   sz-eyes trial new [--dir <project>]                    start a trial: the product used the whole way by stand-ins for the people it is for; prints its folder
-  sz-eyes trial person <folder> <id> --who "<who they are and the moment they arrive in>" [--instead "<what they use for this now>"] [--pays-if "<what would have to be true for them to pay>"]
+  sz-eyes trial person <folder> <id> --who "<who they are and the moment they arrive in>" [--instead "<what they use for this now, and what it costs them>"] [--pays-if "<what would have to be true for them to pay>"] [--voice "<words of a real person in that moment, as they wrote them>"]... [--model opus|sonnet]
   sz-eyes trial note <folder> <person> --when "<첫날|다음 날|3일 뒤|결제 앞|...>" --wanted "<what they wanted>" [--saw "<what the screen gave them>"] [--did "<what they did>"] --felt stuck|lost|fine|glad [--picture <file under the folder>]
-  sz-eyes trial verdict <folder> <person> --reached yes|no --returned yes|no|untried --pay yes|no|not-yet|never-asked --why "<the one reason>" [--needs "<what would make it a yes>"]
+  sz-eyes trial verdict <folder> <person> --reached yes|no --returned yes|no|no-pull|untried --pay yes|no|not-yet|never-asked --why "<in their words: what they have now that they did not, and what paying adds>" [--choice pay|free|back|stop] [--tell "<what they would tell a friend it is>"] [--needs "<what would make it a yes>"]
+  sz-eyes trial canary <folder> --planted "<a fault put into one person's copy on purpose>" --found yes|no
   sz-eyes trial finding <folder> "<what stands between a person and paying>" --kind block|return|worth|pay --basis seen|guessed --size S|M|L [--evidence <file under the folder>]...
   sz-eyes trial ask <folder> "<a question only real people can answer>"
   sz-eyes trial show [<folder>] [--dir <project>]        the trial as it stands (the latest by default), and what it still lacks
   sz-eyes trial page [<folder>] [--dir <project>]        the page the owner reads; exits 1 while the trial is unfinished
+
+  sz-eyes worth new <id> --service "<for whom, in what moment, it does what>" [--seed "<where the idea came from>"] [--dir <project>]
+        start the case for a service: the same lines for every service, each shown or not. Kept in .sz/worth/<id>/
+  sz-eyes worth cite <id> <line|others> --url <a public page> --quote "<the words as they stand there>" --shows "<what they show>" [--against] [--by scout|skeptic|lead]
+        file words from a page under a line. The page is fetched again here and the words looked for on it:
+        a quotation that is not found counts for nothing, and is kept as such. Lines: who, now, pays, gap, reach, edge, price, runs, does, returns, paid
+  sz-eyes worth other <id> <other-id> --name "<name>" --kind product|workaround [--url <u>] [--price "<what it costs>"] [--sign "<the sign people buy or use it>"] [--cite <cN>]...
+        what a person would use for the job instead: the service is judged against these, never against nothing
+  sz-eyes worth line <id> <line> [--says "<the claim>"] [--status shown|refuted|waived|open] [--basis world|owner|product|stand-in|real] [--note "<text>"]
+        what a line claims and where it stands. A line about the world is shown only when enough quotations
+        were found on their pages; the owner's own ground is their words in --note; paid is shown by real money only
+  sz-eyes worth row <id> <row-id> [--where "<where along the job>"] [--need "<what a person needs there>"] [--kind stake|edge|more] [--has <other-id>=yes|no|?]... [--cite <cN>]... [--ours have|lack|not-doing|planned|unknown] [--by "<the standing claim or picture / why not / which milestone>"]
+        one row of the whole job: who gives it already and whether this product does. A stake is what two or
+        more of the others have; "have" is shown by a standing claim or a picture, never said
+  sz-eyes worth object <id> "<why the case is wrong>" --about <line|whole> --weight fatal|serious|minor [--cite <cN>]...
+  sz-eyes worth answer <id> <n> "<what is wrong with the objection, or what was changed>"   |   sz-eyes worth answer <id> <n> --concede
+        the skeptic's objections and what became of each. A fatal one that is granted refutes its line
+  sz-eyes worth weigh <id> <cN> --supports yes|no --why "<text>"
+        what someone who did not file a quotation makes of it, read where it stands: one judged not to
+        support its line counts for nothing, and a line is not "go" on quotations nobody else read
+  sz-eyes worth ask <id> "<what only real people can answer>" [--test "<the cheapest way to ask>"] [--sample <how many> --go-at <percent> --no-at <percent>]
+        said before anyone is asked: how many, and the share that means go and that means no
+  sz-eyes worth heard <id> <n> --of <how many were asked> --did <how many did it> [--note "<where the figures were read>"]
+        what came back, read by what was said beforehand: go, no, or cannot tell (too few, or in between)
+  sz-eyes worth call <id> go|narrow|no --why "<text>"      the call of whoever led the case; "go" is refused while anything stands in its way
+  sz-eyes worth owner <id> --call build|not|later --said "<the owner's words>"   their decision, which is theirs alone
+  sz-eyes worth show [<id>] [--dir <project>]            one case as it stands, or a line for each case
+  sz-eyes worth page [<id>] [--dir <project>]            the page the owner reads: one case, or every case side by side (.sz/worth/index.html)
 
   sz-eyes backlog [--dir <project>]                      what is written down as known and not done (${BACKLOG_FILE})
   sz-eyes backlog add "<one line, in the owner's language>" [--from "<where it came from>"] [--dir <project>]
@@ -180,6 +211,7 @@ function parse(argv: string[], booleans: string[]): { words: string[]; flags: Ma
 }
 
 const out = (text: string): void => void process.stdout.write(`${text}\n`);
+const baseName = (path: string): string => path.split('/').at(-1)!;
 const contractFile = (project: string, id: string): string => join(project, CONTRACTS_DIR, `${id}.json`);
 const evidenceFolder = (project: string, id: string): string => join(project, EVIDENCE_DIR, id);
 /**
@@ -608,7 +640,7 @@ async function main(argv: string[]): Promise<number> {
       const folder = a.words[0] ? resolve(a.words[0]) : '';
       if (!folder || !existsSync(join(folder, 'trial.json'))) throw new Error(`which trial: give the folder sz-eyes trial new printed${a.words[0] ? ` (${a.words[0]} has no trial.json)` : ''}`);
       if (command === 'person') {
-        addPersona(folder, { id: a.words[1] ?? '', who: a.one('--who') ?? '', instead: a.one('--instead') ?? '', paysIf: a.one('--pays-if') ?? '' });
+        addPersona(folder, { id: a.words[1] ?? '', who: a.one('--who') ?? '', instead: a.one('--instead') ?? '', paysIf: a.one('--pays-if') ?? '', voices: a.all('--voice'), model: a.one('--model') ?? '' });
         out(`person: ${a.words[1]}`);
         return 0;
       }
@@ -618,13 +650,20 @@ async function main(argv: string[]): Promise<number> {
         return 0;
       }
       if (command === 'verdict') {
-        setVerdict(folder, Verdict.parse({ persona: a.words[1] ?? '', reached: a.one('--reached'), returned: a.one('--returned'), pay: a.one('--pay'), why: a.one('--why') ?? '', needs: a.one('--needs') ?? '' }));
+        setVerdict(folder, Verdict.parse({ persona: a.words[1] ?? '', reached: a.one('--reached'), returned: a.one('--returned'), pay: a.one('--pay'), why: a.one('--why') ?? '', needs: a.one('--needs') ?? '', choice: a.one('--choice') ?? null, tell: a.one('--tell') ?? '' }));
         out(`verdict for ${a.words[1]}`);
         return 0;
       }
       if (command === 'finding') {
         addFinding(folder, TrialFinding.parse({ text: a.words.slice(1).join(' '), kind: TrialKind.parse(a.one('--kind')), size: a.one('--size'), basis: a.one('--basis'), evidence: a.all('--evidence') }));
         out('found');
+        return 0;
+      }
+      if (command === 'canary') {
+        const found = a.one('--found');
+        if ((a.one('--planted') ?? '').trim().length < 8 || (found !== 'yes' && found !== 'no')) throw new Error('sz-eyes trial canary <folder> --planted "<the fault put into one person\'s copy on purpose>" --found yes|no');
+        setCanary(folder, a.one('--planted')!.trim(), found === 'yes');
+        out(`planted fault: ${found === 'yes' ? 'reported' : 'not reported'}`);
         return 0;
       }
       if (command === 'ask') {
@@ -635,6 +674,111 @@ async function main(argv: string[]): Promise<number> {
       }
     } catch (err) {
       // What a schema refuses is said in a line: which flag, and what it takes.
+      const issues = (err as { issues?: { path: (string | number)[]; message: string }[] }).issues;
+      throw new EyesError(Array.isArray(issues) ? `${issues.map((issue) => `${issue.path.join('.') || 'a value'}: ${issue.message}`).join('; ')} (sz-eyes help shows each flag and the words it takes)` : err instanceof Error ? err.message : String(err));
+    }
+  }
+  if (area === 'worth') {
+    const a = parse(rest, ['--against', '--concede']);
+    const project = resolve(a.one('--dir') ?? '.');
+    const now = new Date().toISOString();
+    const id = a.words[0] ?? '';
+    try {
+      if (command === 'show' || command === 'page') {
+        if (!id) {
+          out(command === 'show' ? renderCases(allCases(project)) : writeCasesPage(project));
+          return 0;
+        }
+        const folder = caseFolder(project, id);
+        const value = readCase(folder);
+        out(command === 'show' ? renderCase(value, folder) : writeCasePage(folder));
+        return command === 'page' && standingOf(value) === 'thin' ? 1 : 0;
+      }
+      if (!id) throw new Error('which case: give its id (sz-eyes worth show lists them)');
+      if (command === 'new') {
+        out(newCase(project, id, a.one('--service') ?? '', a.one('--seed') ?? '', now));
+        return 0;
+      }
+      const folder = caseFolder(project, id);
+      if (command === 'cite') {
+        const line = a.words[1] === 'others' ? 'others' : LineId.parse(a.words[1]);
+        const url = a.one('--url') ?? '';
+        const quote = a.one('--quote') ?? '';
+        const shows = a.one('--shows') ?? '';
+        if (!url || !quote || shows.trim().length < 2) throw new Error('sz-eyes worth cite <id> <line> --url <a public page> --quote "<the words as they stand there>" --shows "<what they show>"');
+        const count = readCase(folder).cites.length + 1;
+        const found = await seeQuote(url, quote, { shot: join(folder, 'cites', `c${count}.png`) }).catch((err: unknown) => {
+          if (err instanceof CiteError) throw new Error(err.message);
+          throw err;
+        });
+        const made = addCite(folder, { line, url, quote, shows, against: a.has('--against'), by: (a.one('--by') as 'scout' | 'skeptic' | 'lead' | undefined) ?? 'scout' }, { seen: found.seen ? { ...found.seen, shot: found.seen.shot ? `cites/${baseName(found.seen.shot)}` : null } : null, why: found.why });
+        out(made.seen ? `${made.id}: seen on ${made.host} (${made.seen.by}): ${made.seen.excerpt.slice(0, 200)}` : `${made.id}: NOT SEEN, so it counts for nothing: ${made.failed}`);
+        return made.seen ? 0 : 1;
+      }
+      if (command === 'other') {
+        setOther(folder, Other.parse({ id: a.words[1] ?? '', name: a.one('--name') ?? '', url: a.one('--url') ?? '', kind: a.one('--kind'), price: a.one('--price') ?? '', sign: a.one('--sign') ?? '', cites: a.all('--cite') }));
+        out(`instead: ${a.words[1]}`);
+        return 0;
+      }
+      if (command === 'line') {
+        const line = LineId.parse(a.words[1]);
+        const set = setLine(folder, line, { ...(a.one('--says') !== undefined ? { says: a.one('--says')! } : {}), ...(a.one('--status') ? { status: LineStatus.parse(a.one('--status')) } : {}), ...(a.one('--basis') ? { basis: Basis.parse(a.one('--basis')) } : {}), ...(a.one('--note') !== undefined ? { note: a.one('--note')! } : {}) }, now);
+        out(`${line}: ${set.status}${set.basis ? ` (${set.basis})` : ''}`);
+        return 0;
+      }
+      if (command === 'row') {
+        const has = Object.fromEntries(a.all('--has').map((pair) => [pair.slice(0, pair.lastIndexOf('=')), pair.slice(pair.lastIndexOf('=') + 1)])) as Record<string, 'yes' | 'no' | '?'>;
+        const stands = new Set(standing(project).stands.map((s) => s.key));
+        const row = setRow(folder, { id: a.words[1] ?? '', ...(a.one('--where') ? { where: a.one('--where')! } : {}), ...(a.one('--need') ? { need: a.one('--need')! } : {}), ...(a.one('--kind') ? { kind: a.one('--kind') as 'stake' | 'edge' | 'more' } : {}), ...(a.all('--has').length > 0 ? { has } : {}), ...(a.all('--cite').length > 0 ? { cites: a.all('--cite') } : {}), ...(a.one('--ours') ? { ours: a.one('--ours') as 'have' } : {}), ...(a.one('--by') !== undefined ? { by: a.one('--by')! } : {}) }, (key) => stands.has(key));
+        out(`row ${row.id}: ${row.kind}, ours ${row.ours}`);
+        return 0;
+      }
+      if (command === 'object') {
+        const n = addObjection(folder, Objection.parse({ about: a.one('--about'), text: a.words.slice(1).join(' '), weight: a.one('--weight'), cites: a.all('--cite') }));
+        out(`objection ${n}`);
+        return 0;
+      }
+      if (command === 'answer') {
+        const n = Number(a.words[1]);
+        const done = answerObjection(folder, n, a.has('--concede') ? null : a.words.slice(2).join(' '), now);
+        out(done.conceded ? `objection ${n}: granted${done.weight === 'fatal' ? ' (fatal: what it is about is refuted)' : ''}` : `objection ${n}: answered`);
+        return 0;
+      }
+      if (command === 'weigh') {
+        const says = a.one('--supports');
+        if (says !== 'yes' && says !== 'no') throw new Error('sz-eyes worth weigh <id> <cN> --supports yes|no --why "<what the words do or do not show about the line>"');
+        const cite = weighCite(folder, a.words[1] ?? '', says === 'yes', a.one('--why') ?? '', now);
+        out(`${cite.id}: ${says === 'yes' ? 'supports' : 'does not support'} ${cite.line}`);
+        return 0;
+      }
+      if (command === 'ask') {
+        if (a.words.slice(1).join(' ').trim().length < 8) throw new Error('sz-eyes worth ask <id> "<what only real people can answer>" [--test "<the cheapest way to ask>"] [--sample <how many> --go-at <percent> --no-at <percent>]');
+        const number = (flag: string): number | undefined => {
+          const value = a.one(flag);
+          if (value === undefined) return undefined;
+          if (!Number.isFinite(Number(value))) throw new Error(`${flag} takes a number`);
+          return Number(value);
+        };
+        const n = addWorthAsk(folder, a.words.slice(1).join(' '), a.one('--test') ?? '', { ...(number('--sample') !== undefined ? { sample: number('--sample')! } : {}), ...(number('--go-at') !== undefined ? { goAt: number('--go-at')! } : {}), ...(number('--no-at') !== undefined ? { noAt: number('--no-at')! } : {}) });
+        out(`question ${n}`);
+        return 0;
+      }
+      if (command === 'heard') {
+        const heard = hearAsk(folder, Number(a.words[1]), Number(a.one('--of')), Number(a.one('--did')), a.one('--note') ?? '', now);
+        out(`${heard.did} of ${heard.of}: ${heard.reading}`);
+        return 0;
+      }
+      if (command === 'call') {
+        setCall(folder, { call: a.words[1] as 'go', why: a.one('--why') ?? '', at: now });
+        out(`call: ${a.words[1]}`);
+        return 0;
+      }
+      if (command === 'owner') {
+        setOwner(folder, { call: a.one('--call') as 'build', said: a.one('--said') ?? '', at: now });
+        out(`the owner: ${a.one('--call')}`);
+        return 0;
+      }
+    } catch (err) {
       const issues = (err as { issues?: { path: (string | number)[]; message: string }[] }).issues;
       throw new EyesError(Array.isArray(issues) ? `${issues.map((issue) => `${issue.path.join('.') || 'a value'}: ${issue.message}`).join('; ')} (sz-eyes help shows each flag and the words it takes)` : err instanceof Error ? err.message : String(err));
     }
