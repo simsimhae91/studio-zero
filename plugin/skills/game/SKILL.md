@@ -1,5 +1,6 @@
 ---
 name: game
+user-invocable: false
 description: Use when building or changing a game (a web game first), or anything whose screen moves by itself and means something by it (a timer, a simulation, an animation that carries a result). How to build it so that it can be asked what it is doing and answers the same every time, how a rule of the game is proven, and what stays the owner's to judge.
 ---
 

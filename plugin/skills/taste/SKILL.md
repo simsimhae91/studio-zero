@@ -1,5 +1,6 @@
 ---
 name: taste
+user-invocable: false
 description: Use when building or changing anything a person looks at (a screen, a page, a game's interface) in a product that is being made from scratch or that asks for a design pass. How a screen is put together so that it reads as made for its subject and not as generated: one idea, one figure, one hero, real things on the first screen. Not for a product that has its own design system unless the owner asks.
 ---
 

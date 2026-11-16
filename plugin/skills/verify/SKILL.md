@@ -1,5 +1,6 @@
 ---
 name: verify
+user-invocable: false
 description: Use when a claim about software has to be shown true on the running product, not argued. How to launch, look at and operate a web page, an iOS app, an Electron desktop app, a web game and other targets with sz-eyes, and what counts as evidence.
 ---
 
