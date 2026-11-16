@@ -100,6 +100,7 @@ const USAGE = `sz-eyes: launch what was built, look at it, operate it, and put w
   sz-eyes contract frozen <id> [--dir <project>]         the files it froze and whether each is still as it was frozen; exits 1 when one changed
   sz-eyes contract show <id> [--dir <project>]           the contract as the owner reads it
   sz-eyes contract status [--dir <project>]              what open contracts still owe; exits 1 when anything is owed
+  sz-eyes contract add-check <id> --frozen <file>...     a check written after the freeze by whoever verified the claim: held from now on like the rest
   sz-eyes contract close <id> [--accepted "<the owner's words>"] [--dir <project>]   # refuses when most claims were not looked at
   sz-eyes evidence <id> [--summary <text>] [--took <text>] [--dir <project>]   writes ${EVIDENCE_DIR}/<id>/report.html
 
@@ -891,6 +892,20 @@ async function main(argv: string[]): Promise<number> {
       if (missing.length > 0) throw new EyesError(`not there to freeze: ${missing.join(', ')}. Paths are relative to the project; write the flow or test first.`);
       writeContract(file, { ...contract, frozen, frozenPrints: fingerprints(project, frozen), frozenAt: new Date().toISOString() });
       out(`frozen: ${id}. Whoever builds it does not edit ${file}${contract.frozen.length + a.all('--frozen').length > 0 ? ' or the files it names' : ''}.`);
+      return 0;
+    }
+    if (command === 'add-check') {
+      // A contract frozen with its claims and without their checks: the check for a claim is written by whoever
+      // verifies it, on the product as it stands, and from then on it is held like any other frozen file. Files
+      // are only ever added here; what is frozen is not taken off or replaced.
+      if (contract.frozenAt === null) throw new EyesError(`${id} is not frozen yet: freeze it first (its claims are what is agreed), then add the checks as they are written`);
+      const added = a.all('--frozen').filter((path) => !contract.frozen.includes(path));
+      if (added.length === 0) throw new EyesError('sz-eyes contract add-check <id> --frozen <flow or test file>... (a file the contract does not hold yet)');
+      const missing = added.filter((path) => !existsSync(join(project, path)));
+      if (missing.length > 0) throw new EyesError(`not there to hold: ${missing.join(', ')}. Paths are relative to the project; write the flow or test first.`);
+      const frozen = [...contract.frozen, ...added];
+      writeContract(file, { ...contract, frozen, frozenPrints: { ...contract.frozenPrints, ...fingerprints(project, added) } });
+      out(`held: ${added.join(', ')} (contract ${id} now holds ${frozen.length} file(s))`);
       return 0;
     }
     if (command === 'claim') {

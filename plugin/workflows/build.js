@@ -186,7 +186,7 @@ Write \`.sz/spec.md\` in the owner's language: what the product is and for whom,
 - All of it: every area the spec lists, each to the depth a person needs to use it for real: what happens when there is nothing yet, when something fails, the second time someone comes. The one thing the product is for is made first and carried furthest.
 - Nothing pretends. No made-up figures, no button that does nothing, no screen that only looks finished: what cannot be real yet (it needs a key of the owner's, a device, data nobody has given) says so in one plain line on the screen and is named in the spec.
 - What a person enters is theirs from the start, with the least account the product can be used with (a guest of this device, or a code by e-mail).
-- Its claims are the product's list of what a person can do, and the definition of done the builder works down: 8 to 20 of them, grouped by area, each shown by a flow, a test, a look or a command, with the figure or the words where there are any. Among them: every area's screen at phone size as pictures the owner can go through in one sitting (a look, kept in the evidence folder), and how it feels, which is the owner's to judge on those pictures (owner).
+- Its claims are the product's list of what a person can do, and the definition of done the builder works down: 8 to 20 of them, grouped by area, each shown by a flow (name the file it will be kept in: whoever verifies writes it), a test of what is pure rule (written before the code), a look or a command, with the figure or the words where there are any. Among them: every area's screen at phone size as pictures the owner can go through in one sitting (a look, kept in the evidence folder), and how it feels, which is the owner's to judge on those pictures (owner).
 
 **Hardening** comes after it. List under "later", a line each, what makes the product safe to give to people (signing in through other services, deleting an account, one person unable to reach another's data, the phone itself, what the law asks), and anything in the request that is too uncertain or too large for the first pass, said as that. Give these no claims: they are planned when the first pass stands and has been looked at. ${Math.max(1, Math.min(maxMilestones, 6) - 1)} lines at most.
 
@@ -233,6 +233,9 @@ if (fresh) {
 // `where` is null when it is built in the project's own folder, with nothing beside it. When it is built beside
 // others it is the folder made for it (a git worktree of the project): everything is done there, and what it
 // did is brought into the project's folder afterwards, with the others, and shown again together.
+const WRITE_FLOWS = (contractId) => ` The flows of this contract have not been written: its builder was told to leave them to you. For each claim of yours that names a flow file: show the claim on the product by operating it, then keep exactly what you did as that file, in the project's own format (the map says which), run it once and see it reach its last line, and have the contract hold it: \`sz-eyes contract add-check ${contractId} --frozen <the file>\`. Write it also when the claim turned out false: it fails now, for that reason, and it is what the fix will be proven against. A flow starts a server of its own only when it is not handed one (\`SZ_URL\`). Commit the flows you wrote, and nothing else.`
+const FIRST_STEPS = (m) => `2. Write first only the tests of what is pure rule (a calculation, a table of what is allowed and what is not): they are quick, and they are the definition. Run them once and see them fail for the right reason. Do not write the flows: whoever verifies writes each of them on the product as it stands, so that no check is fitted to what was built, and so that you get to the product sooner.
+3. Freeze: \`sz-eyes contract freeze ${m.id} --frozen <each of those tests>\` (with no files if there are none). From here you edit neither the contract nor those tests. If you later find that one of them is itself wrong about how it checks, do not work around it and do not stop: finish the build, and list it under "disputes" with the file and exactly what is wrong.`
 const FIRST = `This milestone is the product's first pass: all of it, in one stretch, by you. Work in this order. The look first (load \`sz:taste\`: colour, type and spacing settled once, as names every screen uses). The frame: how a person gets from one area to another, and the shapes of everything that will be stored. Then the one thing the product is for, to the quality it will be used at. When that path works: start the product, write the command that starts it into \`.sz/map.md\`, put a picture of each of its screens at phone size into the contract's evidence folder under \`early/\`, and commit with a message that begins \"look:\". The owner may open it from then on, before anything else exists. Then every other area, each to its claims. Work down the claims, and run each flow as you finish what it shows. Do not stop to report in between: you are done when every claim's own check passes and the product has run in front of you.
 `
 async function milestone(m, n, before, where) {
@@ -280,8 +283,8 @@ What earlier work proved still stands (\`sz-eyes standing\` lists it), except wh
 
 Do this, in order:
 1. Record the contract: \`sz-eyes contract new ${m.id} --lane M --request "<the milestone in a sentence, in the owner's language>" --target <web|ios|...> --claim "<id>|<says>|<kind>:<ref>" ...\` with exactly the claims above, plus \`--not\` and \`--risk\` for the lines above${replaces ? ', and `--supersedes "<contract>/<claim>|<why>"` for each promise it replaces' : ''}.
-2. Write the oracle first: every flow or test file a claim points at, in the project's own format, before the code it checks. They must fail now for the right reason.${replaces ? ' The flow or test a replaced promise was proven by is rewritten now to say the new truth (or removed if nothing of it remains), and frozen with this contract; every other flow and test of earlier work stays exactly as it is.' : ''}
-3. Run each of those files once before freezing, to see that it runs and fails for the right reason (the product is not there yet), not for a mistake in the file. Then freeze: \`sz-eyes contract freeze ${m.id} --frozen <each of those files>\`. From here you edit neither the contract nor those files. If you later find that a frozen file is itself wrong about how it checks (a quoting error, a selector that names nothing), do not work around it and do not stop: finish the build, and list it under "disputes" with the file and exactly what is wrong; someone who did not build this will settle it. If a claim is wrong about what was asked, build what you can and say so in "blocked".
+${m.first ? FIRST_STEPS(m) : `2. Write the oracle first: every flow or test file a claim points at, in the project's own format, before the code it checks. They must fail now for the right reason.${replaces ? ' The flow or test a replaced promise was proven by is rewritten now to say the new truth (or removed if nothing of it remains), and frozen with this contract; every other flow and test of earlier work stays exactly as it is.' : ''}
+3. Run each of those files once before freezing, to see that it runs and fails for the right reason (the product is not there yet), not for a mistake in the file. Then freeze: \`sz-eyes contract freeze ${m.id} --frozen <each of those files>\`. From here you edit neither the contract nor those files. If you later find that a frozen file is itself wrong about how it checks (a quoting error, a selector that names nothing), do not work around it and do not stop: finish the build, and list it under "disputes" with the file and exactly what is wrong; someone who did not build this will settle it. If a claim is wrong about what was asked, build what you can and say so in "blocked".`}
 4. Build the milestone. For anything a person looks at, load \`sz:taste\` first. If it changes the shape of what is stored, it carries over what is already there (on start, or by a command the map names): data written by the version before must still open. Run the project's checks (type check, tests, the flows of earlier milestones) as you go and leave them passing.
 5. Start the product yourself with one command and see it running before you return: its first screen in a browser, or for a phone app the build installed and opened on a simulator of your own (\`sz:verify\` says how, and what a first build of a phone app needs). Say exactly which command, and where it is seen. A milestone that has never run is not built: what stops it from starting is yours to fix here, not the verifier's to find. If it cannot be started for a reason outside the product (a download that does not arrive, a tool that is not on this machine), do not wait on it (a download or a build that shows nothing new for a minute is stopped) and say what stopped it under "blocked". ${where ? 'If this milestone changed how it is launched, say so in "summary" (the map is corrected when the milestones are brought together).' : 'If this milestone changed how it is launched, correct \`.sz/map.md\`.'}
 6. Commit the work on the current branch with a message that says what the milestone built.
@@ -308,16 +311,43 @@ Do not judge your own claims and do not record verdicts: someone who did not bui
   const claimIds = new Set(m.claims.map((c) => c.id))
   const record = `\`sz-eyes standing record <contract>/<claim> --status holds|broken|unchecked --during ${built.contractId} --note "<what was run and what it showed>"\``
   // again: null for the first look, or what was shown false and has been worked on since.
-  const verify = (again) =>
+  const verify = (again, share) =>
     agent(
       `Verify contract \`${built.contractId}\` of the project in ${here}.${PLACE}${SAND} The product is launched like this: ${built.launch}. ${
         again
           ? `This is a second look, after a fix. ${again.claims.length > 0 ? `These claims of the contract were shown false before: ${again.claims.join(', ')}. Check each from the start, on the product as it is now, and record it with \`sz-eyes contract claim\`. ` : ''}${again.standing.length > 0 ? `These promises of earlier work were found broken: ${again.standing.join(', ')}. Show each again and record it with ${record}. ` : ''}A fix can break a neighbour: run once more every flow, test and command of this contract's other claims and of what stood before (\`sz-eyes standing\`), and report whatever fails now (a claim of this contract under "refuted", recorded with \`sz-eyes contract claim\`; a promise of earlier work under "broken", recorded as above). Claims you did not look at again keep their verdict: leave them out. Before the fix, this was noticed outside the claims: ${again.noticed.length > 0 ? again.noticed.map((n) => `[${n}]`).join(' ') : '(nothing)'}. Under "noticed" return each of those that is still so on the product as it is now (drop one the fix has ended) and whatever you notice that is new.`
           : `Give every claim a verdict and record each with \`sz-eyes contract claim\`. Then show again what stood before this work (\`sz-eyes standing\`) and record each with ${record}.`
-      } I am telling you nothing about whether any claim is true. Record what you notice that no claim covers with \`sz-eyes contract notice\`, stop any server you start, and return the verdicts: under "broken" every promise of earlier work that does not hold now, under "held" every one you showed again that holds.`,
-      { label: `verify:${m.id}${again ? ':again' : ''}`, phase: 'Verify', agentType: 'sz:verifier', schema: VERDICT, ...effort('verify') },
+      }${share ? ` You are one of ${share.of} verifiers looking at this contract at the same time. Yours are these claims: ${share.part.join(', ')}. Give a verdict to these and to no other. ${share.k === 0 ? 'You are also the one who shows again what stood before this work.' : 'Do not show again what stood before this work: another verifier does.'} Start a copy of the product of your own, on a port of your own and with a place of its own for what it stores (the map says how it is launched; never the same database file or folder as another copy), and stop it when you are done.` : ''}${m.first && !again ? WRITE_FLOWS(built.contractId) : ''} I am telling you nothing about whether any claim is true. Record what you notice that no claim covers with \`sz-eyes contract notice\`, stop any server you start, and return the verdicts: under "broken" every promise of earlier work that does not hold now, under "held" every one you showed again that holds.`,
+      { label: `verify:${m.id}${again ? ':again' : share ? `:${share.k + 1}of${share.of}` : ''}`, phase: 'Verify', agentType: 'sz:verifier', schema: VERDICT, ...effort('verify') },
     )
-  let verdict = await verify(null)
+  // A first pass has many claims and its flows are still to be written: it is looked at by up to three verifiers
+  // at once, each with claims of its own and a copy of the product of its own. (One verifier took 17 minutes
+  // over 19 claims, and again 10 after the fix.)
+  const lookTogether = async () => {
+    const ids = m.claims.map((c) => c.id)
+    if (!m.first || ids.length <= 8) return verify(null)
+    const size = Math.ceil(ids.length / 3)
+    const parts = [ids.slice(0, size), ids.slice(size, 2 * size), ids.slice(2 * size)].filter((part) => part.length > 0)
+    const looks = await beside(parts.map((part, k) => () => verify(null, { part, k, of: parts.length })))
+    if (looks.every((look) => !look)) return null
+    const all = { proven: [], refuted: [], unchecked: [], broken: [], held: [], noticed: [], stood: undefined, sandbox: '' }
+    looks.forEach((look, k) => {
+      const mine = new Set(parts[k])
+      if (!look) { parts[k].forEach((id) => all.unchecked.push({ id, why: 'the verifier that had this claim did not answer' })); return }
+      all.proven.push(...look.proven.filter((id) => mine.has(id)))
+      all.refuted.push(...look.refuted.filter((r) => mine.has(r.id)))
+      all.unchecked.push(...look.unchecked.filter((u) => mine.has(u.id)))
+      // A claim a verifier was given and said nothing about has not been looked at.
+      for (const id of parts[k]) if (!look.proven.includes(id) && !look.refuted.some((r) => r.id === id) && !look.unchecked.some((u) => u.id === id)) all.unchecked.push({ id, why: 'its verifier gave no verdict' })
+      all.broken.push(...(look.broken || []))
+      all.held.push(...(look.held || []))
+      all.noticed.push(...(look.noticed || []))
+      if (look.stood !== undefined) all.stood = look.stood
+      if (!all.sandbox && (look.sandbox || '').trim() !== '') all.sandbox = look.sandbox
+    })
+    return all
+  }
+  let verdict = await lookTogether()
   for (let round = 1; round <= 2 && verdict && verdict.refuted.length + (verdict.broken || []).length > 0; round++) {
     const wrong = verdict.refuted.map((r) => `- ${r.id}: ${r.fact}`).join('\n') || '(none)'
     const broke = (verdict.broken || []).map((b) => `- ${b.key}: ${b.fact}`).join('\n')

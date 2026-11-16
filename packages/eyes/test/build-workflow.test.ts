@@ -112,11 +112,20 @@ test('a new product is planned twice: its first cut alone, and what comes after 
   const ran = await run({ request: '다이어트 배틀 앱' }, { plan: twice({ mode: 'continue', summary: 's', milestones: [{ ...cut, state: 'closed' }, deep('m2'), deep('m3')] }), build: built, verify: proven, close: closed });
   assert.deepEqual(ran.calls.map((c) => c.label), ['plan', 'build:m1', 'verify:m1', 'close:m1', 'plan:after', 'build:m2', 'verify:m2', 'close:m2', 'build:m3', 'verify:m3', 'close:m3']);
   const first = ran.calls.find((c) => c.label === 'plan')!.prompt;
-  assert.match(first, /\*\*The first cut\*\* is the one milestone you return: the whole product at its thinnest, working/);
+  assert.match(first, /\*\*The first pass\*\* is the one milestone you return: the whole product, at the quality it will be used at, built in one stretch/);
+  assert.match(first, /a flow \(name the file it will be kept in: whoever verifies writes it\), a test of what is pure rule \(written before the code\)/);
   assert.match(first, /Nothing pretends/);
   assert.doesNotMatch(first, /This run has just built and closed the product's first cut/);
-  assert.match(ran.calls.find((c) => c.label === 'build:m1')!.prompt, /This milestone is the product's first cut[\s\S]*Build the frame before the areas[\s\S]*Do not polish one area before every area exists/);
-  assert.doesNotMatch(ran.calls.find((c) => c.label === 'build:m2')!.prompt, /This milestone is the product's first cut/);
+  const firstBuild = ran.calls.find((c) => c.label === 'build:m1')!.prompt;
+  assert.match(firstBuild, /This milestone is the product's first pass: all of it, in one stretch, by you/);
+  assert.match(firstBuild, /commit with a message that begins \\?"look:\\?"/);
+  assert.match(firstBuild, /Do not write the flows: whoever verifies writes each of them on the product as it stands/);
+  assert.doesNotMatch(firstBuild, /Write the oracle first/);
+  const laterBuild = ran.calls.find((c) => c.label === 'build:m2')!.prompt;
+  assert.doesNotMatch(laterBuild, /This milestone is the product's first pass/);
+  assert.match(laterBuild, /Write the oracle first: every flow or test file a claim points at/, 'work on a product that stands keeps its checks before its code');
+  assert.match(ran.calls.find((c) => c.label === 'verify:m1')!.prompt, /The flows of this contract have not been written[\s\S]*sz-eyes contract add-check m1 --frozen/);
+  assert.doesNotMatch(ran.calls.find((c) => c.label === 'verify:m2')!.prompt, /The flows of this contract have not been written/);
   assert.match(ran.calls.find((c) => c.label === 'plan:after')!.prompt, /This run has just built and closed the product's first cut[\s\S]*go through every area of it once before you write a claim[\s\S]*what the owner has said since the first cut comes before the spec/);
   assert.ok(ran.logs.some((l) => /After it, planned when it stands: 대결 깊이 \/ 폰에서/.test(l)), ran.logs.join('\n'));
   assert.ok(ran.logs.some((l) => /^FIRST CUT READY\. The whole product can be looked at now: PORT=\$\(sz-eyes port\) node server\.mjs\. Every screen: r\.html/.test(l)), ran.logs.join('\n'));
@@ -145,8 +154,34 @@ test('a new product is planned twice: its first cut alone, and what comes after 
     { plan: (_c: Call, nth: number) => (nth === 0 ? { mode: 'continue', summary: 's', milestones: [{ ...cut, first: true }], later: [{ title: '대결 깊이', what: 'w' }] } : { mode: 'continue', summary: 's', milestones: [{ ...cut, state: 'closed' }, deep('m2')] }), build: built, verify: proven, close: closed },
   );
   assert.deepEqual(resumed.calls.map((c) => c.label), ['plan', 'build:m1', 'verify:m1', 'close:m1', 'plan:after', 'build:m2', 'verify:m2', 'close:m2']);
-  assert.match(resumed.calls.find((c) => c.label === 'build:m1')!.prompt, /This milestone is the product's first cut/);
+  assert.match(resumed.calls.find((c) => c.label === 'build:m1')!.prompt, /This milestone is the product's first pass/);
   assert.ok(resumed.logs.some((l) => /^continuing\. First cut: 첫 판\. After it, planned when it stands: 대결 깊이/.test(l)), resumed.logs.join('\n'));
+
+  // A first pass with many claims is looked at by three verifiers at once, each with claims and a copy of the product of its own.
+  const many = Array.from({ length: 10 }, (_, k) => claim(`c${k + 1}`));
+  const big = await run(
+    { request: 'x' },
+    {
+      plan: () => ({ mode: 'new', summary: 's', milestones: [{ id: 'm1', title: '첫 판', builds: 'b', claims: many }] }),
+      build: built,
+      verify: ({ label, prompt }: Call) => {
+        if (label === 'verify:m1:1of3') return { proven: ['c1', 'c2', 'c3', 'c9'], refuted: [], unchecked: [], stood: 0, noticed: ['첫째가 본 것'] };
+        if (label === 'verify:m1:2of3') return { proven: ['c5', 'c6'], refuted: [{ id: 'c7', fact: '합계가 0' }], unchecked: [{ id: 'c8', why: '키가 없음' }] };
+        if (label === 'verify:m1:3of3') return { proven: ['c9'], refuted: [], unchecked: [] };
+        return { proven: ['c7'], refuted: [], unchecked: [], prompt };
+      },
+      fix: () => ({ fixed: ['c7'] }),
+      close: closed,
+    },
+  );
+  assert.deepEqual(big.calls.filter((c) => c.label.startsWith('verify')).map((c) => c.label), ['verify:m1:1of3', 'verify:m1:2of3', 'verify:m1:3of3', 'verify:m1:again']);
+  const second = big.calls.find((c) => c.label === 'verify:m1:2of3')!.prompt;
+  assert.match(second, /You are one of 3 verifiers[\s\S]*Yours are these claims: c5, c6, c7, c8\. Give a verdict to these and to no other\. Do not show again what stood before this work/);
+  assert.match(second, /Start a copy of the product of your own, on a port of your own and with a place of its own for what it stores/);
+  assert.match(big.calls.find((c) => c.label === 'verify:m1:1of3')!.prompt, /You are also the one who shows again what stood before this work/);
+  const entry = big.result.milestones[0];
+  assert.deepEqual([...entry.proven].sort(), ['c1', 'c2', 'c3', 'c5', 'c6', 'c7', 'c9'], 'a verdict counts only from the verifier that was given the claim (c9 from the first is not taken), and c7 is proven after its fix');
+  assert.deepEqual(entry.unchecked.map((u: { id: string }) => u.id).sort(), ['c10', 'c4', 'c8'], 'a claim its verifier said nothing about has not been looked at');
 
   // A product with nothing after its first cut is built from one plan.
   const small = await run({ request: 'x' }, { plan: () => ({ mode: 'new', summary: 's', milestones: [cut] }), build: built, verify: proven, close: closed });

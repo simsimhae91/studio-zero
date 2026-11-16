@@ -515,6 +515,27 @@ test('every call to Maestro brings a driver port of its own, so the simulator na
   }
 });
 
+test('a check written by whoever verified is held by the frozen contract from then on, and only ever added', () => {
+  const project = mkdtempSync(join(tmpdir(), 'eyes-addcheck-'));
+  try {
+    assert.equal(eyes(project, 'contract', 'new', 'first-pass', '--lane', 'M', '--request', '첫 판', '--claim', 'judge|크기를 넣으면 판정이 나온다|flow:flows/judge.sh', '--claim', 'rule|80cm는 된다|test:test/rule.test.mjs').code, 0);
+    assert.match(eyes(project, 'contract', 'add-check', 'first-pass', '--frozen', 'flows/judge.sh').text, /is not frozen yet/);
+    mkdirSync(join(project, 'test'), { recursive: true });
+    writeFileSync(join(project, 'test/rule.test.mjs'), '// rule');
+    assert.equal(eyes(project, 'contract', 'freeze', 'first-pass', '--frozen', 'test/rule.test.mjs').code, 0);
+    assert.match(eyes(project, 'contract', 'add-check', 'first-pass', '--frozen', 'flows/judge.sh').text, /not there to hold: flows\/judge\.sh/);
+    mkdirSync(join(project, 'flows'), { recursive: true });
+    writeFileSync(join(project, 'flows/judge.sh'), '#!/bin/bash\nexit 0\n');
+    assert.match(eyes(project, 'contract', 'add-check', 'first-pass', '--frozen', 'flows/judge.sh').text, /^held: flows\/judge\.sh \(contract first-pass now holds 2 file\(s\)\)/);
+    assert.match(eyes(project, 'contract', 'add-check', 'first-pass', '--frozen', 'flows/judge.sh').text, /a file the contract does not hold yet/);
+    const kept = JSON.parse(readFileSync(join(project, '.sz/contracts/first-pass.json'), 'utf8'));
+    assert.deepEqual(kept.frozen, ['test/rule.test.mjs', 'flows/judge.sh']);
+    assert.deepEqual(Object.keys(kept.frozenPrints).sort(), ['flows/judge.sh', 'test/rule.test.mjs']);
+  } finally {
+    rmSync(project, { recursive: true, force: true });
+  }
+});
+
 test('what is owed is said once in a session, and again only when it has changed', () => {
   const project = mkdtempSync(join(tmpdir(), 'eyes-owed-'));
   const hook = fileURLToPath(new URL('../../../plugin/hooks/stop-owed.mjs', import.meta.url));
