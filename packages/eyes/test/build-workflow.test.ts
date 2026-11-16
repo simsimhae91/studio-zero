@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
-type Call = { prompt: string; label: string };
+type Call = { prompt: string; label: string; effort?: string };
 type Answer = (call: Call, nth: number) => unknown;
 
 const SOURCE = readFileSync(fileURLToPath(new URL('../../../plugin/workflows/build.js', import.meta.url)), 'utf8').replace('export const meta', 'const meta');
@@ -16,8 +16,8 @@ async function run(args: unknown, answers: Record<string, Answer>): Promise<{ re
   const calls: Call[] = [];
   const logs: string[] = [];
   const seen = new Map<string, number>();
-  const agent = async (prompt: string, opts: { label: string }): Promise<unknown> => {
-    calls.push({ prompt, label: opts.label });
+  const agent = async (prompt: string, opts: { label: string; effort?: string }): Promise<unknown> => {
+    calls.push({ prompt, label: opts.label, ...(opts.effort ? { effort: opts.effort } : {}) });
     const key = Object.keys(answers).find((k) => opts.label.startsWith(k));
     if (!key) throw new Error(`no answer for ${opts.label}`);
     const nth = seen.get(key) ?? 0;
@@ -173,4 +173,26 @@ test('what does not merge is brought up to date by a builder and then shown agai
   // The sandbox stopped the look at the joined product: said as that.
   const sand = await run({ request: 'x' }, { ...base, join: joinedAll, gate: () => ({ proven: [], refuted: [], unchecked: [], sandbox: 'Run outside of the sandbox' }) });
   assert.match(sand.result.stopped, /brought together and could not be looked at: the session's command sandbox/);
+});
+
+test('every agent is told from its first line when the session is sandboxed, an earlier milestone\'s verdicts are not made up, and how hard each stage thinks can be said', async () => {
+  const answers = { build: built, verify: proven, close: closed };
+  const earlier = (sandboxed: boolean) => () => ({ mode: 'continue', summary: 's', sandboxed, milestones: [{ id: 'm1', title: 'title m1', builds: 'b', claims: [claim('one'), claim('owner')], state: 'closed', contractId: 'm1' }, { id: 'm2', title: 'title m2', builds: 'b', claims: [claim('one'), claim('two')] }] });
+  const inside = await run({ request: 'x' }, { ...answers, plan: earlier(true) });
+  assert.match(inside.calls.find((c) => c.label === 'plan')!.prompt, /run `sz-eyes sandbox` once, as an ordinary command[\s\S]*return under "sandboxed"/);
+  for (const label of ['build:m2', 'verify:m2']) assert.match(inside.calls.find((c) => c.label === label)!.prompt, /This session runs its commands inside a sandbox[\s\S]*outside it from the first try/, label);
+  const outside = await run({ request: 'x' }, { ...answers, plan: earlier(false) });
+  assert.doesNotMatch(outside.calls.find((c) => c.label === 'build:m2')!.prompt, /This session runs its commands inside a sandbox/);
+  assert.match(outside.calls.find((c) => c.label === 'build:m2')!.prompt, /If `sz-eyes` says the session's command sandbox stopped it/);
+  // The first milestone was closed by an earlier run; one of its claims is the owner's to judge and still open.
+  // What this run knows of it is that it is closed, and where its verdicts are: it does not call its claims proven.
+  assert.deepEqual(inside.result.milestones[0], { id: 'm1', title: 'title m1', contractId: 'm1', earlier: true, verdicts: 'closed in an earlier run: sz-eyes contract show m1', proven: [], refuted: [], unchecked: [], noticed: [], report: null });
+  assert.match(inside.calls.find((c) => c.label === 'build:m2')!.prompt, /- title m1: closed in an earlier run/);
+
+  // Unless said, every agent thinks as hard as the session. One word is for the builders; each stage can be named.
+  assert.deepEqual(inside.calls.map((c) => c.effort), [undefined, undefined, undefined, undefined]);
+  const word = await run({ request: 'x', effort: 'high' }, { ...answers, plan: earlier(false) });
+  assert.deepEqual(word.calls.map((c) => [c.label, c.effort]), [['plan', undefined], ['build:m2', 'high'], ['verify:m2', undefined], ['close:m2', undefined]]);
+  const each = await run({ request: 'x', effort: { build: 'high', close: 'low', verify: 'nonsense' } }, { ...answers, plan: earlier(false) });
+  assert.deepEqual(each.calls.map((c) => [c.label, c.effort]), [['plan', undefined], ['build:m2', 'high'], ['verify:m2', undefined], ['close:m2', 'low']]);
 });

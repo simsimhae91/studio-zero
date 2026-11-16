@@ -23,7 +23,7 @@ import { reviewWeb } from './review.ts';
 import { renderStrangers, strangers } from './strangers.ts';
 import { Shown, brokenDuring, keptFor, ledgerProblem, recordShown, renderStanding, stampClosed, standing, standingSummary, mendLedger, STANDING_FILE } from './standing.ts';
 import { Felt, TrialFinding, TrialKind, Verdict, addAsk, addFinding, addNote, addPersona, latestTrial, newTrial, readTrial, renderTrial, setVerdict, unfinished, writeTrialPage, setCanary } from './trial.ts';
-import { SIZES, lookAtWeb, renderLook, renderWalk, walkWeb, type Size, SandboxError } from './web.ts';
+import { SIZES, lookAtWeb, renderLook, renderWalk, walkWeb, type Size, SandboxError, closeBrowser, openBrowser } from './web.ts';
 
 const USAGE = `sz-eyes: launch what was built, look at it, operate it, and put what was seen on one page
 
@@ -154,6 +154,7 @@ const USAGE = `sz-eyes: launch what was built, look at it, operate it, and put w
   sz-eyes worth show [<id>] [--dir <project>]            one case as it stands, or a line for each case
   sz-eyes worth page [<id>] [--dir <project>]            the page the owner reads: one case, or every case side by side (.sz/worth/index.html)
 
+  sz-eyes sandbox                                        says "sandboxed" when run inside a session's command sandbox (where no browser starts), "open" when not
   sz-eyes backlog [--dir <project>]                      what is written down as known and not done (${BACKLOG_FILE})
   sz-eyes backlog add "<one line, in the owner's language>" [--from "<where it came from>"] [--dir <project>]
   sz-eyes backlog done "<some words of the line>" --by "<the contract or commit that ended it>" [--dir <project>]
@@ -792,6 +793,17 @@ async function main(argv: string[]): Promise<number> {
       const issues = (err as { issues?: { path: (string | number)[]; message: string }[] }).issues;
       throw new EyesError(Array.isArray(issues) ? `${issues.map((issue) => `${issue.path.join('.') || 'a value'}: ${issue.message}`).join('; ')} (sz-eyes help shows each flag and the words it takes)` : err instanceof Error ? err.message : String(err));
     }
+  }
+  if (area === 'sandbox') {
+    // Asked once, by whoever plans the work, as an ordinary command: is this session's command sandbox in the way.
+    try {
+      await closeBrowser(await openBrowser());
+      out('open: a browser starts from here. This command did not run inside a command sandbox.');
+    } catch (err) {
+      if (!(err instanceof SandboxError)) throw err;
+      out("sandboxed: this command ran inside the session's command sandbox, where no browser starts. Whoever works in this session runs what opens a browser, a desktop app, a simulator or Docker outside it from the first try (dangerouslyDisableSandbox: true on the Bash call).");
+    }
+    return 0;
   }
   if (area === 'port') {
     out(String(await freePort()));

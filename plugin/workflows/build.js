@@ -20,7 +20,26 @@ const maxMilestones = args && Number.isInteger(args.maxMilestones) ? args.maxMil
 if (request === '') return { error: 'give args: { request: "<what to build, in the owner\'s words>", answers?: "<what the owner answered>" }' }
 
 const TOOLS = 'The command `sz-eyes` is on your PATH (the sz plugin\'s). Load the skills you need with the Skill tool: `sz:work` (how work is sized, contracted and closed), `sz:verify` (how a product is launched, looked at and operated, and what counts as evidence), `sz:taste` (how a screen is put together, for anything a person looks at in a product made here), `sz:backend` (what a product stands on: where it runs for people, what holds its accounts and its data, and what that must prove), `sz:ship` (what a product needs before it can be put where people reach it), `sz:game` (when the product is a game or moves by itself: how it is built to be asked what it is doing, and proven with its time held), `sz:trial` (whether a person would pay: stand-ins for the people it is for use it the whole way), `sz:worth` (the case for the service: who it is for, what they use instead, and the rows of the whole job that say how deep it has to be).'
-const GROUND = 'If `sz-eyes` says the session\'s command sandbox stopped it (or `.sz/map.md` says this owner\'s sessions are sandboxed), run every command that opens a browser, a desktop app, a simulator or Docker outside the sandbox from the first try (`dangerouslyDisableSandbox: true` on the Bash call; the `sz:verify` skill says which). If that call is refused, do not judge the product by reading its code instead: say in what you return that the sandbox stopped the look. You are working in the project\'s folder. Read `.sz/map.md` first (if there is none, load `sz:onboard` and write it), then `.sz/spec.md`, `.sz/owner.md` (what the owner has said they want of this product: it comes before your own taste) and the last lines of `.sz/progress.md` if they exist. Follow the project\'s own rules as the map lists them. Other work of the owner\'s runs on this machine. Never use their simulator, browser profile or dev-server ports: a headless browser, the eyes\' own simulator, and for anything you launch a port taken from the machine (`PORT=$(sz-eyes port)`), never a number you chose. Before you look at what you launched, make sure it is yours that answers (your process is alive and the page is this product). End every server you start, by the process id you kept (`pid=$!` ... `kill $pid`): never by its port and never by its name, because what holds a port you wanted is somebody else\'s.'
+// Whether the session runs its commands inside a sandbox is found out once, when the work is planned, and every
+// agent after that is told so from its first line. (In the first run under a sandbox each agent found it out
+// for itself, by having a browser refused: sixteen lost tries among ten agents.)
+const IN_SANDBOX = ' This session runs its commands inside a sandbox, where nothing that opens a browser, a desktop app, a simulator or Docker can start. Run those outside it from the first try (`dangerouslyDisableSandbox: true` on the Bash call): every `sz-eyes web`, `sz-eyes electron`, `sz-eyes ios` and `sz-eyes docker` command, and the project\'s own flows and tests that open a browser. Everything else stays inside. If such a call is refused, do not judge the product by reading its code instead: say in what you return that the sandbox stopped the look.'
+const MAYBE_SANDBOX = ' If `sz-eyes` says the session\'s command sandbox stopped it, run every command that opens a browser, a desktop app, a simulator or Docker outside the sandbox from the first try (`dangerouslyDisableSandbox: true` on the Bash call; the `sz:verify` skill says which). If that call is refused, do not judge the product by reading its code instead: say in what you return that the sandbox stopped the look.'
+let SAND = MAYBE_SANDBOX
+const GROUND = 'You are working in the project\'s folder. Read `.sz/map.md` first (if there is none, load `sz:onboard` and write it), then `.sz/spec.md`, `.sz/owner.md` (what the owner has said they want of this product: it comes before your own taste) and the last lines of `.sz/progress.md` if they exist. Follow the project\'s own rules as the map lists them. Other work of the owner\'s runs on this machine. Never use their simulator, browser profile or dev-server ports: a headless browser, the eyes\' own simulator, and for anything you launch a port taken from the machine (`PORT=$(sz-eyes port)`), never a number you chose. Before you look at what you launched, make sure it is yours that answers (your process is alive and the page is this product). End every server you start, by the process id you kept (`pid=$!` ... `kill $pid`): never by its port and never by its name, because what holds a port you wanted is somebody else\'s.'
+
+// How hard each kind of agent thinks. Unless said, each thinks as hard as the session it runs in. The owner's
+// sessions think at their highest setting, and a milestone's builder then takes about half again as long as at
+// "high" for the same verdicts (one pair of runs, 2026-11-16): which stage is worth what is theirs to set.
+// args.effort: one word for the builders ("high"), or { plan, build, verify, close, join } each a word.
+const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max']
+const DEFAULT_EFFORT = {}
+const effort = (stage) => {
+  const said = args && args.effort
+  const word = typeof said === 'string' ? (stage === 'build' ? said : undefined) : said && typeof said === 'object' ? said[stage] : undefined
+  const chosen = EFFORTS.includes(word) ? word : DEFAULT_EFFORT[stage]
+  return chosen ? { effort: chosen } : {}
+}
 
 const CLAIM = {
   type: 'object',
@@ -37,6 +56,7 @@ const PLAN = {
   properties: {
     mode: { type: 'string', enum: ['new', 'continue', 'extend'], description: 'new: there was no spec. continue: an earlier run stopped before finishing what the spec has. extend: the request asks for more than the spec had, and the spec was amended' },
     summary: { type: 'string', description: 'two or three sentences: what the product is, for whom, and the shape you chose (when extending: what is added or changed)' },
+    sandboxed: { type: 'boolean', description: 'what `sz-eyes sandbox` said when run as an ordinary command: true when it said "sandboxed"' },
     decided: { type: 'array', items: { type: 'string' }, description: 'what the request and the answers left open and how you decided it' },
     milestones: {
       type: 'array',
@@ -114,7 +134,7 @@ const CLOSED = {
 // ------------------------------------------------------------------ Plan
 phase('Plan')
 const plan = await agent(
-  `You are planning a product (or a large change to one) that will then be built milestone by milestone with nobody watching. ${GROUND} ${TOOLS}
+  `You are planning a product (or a large change to one) that will then be built milestone by milestone with nobody watching. ${GROUND}${SAND} ${TOOLS}
 
 The owner's request:
 ${request}
@@ -127,6 +147,8 @@ If \`.sz/spec.md\` already exists, the product has been worked on before. Read i
   - If \`git worktree list\` shows folders under \`.sz/trees/\`, an earlier run built milestones side by side and stopped before bringing them together: for each such milestone whose contract exists, state "built" (or "closed" if its contract is closed there) and "where": that folder's whole path.
   - "supersedes": the standing claims that will stop being true because what was asked has changed, each with the reason. Be exact: a standing claim you do not list stays a promise, and the milestone must keep it true. Prefer a change that keeps old promises (a new choice whose default is the old behaviour) to one that replaces them.
   - If it changes the shape of what is stored, one claim says that what was saved before the change is still there after it, shown by a test that starts from data in the old shape. The product carries over what exists; nobody is asked to delete their data.
+First, whichever mode it is: run \`sz-eyes sandbox\` once, as an ordinary command (do not ask for it to run outside any sandbox), and return under "sandboxed" whether it answered "sandboxed". Everyone who works after you is told what it said.
+
 Write no product code. Add a line to \`.sz/progress.md\` and commit \`.sz/\` if you amended the spec. If there is no spec yet (mode "new"):
 
 Write \`.sz/spec.md\` in the owner's language: what the product is and for whom, the one thing it must do well, its features in the order they will be built, how it is launched and looked at, and what is deliberately not built. Then cut the work into ${Math.min(maxMilestones, 6)} milestones at most:
@@ -141,9 +163,10 @@ Write \`.sz/spec.md\` in the owner's language: what the product is and for whom,
 - Do not write product code in this step. Add a line to \`.sz/progress.md\` saying the spec is written, and commit \`.sz/\`.
 
 Return the plan.`,
-  { label: 'plan', phase: 'Plan', schema: PLAN },
+  { label: 'plan', phase: 'Plan', schema: PLAN, ...effort('plan') },
 )
 if (!plan || !Array.isArray(plan.milestones) || plan.milestones.length === 0) return { error: 'no plan came back' }
+if (plan.sandboxed === true) SAND = IN_SANDBOX
 const milestones = plan.milestones.slice(0, maxMilestones)
 log(`${plan.mode === 'extend' ? 'spec extended' : plan.mode === 'continue' ? 'continuing' : 'spec written'}: ${milestones.length} milestone(s): ${milestones.map((m) => m.title).join(' / ')}`)
 
@@ -161,7 +184,7 @@ async function milestone(m, n, before, where) {
   const replaces = (m.supersedes || []).map((r) => `- ${r.contract}/${r.claim} | ${r.why}`).join('\n')
 
   const built = m.state === 'built' && m.contractId && m.launch ? { contractId: m.contractId, summary: 'built in an earlier run', launch: m.launch, disputes: m.disputes || [] } : await agent(
-    `You are building milestone ${n} of ${milestones.length} of a product, with nobody watching. ${GROUND} ${TOOLS}${PLACE}
+    `You are building milestone ${n} of ${milestones.length} of a product, with nobody watching. ${GROUND}${SAND} ${TOOLS}${PLACE}
 
 Milestone "${m.title}" (${m.id}): ${m.builds}
 Milestones before it:
@@ -184,7 +207,7 @@ Do this, in order:
 6. Commit the work on the current branch with a message that says what the milestone built.
 
 Do not judge your own claims and do not record verdicts: someone who did not build this will operate it. Do not leave a server running.`,
-    { label: `build:${m.id}`, phase: 'Build', schema: BUILT },
+    { label: `build:${m.id}`, phase: 'Build', schema: BUILT, ...effort('build') },
   )
   if (!built || (built.blocked && built.blocked.trim() !== '')) {
     stopped = `milestone "${m.title}" could not be built: ${built ? built.blocked : 'the builder did not answer'}`
@@ -198,7 +221,7 @@ Do not judge your own claims and do not record verdicts: someone who did not bui
   for (const dispute of built.disputes || []) {
     await agent(
       `Settle a dispute about a frozen check, met while building contract \`${built.contractId}\` in the project in ${here}.${PLACE} The file: \`${dispute.file}\`. It was frozen by that contract or by an earlier one that is closed: the contracts under \`.sz/contracts/\` say which, and a correction is recorded on the contract that froze it. What the builder says is wrong with it: ${dispute.problem}. The product is launched like this: ${built.launch}. Decide which it is (the check, the product, the claim, or a claim that what the owner asked later has replaced), act as your instructions say for that case, and return what you decided.`,
-      { label: `arbiter:${m.id}`, phase: 'Build', agentType: 'sz:arbiter', schema: { type: 'object', properties: { which: { type: 'string', enum: ['check', 'product', 'claim', 'replaced'] }, changed: { type: 'string' }, now: { type: 'string' } }, required: ['which', 'now'] } },
+      { label: `arbiter:${m.id}`, phase: 'Build', agentType: 'sz:arbiter', ...effort('verify'), schema: { type: 'object', properties: { which: { type: 'string', enum: ['check', 'product', 'claim', 'replaced'] }, changed: { type: 'string' }, now: { type: 'string' } }, required: ['which', 'now'] } },
     )
   }
 
@@ -207,19 +230,19 @@ Do not judge your own claims and do not record verdicts: someone who did not bui
   // again: null for the first look, or what was shown false and has been worked on since.
   const verify = (again) =>
     agent(
-      `Verify contract \`${built.contractId}\` of the project in ${here}.${PLACE} The product is launched like this: ${built.launch}. ${
+      `Verify contract \`${built.contractId}\` of the project in ${here}.${PLACE}${SAND} The product is launched like this: ${built.launch}. ${
         again
           ? `This is a second look, after a fix. ${again.claims.length > 0 ? `These claims of the contract were shown false before: ${again.claims.join(', ')}. Check each from the start, on the product as it is now, and record it with \`sz-eyes contract claim\`. ` : ''}${again.standing.length > 0 ? `These promises of earlier work were found broken: ${again.standing.join(', ')}. Show each again and record it with ${record}. ` : ''}A fix can break a neighbour: run once more every flow, test and command of this contract's other claims and of what stood before (\`sz-eyes standing\`), and report whatever fails now (a claim of this contract under "refuted", recorded with \`sz-eyes contract claim\`; a promise of earlier work under "broken", recorded as above). Claims you did not look at again keep their verdict: leave them out. Before the fix, this was noticed outside the claims: ${again.noticed.length > 0 ? again.noticed.map((n) => `[${n}]`).join(' ') : '(nothing)'}. Under "noticed" return each of those that is still so on the product as it is now (drop one the fix has ended) and whatever you notice that is new.`
           : `Give every claim a verdict and record each with \`sz-eyes contract claim\`. Then show again what stood before this work (\`sz-eyes standing\`) and record each with ${record}.`
       } I am telling you nothing about whether any claim is true. Record what you notice that no claim covers with \`sz-eyes contract notice\`, stop any server you start, and return the verdicts: under "broken" every promise of earlier work that does not hold now, under "held" every one you showed again that holds.`,
-      { label: `verify:${m.id}${again ? ':again' : ''}`, phase: 'Verify', agentType: 'sz:verifier', schema: VERDICT },
+      { label: `verify:${m.id}${again ? ':again' : ''}`, phase: 'Verify', agentType: 'sz:verifier', schema: VERDICT, ...effort('verify') },
     )
   let verdict = await verify(null)
   for (let round = 1; round <= 2 && verdict && verdict.refuted.length + (verdict.broken || []).length > 0; round++) {
     const wrong = verdict.refuted.map((r) => `- ${r.id}: ${r.fact}`).join('\n') || '(none)'
     const broke = (verdict.broken || []).map((b) => `- ${b.key}: ${b.fact}`).join('\n')
     await agent(
-      `You are fixing a product so that claims shown false on it become true. ${GROUND} ${TOOLS}${PLACE}
+      `You are fixing a product so that claims shown false on it become true. ${GROUND}${SAND} ${TOOLS}${PLACE}
 
 Contract \`${built.contractId}\` (read it: \`sz-eyes contract show ${built.contractId}\`). The product is launched like this: ${built.launch}.
 Someone who did not build it operated the product and found these claims false:
@@ -227,7 +250,7 @@ ${wrong}
 ${broke ? `And these were true before this work and are not now (each is a promise of earlier work: \`sz-eyes standing\` shows how it is checked):\n${broke}` : ''}
 
 Find the cause of each in the product and fix it there. Do not edit the contract, the flows or the tests it names, or those of earlier work, and do not record verdicts. Check that what was already true still is (run the project's checks). Commit the fix. If a claim cannot be made true without changing what was asked, change nothing for it and say why.`,
-      { label: `fix:${m.id}:${round}`, phase: 'Build', schema: { type: 'object', properties: { fixed: { type: 'array', items: { type: 'string' } }, notFixed: { type: 'array', items: { type: 'string' } } }, required: ['fixed'] } },
+      { label: `fix:${m.id}:${round}`, phase: 'Build', ...effort('build'), schema: { type: 'object', properties: { fixed: { type: 'array', items: { type: 'string' } }, notFixed: { type: 'array', items: { type: 'string' } } }, required: ['fixed'] } },
     )
     const again = await verify({ claims: verdict.refuted.map((r) => r.id), standing: (verdict.broken || []).map((b) => b.key), noticed: verdict.noticed || [] })
     if (!again) break
@@ -269,7 +292,7 @@ Find the cause of each in the product and fix it there. Do not edit the contract
 5. Add one line to \`.sz/progress.md\` in the owner's language: the date, the milestone, how many claims are proven, refuted and unchecked, how many promises of earlier work were shown again and whether any broke or was replaced, anything the verifier noticed that the owner should know, and what comes next. The figures are these, as the verifier returned them: ${verdict.proven.length} proven, ${verdict.refuted.length} refuted, ${verdict.unchecked.length} unchecked${verdict.stood === undefined ? '' : `; of what stood before this milestone, ${verdict.stood} hold`}, ${(verdict.broken || []).length} broken, ${(m.supersedes || []).length} replaced. Use them in the line and in the commit message; do not count again from \`sz-eyes standing\`, which after closing also counts this milestone's own claims.
 6. Commit \`.sz/\` (the contract, the evidence, the standing record, the backlog, the progress line)${where ? ', on this folder\'s own branch' : ''}.
 Change no product code.`,
-    { label: `close:${m.id}`, phase: 'Close', schema: CLOSED },
+    { label: `close:${m.id}`, phase: 'Close', schema: CLOSED, ...effort('close') },
   )
   const broken = verdict.broken || []
   const entry = { id: m.id, title: m.title, contractId: built.contractId, proven: verdict.proven, refuted: verdict.refuted, unchecked: verdict.unchecked, broken, stood: verdict.stood === undefined ? null : verdict.stood, replaced: m.supersedes || [], noticed: verdict.noticed || [], report: closed ? closed.report : null, corrections: (closed && closed.corrections) || [] }
@@ -307,12 +330,13 @@ const done = []
 const closedIds = new Set()
 const joins = []
 let stopped = null
-const beforeText = () => done.map((d) => `- ${d.title}: ${d.refuted.length === 0 ? 'proven' : `left with ${d.refuted.length} claim(s) refuted`}`).join('\n') || '(this is the first)'
+const beforeText = () => done.map((d) => `- ${d.title}: ${d.earlier ? 'closed in an earlier run' : d.refuted.length === 0 ? 'proven' : `left with ${d.refuted.length} claim(s) refuted`}`).join('\n') || '(this is the first)'
 const inOrder = () => done.sort((a, b) => milestones.findIndex((m) => m.id === a.id) - milestones.findIndex((m) => m.id === b.id))
 
 for (const m of milestones) {
   if (m.state !== 'closed' || m.where) continue
-  done.push({ id: m.id, title: m.title, contractId: m.contractId || m.id, proven: m.claims.map((c) => c.id), refuted: [], unchecked: [], noticed: [], report: null, earlier: true })
+  // What was shown of it is in its contract (some of its claims may be the owner's to judge, still open): none of that is repeated here as "proven".
+  done.push({ id: m.id, title: m.title, contractId: m.contractId || m.id, earlier: true, verdicts: `closed in an earlier run: sz-eyes contract show ${m.contractId || m.id}`, proven: [], refuted: [], unchecked: [], noticed: [], report: null })
   closedIds.add(m.id)
   log(`${m.title}: closed in an earlier run`)
 }
@@ -342,7 +366,7 @@ Then, if any merged:
 3. ${corrections.length > 0 ? `Correct \`.sz/map.md\` and \`.sz/spec.md\`: each of these is a line a milestone made false and what it should say now. ${corrections.map((c) => `[${c}]`).join(' ')} Commit.` : 'Nothing in the map or the spec was reported as made false.'}
 4. If what the product depends on changed (its lock file), put the dependencies in place again as the map says.
 Run nothing else and judge nothing.`,
-      { label: `join:${some.map((m) => m.id).join('+')}${again ? ':again' : ''}`, phase: 'Verify', schema: JOINED },
+      { label: `join:${some.map((m) => m.id).join('+')}${again ? ':again' : ''}`, phase: 'Verify', schema: JOINED, ...effort('join') },
     )
   let joined = await join(group, false)
   if (!joined) return `milestones ${group.map((m) => `"${m.title}"`).join(', ')} were built side by side and could not be brought together (nobody answered). Each is closed on its own branch (sz/<id>) in its folder under .sz/trees/.`
@@ -352,7 +376,7 @@ Run nothing else and judge nothing.`,
   const stuck = (joined.conflicted || []).map((c) => ({ m: group.find((g) => g.id === c.id), files: c.files })).filter((c) => c.m)
   for (const { m, files } of stuck) {
     await agent(
-      `You are bringing one milestone's work up to date with the product it has to join. ${GROUND} ${TOOLS}
+      `You are bringing one milestone's work up to date with the product it has to join. ${GROUND}${SAND} ${TOOLS}
 
 Milestone "${m.title}" (contract \`${m.id}\`, closed) was built in the folder \`${whereOf.get(m.id)}\` beside others. The others have been brought into the project's own folder, and this one's branch no longer merges into it: ${files.join(', ') || '(git did not say which files)'}.
 
@@ -362,7 +386,7 @@ Do everything in that folder (start every command with \`cd ${whereOf.get(m.id)}
 3. Run the project's whole check command and this milestone's own flows and tests there, and fix the product until they pass.
 4. Commit.
 Do not merge anything into the project's own folder yourself, and do not record verdicts.`,
-      { label: `resolve:${m.id}`, phase: 'Build', schema: { type: 'object', properties: { settled: { type: 'string', description: 'what conflicted and how each was settled' }, cannot: { type: 'string', description: 'empty unless two milestones cannot both be true: then which claims, and why' } }, required: ['settled'] } },
+      { label: `resolve:${m.id}`, phase: 'Build', ...effort('build'), schema: { type: 'object', properties: { settled: { type: 'string', description: 'what conflicted and how each was settled' }, cannot: { type: 'string', description: 'empty unless two milestones cannot both be true: then which claims, and why' } }, required: ['settled'] } },
     )
   }
   if (stuck.length > 0) {
@@ -376,24 +400,24 @@ Do not merge anything into the project's own folder yourself, and do not record 
     const record = `\`sz-eyes standing record <contract>/<claim> --status holds|broken|unchecked --during ${lastId} --note "<what was run and what it showed>"\``
     const look = (again) =>
       agent(
-        `Milestones ${group.filter((m) => merged.has(m.id)).map((m) => `"${m.title}"`).join(', ')} of the project in the current folder were built side by side, each proven in a folder of its own, and have just been brought into this one. Nobody has seen them together. There is no new claim to prove. ${
+        `Milestones ${group.filter((m) => merged.has(m.id)).map((m) => `"${m.title}"`).join(', ')} of the project in the current folder were built side by side, each proven in a folder of its own, and have just been brought into this one. Nobody has seen them together. There is no new claim to prove.${SAND} ${
           again
             ? `This is a second look, after a fix. These promises did not hold when the milestones were brought together: ${again.join(', ')}. Show each again, and once more everything else that stands, since a fix can break a neighbour.`
             : `Show again every claim that stands (\`sz-eyes standing\`) on the product as it is now in this folder: run every flow, test and command they are shown by (the project's whole check command in one go where it has one), and look at each screen that more than one of these milestones changed.`
         } The product is launched as \`.sz/map.md\` says. Record each with ${record}. I am telling you nothing about whether they hold. Record what you notice that no claim covers and that being brought together caused with \`sz-eyes contract notice ${lastId}\` only if that contract is still open; otherwise return it under "noticed". Stop any server you start. Return under "broken" every promise that does not hold now, under "held" those you showed again that hold, under "stood" how many hold; leave "proven", "refuted" and "unchecked" empty.`,
-        { label: `gate:${group.map((m) => m.id).join('+')}${again ? ':again' : ''}`, phase: 'Verify', agentType: 'sz:verifier', schema: VERDICT },
+        { label: `gate:${group.map((m) => m.id).join('+')}${again ? ':again' : ''}`, phase: 'Verify', agentType: 'sz:verifier', schema: VERDICT, ...effort('verify') },
       )
     gate = await look(null)
     for (let round = 1; round <= 2 && gate && !(gate.sandbox || '').trim() && (gate.broken || []).length > 0; round++) {
       const broke = gate.broken.map((b) => `- ${b.key}: ${b.fact}`).join('\n')
       await agent(
-        `You are fixing a product after milestones that were built side by side were brought into one. ${GROUND} ${TOOLS}
+        `You are fixing a product after milestones that were built side by side were brought into one. ${GROUND}${SAND} ${TOOLS}
 
 Each was proven alone. Together, these promises do not hold (each is a standing claim: \`sz-eyes standing\` shows how it is checked):
 ${broke}
 
 Find the cause in the product (usually two milestones that each changed the same thing their own way) and fix it there so that all of them hold. Do not edit a contract or the flows and tests one names, and do not record verdicts. Run the project's checks. Commit the fix.`,
-        { label: `mend:${group.map((m) => m.id).join('+')}:${round}`, phase: 'Build', schema: { type: 'object', properties: { fixed: { type: 'array', items: { type: 'string' } }, notFixed: { type: 'array', items: { type: 'string' } } }, required: ['fixed'] } },
+        { label: `mend:${group.map((m) => m.id).join('+')}:${round}`, phase: 'Build', ...effort('build'), schema: { type: 'object', properties: { fixed: { type: 'array', items: { type: 'string' } }, notFixed: { type: 'array', items: { type: 'string' } } }, required: ['fixed'] } },
       )
       const again = await look(gate.broken.map((b) => b.key))
       if (!again) break
@@ -420,7 +444,7 @@ while (!stopped) {
   // Left by an earlier run in a folder of its own: finished there, then brought in.
   if (first.where) {
     const whereOf = new Map([[first.id, first.where]])
-    if (first.state === 'closed') done.push({ id: first.id, title: first.title, contractId: first.contractId || first.id, proven: first.claims.map((c) => c.id), refuted: [], unchecked: [], noticed: [], report: null, earlier: true })
+    if (first.state === 'closed') done.push({ id: first.id, title: first.title, contractId: first.contractId || first.id, earlier: true, verdicts: `closed in an earlier run: sz-eyes contract show ${first.contractId || first.id}`, proven: [], refuted: [], unchecked: [], noticed: [], report: null })
     else {
       const r = await milestone(first, milestones.indexOf(first) + 1, beforeText(), first.where)
       if (r.entry) done.push(r.entry)
@@ -453,7 +477,7 @@ The milestone ids: ${group.map((m) => m.id).join(', ')}
 5. In each folder, put the product's dependencies in place as \`.sz/map.md\` says they are installed. Where the project's own folder already has them, copying is quicker than installing (on macOS \`cp -cR node_modules .sz/trees/<id>/node_modules\`). Whatever the map says must exist before the product starts and is not in git (a settings file, a built folder) is copied likewise. Never copy what the product stored (a database, what people entered): each folder starts with its own.
 6. In each folder run the project's quick check once (the map's check command), to see that it passes there before anything is changed.
 Return each id with the whole path of its folder (\`pwd\` inside it).`,
-    { label: `stage:${group.map((m) => m.id).join('+')}`, phase: 'Build', schema: STAGED },
+    { label: `stage:${group.map((m) => m.id).join('+')}`, phase: 'Build', schema: STAGED, ...effort('join') },
   )
   const whereOf = new Map(((staged && staged.folders) || []).map((f) => [f.id, f.where]))
   if (!staged || (staged.problem || '').trim() !== '' || group.some((m) => !whereOf.get(m.id))) {
