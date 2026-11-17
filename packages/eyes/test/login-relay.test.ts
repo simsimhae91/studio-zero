@@ -495,7 +495,10 @@ test('supabase start with the owner\'s keys in the vault: the block names the re
     // Handed over by environment: the command line got each secret; no file anywhere holds one.
     const ran = readFileSync(calls, 'utf8').split('\n').filter(Boolean).map((line) => JSON.parse(line) as { args: string[]; kakao: string | null; google: string | null });
     assert.deepEqual(ran.map((call) => call.args[0]), ['stop', 'start'], 'a stack that was up is taken down so that it reads the new configuration');
-    assert.deepEqual(ran.at(-1)!.args, ['start', '--runtime', 'docker', '--exclude', 'studio,analytics', '--output-format', 'json']);
+    // Started with every service up and kept up: left to itself the command line stops each service but the
+    // database after a minute with no traffic and wakes it on the next request, and a person's first tap on
+    // sign-in then opens an empty window (2026-11-18: 10 and 6 seconds with no answer on a phone, twice given up).
+    assert.deepEqual(ran.at(-1)!.args, ['start', '--runtime', 'docker', '--exclude', 'studio,analytics', '--output-format', 'json', '--eager']);
     assert.deepEqual([ran.at(-1)!.kakao, ran.at(-1)!.google], [sha(KAKAO_SECRET), sha(GOOGLE_SECRET)]);
     for (const { file, text } of everythingIn(m.root)) for (const secret of [KAKAO_SECRET, GOOGLE_SECRET]) assert.equal(text.includes(secret), false, `${file} holds a secret`);
     assert.equal(said.join('').includes(KAKAO_SECRET) || printed.join('').includes(GOOGLE_SECRET), false);
@@ -512,8 +515,9 @@ test('supabase start with the owner\'s keys in the vault: the block names the re
     assert.match(printed.join('').trim().split('\n').at(-1)!, /^\{"id":"5544e7ce750573f1"/);
 
     // Started again with nothing changed: not taken down, registered once.
-    await supabaseCommand(['start', '--runtime', 'docker', '--exclude', 'studio,analytics', '--output-format', 'json'], deps);
+    await supabaseCommand(['start', '--runtime', 'docker', '--exclude', 'studio,analytics', '--output-format', 'json', '--eager'], deps);
     assert.deepEqual(readFileSync(calls, 'utf8').split('\n').filter(Boolean).map((line) => (JSON.parse(line) as { args: string[] }).args[0]), ['stop', 'start', 'start']);
+    assert.deepEqual((JSON.parse(readFileSync(calls, 'utf8').split('\n').filter(Boolean).at(-1)!) as { args: string[] }).args.filter((arg) => arg === '--eager'), ['--eager'], 'a caller who says it is not answered with it twice');
     assert.equal(readBackends(m.logins).length, 1);
     assert.equal(readFileSync(join(folder, 'supabase', 'config.toml'), 'utf8'), config);
 
@@ -555,7 +559,7 @@ test('supabase start with no keys in the vault changes nothing and says which ke
     assert.equal(existsSync(join(m.logins, 'backends.json')), false, 'nothing is registered');
     assert.equal(m.relayPid(), null, 'no relay is started');
     assert.equal(m.eyes('login', 'relay', 'status').code, 1);
-    assert.deepEqual(readFileSync(calls, 'utf8').split('\n').filter(Boolean).map((line) => JSON.parse(line) as { args: string[]; kakao: string | null }), [{ args: ['start', '--output-format', 'json'], kakao: null, google: null }]);
+    assert.deepEqual(readFileSync(calls, 'utf8').split('\n').filter(Boolean).map((line) => JSON.parse(line) as { args: string[]; kakao: string | null }), [{ args: ['start', '--output-format', 'json', '--eager'], kakao: null, google: null }]);
     assert.match(said.join(''), /^sign-in: email only\. Not in the vault: login\/kakao\/client-id, login\/kakao\/client-secret, login\/google\/client-id, login\/google\/client-secret\./m);
 
     // Asking the command line how start is used (a session did, on 2026-11-16) starts and changes nothing, keys or not.

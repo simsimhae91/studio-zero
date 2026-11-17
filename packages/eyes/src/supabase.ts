@@ -16,6 +16,11 @@ import type { SecretStore } from './secrets.ts';
  * command line by environment variable (the configuration names them, never holds them), the backend is
  * registered with the relay, and the relay is started if it is not up. Every other call on a stack wired so is
  * handed the secrets too, since the configuration names them.
+ *
+ * `start` also asks for every service up and kept up (`--eager`). Left to itself the command line's stack stops
+ * each service but the database after a minute without traffic and wakes it on the next request. A wake is
+ * about a second when the machine is warm and was 46 seconds after two idle hours (2026-11-18): a person's first
+ * tap on sign-in opened an empty window on 127.0.0.1, and a flow's first step ran into its ten-second limit.
  */
 
 export interface SupabaseDeps {
@@ -51,6 +56,9 @@ function readArgs(args: readonly string[], cwd: string): { verb: string | null; 
 
 const names = (providers: readonly string[]): string => (providers.length <= 1 ? providers.join('') : `${providers.slice(0, -1).join(', ')} and ${providers.at(-1)}`);
 const TITLE: Record<Provider, string> = { kakao: 'Kakao', google: 'Google' };
+
+/** A start's words with `--eager` among them, once. */
+const eager = (args: readonly string[]): string[] => (args.includes('--eager') ? [...args] : [...args, '--eager']);
 
 export async function supabaseCommand(args: string[], deps: SupabaseDeps): Promise<number> {
   const { verb, folder } = readArgs(args, deps.cwd);
@@ -104,7 +112,7 @@ export async function supabaseCommand(args: string[], deps: SupabaseDeps): Promi
   }
 
   // Whatever the configuration names now, the command line is handed.
-  const started = call(args, hasLoginBlock(readFileSync(config, 'utf8')) ? loginEnv(keys) : {}, { capture: 'out' });
+  const started = call(eager(args), hasLoginBlock(readFileSync(config, 'utf8')) ? loginEnv(keys) : {}, { capture: 'out' });
   const code = started.status ?? 1;
   if (wired) {
     const off = PROVIDERS.filter((provider) => !on.includes(provider));
