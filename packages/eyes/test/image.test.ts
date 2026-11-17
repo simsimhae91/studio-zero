@@ -1,11 +1,13 @@
 // Pictures for a product's screens are made on the subscription the owner already pays for: the Codex CLI's own
 // image generation, signed in with ChatGPT. Never through an API that bills for each image. Run through the real
 // command line against a fake `codex` (SZ_CODEX_BIN) that behaves as each test asks: no real image is ever made.
+// Every picture made is kept in the owner's stock, here a folder of each test's own (SZ_STOCK_DIR).
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { crc32, deflateSync } from 'node:zlib';
@@ -108,9 +110,11 @@ interface Place {
   assets: string;
   tmp: string;
   codexHome: string;
+  /** The owner's stock of pictures, for this test: not made until something is kept. */
+  stock: string;
   done: () => void;
 }
-/** A project, the folder its pictures go to, codex's own home and a temporary folder, all the test's own. */
+/** A project, the folder its pictures go to, codex's own home, a stock and a temporary folder, all the test's own. */
 function place(): Place {
   const root = mkdtempSync(join(tmpdir(), 'sz-image-test-'));
   const project = join(root, 'project');
@@ -118,7 +122,7 @@ function place(): Place {
   const tmp = join(root, 'tmp');
   const codexHome = join(root, 'codex-home');
   for (const dir of [project, tmp, codexHome]) mkdirSync(dir, { recursive: true });
-  return { root, project, assets, tmp, codexHome, done: () => rmSync(root, { recursive: true, force: true }) };
+  return { root, project, assets, tmp, codexHome, stock: join(root, 'stock'), done: () => rmSync(root, { recursive: true, force: true }) };
 }
 
 /** `sz-eyes image ...` as its own process, with API keys set in the environment it is started with. */
@@ -126,7 +130,7 @@ const image = (p: Place, bin: string, args: string[], env: Record<string, string
   new Promise((done) => {
     const child = spawn(process.execPath, [CLI, 'image', ...args], {
       cwd: p.project,
-      env: { ...process.env, SZ_CODEX_BIN: bin, CODEX_HOME: p.codexHome, TMPDIR: p.tmp, OPENAI_API_KEY: 'sk-proj-test', CODEX_API_KEY: 'sk-codex-test', ANTHROPIC_API_KEY: 'sk-ant-test', ...env },
+      env: { ...process.env, SZ_CODEX_BIN: bin, CODEX_HOME: p.codexHome, TMPDIR: p.tmp, SZ_STOCK_DIR: p.stock, OPENAI_API_KEY: 'sk-proj-test', CODEX_API_KEY: 'sk-codex-test', ANTHROPIC_API_KEY: 'sk-ant-test', ...env },
     });
     let out = '';
     let err = '';
@@ -136,6 +140,8 @@ const image = (p: Place, bin: string, args: string[], env: Record<string, string
   });
 
 const PROMPT = '한강 둔치의 저녁, 자전거를 세워 두고 쉬는 사람들, 따뜻한 역광: 산책 기록 앱 첫 화면의 큰 사진';
+/** What every make says about its picture for the stock: what kind of picture, and what is in it. */
+const KEPT_AS = ['--kind', 'place', '--what', 'riverside park at dusk, bicycles resting'];
 /** A picture an earlier call left under the same name: a whole PNG of the asked size. */
 const earlier = (p: Place, name: string, width = 1024, height = 1024): Buffer => {
   mkdirSync(p.assets, { recursive: true });
@@ -149,12 +155,48 @@ const noKeys = (calls: { env: string[] }[]): void => {
 /** Nothing of a call is left in the temporary folder. */
 const tidy = (p: Place): void => assert.deepEqual(readdirSync(p.tmp), []);
 
+/** The stock's index, a line an entry. */
+const stockLines = (p: Place): Record<string, unknown>[] =>
+  existsSync(join(p.stock, 'index.jsonl'))
+    ? readFileSync(join(p.stock, 'index.jsonl'), 'utf8')
+        .split('\n')
+        .filter((line) => line.trim() !== '')
+        .map((line) => JSON.parse(line) as Record<string, unknown>)
+    : [];
+/** Every picture file in the stock, from its pictures folder. */
+const stockFiles = (p: Place): string[] => (existsSync(join(p.stock, 'pictures')) ? readdirSync(join(p.stock, 'pictures'), { recursive: true, encoding: 'utf8' }).filter((name) => /\.\w+$/.test(name)) : []);
+const sha = (bytes: Buffer): string => createHash('sha256').update(bytes).digest('hex');
+/** Where a stock command would find codex if it ever asked for it: nowhere. */
+const NO_CODEX = '/nonexistent/codex';
+
+/** The head of a JPEG of that size: enough for what is read from it (its kind and its size), never decoded. */
+const jpeg = (width: number, height: number): Buffer =>
+  Buffer.from([0xff, 0xd8, 0xff, 0xc0, 0x00, 0x11, 0x08, height >> 8, height & 255, width >> 8, width & 255, 0x03, 0x01, 0x22, 0x00, 0x02, 0x11, 0x01, 0x03, 0x11, 0x01, 0xff, 0xd9]);
+/** The head of an extended WebP of that size. */
+const webp = (width: number, height: number): Buffer => {
+  const bytes = Buffer.alloc(30);
+  bytes.write('RIFF', 0, 'latin1');
+  bytes.writeUInt32LE(22, 4);
+  bytes.write('WEBPVP8X', 8, 'latin1');
+  bytes.writeUInt32LE(10, 16);
+  bytes.writeUIntLE(width - 1, 24, 3);
+  bytes.writeUIntLE(height - 1, 27, 3);
+  return bytes;
+};
+
+/** A picture brought into the stock with `image keep`, from a file of the test's own. */
+const keep = (p: Place, bytes: Buffer, kind: string, what: string, more: string[] = []): Promise<Ran> => {
+  const file = join(p.root, `in-${sha(bytes).slice(0, 12)}.bin`);
+  writeFileSync(file, bytes);
+  return image(p, NO_CODEX, ['keep', '--file', file, '--kind', kind, '--what', what, ...more]);
+};
+
 test('one picture is made on the ChatGPT login, checked on disk, and put in place at the size asked', async () => {
   const p = place();
   try {
     const codex = fakeCodex(p.root, 'ok');
     const old = earlier(p, 'hero', 1600, 900);
-    const run = await image(p, codex.bin, ['make', '--prompt', PROMPT, '--name', 'hero', '--size', '1600x900']);
+    const run = await image(p, codex.bin, ['make', '--prompt', PROMPT, '--name', 'hero', '--size', '1600x900', ...KEPT_AS]);
     assert.equal(run.code, 0, run.text);
     const file = join(p.assets, 'hero.png');
     assert.match(run.out, new RegExp(file.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
@@ -180,7 +222,7 @@ test('one picture is made on the ChatGPT login, checked on disk, and put in plac
 
     // --json gives the same as an object; --out puts it elsewhere; the default size is 1024x1024.
     const out = join(p.root, 'elsewhere');
-    const json = await image(p, codex.bin, ['make', '--prompt', PROMPT, '--name', 'square-1', '--out', out, '--json']);
+    const json = await image(p, codex.bin, ['make', '--prompt', PROMPT, '--name', 'square-1', '--out', out, '--json', ...KEPT_AS]);
     assert.equal(json.code, 0, json.text);
     const said = JSON.parse(json.out);
     assert.equal(said.path, join(out, 'square-1.png'));
@@ -204,7 +246,7 @@ test('codex not signed in with ChatGPT, or not there at all: nothing is made, co
     ] as const) {
       const codex = fakeCodex(join(p.root, mode), mode);
       const old = earlier(p, 'hero');
-      const run = await image(p, codex.bin, ['make', '--prompt', PROMPT, '--name', 'hero']);
+      const run = await image(p, codex.bin, ['make', '--prompt', PROMPT, '--name', 'hero', ...KEPT_AS]);
       assert.equal(run.code, 1, run.text);
       assert.match(run.text, says);
       assert.match(run.text, /`codex login`/);
@@ -214,8 +256,9 @@ test('codex not signed in with ChatGPT, or not there at all: nothing is made, co
       noKeys(codex.calls());
       assert.deepEqual(readFileSync(join(p.assets, 'hero.png')), old);
       assert.deepEqual(readdirSync(p.assets), ['hero.png']);
+      assert.deepEqual(stockLines(p), []);
     }
-    const missing = await image(p, join(p.root, 'no-such-codex'), ['make', '--prompt', PROMPT, '--name', 'hero']);
+    const missing = await image(p, join(p.root, 'no-such-codex'), ['make', '--prompt', PROMPT, '--name', 'hero', ...KEPT_AS]);
     assert.equal(missing.code, 1, missing.text);
     assert.match(missing.text, /not installed/);
     assert.match(missing.text, /`codex login`/);
@@ -231,17 +274,25 @@ test('what the call asks is checked before codex is asked anything', async () =>
   try {
     const codex = fakeCodex(p.root, 'ok');
     for (const [args, says] of [
-      [['make', '--name', 'hero'], /--prompt/],
-      [['make', '--prompt', PROMPT], /--name/],
-      [['make', '--prompt', PROMPT, '--name', 'Hero Image'], /lower-case letters, digits and dashes/],
-      [['make', '--prompt', PROMPT, '--name', 'hero', '--size', '800x600'], /1024x1024.*1600x900/],
+      [['make', '--name', 'hero', ...KEPT_AS], /--prompt missing/],
+      [['make', '--prompt', PROMPT, ...KEPT_AS], /--name missing/],
+      [['make', '--prompt', PROMPT, '--name', 'Hero Image', ...KEPT_AS], /lower-case letters, digits and dashes/],
+      [['make', '--prompt', PROMPT, '--name', 'hero', '--size', '800x600', ...KEPT_AS], /1024x1024.*1600x900/],
+      // The stock is told what kind of picture it is and what is in it, every time: without them nothing starts.
+      [['make', '--prompt', PROMPT, '--name', 'hero', '--what', 'riverside park at dusk'], /--kind missing/],
+      [['make', '--prompt', PROMPT, '--name', 'hero', '--kind', 'place'], /--what missing/],
+      [['make', '--prompt', PROMPT, '--name', 'hero'], /--kind, --what missing/],
+      [['make', '--prompt', PROMPT, '--name', 'hero', '--kind', 'place', '--what', '   '], /--what missing/],
+      [['make', '--prompt', PROMPT, '--name', 'hero', '--kind', '!!!', '--what', 'riverside park'], /--kind "!!!" has no letter or digit/],
+      [['make', '--prompt', PROMPT, '--name', 'hero', '--no-stock'], /--kind, --what missing/],
     ] as const) {
       const run = await image(p, codex.bin, [...args]);
       assert.equal(run.code, 1, run.text);
       assert.match(run.text, says);
     }
-    assert.deepEqual(codex.calls(), []);
+    assert.deepEqual(codex.calls(), [], 'codex was not even asked how it is signed in');
     assert.ok(!existsSync(p.assets));
+    assert.ok(!existsSync(p.stock), 'nothing was kept');
   } finally {
     p.done();
   }
@@ -256,13 +307,15 @@ test('the result is what is on disk: no file, or a picture of another size, is n
     ] as const) {
       const codex = fakeCodex(join(p.root, mode), mode);
       const old = earlier(p, 'hero');
-      const run = await image(p, codex.bin, ['make', '--prompt', PROMPT, '--name', 'hero']);
+      const run = await image(p, codex.bin, ['make', '--prompt', PROMPT, '--name', 'hero', ...KEPT_AS]);
       assert.equal(run.code, 1, `${mode}: ${run.text}`);
       assert.match(run.text, says);
       assert.match(run.text, /no image was made/);
       assert.match(run.text, /hero\.png already in .* is an earlier one/, 'the earlier file is not taken for this call’s');
       assert.deepEqual(readFileSync(join(p.assets, 'hero.png')), old);
       assert.deepEqual(readdirSync(p.assets), ['hero.png']);
+      assert.deepEqual(stockLines(p), [], 'a picture that was not made is not kept');
+      assert.deepEqual(stockFiles(p), []);
       noKeys(codex.calls());
       tidy(p);
     }
@@ -276,7 +329,7 @@ test('a call that runs past its time limit is stopped, codex with it', async () 
   try {
     const codex = fakeCodex(p.root, 'hang');
     const old = earlier(p, 'hero');
-    const run = await image(p, codex.bin, ['make', '--prompt', PROMPT, '--name', 'hero'], { SZ_IMAGE_TIMEOUT_MS: '4000' });
+    const run = await image(p, codex.bin, ['make', '--prompt', PROMPT, '--name', 'hero', ...KEPT_AS], { SZ_IMAGE_TIMEOUT_MS: '4000' });
     assert.equal(run.code, 1, run.text);
     assert.match(run.text, /did not finish within/);
     assert.match(run.text, /no image was made/);
@@ -304,7 +357,7 @@ test('codex refusing (the subscription’s own limit reached) is passed on in it
   try {
     const codex = fakeCodex(p.root, 'limit');
     const old = earlier(p, 'hero');
-    const run = await image(p, codex.bin, ['make', '--prompt', PROMPT, '--name', 'hero']);
+    const run = await image(p, codex.bin, ['make', '--prompt', PROMPT, '--name', 'hero', ...KEPT_AS]);
     assert.equal(run.code, 1, run.text);
     assert.ok(run.text.includes(LIMIT), run.text);
     assert.match(run.text, /no image was made/);
@@ -322,12 +375,13 @@ test('several calls at once, under different names, do not get in each other’s
   try {
     const codex = fakeCodex(p.root, 'ok', 400);
     const runs = await Promise.all([
-      image(p, codex.bin, ['make', '--prompt', PROMPT, '--name', 'walk-1']),
-      image(p, codex.bin, ['make', '--prompt', PROMPT, '--name', 'walk-2', '--size', '512x512']),
-      image(p, codex.bin, ['make', '--prompt', PROMPT, '--name', 'walk-3', '--size', '1600x900']),
+      image(p, codex.bin, ['make', '--prompt', PROMPT, '--name', 'walk-1', ...KEPT_AS]),
+      image(p, codex.bin, ['make', '--prompt', PROMPT, '--name', 'walk-2', '--size', '512x512', ...KEPT_AS]),
+      image(p, codex.bin, ['make', '--prompt', PROMPT, '--name', 'walk-3', '--size', '1600x900', ...KEPT_AS]),
     ]);
     for (const run of runs) assert.equal(run.code, 0, run.text);
     assert.deepEqual(readdirSync(p.assets).sort(), ['walk-1.png', 'walk-2.png', 'walk-3.png']);
+    assert.equal(stockLines(p).length, 3, 'each of the three was kept in the stock');
     assert.equal(sizeOf(readFileSync(join(p.assets, 'walk-1.png'))), '1024x1024');
     assert.equal(sizeOf(readFileSync(join(p.assets, 'walk-2.png'))), '512x512');
     assert.equal(sizeOf(readFileSync(join(p.assets, 'walk-3.png'))), '1600x900');
@@ -345,7 +399,7 @@ test('where codex keeps what it makes cannot be written (the session’s command
   try {
     const codex = fakeCodex(p.root, 'ok');
     chmodSync(p.codexHome, 0o555);
-    const run = await image(p, codex.bin, ['make', '--prompt', PROMPT, '--name', 'hero']);
+    const run = await image(p, codex.bin, ['make', '--prompt', PROMPT, '--name', 'hero', ...KEPT_AS]);
     chmodSync(p.codexHome, 0o755);
     assert.notEqual(run.code, 0, run.text);
     assert.match(run.text, /cannot write there \(EACCES\)/);
@@ -358,7 +412,344 @@ test('where codex keeps what it makes cannot be written (the session’s command
   }
 });
 
-const hook = (input: string, env: Record<string, string> = {}): { code: number | null; out: string; err: string } => {
+// The stock: every picture made is kept on the owner's machine, outside any project, and looked in before
+// another is made ("저장해두죠": faces, a bathroom scale, a meal were made again for every product).
+
+test('a picture made is left in the project, and a copy is kept in the stock with its prompt and a full index line', async () => {
+  const p = place();
+  try {
+    const codex = fakeCodex(p.root, 'ok');
+    const run = await image(p, codex.bin, ['make', '--prompt', PROMPT, '--name', 'hero', '--size', '1600x900', '--kind', '풍경', '--what', '한강 둔치의 저녁, 쉬는 자전거']);
+    assert.equal(run.code, 0, run.text);
+    const placed = readFileSync(join(p.assets, 'hero.png'));
+    assert.equal(sizeOf(placed), '1600x900');
+    assert.deepEqual(readdirSync(p.assets), ['hero.png'], 'the project gets the picture and nothing else');
+    const all = stockLines(p);
+    assert.equal(all.length, 1);
+    const kept = all[0]!;
+    assert.deepEqual(Object.keys(kept), ['id', 'kind', 'what', 'prompt', 'width', 'height', 'file', 'sha256', 'addedAt', 'madeBy', 'for']);
+    assert.equal(kept.kind, '풍경');
+    assert.equal(kept.what, '한강 둔치의 저녁, 쉬는 자전거');
+    assert.equal(kept.prompt, PROMPT, 'the words it was made from');
+    assert.deepEqual([kept.width, kept.height], [1600, 900]);
+    assert.equal(kept.sha256, sha(placed));
+    assert.equal(kept.file, `pictures/풍경/한강-둔치의-저녁-쉬는-자전거-${sha(placed).slice(0, 8)}.png`, 'Hangul keeps its letters in the folder and file names');
+    assert.deepEqual(readFileSync(join(p.stock, kept.file as string)), placed, 'the copy is the picture placed in the project');
+    assert.equal(kept.madeBy, 'codex');
+    assert.equal(kept.for, basename(p.project), 'the project it was made for');
+    assert.ok(Date.parse(kept.addedAt as string) > Date.now() - 600_000);
+    assert.ok(run.out.includes(`kept in the stock: ${kept.id as string}`), run.out);
+    assert.ok(run.out.includes(join(p.stock, kept.file as string)), 'and where');
+    assert.match(run.out, /"풍경" is a new kind \(the first in the stock\)/);
+    tidy(p);
+
+    // --json says the same, with where the copy is; the kind is now there, so this one is not new.
+    const json = await image(p, codex.bin, ['make', '--prompt', PROMPT, '--name', 'square', '--json', '--kind', '풍경', '--what', 'the same evening, square']);
+    assert.equal(json.code, 0, json.text);
+    const said = JSON.parse(json.out) as { path: string; stock: { status: string; id: string; path: string; newKind: boolean } };
+    assert.equal(said.path, join(realpathSync(p.assets), 'square.png'));
+    const second = stockLines(p)[1]!;
+    assert.deepEqual([said.stock.status, said.stock.id, said.stock.path, said.stock.newKind], ['kept', second.id, join(p.stock, second.file as string), false]);
+
+    // --no-stock: a picture only right for this one product is placed, and the stock is left as it was.
+    const index = readFileSync(join(p.stock, 'index.jsonl'));
+    const files = stockFiles(p);
+    const only = await image(p, codex.bin, ['make', '--prompt', PROMPT, '--name', 'only-here', '--size', '512x512', '--no-stock', '--kind', '풍경', '--what', 'this product’s own app icon']);
+    assert.equal(only.code, 0, only.text);
+    assert.equal(sizeOf(readFileSync(join(p.assets, 'only-here.png'))), '512x512');
+    assert.deepEqual(readFileSync(join(p.stock, 'index.jsonl')), index);
+    assert.deepEqual(stockFiles(p), files);
+    assert.match(only.out, /not kept in the stock \(--no-stock\)/);
+    tidy(p);
+  } finally {
+    p.done();
+  }
+});
+
+test('before codex starts, a make is told what the stock holds of its kind and goes on; a make that fails keeps nothing', async () => {
+  const p = place();
+  try {
+    assert.equal((await keep(p, png(64, 64, 'face 1'), 'face', 'smiling woman in her thirties')).code, 0);
+    assert.equal((await keep(p, png(64, 64, 'face 2'), 'face', 'older man with glasses, laughing')).code, 0);
+    assert.equal((await keep(p, png(64, 64, 'meal'), 'food', 'bibimbap in a stone bowl')).code, 0);
+    const index = readFileSync(join(p.stock, 'index.jsonl'));
+    const codex = fakeCodex(p.root, 'limit');
+    const run = await image(p, codex.bin, ['make', '--prompt', 'a friendly face for the profile screen', '--name', 'avatar', '--kind', 'Face', '--what', 'young woman, short hair']);
+    assert.equal(run.code, 1, run.text);
+    assert.match(run.text, /the stock already holds 2 pictures of kind "face"/, 'a kind is the same kind whatever its case');
+    assert.ok(run.text.includes('sz-eyes image find --kind "face"'), run.text);
+    assert.ok(run.text.includes(LIMIT), 'it went on to codex (which here refused)');
+    assert.ok(run.text.indexOf('already holds') < run.text.indexOf(LIMIT), 'the reminder came first');
+    assert.deepEqual(readFileSync(join(p.stock, 'index.jsonl')), index, 'a make that failed adds nothing to the stock');
+    assert.equal(stockFiles(p).length, 3);
+    assert.ok(!existsSync(join(p.assets, 'avatar.png')));
+
+    // A kind the stock holds nothing of: no reminder, and a new kind lists the kinds there are.
+    const ok = fakeCodex(join(p.root, 'ok'), 'ok');
+    const fresh = await image(p, ok.bin, ['make', '--prompt', PROMPT, '--name', 'hero', ...KEPT_AS]);
+    assert.equal(fresh.code, 0, fresh.text);
+    assert.doesNotMatch(fresh.text, /already holds/);
+    assert.match(fresh.out, /"place" is a new kind\. Kinds already kept: face \(2\), food \(1\)/);
+    assert.equal(stockLines(p).length, 4);
+  } finally {
+    p.done();
+  }
+});
+
+test('where the stock cannot be written, make does not start codex (unless the picture is not to be kept)', async () => {
+  const p = place();
+  try {
+    const codex = fakeCodex(p.root, 'ok');
+    mkdirSync(p.stock);
+    chmodSync(p.stock, 0o555);
+    const run = await image(p, codex.bin, ['make', '--prompt', PROMPT, '--name', 'hero', ...KEPT_AS]);
+    const without = await image(p, codex.bin, ['make', '--prompt', PROMPT, '--name', 'hero', '--no-stock', ...KEPT_AS]);
+    chmodSync(p.stock, 0o755);
+    assert.equal(run.code, 1, run.text);
+    assert.match(run.text, /cannot write there \(EACCES\)/);
+    assert.match(run.text, /no image was made/);
+    assert.equal(codex.calls().filter((call) => call.args.includes('exec')).length, 1, 'codex made one picture: the one not to be kept');
+    assert.equal(without.code, 0, without.text);
+    assert.ok(existsSync(join(p.assets, 'hero.png')));
+    assert.deepEqual(readdirSync(p.stock), []);
+  } finally {
+    p.done();
+  }
+});
+
+test('find: by words of what or prompt, by kind, with nothing that matches, and on an empty stock', async () => {
+  const p = place();
+  try {
+    for (const args of [['find', 'face'], ['find'], ['find', '--kind', 'face']]) {
+      const empty = await image(p, NO_CODEX, args);
+      assert.equal(empty.code, 0, `an empty stock is not an error: ${empty.text}`);
+      assert.match(empty.out, /nothing is kept yet in /);
+    }
+    assert.equal((await keep(p, png(1024, 1024, 'a'), 'face', 'smiling woman in her thirties', ['--prompt', 'portrait photograph, soft window light'])).code, 0);
+    assert.equal((await keep(p, png(1600, 900, 'b'), '음식', '돌솥 비빔밥 한 그릇')).code, 0);
+    assert.equal((await keep(p, jpeg(800, 600), 'object', 'bathroom scale, white, from above', ['--prompt', 'a bathroom scale on warm tiles, soft light'])).code, 0);
+    const [face, food, scale] = stockLines(p) as { id: string; file: string; addedAt: string }[];
+
+    const byWords = await image(p, NO_CODEX, ['find', 'Woman', 'WINDOW']);
+    assert.equal(byWords.code, 0, byWords.text);
+    assert.ok(byWords.out.includes(face!.id), 'a word of what and a word of the prompt, in any case');
+    assert.ok(!byWords.out.includes(scale!.id) && !byWords.out.includes(food!.id), 'every word has to be somewhere in it');
+    for (const said of [join(p.stock, face!.file), '[face]', 'smiling woman in her thirties', '1024x1024', face!.addedAt.slice(0, 10)]) assert.ok(byWords.out.includes(said), `it says ${said}:\n${byWords.out}`);
+    assert.match(byWords.out, /sz-eyes image use <id> --name <name>/, 'and how to take one');
+
+    const soft = await image(p, NO_CODEX, ['find', 'soft', 'light']);
+    assert.ok(soft.out.includes(face!.id) && soft.out.includes(scale!.id) && !soft.out.includes(food!.id), soft.out);
+    const byKind = await image(p, NO_CODEX, ['find', '--kind', '음식']);
+    assert.ok(byKind.out.includes(food!.id) && !byKind.out.includes(face!.id), byKind.out);
+    const hangul = await image(p, NO_CODEX, ['find', '비빔밥']);
+    assert.ok(hangul.out.includes(food!.id), hangul.out);
+    const both = await image(p, NO_CODEX, ['find', 'soft', '--kind', 'Object']);
+    assert.ok(both.out.includes(scale!.id) && !both.out.includes(face!.id), both.out);
+    assert.ok(both.out.includes('800x600'));
+
+    const nothing = await image(p, NO_CODEX, ['find', 'zebra']);
+    assert.equal(nothing.code, 0, nothing.text);
+    assert.match(nothing.out, /nothing kept matches "zebra" \(3 pictures kept\)/);
+    assert.match(nothing.out, /face \(1\)/);
+    const counts = await image(p, NO_CODEX, ['find']);
+    assert.equal(counts.code, 0);
+    assert.match(counts.out, /3 pictures kept, by kind/);
+    for (const kind of [/face\s+1/, /음식\s+1/, /object\s+1/]) assert.match(counts.out, kind);
+
+    const json = JSON.parse((await image(p, NO_CODEX, ['find', '--kind', 'face', '--json'])).out) as { total: number; matches: { id: string; path: string; width: number; height: number }[] };
+    assert.equal(json.total, 3);
+    assert.deepEqual(json.matches.map((m) => [m.id, m.path, m.width, m.height]), [[face!.id, join(p.stock, face!.file), 1024, 1024]]);
+  } finally {
+    p.done();
+  }
+});
+
+/** A folder holding a `sips` that leaves something other than the picture asked for, and exits as if it had worked. */
+const brokenSips = (p: Place): string => {
+  const dir = join(p.root, 'broken-sips');
+  mkdirSync(dir, { recursive: true });
+  const bin = join(dir, 'sips');
+  writeFileSync(bin, `#!${process.execPath}\nconst args = process.argv.slice(2);\nconst i = args.indexOf('--out');\nrequire('node:fs').writeFileSync(i >= 0 ? args[i + 1] : args.at(-1), 'half a picture');\n`);
+  chmodSync(bin, 0o755);
+  return dir;
+};
+
+test('use: a stock picture is put in the project under the asked name, and an earlier file under that name stays as it was when that fails', async () => {
+  const p = place();
+  try {
+    const face = png(1024, 1024, 'face');
+    assert.equal((await keep(p, face, 'face', 'smiling woman in her thirties')).code, 0);
+    const photo = jpeg(800, 600);
+    assert.equal((await keep(p, photo, 'object', 'bathroom scale, from above')).code, 0);
+    const [faceId, photoId] = stockLines(p).map((one) => one.id as string) as [string, string];
+
+    const used = await image(p, NO_CODEX, ['use', faceId, '--name', 'avatar-1']);
+    assert.equal(used.code, 0, used.text);
+    assert.deepEqual(readFileSync(join(p.assets, 'avatar-1.png')), face, 'the same picture, byte for byte');
+    assert.ok(used.out.includes(join(p.assets, 'avatar-1.png')), used.out);
+    assert.match(used.out, /1024x1024/);
+    assert.ok(used.out.includes(faceId));
+    // A JPEG stays a JPEG; --out puts it elsewhere; --json says the same.
+    const out = join(p.root, 'web', 'public');
+    const elsewhere = JSON.parse((await image(p, NO_CODEX, ['use', photoId, '--name', 'scale.jpg', '--out', out, '--json'])).out) as { path: string; width: number; height: number };
+    assert.deepEqual([elsewhere.path, elsewhere.width, elsewhere.height], [join(out, 'scale.jpg'), 800, 600]);
+    assert.deepEqual(readFileSync(join(out, 'scale.jpg')), photo);
+    // Again under the same name: replaced whole, and it says so.
+    const again = await image(p, NO_CODEX, ['use', faceId, '--name', 'avatar-1']);
+    assert.match(again.out, /replaces the earlier avatar-1\.png/);
+
+    // Each way it can fail leaves the earlier avatar-2.png as it was, and nothing half-made beside it.
+    const old = earlier(p, 'avatar-2');
+    const emptyPath = join(p.root, 'no-sips-here');
+    mkdirSync(emptyPath);
+    rmSync(join(p.stock, stockLines(p)[1]!.file as string));
+    for (const [args, says, env] of [
+      [['use', 'no-such-picture', '--name', 'avatar-2'], /no picture no-such-picture is kept/, {}],
+      [['use', photoId, '--name', 'avatar-2'], /its picture is not there/, {}],
+      [['use', faceId, '--name', 'avatar-2', '--size', '96x96'], /sips is not on this machine/, { PATH: emptyPath }],
+      [['use', faceId, '--name', 'avatar-2', '--size', '96x96'], /not a picture of 96x96|is not a picture/, { PATH: brokenSips(p) }],
+      [['use', faceId, '--name', 'avatar-2', '--size', 'big'], /--size big/, {}],
+      [['use', faceId, '--name', 'Avatar Two'], /lower-case letters, digits and dashes/, {}],
+      [['use', faceId], /--name <name> is missing/, {}],
+      [['use', '--name', 'avatar-2'], /which picture/, {}],
+    ] as const) {
+      const failed = await image(p, NO_CODEX, [...args], env);
+      assert.equal(failed.code, 1, `${args.join(' ')}: ${failed.text}`);
+      assert.match(failed.text, says);
+      assert.deepEqual(readFileSync(join(p.assets, 'avatar-2.png')), old, `${args.join(' ')}: the earlier file is untouched`);
+      assert.deepEqual(readdirSync(p.assets).sort(), ['avatar-1.png', 'avatar-2.png'], `${args.join(' ')}: nothing half-made is left`);
+      tidy(p);
+    }
+  } finally {
+    p.done();
+  }
+});
+
+test('use --size: the copy is exactly that size, scaled to cover it and cut from the middle, never stretched', async (t) => {
+  const p = place();
+  try {
+    assert.equal((await keep(p, png(1600, 900, 'wide'), 'place', 'riverside park at dusk')).code, 0);
+    const id = stockLines(p)[0]!.id as string;
+    const square = await image(p, NO_CODEX, ['use', id, '--name', 'hero-square', '--size', '512x512']);
+    if (spawnSync('sips', ['--help']).error) {
+      t.diagnostic('sips is not on this machine (it comes with macOS): the size of a resized copy is not checked here');
+      assert.equal(square.code, 1, square.text);
+      assert.match(square.text, /sips is not on this machine/);
+      return;
+    }
+    if (square.code === 3) {
+      t.diagnostic(`sips cannot write its working copy inside the session's command sandbox, so the size of a resized copy is not checked in this run: ${square.text.trim()}`);
+      assert.match(square.text, /sandbox/);
+      return;
+    }
+    assert.equal(square.code, 0, square.text);
+    assert.equal(sizeOf(readFileSync(join(p.assets, 'hero-square.png'))), '512x512');
+    assert.match(square.out, /512x512/);
+    const og = await image(p, NO_CODEX, ['use', id, '--name', 'og', '--size', '1200x630']);
+    assert.equal(og.code, 0, og.text);
+    assert.equal(sizeOf(readFileSync(join(p.assets, 'og.png'))), '1200x630');
+    const bigger = await image(p, NO_CODEX, ['use', id, '--name', 'story', '--size', '1080x1920']);
+    assert.equal(bigger.code, 0, bigger.text);
+    assert.equal(sizeOf(readFileSync(join(p.assets, 'story.png'))), '1080x1920');
+    assert.deepEqual(readdirSync(p.assets).sort(), ['hero-square.png', 'og.png', 'story.png']);
+    assert.equal(stockLines(p).length, 1, 'the stock is only read');
+    assert.equal(sizeOf(readFileSync(join(p.stock, stockLines(p)[0]!.file as string))), '1600x900', 'and its picture is left as it was');
+    tidy(p);
+  } finally {
+    p.done();
+  }
+});
+
+test('keep: a picture on disk is brought into the stock, anything else is refused, and the same picture is kept once', async () => {
+  const p = place();
+  try {
+    const photo = jpeg(3024, 4032);
+    const kept = await keep(p, photo, 'face', 'the owner, smiling, by a window', ['--for', 'side']);
+    assert.equal(kept.code, 0, kept.text);
+    const entry = stockLines(p)[0]!;
+    assert.deepEqual(Object.keys(entry), ['id', 'kind', 'what', 'prompt', 'width', 'height', 'file', 'sha256', 'addedAt', 'madeBy', 'for']);
+    assert.deepEqual([entry.kind, entry.what, entry.prompt, entry.width, entry.height, entry.madeBy, entry.for], ['face', 'the owner, smiling, by a window', null, 3024, 4032, null, 'side'], 'what is not said is kept as nothing, not a guess');
+    assert.equal(entry.file, `pictures/face/the-owner-smiling-by-a-window-${sha(photo).slice(0, 8)}.jpg`, 'its type is read from its bytes, not its name');
+    assert.deepEqual(readFileSync(join(p.stock, entry.file as string)), photo);
+    assert.ok(kept.out.includes(`kept: ${entry.id as string}`), kept.out);
+    assert.ok(kept.out.includes(join(p.stock, entry.file as string)));
+
+    const mug = await keep(p, webp(640, 480), 'Object', 'white mug on a wooden table', ['--prompt', 'a white mug, morning light']);
+    assert.equal(mug.code, 0, mug.text);
+    const second = stockLines(p)[1]!;
+    assert.deepEqual([second.kind, second.prompt, second.width, second.height], ['Object', 'a white mug, morning light', 640, 480]);
+    assert.match(second.file as string, /^pictures\/object\/white-mug-on-a-wooden-table-[0-9a-f]{8}\.webp$/);
+    assert.match(mug.out, /"Object" is a new kind\. Kinds already kept: face \(1\)/);
+    const again = await keep(p, png(32, 32, 'plate'), 'object', 'an empty plate');
+    assert.equal(stockLines(p)[2]!.kind, 'Object', 'a kind is kept under the name it was first given');
+    assert.doesNotMatch(again.out, /new kind/);
+
+    for (const [bytes, says] of [
+      [Buffer.from('just some words, not a picture'), /is not a picture: PNG, JPEG or WebP/],
+      [Buffer.concat([Buffer.from('GIF89a'), Buffer.alloc(20)]), /is not a picture: PNG, JPEG or WebP/],
+      [Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00]), /size cannot be read/],
+    ] as const) {
+      const refused = await keep(p, bytes, 'face', 'something');
+      assert.equal(refused.code, 1, refused.text);
+      assert.match(refused.text, says);
+    }
+    const missing = await image(p, NO_CODEX, ['keep', '--file', join(p.root, 'nowhere.png'), '--kind', 'face', '--what', 'someone']);
+    assert.equal(missing.code, 1);
+    assert.match(missing.text, /no such file/);
+    const bare = await image(p, NO_CODEX, ['keep', '--file', join(p.root, 'nowhere.png')]);
+    assert.equal(bare.code, 1);
+    assert.match(bare.text, /--kind, --what missing/);
+    assert.equal(stockLines(p).length, 3, 'nothing refused was kept');
+
+    const twice = await keep(p, photo, 'people', 'the same photograph under another name');
+    assert.equal(twice.code, 0, twice.text);
+    assert.ok(twice.out.includes(`already kept: ${entry.id as string}`), twice.out);
+    assert.equal(stockLines(p).length, 3);
+    assert.equal(stockFiles(p).length, 3);
+    assert.equal(stockLines(p)[0]!.what, 'the owner, smiling, by a window', 'the picture kept first is left as it was');
+  } finally {
+    p.done();
+  }
+});
+
+test('show: one picture of the stock in full', async () => {
+  const p = place();
+  try {
+    assert.equal((await keep(p, png(1024, 1024, 'scale'), 'object', 'bathroom scale, white, from above', ['--prompt', 'a white bathroom scale on warm tiles, seen from above, soft morning light', '--for', 'weigh-in'])).code, 0);
+    const entry = stockLines(p)[0]! as { id: string; file: string; sha256: string };
+    const shown = await image(p, NO_CODEX, ['show', entry.id]);
+    assert.equal(shown.code, 0, shown.text);
+    for (const said of [entry.id, 'object', 'bathroom scale, white, from above', 'a white bathroom scale on warm tiles, seen from above, soft morning light', '1024x1024', 'weigh-in', join(p.stock, entry.file), entry.sha256]) assert.ok(shown.out.includes(said), `it says ${said}:\n${shown.out}`);
+    const json = JSON.parse((await image(p, NO_CODEX, ['show', entry.id, '--json'])).out) as { id: string; path: string; prompt: string };
+    assert.deepEqual([json.id, json.path], [entry.id, join(p.stock, entry.file)]);
+    const unknown = await image(p, NO_CODEX, ['show', 'no-such-picture']);
+    assert.equal(unknown.code, 1);
+    assert.match(unknown.text, /no picture no-such-picture is kept/);
+    const none = await image(p, NO_CODEX, ['show']);
+    assert.equal(none.code, 1);
+    assert.match(none.text, /which picture/);
+  } finally {
+    p.done();
+  }
+});
+
+test('eight keeps at the same moment all keep their line', async () => {
+  const p = place();
+  try {
+    const ran = await Promise.all(Array.from({ length: 8 }, (_, i) => keep(p, png(48, 48, `#${i}`), i % 2 === 0 ? 'face' : 'food', `picture number ${i + 1}`)));
+    for (const one of ran) assert.equal(one.code, 0, one.text);
+    const all = stockLines(p);
+    assert.equal(all.length, 8, 'no line was lost');
+    assert.equal(new Set(all.map((one) => one.id)).size, 8);
+    assert.equal(stockFiles(p).length, 8);
+    assert.ok(!existsSync(join(p.stock, 'index.jsonl.lock')), 'the lock is let go');
+    assert.deepEqual(readdirSync(p.stock).filter((name) => name.endsWith('.tmp')), [], 'no half-written index is left behind');
+  } finally {
+    p.done();
+  }
+});
+
+const hook =(input: string, env: Record<string, string> = {}): { code: number | null; out: string; err: string } => {
   const base: NodeJS.ProcessEnv = { ...process.env };
   delete base.SZ_PAID_IMAGES;
   const run = spawnSync(process.execPath, [HOOK], { encoding: 'utf8', input, env: { ...base, ...env } });

@@ -217,7 +217,25 @@ const USAGE = `sz-eyes: launch what was built, look at it, operate it, and put w
         The library is the owner's own, on this machine ($SZ_REFS_DIR, or ~/.studio-zero/references): pictures of other
         products' screens kept to look at, never put into a product, never committed to a repository, never passed on
 
-  sz-eyes image make --prompt "<what it shows and what it is for>" --name <name> [--size <WxH>] [--out <folder>] [--dir <project>] [--json]
+  sz-eyes image find [<words>...] [--kind <kind>] [--json]
+        the first thing to run when a screen needs a picture: the pictures of the stock that have every word (in
+        kind, what or prompt), each with its id, size, where it is and when it was kept; with nothing asked, how
+        many are kept of each kind. When one fits, take it with image use rather than make another
+  sz-eyes image use <id> --name <name> [--size <WxH>] [--out <folder>] [--dir <project>] [--json]
+        put a picture of the stock in the project as <out>/<name>.<its type> (${IMAGE_ASSETS_DIR} by default), in
+        seconds and with nothing spent. --size makes the copy exactly that size with macOS sips (scaled to cover it
+        and cut from the middle, never stretched; a WebP comes out a PNG); sips keeps its working copy in the
+        system's temporary folder, so a resize runs outside the session's command sandbox. A picture already there
+        under that name stays as it was until the new one is whole
+  sz-eyes image keep --file <picture> --kind "<kind>" --what "<one line: what is in the picture>" [--prompt "<the words it was made from>"] [--for <project>] [--json]
+        bring a picture that already exists into the stock: one made earlier, or the owner's own photograph. PNG,
+        JPEG or WebP, read from its bytes. The same picture is kept once ("already kept: <id>")
+  sz-eyes image show <id> [--json]                       one picture of the stock in full, prompt and all
+        The stock is the owner's own, on this machine ($SZ_STOCK_DIR, or ~/.studio-zero/stock), outside any
+        repository: every picture made for a product, with the words it was made from, so that the next product
+        takes it instead of making it again. index.jsonl holds a line a picture; pictures/<kind>/ the pictures
+  sz-eyes image make --prompt "<what it shows and what it is for>" --name <name> --kind "<kind>" --what "<one line: what is in the picture>"
+        [--size <WxH>] [--out <folder>] [--dir <project>] [--no-stock] [--json]
         make one original picture for the product's screens, on the subscription the owner already pays for: the
         Codex CLI makes it with its own image generation, signed in with ChatGPT, with every API key kept from it.
         Never through an API that bills for each image, and never any other way: when codex is not installed, not
@@ -231,7 +249,12 @@ const USAGE = `sz-eyes: launch what was built, look at it, operate it, and put w
         and go on working; several may run at once under different names. codex keeps what it makes in ~/.codex,
         so run it outside the session's command sandbox. Prints the path, the size and how long it took. Exits 1,
         with nothing made, when codex refuses (its words, such as its own limit reached, are passed on as they are)
-        or brings back no picture of exactly that size
+        or brings back no picture of exactly that size.
+        A copy goes into the stock with its prompt, and its id is printed. --kind says what kind of picture it is
+        (face, food, object, place and so on: a new kind lists the kinds there are, give one of their names when it
+        is the same kind) and --what says in one line what is in it; both are asked every time. --no-stock leaves
+        out a picture that is only right for this one product. When the stock already holds pictures of the kind,
+        it says so before codex starts (how many, and the image find that lists them) and goes on
 `;
 
 /** `--flag value` pairs and bare words, in order. A flag given twice is a list. */
@@ -845,7 +868,7 @@ async function main(argv: string[]): Promise<number> {
     return done.code;
   }
   if (area === 'image') {
-    const done = await imageCommand(command, parse(rest, ['--json'])).catch((err: unknown) => {
+    const done = await imageCommand(command, parse(rest, ['--json', '--no-stock'])).catch((err: unknown) => {
       if (err instanceof ImageError) throw err.sandboxed ? new SandboxError(err.message) : new EyesError(err.message);
       throw err;
     });

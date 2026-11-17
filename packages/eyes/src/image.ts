@@ -1,8 +1,9 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, openSync, readSync, closeSync, renameSync, rmSync, rmdirSync, statSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, readSync, closeSync, renameSync, rmSync, rmdirSync, statSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
+import { PICTURE_NAME, StockError, checkFields, checkWritable, keepPicture, missingFields, newKindLine, readStock, reminder, stockCommand, stockDir, type StockPicture } from './stock.ts';
 
 /**
  * Pictures for a product's screens, made on the subscription the owner already pays for: the Codex CLI's own
@@ -88,7 +89,7 @@ export function imageSpec(ask: { prompt?: string | undefined; name?: string | un
   if (prompt.length > MAX_PROMPT) throw new ImageError(`--prompt is ${prompt.length} characters; ${MAX_PROMPT} at most`);
   const name = (ask.name ?? '').trim().replace(/\.png$/i, '');
   if (name === '') throw new ImageError('--name <name> is missing: the picture is written as <name>.png');
-  if (!/^[a-z0-9][a-z0-9-]{0,60}$/.test(name)) throw new ImageError(`--name ${name}: lower-case letters, digits and dashes, 61 at most (the picture is written as <name>.png)`);
+  if (!PICTURE_NAME.test(name)) throw new ImageError(`--name ${name}: lower-case letters, digits and dashes, 61 at most (the picture is written as <name>.png)`);
   const size = (ask.size ?? '1024x1024').trim().toLowerCase().replace('×', 'x');
   if (!(IMAGE_SIZES as readonly string[]).includes(size)) throw new ImageError(`--size ${ask.size}: one of ${IMAGE_SIZES.join(', ')} (${IMAGE_SIZE_USES})`);
   const [width, height] = size.split('x').map(Number) as [number, number];
@@ -385,12 +386,70 @@ export interface ImageArgs {
   one: (flag: string) => string | undefined;
 }
 
-/** `sz-eyes image <command>`: what to print and the exit code. A refusal is thrown as an ImageError. */
-export async function imageCommand(command: string | undefined, a: ImageArgs, env: NodeJS.ProcessEnv = process.env): Promise<{ text: string; code: number }> {
-  if (command !== 'make') throw new ImageError('sz-eyes image make --prompt "<what it shows and what it is for>" --name <name> [--size <WxH>] [--out <folder>] (sz-eyes help)');
+const MAKE_USAGE = 'sz-eyes image make --prompt "<what it shows and what it is for>" --name <name> --kind "<face, food, object, place, ...>" --what "<one line: what is in the picture>" [--size <WxH>] [--out <folder>] [--no-stock] (sz-eyes help)';
+
+/** What became of the stock's copy of a picture made. */
+export type StockOutcome =
+  | { status: 'kept' | 'already kept'; id: string; path: string; newKind: boolean }
+  | { status: 'left out' }
+  | { status: 'not kept'; error: string };
+
+/**
+ * `image make`: what the call asks is checked whole before codex is asked anything, the caller is told what the
+ * stock already holds of the kind (and the work goes on), and the picture made is kept in the stock with its prompt
+ * unless --no-stock. Where the stock cannot be written, codex is not started: the picture could not be kept.
+ */
+async function makeCommand(a: ImageArgs, { project, out, dir }: { project: string; out: string; dir: string }, env: NodeJS.ProcessEnv, say: (line: string) => void): Promise<{ text: string; code: number }> {
+  const keep = !a.has('--no-stock');
+  const missing = [...(['--prompt', '--name'] as const).filter((flag) => (a.one(flag) ?? '').trim() === ''), ...missingFields({ kind: a.one('--kind'), what: a.one('--what') })];
+  if (missing.length > 0) throw new ImageError(`${missing.join(', ')} missing: ${MAKE_USAGE}`);
+  const ask = { prompt: a.one('--prompt'), name: a.one('--name'), size: a.one('--size'), out };
+  const spec = imageSpec(ask);
+  const fields = checkFields({ kind: a.one('--kind')!, what: a.one('--what')!, prompt: spec.prompt, for: basename(project) });
+  let held: StockPicture[] = [];
+  try {
+    held = readStock(dir);
+  } catch (err) {
+    if (keep) throw new ImageError(`${(err as Error).message}. No image was made, and codex was not started: the picture could not be kept (--no-stock makes one that is not kept)`);
+  }
+  if (keep) checkWritable(dir, 'no image was made, and codex was not started, since the picture could not be kept (--no-stock makes one that is not kept)');
+  const told = reminder(held, fields.kind);
+  if (told) say(told);
+
+  const made = await makeImage(ask, env);
+  let stock: StockOutcome = { status: 'left out' };
+  const lines = [made.path, `${made.size}, ${Math.round(made.bytes / 1024)} KB, made in ${made.seconds}s${made.replaced ? ` (it replaces the earlier ${basename(made.path)})` : ''}`];
+  if (!keep) lines.push('not kept in the stock (--no-stock)');
+  else {
+    try {
+      const kept = keepPicture(dir, readFileSync(made.path), { kind: fields.kind, what: fields.what, prompt: fields.prompt ?? undefined, for: fields.for ?? undefined, madeBy: 'codex' });
+      stock = { status: kept.status, id: kept.picture.id, path: kept.path, newKind: kept.newKind };
+      lines.push(`${kept.status === 'kept' ? 'kept in the stock' : 'already in the stock'}: ${kept.picture.id} (${kept.path})`, ...newKindLine(kept));
+    } catch (err) {
+      // The picture is made and in place: what failed is only its copy, and the command that keeps it is given.
+      const error = err instanceof Error ? err.message : String(err);
+      stock = { status: 'not kept', error };
+      lines.push(`not kept in the stock: ${error}. The picture is made and in place; keep it with sz-eyes image keep --file ${JSON.stringify(made.path)} --kind ${JSON.stringify(fields.kind)} --what ${JSON.stringify(fields.what)} --prompt <the same prompt>`);
+    }
+  }
+  if (a.has('--json')) return { text: JSON.stringify({ ...made, stock }, null, 2), code: 0 };
+  return { text: lines.join('\n'), code: 0 };
+}
+
+/**
+ * `sz-eyes image <command>`: what to print and the exit code. A refusal is thrown as an ImageError. `say` prints
+ * what is to be read while the command is still working (before codex starts); stdout keeps the result alone.
+ */
+export async function imageCommand(command: string | undefined, a: ImageArgs, env: NodeJS.ProcessEnv = process.env, say: (line: string) => void = (line) => void process.stderr.write(`${line}\n`)): Promise<{ text: string; code: number }> {
   const project = resolve(a.one('--dir') ?? '.');
   const out = a.one('--out') ? resolve(a.one('--out')!) : join(project, IMAGE_ASSETS_DIR);
-  const made = await makeImage({ prompt: a.one('--prompt'), name: a.one('--name'), size: a.one('--size'), out }, env);
-  if (a.has('--json')) return { text: JSON.stringify(made, null, 2), code: 0 };
-  return { text: `${made.path}\n${made.size}, ${Math.round(made.bytes / 1024)} KB, made in ${made.seconds}s${made.replaced ? ` (it replaces the earlier ${basename(made.path)})` : ''}`, code: 0 };
+  const dir = stockDir(env);
+  try {
+    if (command === 'make') return await makeCommand(a, { project, out, dir }, env, say);
+    if (command === 'find' || command === 'use' || command === 'keep' || command === 'show') return stockCommand(command, a, { dir, out });
+  } catch (err) {
+    if (err instanceof StockError) throw new ImageError(err.message, err.sandboxed);
+    throw err;
+  }
+  throw new ImageError('sz-eyes image make|find|use|keep|show (sz-eyes help)');
 }
