@@ -50,6 +50,7 @@ I4. One set, one direction: the same light and distance, colours toward the them
 I5. How many: one for a mock-up direction. For a build: what the fixtures need (six or so) and one hero at most on a working screen; a page that has to win a visitor may carry one a section, each showing something of the subject.
 I6. Words on a photograph sit on a plate or a scrim, never on the bare picture.
 I7. Icons come from one set (lucide), with a 1.5 to 2px stroke: in ink when bare, in the tile's colour on a tile, in the accent when active.
+I8. The product's own mark (its app icon: in the app bar, on the first screen, as the favicon and the home-screen icon) is a picture made for this product, new each time: `sz-eyes image make --size 512x512 --kind "app icon" --what "<the product>: <what it shows>" --no-stock`. One object or sign from the product's subject on a rounded square in the product's colour, with no letters in it (the name is set beside it as text), and still read at 28px. Never a glyph from the icon set on a coloured tile, and never one taken from the stock: a mark two products share is nobody's.
 
 What a screen is made of.
 The owner's standard is the consumer products people call alive: a game maker's store, a shopping app, a live-streaming app, a neighbourhood marketplace, a finance app. Their first screens were measured on a phone with the studio's own ruler, beside the pages the studio used to draw:
