@@ -93,6 +93,16 @@ The steps are those of `web do`, and `window:<words>` goes on in another window 
 
 **Anything else** (a desktop app, a CLI, a game in an engine): use what the map names: the project's test runner, a headless run that prints state, a screenshot command. Prefer a check that exposes state (a game that can print its state and step its clock) to one that needs a picture judged.
 
+## A claim about every screen
+
+"Nothing is cut off on any screen" is a claim at the product's limits, and it is shown once, whole, not by trying one longer input each time someone looks:
+
+- Fill every field a person can type into, and every figure that grows, with the longest value the spec allows (where the spec is silent, the longest the product accepts): the longest name, the longest sentence, the largest figure, two long things side by side.
+- Open every screen in every state at phone size and measure each: `sz-eyes web look <address> --size phone`, or the look a `sz-eyes web do` ends on when a state has to be reached by pressing. "nothing above minor" is the line that says a screen holds.
+- Keep exactly that as the claim's flow: it prints every finding with its screen and fails when there is one. Report all of them in the one verdict.
+
+Whoever mends them runs the same flow over the whole product until it reports nothing. At a second look the claim is judged by that flow at those limits: an input the product does not accept shows nothing about it; what else you see goes under what you noticed.
+
 ## What stood before
 
 A product that has been worked on before keeps promises, and a change is not done until they are shown again:

@@ -236,6 +236,30 @@ test('a new product is planned twice: its first pass alone, and what comes after
   assert.deepEqual(small.calls.map((c) => c.label), ['plan', 'build:m1', 'verify:m1', 'close:m1']);
 });
 
+test('a claim about every screen is shown once at the product\'s limits, mended wherever the same thing is shown, and a second look runs the whole check once', async () => {
+  const cut = { id: 'm1', title: '첫 판', builds: '온 제품', claims: [claim('one'), claim('two')] };
+  const first = { proven: ['one'], refuted: [{ id: 'two', fact: '12자 닉네임이 대결 화면과 피드에서 잘린다' }], unchecked: [] };
+  const ran = await run({ request: '다이어트 배틀 앱' }, {
+    plan: (_call, nth) => (nth === 0 ? { mode: 'new', summary: 's', milestones: [cut], later: [] } : { mode: 'continue', summary: 's', milestones: [{ ...cut, state: 'closed' }] }),
+    build: built, fix: () => ({ fixed: ['two'] }), verify: (_call, nth) => (nth === 0 ? first : { proven: ['two'], refuted: [], unchecked: [] }), close: closed,
+  });
+  const planned = ran.calls.find((c) => c.label === 'plan')!.prompt;
+  assert.match(planned, /A claim about every screen \(nothing cut off, nothing that scrolls sideways, nothing to press smaller than 44px\) is a claim at the product's limits/);
+  assert.match(planned, /the spec states each limit[\s\S]*shown by a flow that fills every field with its longest value and measures every screen in every state/);
+  assert.match(ran.calls.find((c) => c.label === 'build:m1')!.prompt, /Before you return, fill every field with the longest value the spec allows and look at every screen at phone size[\s\S]*mend it wherever the same thing is shown/);
+  const look = ran.calls.find((c) => c.label === 'verify:m1')!.prompt;
+  assert.match(look, /A claim about every screen at the product's limits is one flow too: it fills every field a person can type into[\s\S]*prints every finding above minor with its screen, and fails when there is one/);
+  assert.match(look, /Report every finding it prints, not the first/);
+  const mend = ran.calls.find((c) => c.label === 'fix:m1:1')!.prompt;
+  assert.match(mend, /mend the cause wherever the same thing is shown, not only in the place named, and run that claim's flow over the whole product until it reports nothing before you return/);
+  const again = ran.calls.find((c) => c.label === 'verify:m1:again')!.prompt;
+  assert.match(again, /by the project's whole check command run once where it has one, and a flow, test or command by itself only where that run failed or says nothing of a claim/);
+  assert.doesNotMatch(again, /run once more every flow, test and command/, 'the second look is no longer told to run each check by itself');
+  assert.match(again, /judged by its flow, at the limits the spec states: an input the product does not accept shows nothing about it/);
+  assert.doesNotMatch(again, /The flows of this contract have not been written/, 'flows are written at the first look only');
+  assert.deepEqual(ran.result.milestones[0].proven, ['one', 'two']);
+});
+
 test('the workflow tells every agent how to launch and end things on a machine it shares', async () => {
   const { calls, result } = await run({ request: '운영 준비' }, { plan: plan('m5'), build: built, verify: () => ({ proven: ['one', 'two'], refuted: [], unchecked: [], stood: 25, noticed: [] }), close: closed });
   assert.equal(result.stopped, null);
