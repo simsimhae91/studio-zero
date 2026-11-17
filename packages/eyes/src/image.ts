@@ -379,11 +379,12 @@ export async function makeImage(ask: { prompt?: string | undefined; name?: strin
   throw new ImageError(`codex brought back a picture of ${size[0]}x${size[1]}, not the ${spec.width}x${spec.height} asked (${seconds}s): no image was made${earlier()}.${said}`);
 }
 
-/** The command line as cli.ts parses it: bare words, and `--flag value` pairs. */
+/** The command line as cli.ts parses it: bare words, and `--flag value` pairs (every flag given, by name). */
 export interface ImageArgs {
   words: string[];
   has: (flag: string) => boolean;
   one: (flag: string) => string | undefined;
+  flags?: ReadonlyMap<string, unknown>;
 }
 
 const MAKE_USAGE = 'sz-eyes image make --prompt "<what it shows and what it is for>" --name <name> --kind "<face, food, object, place, ...>" --what "<one line: what is in the picture>" [--size <WxH>] [--out <folder>] [--no-stock] (sz-eyes help)';
@@ -446,10 +447,10 @@ export async function imageCommand(command: string | undefined, a: ImageArgs, en
   const dir = stockDir(env);
   try {
     if (command === 'make') return await makeCommand(a, { project, out, dir }, env, say);
-    if (command === 'find' || command === 'use' || command === 'keep' || command === 'show') return stockCommand(command, a, { dir, out });
+    if (command === 'find' || command === 'use' || command === 'keep' || command === 'show' || command === 'edit' || command === 'remove') return stockCommand(command, a, { dir, out });
   } catch (err) {
     if (err instanceof StockError) throw new ImageError(err.message, err.sandboxed);
     throw err;
   }
-  throw new ImageError('sz-eyes image make|find|use|keep|show (sz-eyes help)');
+  throw new ImageError('sz-eyes image make|find|use|keep|show|edit|remove (sz-eyes help)');
 }

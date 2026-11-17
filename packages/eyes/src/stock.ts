@@ -2,9 +2,9 @@ import { spawnSync } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, rmdirSync, statSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
-import { basename, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { withFileLock, writeFileAtomic } from './lock.ts';
-import { refSlug } from './refs.ts';
+import { closestIds, refSlug } from './refs.ts';
 
 /**
  * The owner's stock of pictures: every picture made for a product's screens, kept with the words it was made
@@ -257,6 +257,113 @@ export function keepPicture(dir: string, bytes: Buffer, given: PictureFields & {
 
 const NOT_A_PICTURE = 'PNG, JPEG or WebP (what a screen shows) are kept';
 
+/** An id that is not kept, said plainly, with the ids nearest to it. */
+function notKept(dir: string, id: string, pictures: readonly StockPicture[]): StockError {
+  const near = closestIds(id, pictures.map((picture) => picture.id)).map((one) => pictures.find((picture) => picture.id === one)!);
+  return new StockError(`no picture ${id} is kept in ${dir} (sz-eyes image find lists them)${near.length > 0 ? `. The closest: ${near.map((picture) => `${picture.id} ([${picture.kind}] ${picture.what})`).join(', ')}` : ''}`);
+}
+
+/** A kind's folder of pictures is taken away when nothing is left in it. */
+function dropIfEmpty(folder: string): void {
+  try {
+    rmdirSync(folder);
+  } catch {
+    // Something is still in it, or it is gone already.
+  }
+}
+
+/** What an edit changes, each field already checked; a field left out stays as it is, and a prompt of null is taken out. */
+export interface PictureEdit {
+  kind?: string;
+  what?: string;
+  prompt?: string | null;
+}
+
+/** The fields an edit can change, in the order a change is said; `file` changes with the kind. */
+const EDITABLE = ['kind', 'file', 'what', 'prompt'] as const;
+
+export interface PictureChange {
+  field: (typeof EDITABLE)[number];
+  was: string | null;
+  now: string | null;
+}
+
+export interface EditedPicture {
+  picture: StockPicture;
+  /** Nothing, when the picture's entry already said all that. */
+  changes: PictureChange[];
+  newKind: boolean;
+  /** The kinds the other pictures are kept under. */
+  kindsBefore: StockKind[];
+  /** The kind it was moved out of, when no picture is kept under it now. */
+  emptied: string | null;
+}
+
+/**
+ * Puts right what is said about a picture of the stock, under the stock's lock: the fields given change and the rest
+ * stay, the id never changes. A new kind moves the picture into that kind's folder under the same file name (its hash
+ * kept): copied there first, the index written, and only then the old file deleted, so the index never points at nothing.
+ */
+export function editPicture(dir: string, id: string, edit: PictureEdit): EditedPicture {
+  return exclusively(dir, () => {
+    const pictures = readStock(dir);
+    const before = pictures.find((picture) => picture.id === id);
+    if (!before) throw notKept(dir, id, pictures);
+    const others = pictures.filter((picture) => picture.id !== id);
+    const kindsBefore = stockKinds(others);
+    const there = edit.kind === undefined ? undefined : ofKind(others, edit.kind)[0];
+    // A kind others hold keeps the name it was first given; a kind nobody else holds takes the name given now.
+    const kind = edit.kind === undefined ? before.kind : (there?.kind ?? edit.kind);
+    const moving = refSlug(kind) !== refSlug(before.kind);
+    const file = moving ? `pictures/${refSlug(kind)}/${basename(before.file)}` : before.file;
+    if (moving) {
+      const holder = others.find((picture) => picture.file === file);
+      if (holder) throw new StockError(`the picture would go to ${join(dir, file)}, which is ${holder.id}'s picture: nothing was changed`);
+      if (!existsSync(join(dir, before.file))) throw new StockError(`${id}'s picture is not where its line says (${join(dir, before.file)}), so it cannot be moved into "${kind}": nothing was changed. sz-eyes image remove ${id} takes the line out`);
+    }
+    const picture: StockPicture = { ...before, kind, file, what: edit.what ?? before.what, prompt: edit.prompt !== undefined ? edit.prompt : before.prompt };
+    const changes = EDITABLE.filter((field) => picture[field] !== before[field]).map((field) => ({ field, was: before[field], now: picture[field] }));
+    if (changes.length === 0) return { picture: before, changes, newKind: false, kindsBefore, emptied: null };
+    if (moving) writeFileAtomic(join(dir, file), readFileSync(join(dir, before.file)));
+    writeIndex(dir, pictures.map((one) => (one.id === id ? picture : one)));
+    if (moving) {
+      rmSync(join(dir, before.file), { force: true });
+      dropIfEmpty(dirname(join(dir, before.file)));
+    }
+    const emptied = moving && ofKind(others, before.kind).length === 0 ? before.kind : null;
+    return { picture, changes, newKind: moving && !there, kindsBefore, emptied };
+  });
+}
+
+export interface RemovedPicture {
+  /** The whole entry as it was kept. */
+  picture: StockPicture;
+  pictureDeleted: boolean;
+  /** How many pictures its kind holds now. */
+  left: number;
+}
+
+/**
+ * Takes a picture out of the stock, under its lock: its line first, then its file in the stock (a crash between
+ * leaves a stray file, never a line pointing at nothing). A copy put in a project is the project's, and is not touched.
+ */
+export function removePicture(dir: string, id: string): RemovedPicture {
+  return exclusively(dir, () => {
+    const pictures = readStock(dir);
+    const picture = pictures.find((one) => one.id === id);
+    if (!picture) throw notKept(dir, id, pictures);
+    const others = pictures.filter((one) => one.id !== id);
+    writeIndex(dir, others);
+    const path = join(dir, picture.file);
+    const pictureDeleted = existsSync(path) && !others.some((one) => one.file === picture.file);
+    if (pictureDeleted) {
+      rmSync(path, { force: true });
+      dropIfEmpty(dirname(path));
+    }
+    return { picture, pictureDeleted, left: ofKind(others, picture.kind).length };
+  });
+}
+
 /** The pictures that have every word somewhere in their kind, what or prompt (any case), and are of the kind asked. */
 export function findPictures(pictures: readonly StockPicture[], ask: { words?: readonly string[]; kind?: string | undefined }): StockPicture[] {
   const fold = (text: string): string => text.normalize('NFC').toLowerCase();
@@ -322,8 +429,9 @@ export interface UsedPicture {
  * that name stays as it was when anything fails.
  */
 export function usePicture(dir: string, id: string, ask: { name: string; out: string; size?: [number, number] | undefined }): UsedPicture {
-  const picture = readStock(dir).find((one) => one.id === id);
-  if (!picture) throw new StockError(`no picture ${id} is kept in ${dir} (sz-eyes image find lists them)`);
+  const pictures = readStock(dir);
+  const picture = pictures.find((one) => one.id === id);
+  if (!picture) throw notKept(dir, id, pictures);
   const source = join(dir, picture.file);
   if (!existsSync(source)) throw new StockError(`${id} is in the stock's index, but its picture is not there (${source}): nothing was put in the project`);
   const bytes = readFileSync(source);
@@ -420,15 +528,39 @@ export function reminder(pictures: readonly StockPicture[], kind: string): strin
 
 const EMPTY = (dir: string): string => `nothing is kept yet in ${dir}: every picture sz-eyes image make makes is kept there, and sz-eyes image keep brings in one made before (sz-eyes help)`;
 
-/** The command line as cli.ts parses it: bare words, and `--flag value` pairs. */
+const LABELS: Record<PictureChange['field'], string> = { kind: 'kind', file: 'picture', what: 'what', prompt: 'prompt' };
+
+/** Each change, as it was and as it is now: the picture by where it is. */
+function renderChanges(dir: string, changes: readonly PictureChange[]): string[] {
+  return changes.flatMap(({ field, was, now }) => {
+    const said = (value: string | null): string => (value === null ? '(not said)' : field === 'file' ? join(dir, value) : value);
+    return [`  ${LABELS[field].padEnd(10)}was  ${said(was)}`, `  ${''.padEnd(10)}now  ${said(now)}`];
+  });
+}
+
+/** The command line as cli.ts parses it: bare words, and `--flag value` pairs (every flag given, by name). */
 export interface StockArgs {
   words: string[];
   has: (flag: string) => boolean;
   one: (flag: string) => string | undefined;
+  flags?: ReadonlyMap<string, unknown>;
 }
 
-/** `sz-eyes image find|use|keep|show`: what to print and the exit code. A refusal is thrown as a StockError. */
-export function stockCommand(command: 'find' | 'use' | 'keep' | 'show', a: StockArgs, { dir, out }: { dir: string; out: string }): { text: string; code: number } {
+const EDIT_USAGE = 'sz-eyes image edit <id> [--kind "<kind>"] [--what "<one line>"] [--prompt "<words>"] [--json]';
+
+/** The one id an edit or a remove is about. A flag it does not take is refused rather than passed over. */
+function theId(a: StockArgs, command: 'edit' | 'remove', usage: string, takes: readonly string[]): string {
+  const id = a.words[0];
+  if (!id) throw new StockError(`which picture: ${usage} (sz-eyes image find lists them)`);
+  if (a.words.length > 1) throw new StockError(`${command} takes one id, and ${a.words.slice(1).map((word) => JSON.stringify(word)).join(' ')} is more: a value of more than one word is given in quotes (--what "smiling woman"). ${usage}`);
+  const other = [...(a.flags?.keys() ?? [])].filter((flag) => !takes.includes(flag));
+  if (other.includes('--file')) throw new StockError(`the picture is what an entry of the stock is: another picture is another entry (sz-eyes image remove ${id}, then sz-eyes image keep). Nothing was changed`);
+  if (other.length > 0) throw new StockError(`${command} does not take ${other.join(', ')}: ${usage}`);
+  return id;
+}
+
+/** `sz-eyes image find|use|keep|show|edit|remove`: what to print and the exit code. A refusal is thrown as a StockError. */
+export function stockCommand(command: 'find' | 'use' | 'keep' | 'show' | 'edit' | 'remove', a: StockArgs, { dir, out }: { dir: string; out: string }): { text: string; code: number } {
   const json = a.has('--json');
   const done = (value: unknown, text: string): { text: string; code: number } => ({ text: json ? JSON.stringify(value, null, 2) : text, code: 0 });
   if (command === 'find') {
@@ -461,10 +593,49 @@ export function stockCommand(command: 'find' | 'use' | 'keep' | 'show', a: Stock
     const kept = keepPicture(dir, bytes, { kind: a.one('--kind')!, what: a.one('--what')!, prompt: a.one('--prompt'), for: a.one('--for'), madeBy: null });
     return done({ ...kept, picture: withPath(dir, kept.picture) }, renderKept(kept).join('\n'));
   }
+  if (command === 'edit') {
+    const id = theId(a, 'edit', EDIT_USAGE, ['--kind', '--what', '--prompt', '--json']);
+    const edit: PictureEdit = {};
+    for (const key of ['kind', 'what'] as const) {
+      if (!a.has(`--${key}`)) continue;
+      const given = a.one(`--${key}`) ?? '';
+      if (refSlug(given) === '') throw new StockError(`--${key} "${given}" has no letter or digit in it`);
+      edit[key] = oneLine(given);
+    }
+    if (a.has('--prompt')) edit.prompt = (a.one('--prompt') ?? '').trim() || null;
+    if (Object.keys(edit).length === 0) throw new StockError(`what to change: ${EDIT_USAGE}`);
+    const edited = editPicture(dir, id, edit);
+    const { picture, changes } = edited;
+    const value = { id, changes, picture: withPath(dir, picture), newKind: edited.newKind, emptied: edited.emptied };
+    if (changes.length === 0) return done(value, `nothing changed: ${id} already says that`);
+    const lines = [`edited: ${id}`, ...renderChanges(dir, changes)];
+    if (edited.newKind) lines.push(edited.kindsBefore.length > 0 ? `"${picture.kind}" is a new kind. Kinds already kept: ${kindList(edited.kindsBefore)}. When it is the same kind of picture as one of them, give that name: sz-eyes image edit ${id} --kind "<that name>".` : `"${picture.kind}" is a new kind (the only one in the stock).`);
+    if (edited.emptied !== null) lines.push(`"${edited.emptied}" holds no picture now, and is no longer listed.`);
+    return done(value, lines.join('\n'));
+  }
+  if (command === 'remove') {
+    const removed = removePicture(dir, theId(a, 'remove', 'sz-eyes image remove <id> [--json]', ['--json']));
+    const { picture } = removed;
+    const lines = [
+      `removed from the stock: ${picture.id} (${removed.pictureDeleted ? 'its picture there is deleted' : 'its picture was not there'}: ${join(dir, picture.file)})`,
+      `  kind      ${picture.kind}`,
+      `  what      ${picture.what}`,
+      `  size      ${picture.width}x${picture.height}`,
+      ...(picture.madeBy ? [`  made by   ${picture.madeBy}`] : []),
+      ...(picture.for ? [`  for       ${picture.for}`] : []),
+      `  kept      ${picture.addedAt}`,
+      ...(picture.prompt ? ['', picture.prompt] : ['', '(kept without the words it was made from)']),
+      '',
+      `A copy put in a project with sz-eyes image use is the project's own, and stays where it is. To keep it again: sz-eyes image keep --file <such a copy> --kind ${JSON.stringify(picture.kind)} --what ${JSON.stringify(picture.what)}${picture.prompt ? ` --prompt ${JSON.stringify(picture.prompt)}` : ''}`,
+      ...(removed.left === 0 ? [`"${picture.kind}" holds no picture now, and is no longer listed.`] : []),
+    ];
+    return done({ removed: withPath(dir, picture), pictureDeleted: removed.pictureDeleted, left: removed.left }, lines.join('\n'));
+  }
   const id = a.words[0];
   if (!id) throw new StockError('which picture: sz-eyes image show <id> (sz-eyes image find lists them)');
-  const picture = readStock(dir).find((one) => one.id === id);
-  if (!picture) throw new StockError(`no picture ${id} is kept in ${dir} (sz-eyes image find lists them)`);
+  const pictures = readStock(dir);
+  const picture = pictures.find((one) => one.id === id);
+  if (!picture) throw notKept(dir, id, pictures);
   const text = [
     picture.id,
     `  kind      ${picture.kind}`,

@@ -749,6 +749,212 @@ test('eight keeps at the same moment all keep their line', async () => {
   }
 });
 
+// Correcting and taking out: an entry kept with a line that overstates what is in it, or under the wrong kind, is
+// put right with image edit, and a picture that should not be in the stock is taken out with image remove, both
+// under the stock's lock, never by a hand edit of an index other agents are writing.
+
+/** The stock's index as it is on disk, to see that a refusal changed nothing. */
+const stockIndex = (p: Place): Buffer => readFileSync(join(p.stock, 'index.jsonl'));
+
+test('image edit: the fields given change, the rest stay, the id and the picture stay, and each change is said as it was and as it is', async () => {
+  const p = place();
+  try {
+    assert.equal((await keep(p, png(64, 64, 'a'), 'face', 'smiling woman in her thirties', ['--prompt', 'portrait photograph, soft window light', '--for', 'side'])).code, 0);
+    assert.equal((await keep(p, png(64, 64, 'b'), 'food', 'bibimbap in a stone bowl')).code, 0);
+    const [before, other] = stockLines(p) as [Record<string, unknown>, Record<string, unknown>];
+    const id = before.id as string;
+    const ran = await image(p, NO_CODEX, ['edit', id, '--what', 'smiling woman']);
+    assert.equal(ran.code, 0, ran.text);
+    const [after, untouched] = stockLines(p) as [Record<string, unknown>, Record<string, unknown>];
+    assert.deepEqual(after, { ...before, what: 'smiling woman' }, 'only what changed: the id, the picture and every other field stay');
+    assert.deepEqual(untouched, other, 'another picture is left as it was');
+    assert.deepEqual(readFileSync(join(p.stock, before.file as string)), png(64, 64, 'a'));
+    assert.ok(ran.out.includes(id), ran.out);
+    assert.match(ran.out, /what\s+was\s+smiling woman in her thirties\n\s+now\s+smiling woman/);
+    assert.doesNotMatch(ran.out, /^\s+(kind|prompt|picture)\s/m, 'a field that did not change is not listed');
+
+    // The prompt is changed, and "" takes it out (kept without the words it was made from).
+    const prompted = await image(p, NO_CODEX, ['edit', id, '--prompt', 'portrait, north light']);
+    assert.equal(prompted.code, 0, prompted.text);
+    assert.match(prompted.out, /prompt\s+was\s+portrait photograph, soft window light\n\s+now\s+portrait, north light/);
+    assert.deepEqual(stockLines(p)[0], { ...after, prompt: 'portrait, north light' });
+    const cleared = await image(p, NO_CODEX, ['edit', id, '--prompt', '']);
+    assert.equal(cleared.code, 0, cleared.text);
+    assert.equal(stockLines(p)[0]!.prompt, null);
+    assert.match(cleared.out, /now\s+\(not said\)/);
+    const json = JSON.parse((await image(p, NO_CODEX, ['edit', id, '--what', 'a smiling woman', '--json'])).out) as { picture: { id: string; what: string; path: string }; changes: { field: string; was: unknown; now: unknown }[] };
+    assert.deepEqual([json.picture.id, json.picture.what, json.picture.path], [id, 'a smiling woman', join(p.stock, before.file as string)]);
+    assert.deepEqual(json.changes, [{ field: 'what', was: 'smiling woman', now: 'a smiling woman' }]);
+
+    // The same again changes nothing, and says so.
+    const index = stockIndex(p);
+    const same = await image(p, NO_CODEX, ['edit', id, '--what', 'a smiling woman', '--kind', 'face']);
+    assert.equal(same.code, 0, same.text);
+    assert.match(same.out, /nothing changed/);
+    assert.deepEqual(stockIndex(p), index);
+
+    // Nothing to change, what edit does not take, words past the id, and a kind or what with nothing in it are refused.
+    const file = join(p.root, 'another.png');
+    writeFileSync(file, png(64, 64, 'another'));
+    for (const [args, says] of [
+      [['edit', id], /what to change/],
+      [['edit', '--what', 'someone'], /which picture/],
+      [['edit', id, '--file', file], /another picture is another entry.*image remove/],
+      [['edit', id, '--what', 'smiling', 'woman'], /one id/],
+      [['edit', id, '--what', '   '], /--what .*no letter or digit/],
+      [['edit', id, '--kind', '!!!'], /--kind "!!!" has no letter or digit/],
+    ] as const) {
+      const refused = await image(p, NO_CODEX, [...args]);
+      assert.equal(refused.code, 1, `${args.join(' ')}: ${refused.text}`);
+      assert.match(refused.text, says, args.join(' '));
+    }
+    assert.deepEqual(stockIndex(p), index, 'nothing refused changed the index');
+  } finally {
+    p.done();
+  }
+});
+
+test('image edit --kind moves the picture into the new kind, its name and hash kept, and find --kind finds it there and not under the old', async () => {
+  const p = place();
+  try {
+    assert.equal((await keep(p, png(64, 64, 'a'), 'face', 'smiling woman in her thirties')).code, 0);
+    assert.equal((await keep(p, png(64, 64, 'b'), 'face', 'older man with glasses')).code, 0);
+    assert.equal((await keep(p, png(64, 64, 'c'), 'food', 'bibimbap in a stone bowl')).code, 0);
+    const [first, second, food] = stockLines(p) as { id: string; file: string; sha256: string }[];
+
+    const ran = await image(p, NO_CODEX, ['edit', first!.id, '--kind', 'Person']);
+    assert.equal(ran.code, 0, ran.text);
+    const moved = stockLines(p)[0]! as { id: string; kind: string; file: string; sha256: string };
+    assert.deepEqual([moved.id, moved.kind, moved.sha256], [first!.id, 'Person', first!.sha256], 'the id and the picture stay');
+    assert.equal(moved.file, `pictures/person/${basename(first!.file)}`, 'the file keeps its name, and so its hash');
+    assert.deepEqual(readFileSync(join(p.stock, moved.file)), png(64, 64, 'a'));
+    assert.ok(!existsSync(join(p.stock, first!.file)));
+    assert.equal(stockFiles(p).length, 3);
+    assert.match(ran.out, /kind\s+was\s+face\n\s+now\s+Person/);
+    assert.ok(ran.out.includes(join(p.stock, first!.file)) && ran.out.includes(join(p.stock, moved.file)), 'where the picture was and where it is');
+    assert.match(ran.out, /"Person" is a new kind\. Kinds already kept: face \(1\), food \(1\)/);
+
+    const underNew = await image(p, NO_CODEX, ['find', '--kind', 'person']);
+    assert.ok(underNew.out.includes(first!.id), underNew.out);
+    const underOld = await image(p, NO_CODEX, ['find', '--kind', 'face']);
+    assert.ok(!underOld.out.includes(first!.id) && underOld.out.includes(second!.id), underOld.out);
+
+    // A kind already kept keeps the name it was first given, whatever case it is given in; the kind left empty is gone.
+    const joined = await image(p, NO_CODEX, ['edit', second!.id, '--kind', 'PERSON']);
+    assert.equal(joined.code, 0, joined.text);
+    assert.doesNotMatch(joined.out, /new kind/);
+    assert.deepEqual([(stockLines(p)[1] as { kind: string }).kind, (stockLines(p)[1] as { file: string }).file], ['Person', `pictures/person/${basename(second!.file)}`]);
+    const counts = await image(p, NO_CODEX, ['find']);
+    assert.match(counts.out, /Person\s+2/);
+    assert.doesNotMatch(counts.out, /face/);
+    assert.deepEqual(readdirSync(join(p.stock, 'pictures')).sort(), ['food', 'person'], 'a kind’s folder left empty is taken away');
+    const same = await image(p, NO_CODEX, ['edit', food!.id, '--kind', 'Food']);
+    assert.equal(same.code, 0, same.text);
+    assert.match(same.out, /kind\s+was\s+food\n\s+now\s+Food/, 'a kind nobody else holds takes the name given now');
+    assert.equal((stockLines(p)[2] as { file: string }).file, food!.file, 'and its picture stays where it is');
+  } finally {
+    p.done();
+  }
+});
+
+test('image remove: the line and the picture leave the stock, a copy put in a project stays, and show then says it is not there', async () => {
+  const p = place();
+  try {
+    const face = png(64, 64, 'face');
+    assert.equal((await keep(p, face, 'face', 'smiling woman in her thirties', ['--prompt', 'portrait photograph, soft window light'])).code, 0);
+    assert.equal((await keep(p, png(64, 64, 'meal'), 'food', 'bibimbap in a stone bowl')).code, 0);
+    const [gone, stays] = stockLines(p) as { id: string; file: string }[];
+    assert.equal((await image(p, NO_CODEX, ['use', gone!.id, '--name', 'avatar'])).code, 0);
+
+    const ran = await image(p, NO_CODEX, ['remove', gone!.id]);
+    assert.equal(ran.code, 0, ran.text);
+    for (const said of [gone!.id, 'face', 'smiling woman in her thirties', 'portrait photograph, soft window light', '64x64', 'sz-eyes image keep']) assert.ok(ran.out.includes(said), `it says ${said}:\n${ran.out}`);
+    assert.deepEqual(stockLines(p).map((one) => one.id), [stays!.id]);
+    assert.ok(!existsSync(join(p.stock, gone!.file)), 'its picture is deleted from the stock');
+    assert.deepEqual(readFileSync(join(p.assets, 'avatar.png')), face, 'the copy in the project is the project’s, and stays');
+    assert.deepEqual(readFileSync(join(p.stock, stays!.file)), png(64, 64, 'meal'), 'the other picture is left as it was');
+    const counts = await image(p, NO_CODEX, ['find']);
+    assert.doesNotMatch(counts.out, /face/, 'a kind left empty is no longer listed');
+    const shown = await image(p, NO_CODEX, ['show', gone!.id]);
+    assert.equal(shown.code, 1, shown.text);
+    assert.match(shown.text, new RegExp(`no picture ${gone!.id} is kept`));
+
+    // --json gives the whole entry that was removed; the copy in the project can be kept again.
+    const json = JSON.parse((await image(p, NO_CODEX, ['remove', stays!.id, '--json'])).out) as { removed: { id: string; what: string } };
+    assert.deepEqual([json.removed.id, json.removed.what], [stays!.id, 'bibimbap in a stone bowl']);
+    assert.deepEqual(stockLines(p), []);
+    assert.deepEqual(stockFiles(p), []);
+    const again = await image(p, NO_CODEX, ['keep', '--file', join(p.assets, 'avatar.png'), '--kind', 'face', '--what', 'smiling woman in her thirties']);
+    assert.equal(again.code, 0, again.text);
+    assert.match(again.out, /^kept: /);
+  } finally {
+    p.done();
+  }
+});
+
+test('image: an id that is not kept is refused with exit 1, naming the closest ids when a prefix matches, and nothing changes', async () => {
+  const p = place();
+  try {
+    assert.equal((await keep(p, png(64, 64, 'a'), 'face', 'smiling woman')).code, 0);
+    assert.equal((await keep(p, png(64, 64, 'b'), 'food', 'bibimbap')).code, 0);
+    const [face, food] = stockLines(p) as { id: string }[];
+    const index = stockIndex(p);
+    for (const command of [['edit', '--what', 'another line'], ['remove'], ['show']]) {
+      const typo = `${face!.id.slice(0, -1)}z`;
+      const near = await image(p, NO_CODEX, [command[0]!, typo, ...command.slice(1)]);
+      assert.equal(near.code, 1, near.text);
+      assert.match(near.text, new RegExp(`no picture ${typo} is kept`));
+      assert.ok(near.text.includes(face!.id) && !near.text.includes(food!.id), `the closest id, and only it: ${near.text}`);
+      const prefix = await image(p, NO_CODEX, [command[0]!, 'foo', ...command.slice(1)]);
+      assert.equal(prefix.code, 1, prefix.text);
+      assert.ok(prefix.text.includes(food!.id) && !prefix.text.includes(face!.id), prefix.text);
+      const far = await image(p, NO_CODEX, [command[0]!, 'zebra-0000', ...command.slice(1)]);
+      assert.equal(far.code, 1, far.text);
+      assert.match(far.text, /no picture zebra-0000 is kept/);
+      assert.ok(!far.text.includes(face!.id) && !far.text.includes(food!.id), far.text);
+    }
+    assert.deepEqual(stockIndex(p), index);
+    assert.equal(stockFiles(p).length, 2);
+  } finally {
+    p.done();
+  }
+});
+
+test('four image edits and four image removes of different pictures at the same moment all take effect, and no line is lost', async () => {
+  const p = place();
+  try {
+    const kept = await Promise.all(Array.from({ length: 8 }, (_, i) => keep(p, png(48, 48, `#${i + 1}`), 'face', `picture number ${i + 1}`)));
+    for (const one of kept) assert.equal(one.code, 0, one.text);
+    const before = stockLines(p) as { id: string; what: string; file: string }[];
+    const byNumber = (n: number): { id: string; file: string } => before.find((one) => one.what === `picture number ${n}`)!;
+    const ran = await Promise.all([
+      image(p, NO_CODEX, ['edit', byNumber(1).id, '--what', 'edited one']),
+      image(p, NO_CODEX, ['edit', byNumber(2).id, '--kind', 'person']),
+      image(p, NO_CODEX, ['edit', byNumber(3).id, '--kind', 'person', '--what', 'edited three']),
+      image(p, NO_CODEX, ['edit', byNumber(4).id, '--prompt', 'a face, soft light']),
+      ...[5, 6, 7, 8].map((n) => image(p, NO_CODEX, ['remove', byNumber(n).id])),
+    ]);
+    for (const one of ran) assert.equal(one.code, 0, one.text);
+    const after = stockLines(p) as { id: string; kind: string; what: string; prompt: string | null; file: string }[];
+    assert.equal(after.length, 4, 'four removed, four kept');
+    const find = (n: number): (typeof after)[number] => after.find((one) => one.id === byNumber(n).id)!;
+    assert.equal(find(1).what, 'edited one');
+    assert.equal(find(2).kind, 'person');
+    assert.deepEqual([find(3).kind, find(3).what], ['person', 'edited three']);
+    assert.equal(find(4).prompt, 'a face, soft light');
+    for (const n of [5, 6, 7, 8]) {
+      assert.ok(!after.some((one) => one.id === byNumber(n).id), `${n} is gone`);
+      assert.ok(!existsSync(join(p.stock, byNumber(n).file)), `${n}'s picture is gone`);
+    }
+    for (const one of after) assert.ok(existsSync(join(p.stock, one.file)), `${one.id}'s picture is where its line says`);
+    assert.equal(stockFiles(p).length, 4);
+    assert.ok(!existsSync(join(p.stock, 'index.jsonl.lock')), 'the lock is let go');
+    assert.deepEqual(readdirSync(p.stock).filter((name) => name.endsWith('.tmp')), [], 'no half-written index is left behind');
+  } finally {
+    p.done();
+  }
+});
+
 const hook =(input: string, env: Record<string, string> = {}): { code: number | null; out: string; err: string } => {
   const base: NodeJS.ProcessEnv = { ...process.env };
   delete base.SZ_PAID_IMAGES;

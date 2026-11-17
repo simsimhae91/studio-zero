@@ -7,7 +7,7 @@ import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
@@ -312,6 +312,297 @@ test('--image downloads a picture over https only, an image only, 10 MB at most,
     assert.deepEqual(readFileSync(join(lib, ref.file as string)), picture(7));
   } finally {
     server.close();
+    done();
+  }
+});
+
+// Correcting and taking out: on the library's first day two agents edited index.jsonl by hand, one because a
+// description overstated what the screen shows, one because an entry was kept with a wrong link. Hand edits of an
+// index other agents are writing at the same moment are how a library loses lines.
+
+/** The library's index as it is on disk, to see that a refusal changed nothing. */
+const indexBytes = (lib: string): Buffer => readFileSync(join(lib, 'index.jsonl'));
+/** A kind's page, written through the command line (80 characters at least). */
+const page = (lib: string, put: (name: string, body: string | Buffer) => string, kind: string, body: string): Promise<Ran> =>
+  refs(lib, ['kind', kind, '--write', put(`page-${body.length}.md`, `# ${kind}\n\n${body}\n`)]);
+const PAGE = 'Ask for one thing first and keep everything else for after it: every kept reference of this kind does that.';
+
+test('edit: the fields given change, the rest stay, the id and the picture stay, and each change is said as it was and as it is', async () => {
+  const { lib, put, done } = setup();
+  try {
+    assert.equal((await add(lib, put, 1, { '--platform': 'ios', '--lang': 'ko', '--for': 'side' })).code, 0);
+    assert.equal((await add(lib, put, 2)).code, 0);
+    const [before, other] = lines(lib) as [Record<string, unknown>, Record<string, unknown>];
+    const id = before.id as string;
+    const ran = await refs(lib, ['edit', id, '--what', 'phone number first']);
+    assert.equal(ran.code, 0, ran.text);
+    const [after, untouched] = lines(lib) as [Record<string, unknown>, Record<string, unknown>];
+    assert.deepEqual(after, { ...before, what: 'phone number first' }, 'only what changed: the id, the picture and every other field stay');
+    assert.deepEqual(untouched, other, 'another reference is left as it was');
+    assert.deepEqual(readFileSync(join(lib, before.file as string)), picture(1));
+    assert.ok(ran.out.includes(id), ran.out);
+    assert.match(ran.out, /what\s+was\s+phone number first, terms later\n\s+now\s+phone number first/);
+    assert.doesNotMatch(ran.out, /^\s+(kind|product|platform|lang|notes|from)\s/m, 'a field that did not change is not listed');
+
+    // Several at once; the notes are said as replaced, with how many characters they now hold.
+    const more = await refs(lib, ['edit', id, '--notes', put('ko.md', NOTES_KO), '--platform', 'web', '--lang', 'en', '--product', 'Toss Bank', '--link', 'https://example.com/screens/1b']);
+    assert.equal(more.code, 0, more.text);
+    assert.deepEqual(lines(lib)[0], { ...after, notes: NOTES_KO.trim(), platform: 'web', lang: 'en', product: 'Toss Bank', link: 'https://example.com/screens/1b' });
+    assert.match(more.out, new RegExp(`notes\\s+replaced, ${[...NOTES_KO.trim()].length} characters`));
+    assert.match(more.out, /platform\s+was\s+ios\n\s+now\s+web/);
+    assert.match(more.out, /lang\s+was\s+ko\n\s+now\s+en/);
+    assert.match(more.out, /product\s+was\s+Toss\n\s+now\s+Toss Bank/);
+    assert.match(more.out, /from\s+was\s+https:\/\/example\.com\/screens\/1\n\s+now\s+https:\/\/example\.com\/screens\/1b/);
+    const json = JSON.parse((await refs(lib, ['edit', id, '--lang', 'ja', '--json'])).out) as { ref: { id: string; lang: string; path: string }; changes: { field: string; was: unknown; now: unknown }[] };
+    assert.deepEqual([json.ref.id, json.ref.lang, json.ref.path], [id, 'ja', join(lib, before.file as string)]);
+    assert.deepEqual(json.changes, [{ field: 'lang', was: 'en', now: 'ja' }]);
+
+    // The same again changes nothing, and says so.
+    const index = indexBytes(lib);
+    const same = await refs(lib, ['edit', id, '--platform', 'web', '--what', 'phone number first']);
+    assert.equal(same.code, 0, same.text);
+    assert.match(same.out, /nothing changed/);
+    assert.deepEqual(indexBytes(lib), index);
+
+    // Nothing to change, what edit does not take, and words past the id are refused, and nothing changes.
+    for (const [args, says] of [
+      [['edit', id], /what to change/],
+      [['edit', '--what', 'a screen'], /which reference/],
+      [['edit', id, '--file', put('other.png', picture(9))], /another picture is another reference.*refs remove/],
+      [['edit', id, '--what', 'phone', 'number'], /one id/],
+      [['edit', id, '--platform', 'tv'], /--platform is one of/],
+      [['edit', id, '--lang', 'korean language'], /--lang takes a language tag/],
+      [['edit', id, '--kind', '!!!'], /--kind "!!!" has no letter or digit/],
+      [['edit', id, '--link', 'not an address'], /--link not an address is not an address/],
+    ] as const) {
+      const refused = await refs(lib, [...args]);
+      assert.equal(refused.code, 1, `${args.join(' ')}: ${refused.text}`);
+      assert.match(refused.text, says, args.join(' '));
+    }
+    assert.deepEqual(indexBytes(lib), index, 'nothing refused changed the index');
+  } finally {
+    done();
+  }
+});
+
+test('edit --kind moves the picture into the new kind, its name and hash kept, and find --kind finds it there and not under the old', async () => {
+  const { lib, put, done } = setup();
+  try {
+    assert.equal((await add(lib, put, 1)).code, 0);
+    assert.equal((await add(lib, put, 2)).code, 0);
+    assert.equal((await add(lib, put, 3, { '--kind': '결제', '--product': 'Kakao Pay', '--notes': put('pay.md', NOTES_PAY) })).code, 0);
+    assert.equal((await page(lib, put, 'Sign in', PAGE)).code, 0);
+    assert.equal((await page(lib, put, '결제', PAGE)).code, 0);
+    const [first, second, pay] = lines(lib) as { id: string; file: string; sha256: string }[];
+
+    // Into a kind that is kept already: both kinds' pages were written before the change, and it says so.
+    const ran = await refs(lib, ['edit', first!.id, '--kind', '결제']);
+    assert.equal(ran.code, 0, ran.text);
+    const moved = lines(lib)[0]! as { id: string; kind: string; file: string; sha256: string };
+    assert.deepEqual([moved.id, moved.kind, moved.sha256], [first!.id, '결제', first!.sha256], 'the id and the picture stay');
+    assert.equal(moved.file, `shots/결제/${basename(first!.file)}`, 'the file keeps its name, and so its hash');
+    assert.deepEqual(readFileSync(join(lib, moved.file)), picture(1));
+    assert.ok(!existsSync(join(lib, first!.file)), 'nothing is left in the old kind’s folder');
+    assert.equal(shots(lib).length, 3);
+    assert.match(ran.out, /kind\s+was\s+Sign in\n\s+now\s+결제/);
+    assert.ok(ran.out.includes(join(lib, first!.file)) && ran.out.includes(join(lib, moved.file)), 'where the picture was and where it is');
+    assert.doesNotMatch(ran.out, /new kind/);
+    for (const kind of ['Sign in', '결제']) assert.match(ran.out, new RegExp(`page of "${kind}" .*was written before this change`), kind);
+
+    const underNew = await refs(lib, ['find', '--kind', '결제']);
+    assert.ok(underNew.out.includes(first!.id) && underNew.out.includes(pay!.id), underNew.out);
+    const underOld = await refs(lib, ['find', '--kind', 'sign in']);
+    assert.ok(!underOld.out.includes(first!.id) && underOld.out.includes(second!.id), underOld.out);
+    assert.deepEqual(JSON.parse((await refs(lib, ['kinds', '--json'])).out).map((k: { kind: string; count: number }) => [k.kind, k.count]), [['결제', 2], ['Sign in', 1]]);
+
+    // Into a kind nobody has kept: the kinds there are are listed, as add does; a kind given in another case is the kind kept.
+    const fresh = await refs(lib, ['edit', second!.id, '--kind', 'Log in']);
+    assert.equal(fresh.code, 0, fresh.text);
+    assert.match(fresh.out, /"Log in" is a new kind\. Kinds already kept: 결제 \(2\)/);
+    assert.equal((lines(lib)[1] as { file: string }).file, `shots/log-in/${basename(second!.file)}`);
+    assert.match(fresh.out, /"Sign in" holds no reference now/, 'the kind it left is empty');
+    // The same kind in another case: a kind nobody else holds takes the name given now, and its picture stays where it is.
+    const cased = await refs(lib, ['edit', second!.id, '--kind', 'log IN']);
+    assert.equal(cased.code, 0, cased.text);
+    assert.deepEqual([(lines(lib)[1] as { kind: string }).kind, (lines(lib)[1] as { file: string }).file], ['log IN', `shots/log-in/${basename(second!.file)}`]);
+    assert.doesNotMatch(cased.out, /new kind/);
+    // A kind others hold keeps the name it was first given, whatever case it is given in.
+    const joined = await refs(lib, ['edit', second!.id, '--kind', '결제']);
+    assert.equal(joined.code, 0, joined.text);
+    const same = await refs(lib, ['edit', pay!.id, '--kind', '결제']);
+    assert.match(same.out, /nothing changed/);
+    assert.equal(shots(lib).length, 3);
+    assert.deepEqual(readdirSync(join(lib, 'shots')).sort(), ['결제'], 'a kind’s folder left empty is taken away');
+  } finally {
+    done();
+  }
+});
+
+test('edit: notes that say almost nothing are refused, as add refuses them, and nothing changes', async () => {
+  const { lib, put, done } = setup();
+  try {
+    assert.equal((await add(lib, put, 1)).code, 0);
+    const id = lines(lib)[0]!.id as string;
+    const index = indexBytes(lib);
+    const short = await refs(lib, ['edit', id, '--notes', put('short.md', '로그인 화면. 깔끔함.\n'), '--what', 'a better line']);
+    assert.equal(short.code, 1, short.text);
+    assert.match(short.text, /80/);
+    const missing = await refs(lib, ['edit', id, '--notes', join(lib, 'nowhere.md')]);
+    assert.equal(missing.code, 1, missing.text);
+    assert.match(missing.text, /no such file/);
+    assert.deepEqual(indexBytes(lib), index, 'nothing changed, not even the field given beside the notes');
+  } finally {
+    done();
+  }
+});
+
+test('edit --link: an address another reference has is refused, however it is written', async () => {
+  const { lib, put, done } = setup();
+  try {
+    assert.equal((await add(lib, put, 1)).code, 0);
+    assert.equal((await add(lib, put, 2)).code, 0);
+    const [first, second] = lines(lib) as { id: string; link: string }[];
+    const index = indexBytes(lib);
+    for (const link of ['https://example.com/screens/2', 'https://EXAMPLE.com/screens/2']) {
+      const refused = await refs(lib, ['edit', first!.id, '--link', link]);
+      assert.equal(refused.code, 1, refused.text);
+      assert.ok(refused.text.includes(second!.id), `it says which reference has it: ${refused.text}`);
+      assert.match(refused.text, /kept once/);
+    }
+    assert.deepEqual(indexBytes(lib), index);
+    const own = await refs(lib, ['edit', first!.id, '--link', 'https://example.com/screens/1']);
+    assert.equal(own.code, 0, own.text);
+    assert.match(own.out, /nothing changed/, 'its own address is not another’s');
+  } finally {
+    done();
+  }
+});
+
+test('remove: the line and the picture are gone, it says what was removed so it can be kept again, and show then says it is not there', async () => {
+  const { lib, put, done } = setup();
+  try {
+    assert.equal((await add(lib, put, 1, { '--platform': 'ios' })).code, 0);
+    assert.equal((await add(lib, put, 2)).code, 0);
+    const [gone, stays] = lines(lib) as { id: string; file: string; link: string }[];
+    const ran = await refs(lib, ['remove', gone!.id]);
+    assert.equal(ran.code, 0, ran.text);
+    for (const said of [gone!.id, 'Sign in', 'Toss', 'phone number first, terms later', gone!.link, NOTES.trim(), 'sz-eyes refs add']) assert.ok(ran.out.includes(said), `it says ${said}:\n${ran.out}`);
+    assert.deepEqual(lines(lib).map((ref) => ref.id), [stays!.id]);
+    assert.ok(!existsSync(join(lib, gone!.file)), 'its picture is deleted');
+    assert.deepEqual(readFileSync(join(lib, stays!.file)), picture(2), 'the other picture is left as it was');
+    assert.equal(shots(lib).length, 1);
+    const shown = await refs(lib, ['show', gone!.id]);
+    assert.equal(shown.code, 1, shown.text);
+    assert.match(shown.text, new RegExp(`no reference ${gone!.id} is kept`));
+    // --json gives the whole entry that was removed, notes and all.
+    const json = JSON.parse((await refs(lib, ['remove', stays!.id, '--json'])).out) as { removed: { id: string; notes: string; link: string } };
+    assert.deepEqual([json.removed.id, json.removed.notes, json.removed.link], [stays!.id, NOTES.trim(), stays!.link]);
+    assert.deepEqual(lines(lib), []);
+    // A link removed can be kept again.
+    const again = await add(lib, put, 1);
+    assert.equal(again.code, 0, again.text);
+    assert.match(again.out, /^kept: /);
+  } finally {
+    done();
+  }
+});
+
+test('an id that is not kept is refused with exit 1, naming the closest ids when a prefix matches, and nothing changes', async () => {
+  const { lib, put, done } = setup();
+  try {
+    assert.equal((await add(lib, put, 1)).code, 0);
+    assert.equal((await add(lib, put, 2, { '--product': 'Kakao Pay' })).code, 0);
+    const [toss, kakao] = lines(lib) as { id: string }[];
+    const index = indexBytes(lib);
+    for (const command of [['edit', '--what', 'another line'], ['remove'], ['show']]) {
+      const typo = `${toss!.id.slice(0, -1)}z`;
+      const near = await refs(lib, [command[0]!, typo, ...command.slice(1)]);
+      assert.equal(near.code, 1, near.text);
+      assert.match(near.text, new RegExp(`no reference ${typo} is kept`));
+      assert.ok(near.text.includes(toss!.id) && !near.text.includes(kakao!.id), `the closest id, and only it: ${near.text}`);
+      const prefix = await refs(lib, [command[0]!, 'kakao', ...command.slice(1)]);
+      assert.equal(prefix.code, 1, prefix.text);
+      assert.ok(prefix.text.includes(kakao!.id) && !prefix.text.includes(toss!.id), prefix.text);
+      const far = await refs(lib, [command[0]!, 'zebra-0000', ...command.slice(1)]);
+      assert.equal(far.code, 1, far.text);
+      assert.match(far.text, /no reference zebra-0000 is kept/);
+      assert.ok(!far.text.includes(toss!.id) && !far.text.includes(kakao!.id), far.text);
+    }
+    assert.deepEqual(indexBytes(lib), index);
+    assert.equal(shots(lib).length, 2);
+  } finally {
+    done();
+  }
+});
+
+test('a kind a remove leaves empty keeps its page, and kinds lists it with 0', async () => {
+  const { lib, put, done } = setup();
+  try {
+    assert.equal((await add(lib, put, 1)).code, 0);
+    assert.equal((await add(lib, put, 2, { '--kind': '결제', '--notes': put('pay.md', NOTES_PAY) })).code, 0);
+    assert.equal((await page(lib, put, 'Sign in', PAGE)).code, 0);
+    const pagePath = join(lib, 'kinds', 'sign-in.md');
+    const written = readFileSync(pagePath, 'utf8');
+    const [signIn, pay] = lines(lib) as { id: string }[];
+
+    const ran = await refs(lib, ['remove', signIn!.id]);
+    assert.equal(ran.code, 0, ran.text);
+    assert.match(ran.out, /"Sign in" holds no reference now/);
+    assert.match(ran.out, /page .*stays/);
+    assert.match(ran.out, /refs kinds lists .*0/);
+    assert.equal(readFileSync(pagePath, 'utf8'), written, 'the page is the owner’s writing, and stays as it was');
+    const kinds = await refs(lib, ['kinds']);
+    assert.equal(kinds.code, 0, kinds.text);
+    assert.match(kinds.out, /Sign in\s+0/);
+    assert.match(kinds.out, /결제\s+1/);
+    assert.deepEqual(JSON.parse((await refs(lib, ['kinds', '--json'])).out).map((k: { kind: string; count: number; page: boolean }) => [k.kind, k.count, k.page]), [['결제', 1, false], ['Sign in', 0, true]]);
+    const kind = await refs(lib, ['kind', 'Sign in']);
+    assert.equal(kind.code, 0, kind.text);
+    assert.ok(kind.out.includes(PAGE), `the page can still be read: ${kind.out}`);
+
+    // A kind with no page that is left empty is no longer listed; the pages that stay are, even with nothing kept.
+    const last = await refs(lib, ['remove', pay!.id]);
+    assert.equal(last.code, 0, last.text);
+    assert.match(last.out, /"결제" holds no reference now/);
+    const none = await refs(lib, ['kinds']);
+    assert.match(none.out, /Sign in\s+0/);
+    assert.doesNotMatch(none.out, /결제/);
+  } finally {
+    done();
+  }
+});
+
+test('four edits and four removes of different references at the same moment all take effect, and no line is lost', async () => {
+  const { lib, put, done } = setup();
+  try {
+    const added = await Promise.all(Array.from({ length: 8 }, (_, i) => add(lib, put, i + 1, { '--product': `Product ${i + 1}` })));
+    for (const one of added) assert.equal(one.code, 0, one.text);
+    const before = lines(lib) as { id: string; product: string; file: string }[];
+    const byProduct = (n: number): { id: string; file: string } => before.find((ref) => ref.product === `Product ${n}`)!;
+    const ran = await Promise.all([
+      refs(lib, ['edit', byProduct(1).id, '--what', 'edited one']),
+      refs(lib, ['edit', byProduct(2).id, '--kind', 'Log in']),
+      refs(lib, ['edit', byProduct(3).id, '--kind', 'Log in', '--what', 'edited three']),
+      refs(lib, ['edit', byProduct(4).id, '--notes', put('pay.md', NOTES_PAY)]),
+      ...[5, 6, 7, 8].map((n) => refs(lib, ['remove', byProduct(n).id])),
+    ]);
+    for (const one of ran) assert.equal(one.code, 0, one.text);
+    const after = lines(lib) as { id: string; kind: string; what: string; notes: string; file: string }[];
+    assert.equal(after.length, 4, 'four removed, four kept');
+    const find = (n: number): (typeof after)[number] => after.find((ref) => ref.id === byProduct(n).id)!;
+    assert.equal(find(1).what, 'edited one');
+    assert.equal(find(2).kind, 'Log in');
+    assert.deepEqual([find(3).kind, find(3).what], ['Log in', 'edited three']);
+    assert.equal(find(4).notes, NOTES_PAY.trim());
+    for (const n of [5, 6, 7, 8]) {
+      assert.ok(!after.some((ref) => ref.id === byProduct(n).id), `${n} is gone`);
+      assert.ok(!existsSync(join(lib, byProduct(n).file)), `${n}'s picture is gone`);
+    }
+    for (const ref of after) assert.ok(existsSync(join(lib, ref.file)), `${ref.id}'s picture is where its line says`);
+    assert.equal(shots(lib).length, 4);
+    assert.ok(!existsSync(join(lib, 'index.jsonl.lock')), 'the lock is let go');
+    assert.deepEqual(readdirSync(lib).filter((name) => name.endsWith('.tmp')), [], 'no half-written index is left behind');
+  } finally {
     done();
   }
 });

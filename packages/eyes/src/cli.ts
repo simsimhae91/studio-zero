@@ -242,8 +242,22 @@ const USAGE = `sz-eyes: launch what was built, look at it, operate it, and put w
         the page of what a kind's references teach, and its references. After keeping some, read them all and
         rewrite the page from them: --write replaces it, and the page before is kept as <kind>.prev.md
   sz-eyes refs show <id> [--json]                        one reference in full, notes and all
+  sz-eyes refs edit <id> [--kind "<kind>"] [--product "<name>"] [--what "<one line>"] [--notes <file.md>] [--platform ios|android|web] [--lang <code>] [--link <address>] [--json]
+        put right what is said about a reference: the fields given change, the rest and the id stay. A change of
+        kind moves the picture into the new kind's folder (its file name, and so its hash, kept); a kind nobody has
+        kept lists the kinds there are, as add does. --notes holds 80 characters at least, as for add; a link
+        another reference has is refused (an address is kept once); "" takes out a platform or a language. Prints
+        each change as it was and as it is (the notes by how many characters they now hold), and names the kind's
+        page, which was written before the change (both kinds' pages when the kind changed). Another picture is
+        another reference: remove, then add
+  sz-eyes refs remove <id> [--json]
+        take a reference out: its line and its picture. Prints all it held, notes and all, and the add that keeps it
+        again. Its kind's page still speaks of it; a kind left with no reference keeps its page (the owner's
+        writing), and refs kinds lists it with 0
         The library is the owner's own, on this machine ($SZ_REFS_DIR, or ~/.studio-zero/references): pictures of other
-        products' screens kept to look at, never put into a product, never committed to a repository, never passed on
+        products' screens kept to look at, never put into a product, never committed to a repository, never passed on.
+        Its index.jsonl is changed only by these commands, under the lock every other agent writes it under: an edit
+        by hand, while others write it, loses their lines
 
   sz-eyes image find [<words>...] [--kind <kind>] [--json]
         the first thing to run when a screen needs a picture: the pictures of the stock that have every word (in
@@ -259,9 +273,19 @@ const USAGE = `sz-eyes: launch what was built, look at it, operate it, and put w
         bring a picture that already exists into the stock: one made earlier, or the owner's own photograph. PNG,
         JPEG or WebP, read from its bytes. The same picture is kept once ("already kept: <id>")
   sz-eyes image show <id> [--json]                       one picture of the stock in full, prompt and all
+  sz-eyes image edit <id> [--kind "<kind>"] [--what "<one line>"] [--prompt "<words>"] [--json]
+        put right what is said about a picture of the stock: the fields given change, the rest and the id stay. A
+        change of kind moves the picture into the new kind's folder (its file name, and so its hash, kept); a kind
+        nobody has kept lists the kinds there are, as keep does. --prompt "" takes out the words it was made from.
+        Prints each change as it was and as it is. Another picture is another entry: remove, then keep
+  sz-eyes image remove <id> [--json]
+        take a picture out of the stock: its line and its file there. A copy put in a project with image use is the
+        project's own and stays where it is. Prints all it held and the image keep that brings it back from such a copy
         The stock is the owner's own, on this machine ($SZ_STOCK_DIR, or ~/.studio-zero/stock), outside any
         repository: every picture made for a product, with the words it was made from, so that the next product
-        takes it instead of making it again. index.jsonl holds a line a picture; pictures/<kind>/ the pictures
+        takes it instead of making it again. index.jsonl holds a line a picture; pictures/<kind>/ the pictures. The
+        index is changed only by these commands, under the lock every other agent writes it under: an edit by hand,
+        while others write it, loses their lines
   sz-eyes image make --prompt "<what it shows and what it is for>" --name <name> --kind "<kind>" --what "<one line: what is in the picture>"
         [--size <WxH>] [--out <folder>] [--dir <project>] [--no-stock] [--json]
         make one original picture for the product's screens, on the subscription the owner already pays for: the
