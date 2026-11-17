@@ -15,6 +15,7 @@ import { IMAGE_ASSETS_DIR, ImageError, imageCommand } from './image.ts';
 import { EyesError, installApp, restSimulator, runFlow, screenText, screenshot, spareSimulator } from './ios.ts';
 import { downloadsOf, filesOf, leakReport, renderLeaks } from './leaks.ts';
 import { lookAtLive, renderLive } from './live.ts';
+import { RelayError, loginCommand } from './login-relay.ts';
 import { DANGEROUS, changesInCode, classify, renderMigrations } from './migrations.ts';
 import { findProducts, overviewPage, renderOverview, viewOf } from './overview.ts';
 import { freePort } from './port.ts';
@@ -23,6 +24,7 @@ import { heldSecrets, ownersVault, parseRun, runWithSecrets, setSecret } from '.
 import { GATE_LINES, lastRelease, releaseContract, releases, renderReleases, type Gate } from './release.ts';
 import { reviewWeb } from './review.ts';
 import { renderStrangers, strangers } from './strangers.ts';
+import { supabaseCommand } from './supabase.ts';
 import { Shown, brokenDuring, keptFor, ledgerProblem, recordShown, renderStanding, stampClosed, standing, standingSummary, mendLedger, STANDING_FILE } from './standing.ts';
 import { Felt, TrialFinding, TrialKind, Verdict, addAsk, addFinding, addNote, addPersona, latestTrial, newTrial, readTrial, renderTrial, setVerdict, unfinished, writeTrialPage, setCanary } from './trial.ts';
 import { SIZES, lookAtWeb, renderLook, renderWalk, walkWeb, type Size, SandboxError, closeBrowser, openBrowser } from './web.ts';
@@ -190,6 +192,21 @@ const USAGE = `sz-eyes: launch what was built, look at it, operate it, and put w
 
   sz-eyes docker <args>...                               the container engine on this machine, reached without touching the owner's settings
   sz-eyes supabase <args>...                             the Supabase stack that runs on this machine for this project (never a hosted one)
+        start also wires the stack to the login relay when the owner's Kakao or Google keys are in the vault (read
+        there by their names; nobody spells them): each provider switched on with the relay's address as where it
+        sends people back, the product's own local addresses allowed as where they land, the secrets handed over by
+        environment only, the backend registered with the relay, the relay started. Prints one line: which
+        providers are on and the one address the owner registers once with each. With no keys, nothing changes and
+        it says which are missing
+
+  sz-eyes login relay start|stop|status
+        the one address registered with Kakao and Google for every product built here (http://localhost:49210/oauth/callback,
+        or the port in SZ_LOGIN_RELAY_PORT): it passes each person who comes back from a provider on to the
+        product's backend that started their sign-in, asking each registered backend's database. start runs it
+        detached and starts nothing when it is already up (exits 1, saying what holds the port, when something
+        else does); stop ends only the relay; status says whether it is up and which backends are registered.
+        Its registry, pid file and log are in ~/.studio-zero/logins ($SZ_LOGINS_DIR). Run it outside the session's
+        command sandbox: it reaches the databases through the container engine
 
   sz-eyes overview [<folder>...] [--out <file.html>]
         several products at once, most urgent first: promises that broke, what waits for the owner's judgement
@@ -410,9 +427,17 @@ async function main(argv: string[]): Promise<number> {
     if (area === 'supabase') {
       const hosted = hostedSupabaseCall(args);
       if (hosted) throw new EyesError(`not passed on: ${hosted}. This door opens only on the stack that runs on this machine. A hosted project is the owner's and is reached with their own \`supabase\`, by the steps of a release (sz:ship).`);
+      return supabaseCommand(args, { tool, env: process.env, cwd: process.cwd(), store: ownersVault(), out: (text) => void process.stdout.write(text), err: (text) => void process.stderr.write(text) });
     }
     const ran = spawnSync(tool, args, { stdio: 'inherit', env: engineEnv() });
     return ran.status ?? 1;
+  }
+  if (area === 'login') {
+    const done = await loginCommand(command, rest).catch((err: unknown) => {
+      throw err instanceof RelayError ? (err.sandboxed ? new SandboxError(err.message) : new EyesError(err.message)) : err;
+    });
+    out(done.text);
+    return done.code;
   }
   if (area === 'release') {
     const a = parse(rest, []);
