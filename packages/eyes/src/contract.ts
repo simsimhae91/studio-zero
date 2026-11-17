@@ -1,6 +1,7 @@
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { z } from 'zod';
+import { withFileLock, writeFileAtomic } from './lock.ts';
 
 /** Where a project keeps what the harness knows of it. */
 export const SZ_DIR = '.sz';
@@ -117,13 +118,31 @@ export const Contract = z.object({
 });
 export type Contract = z.infer<typeof Contract>;
 
+/** A contract as it is now. Takes no lock: the file is always written whole (`writeFileAtomic`). */
 export function readContract(file: string): Contract {
   return Contract.parse(JSON.parse(readFileSync(file, 'utf8')));
 }
 
+const contractText = (contract: Contract): string => `${JSON.stringify(Contract.parse(contract), null, 2)}\n`;
+
+/** Writes a contract as given, whole, under its lock: for one that is being made. To change one, `updateContract`. */
 export function writeContract(file: string, contract: Contract): void {
-  mkdirSync(dirname(file), { recursive: true });
-  writeFileSync(file, `${JSON.stringify(Contract.parse(contract), null, 2)}\n`);
+  const text = contractText(contract);
+  withFileLock(file, () => writeFileAtomic(file, text));
+}
+
+/**
+ * Changes a contract: under its lock, reads it as it is then, applies `change` to it and writes what comes back.
+ * Three verifiers record on one contract at once; a change worked out from a copy read before the lock would
+ * write over what another recorded in between. So whatever `change` checks (is it closed, does the claim exist)
+ * it checks on the contract it is given, and it returns a new object. Nothing slow is done inside it.
+ */
+export function updateContract(file: string, change: (contract: Contract) => Contract): Contract {
+  return withFileLock(file, () => {
+    const next = Contract.parse(change(readContract(file)));
+    writeFileAtomic(file, contractText(next));
+    return next;
+  });
 }
 
 /** Every contract of a project that can be read, in the order they were written. */
@@ -131,6 +150,7 @@ export function allContracts(projectDir: string): { file: string; contract: Cont
   const dir = join(projectDir, CONTRACTS_DIR);
   if (!existsSync(dir)) return [];
   return readdirSync(dir)
+    // Not a contract's lock (`<id>.json.lock`) nor a contract being written (`<id>.json.<n>.tmp`).
     .filter((name) => name.endsWith('.json'))
     .flatMap((name) => {
       try {

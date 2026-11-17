@@ -1,9 +1,10 @@
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { z } from 'zod';
 import { SZ_DIR, addedLate, allContracts, type Claim, type Contract } from './contract.ts';
 import { fingerprints } from './fingerprint.ts';
+import { withFileLock, writeFileAtomic } from './lock.ts';
 
 /**
  * A product that lives is changed many times, and each change is made by someone who was not there for the ones
@@ -26,7 +27,7 @@ export const Shown = z.object({
 export type Shown = z.infer<typeof Shown>;
 
 const Ledger = z.object({ shown: z.record(z.string(), Shown).default({}) });
-type Ledger = z.infer<typeof Ledger>;
+export type Ledger = z.infer<typeof Ledger>;
 
 function readLedger(projectDir: string): Ledger {
   const file = join(projectDir, STANDING_FILE);
@@ -57,11 +58,31 @@ function ledgerOrEmpty(projectDir: string): Ledger {
   }
 }
 
+/** The record as it is written, its claims in order of their keys. */
+function ledgerText(ledger: Ledger): string {
+  const sorted = Object.fromEntries(Object.entries(ledger.shown).sort(([a], [b]) => a.localeCompare(b)));
+  return `${JSON.stringify(Ledger.parse({ shown: sorted }), null, 2)}\n`;
+}
+
+/** Writes the record as given, whole, under its lock. To change it, `updateLedger`. */
 function writeLedger(projectDir: string, ledger: Ledger): void {
   const file = join(projectDir, STANDING_FILE);
-  mkdirSync(dirname(file), { recursive: true });
-  const sorted = Object.fromEntries(Object.entries(ledger.shown).sort(([a], [b]) => a.localeCompare(b)));
-  writeFileSync(file, `${JSON.stringify(Ledger.parse({ shown: sorted }), null, 2)}\n`);
+  const text = ledgerText(ledger);
+  withFileLock(file, () => writeFileAtomic(file, text));
+}
+
+/**
+ * Changes the record: under its lock, reads it as it is then, applies `change` and writes what comes back. Looks
+ * at standing claims are recorded by several processes at once; each merges its own onto the record as it is,
+ * not onto a copy read before another wrote. Throws, writing nothing, when the record cannot be read.
+ */
+export function updateLedger(projectDir: string, change: (ledger: Ledger) => Ledger): Ledger {
+  const file = join(projectDir, STANDING_FILE);
+  return withFileLock(file, () => {
+    const next = Ledger.parse(change(readLedger(projectDir)));
+    writeFileAtomic(file, ledgerText(next));
+    return next;
+  });
 }
 
 /**
@@ -176,19 +197,18 @@ export function recordShown(projectDir: string, key: string, look: { status: Sho
     throw new Error(gone ? `${key} no longer stands: contract ${gone.by} replaced it (${gone.why})` : `${key} is not a standing claim. Standing: ${stands.map((s) => s.key).join(', ') || '(none)'}`);
   }
   const contract = allContracts(projectDir).find((entry) => entry.contract.id === found.contract)!.contract;
-  const shown = Shown.parse({ ...look, files: look.status === 'holds' ? fingerprints(projectDir, watched(contract, found.claim)) : (found.last?.files ?? {}) });
-  const ledger = readLedger(projectDir);
-  ledger.shown[key] = shown;
-  writeLedger(projectDir, ledger);
-  return shown;
+  // The files are fingerprinted before the lock is taken. A look that did not find it holding keeps the stamp
+  // of when it last held, as the record has it when this look is written onto it.
+  const files = look.status === 'holds' ? fingerprints(projectDir, watched(contract, found.claim)) : null;
+  const recorded = updateLedger(projectDir, (ledger) => ({ shown: { ...ledger.shown, [key]: Shown.parse({ ...look, files: files ?? ledger.shown[key]?.files ?? {} }) } }));
+  return recorded.shown[key]!;
 }
 
 /** When a contract is closed, each claim it proved starts standing, stamped with the files as they are now. */
 export function stampClosed(projectDir: string, contract: Contract, at: string): void {
   if (contract.release !== null) return;
-  const ledger = readLedger(projectDir);
-  for (const claim of contract.claims) if (claim.status === 'proven') ledger.shown[keyOf(contract.id, claim.id)] = Shown.parse({ status: 'holds', at, note: '', during: contract.id, files: fingerprints(projectDir, watched(contract, claim)) });
-  writeLedger(projectDir, ledger);
+  const stamped = Object.fromEntries(contract.claims.filter((claim) => claim.status === 'proven').map((claim) => [keyOf(contract.id, claim.id), Shown.parse({ status: 'holds', at, note: '', during: contract.id, files: fingerprints(projectDir, watched(contract, claim)) })]));
+  updateLedger(projectDir, (ledger) => ({ shown: { ...ledger.shown, ...stamped } }));
 }
 
 /** Standing claims that were found broken while this contract was being worked on, and are still recorded so. */

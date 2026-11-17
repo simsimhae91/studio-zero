@@ -1,12 +1,12 @@
 // The parts of the eyes that need no browser and no simulator: a contract and what it still owes, the page the
 // owner reads, and the copy of a flow that cannot write outside the folder it was given.
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { test } from 'node:test';
-import { spawnSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { spawn, spawnSync } from 'node:child_process';
+import { existsSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { addToBacklog, doneInBacklog, leftBy, openBacklog } from '../src/backlog.ts';
 import { freePort } from '../src/port.ts';
@@ -18,6 +18,7 @@ import { SandboxError, stoppedBySandbox, walkWeb } from '../src/web.ts';
 import { brokenDuring, keptFor, recordShown, stampClosed, standing } from '../src/standing.ts';
 import { evidencePage } from '../src/evidence.ts';
 import { quarantineFlow, screenText } from '../src/ios.ts';
+import { lockPathOf, withFileLock, writeFileAtomic } from '../src/lock.ts';
 
 const contract = (): Contract =>
   Contract.parse({
@@ -764,4 +765,157 @@ test('two lines of work that each looked at what stands are brought together wit
   } finally {
     rmSync(project, { recursive: true, force: true });
   }
+});
+
+// ------------------------------------------------------------------ several verifiers at once
+
+/** The command line in a process of its own, not waited for: started beside others, as verifiers start it. */
+const eyesLater = (project: string, ...args: string[]): Promise<{ code: number | null; text: string }> =>
+  new Promise((done, fail) => {
+    const child = spawn(process.execPath, [join(HERE, '../src/cli.ts'), ...args, '--dir', project]);
+    let text = '';
+    child.stdout.setEncoding('utf8').on('data', (chunk: string) => (text += chunk));
+    child.stderr.setEncoding('utf8').on('data', (chunk: string) => (text += chunk));
+    child.on('error', fail);
+    child.on('close', (code) => done({ code, text }));
+  });
+
+test('verifiers recording on one contract at the same moment lose no verdict, notice or look, and a reader never sees half a file', async () => {
+  // Three verifiers look at a product at once and each records on the same contract. Each command read the whole
+  // file, changed it and wrote it back: a verdict written first was overwritten by the next writer and read back
+  // as unproven (16 at once lost 5, 8 and 6 of 16).
+  const project = mkdtempSync(join(tmpdir(), 'eyes-race-'));
+  const n = 16;
+  const ids = Array.from({ length: n }, (_, i) => `c${i + 1}`);
+  const file = join(project, CONTRACTS_DIR, 'race.json');
+  try {
+    assert.equal(eyes(project, 'contract', 'new', 'race', '--lane', 'M', '--request', '여럿이 한꺼번에 적는다', ...ids.flatMap((id) => ['--claim', `${id}|약속 ${id}이 참이다|command:true`])).code, 0);
+    assert.equal(eyes(project, 'contract', 'freeze', 'race').code, 0);
+
+    // While they write, someone reads the file as it is, with no lock: it is always a whole file.
+    const reader = (async () => {
+      const broken: string[] = [];
+      for (let i = 0; i < 200; i++) {
+        try {
+          Contract.parse(JSON.parse(readFileSync(file, 'utf8')));
+        } catch (err) {
+          broken.push(String(err).split('\n')[0]!);
+        }
+        await new Promise((resolve) => setTimeout(resolve, 3));
+      }
+      return broken;
+    })();
+    const [claimed, broken] = await Promise.all([Promise.all(ids.map((id) => eyesLater(project, 'contract', 'claim', 'race', id, '--status', 'proven', '--note', `돌려서 봤다 ${id}`))), reader]);
+    for (const run of claimed) assert.equal(run.code, 0, run.text);
+    const after = Contract.parse(JSON.parse(readFileSync(file, 'utf8')));
+    const lost = after.claims.filter((claim) => claim.status !== 'proven').map((claim) => claim.id);
+    assert.deepEqual(lost, [], `${lost.length} of ${n} verdicts lost`);
+    assert.deepEqual(after.claims.map((claim) => claim.note), ids.map((id) => `돌려서 봤다 ${id}`));
+    assert.deepEqual(broken, [], `${broken.length} of 200 reads did not get a whole contract`);
+
+    const noticed = await Promise.all(Array.from({ length: 6 }, (_, i) => eyesLater(project, 'contract', 'notice', 'race', `눈에 띈 것 ${i + 1}`)));
+    for (const run of noticed) assert.equal(run.code, 0, run.text);
+    const kept = Contract.parse(JSON.parse(readFileSync(file, 'utf8'))).noticed.map((entry) => entry.text).sort();
+    assert.deepEqual(kept, Array.from({ length: 6 }, (_, i) => `눈에 띈 것 ${i + 1}`).sort(), `${6 - kept.length} of 6 notices lost`);
+    assert.deepEqual(readdirSync(join(project, CONTRACTS_DIR)).filter((name) => !name.endsWith('.json')), [], 'no lock or half-written file is left beside the contracts');
+
+    // The promises it proved stand once it is closed, and the looks at them are recorded at once too.
+    assert.equal(eyes(project, 'contract', 'close', 'race').code, 0);
+    const looked = await Promise.all(ids.map((id) => eyesLater(project, 'standing', 'record', `race/${id}`, '--status', 'holds', '--note', `다시 돌려 봤다 ${id}`, '--during', 'race')));
+    for (const run of looked) assert.equal(run.code, 0, run.text);
+    const shown = JSON.parse(readFileSync(join(project, '.sz/standing.json'), 'utf8')).shown as Record<string, { status: string; note: string }>;
+    const forgotten = ids.filter((id) => shown[`race/${id}`]?.note !== `다시 돌려 봤다 ${id}`);
+    assert.deepEqual(forgotten, [], `${forgotten.length} of ${n} looks lost`);
+    assert.deepEqual(readdirSync(join(project, '.sz')).filter((name) => name.endsWith('.lock') || name.endsWith('.tmp')), [], 'no lock or half-written file is left beside the record');
+  } finally {
+    rmSync(project, { recursive: true, force: true });
+  }
+});
+
+/** A folder for a lock test, with the lock's waits set for it and put back as they were afterwards. */
+const lockTest = (name: string, env: Record<string, string>, body: (target: string, lock: string) => void): void => {
+  test(name, () => {
+    const folder = mkdtempSync(join(tmpdir(), 'eyes-lock-'));
+    const before = Object.fromEntries(Object.keys(env).map((key) => [key, process.env[key]]));
+    Object.assign(process.env, env);
+    try {
+      const target = join(folder, 'contracts', 'm1.json');
+      body(target, lockPathOf(target));
+    } finally {
+      for (const [key, value] of Object.entries(before)) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+      rmSync(folder, { recursive: true, force: true });
+    }
+  });
+};
+const someoneElse = (lock: string, pid: number): string => {
+  mkdirSync(lock, { recursive: true });
+  const token = join(lock, `${pid}.elsewhere.json`);
+  writeFileSync(token, JSON.stringify({ pid, at: '2026-11-17T01:02:03.000Z' }));
+  return token;
+};
+
+lockTest('a lock is a folder beside the file: the callback runs inside it, and nothing of it is left after', { SZ_LOCK_TIMEOUT_MS: '2000' }, (target, lock) => {
+  assert.equal(lock, `${target}.lock`);
+  assert.equal(withFileLock(target, () => {
+    assert.ok(existsSync(lock), 'held while the callback runs');
+    writeFileAtomic(target, '{"n":1}\n');
+    return 'what it returned';
+  }), 'what it returned');
+  assert.equal(existsSync(lock), false);
+  assert.throws(() => withFileLock(target, () => { throw new Error('failed inside'); }), /failed inside/);
+  assert.equal(existsSync(lock), false, 'given back when the callback throws');
+  assert.deepEqual(readdirSync(dirname(target)), ['m1.json'], 'no lock and no half-written file beside it');
+  assert.equal(readFileSync(target, 'utf8'), '{"n":1}\n');
+});
+
+lockTest('a lock older than the stale time is taken as abandoned, whoever made it, and the call goes on', { SZ_LOCK_TIMEOUT_MS: '2000', SZ_LOCK_STALE_MS: '30000' }, (target, lock) => {
+  // A process alive or not, its number reused or not: only the age of its lock says it was abandoned.
+  someoneElse(lock, process.pid);
+  const old = new Date(Date.now() - 60_000);
+  utimesSync(lock, old, old);
+  assert.equal(withFileLock(target, () => 'went on'), 'went on');
+  assert.equal(existsSync(lock), false);
+  assert.deepEqual(readdirSync(dirname(target)), [], 'what was reclaimed is gone, not set aside and left');
+});
+
+lockTest('a fresh lock held by someone else is waited for, then refused with the file, the wait and who holds it', { SZ_LOCK_TIMEOUT_MS: '200', SZ_LOCK_STALE_MS: '30000' }, (target, lock) => {
+  const token = someoneElse(lock, 4242);
+  const started = Date.now();
+  let ran = false;
+  assert.throws(
+    () => withFileLock(target, () => (ran = true)),
+    (err: Error) => err.message.includes(target) && /waited \d+ ms/.test(err.message) && /process 4242 since 2026-11-17T01:02:03\.000Z/.test(err.message),
+  );
+  assert.ok(Date.now() - started >= 200, 'it waited for the time it was given');
+  assert.equal(ran, false);
+  assert.ok(existsSync(token), 'the lock of whoever holds it is left as it is');
+});
+
+lockTest('taking the same lock again inside its callback is refused at once, not waited on forever', { SZ_LOCK_TIMEOUT_MS: '5000' }, (target, lock) => {
+  const started = Date.now();
+  assert.throws(() => withFileLock(target, () => withFileLock(target, () => 'never')), /already holds the lock/);
+  assert.ok(Date.now() - started < 1000, `refused at once, not after the wait (${Date.now() - started} ms)`);
+  assert.throws(() => withFileLock(target, () => withFileLock(`${dirname(target)}/./m1.json`, () => 'never')), /already holds the lock/, 'the same file by another spelling');
+  assert.equal(existsSync(lock), false);
+});
+
+lockTest('a holder whose lock was taken from it while it was held up does not remove the next holder’s lock', { SZ_LOCK_TIMEOUT_MS: '2000' }, (target, lock) => {
+  // While this holder was frozen past the stale time, its lock was reclaimed and someone else took it afresh.
+  let next = '';
+  withFileLock(target, () => {
+    renameSync(lock, `${lock}-reclaimed`);
+    rmSync(`${lock}-reclaimed`, { recursive: true });
+    next = someoneElse(lock, 5151);
+  });
+  assert.ok(existsSync(next), 'the next holder still holds it');
+  rmSync(lock, { recursive: true });
+  // Nor when the next holder has made its folder and not yet put its token in it.
+  withFileLock(target, () => {
+    rmSync(lock, { recursive: true });
+    mkdirSync(lock);
+  });
+  assert.ok(existsSync(lock));
 });

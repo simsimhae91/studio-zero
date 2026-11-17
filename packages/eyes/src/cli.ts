@@ -3,7 +3,7 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 import { BACKLOG_FILE, addToBacklog, doneInBacklog, leftBy, openBacklog } from './backlog.ts';
-import { CONTRACTS_DIR, EVIDENCE_DIR, ClaimStatus, Contract, Lane, ShownBy, localDay, notLookedAt, openContracts, owed, readContract, renderContract, writeContract } from './contract.ts';
+import { CONTRACTS_DIR, EVIDENCE_DIR, ClaimStatus, Contract, Lane, ShownBy, localDay, notLookedAt, openContracts, owed, readContract, renderContract, updateContract, writeContract, type Claim } from './contract.ts';
 import { ElectronError, renderAppLook, renderAppWalk, walkElectron } from './electron.ts';
 import { CiteError, seeQuote } from './cite.ts';
 import { Basis, LineId, LineStatus, Objection, Other, addAsk as addWorthAsk, addCite, addObjection, allCases, answerObjection, caseFolder, hearAsk, newCase, readCase, renderCase, renderCases, setCall, setLine, setOther, setOwner, setRow, standingOf, unanswered, weighCite, writeCasePage, writeCasesPage } from './worth.ts';
@@ -248,6 +248,9 @@ function alsoOwed(project: string, contract: Contract): string[] {
   ];
 }
 
+/** A contract with one of its claims changed, as a new object: the one that was read is left as it was. */
+const withClaim = (contract: Contract, claimId: string, change: (claim: Claim) => Claim): Contract => ({ ...contract, claims: contract.claims.map((claim) => (claim.id === claimId ? change(claim) : claim)) });
+
 /** Nothing is recorded or closed over a record of promises that cannot be read. */
 function needLedger(project: string): void {
   const problem = ledgerProblem(project);
@@ -394,12 +397,14 @@ async function main(argv: string[]): Promise<number> {
       if (!id || note.length < 12) throw new EyesError('sz-eyes release back <id> --note "<what was put back and what answers now>"');
       const file = contractFile(project, id);
       if (!existsSync(file)) throw new EyesError(`no such release: ${id}`);
-      const contract = readContract(file);
-      if (!contract.release || contract.release.candidate === null) throw new EyesError(`${id} is not a release`);
-      if (contract.release.takenBack) throw new EyesError(`${id} was already taken back at ${contract.release.takenBack.at}`);
-      writeContract(file, { ...contract, release: { ...contract.release, takenBack: { at: now, note } }, closedAt: contract.closedAt ?? now });
-      addToBacklog(project, [{ text: `출하 ${id}(${contract.release.commit.slice(0, 7)})를 되돌렸다: ${note}`, from: id }]);
-      out(`taken back: ${id}. ${lastRelease(project, contract.release.place) ? `What should answer at ${contract.release.place} now: ${lastRelease(project, contract.release.place)!.release!.commit.slice(0, 7)}` : `Nothing released to ${contract.release.place} stands now`}. Written to ${BACKLOG_FILE}.`);
+      const back = updateContract(file, (contract) => {
+        if (!contract.release || contract.release.candidate === null) throw new EyesError(`${id} is not a release`);
+        if (contract.release.takenBack) throw new EyesError(`${id} was already taken back at ${contract.release.takenBack.at}`);
+        return { ...contract, release: { ...contract.release, takenBack: { at: now, note } }, closedAt: contract.closedAt ?? now };
+      });
+      const release = back.release!;
+      addToBacklog(project, [{ text: `출하 ${id}(${release.commit.slice(0, 7)})를 되돌렸다: ${note}`, from: id }]);
+      out(`taken back: ${id}. ${lastRelease(project, release.place) ? `What should answer at ${release.place} now: ${lastRelease(project, release.place)!.release!.commit.slice(0, 7)}` : `Nothing released to ${release.place} stands now`}. Written to ${BACKLOG_FILE}.`);
       return 0;
     }
     const place = a.one('--place');
@@ -886,29 +891,36 @@ async function main(argv: string[]): Promise<number> {
       out(contract.frozen.length === 0 ? `${id} froze no file` : `${id} froze ${contract.frozen.length} file(s) at ${contract.frozenAt}:\n${contract.frozen.map((path) => `  ${changed.includes(path) ? 'CHANGED  ' : contract.frozenPrints[path] === undefined ? 'unstamped' : 'as frozen'} ${path}${contract.amendments.some((amend) => amend.file === path) ? ' (corrected by the arbiter since, and stamped again)' : ''}`).join('\n')}`);
       return changed.length > 0 ? 1 : 0;
     }
+    // The commands below change the contract. Each does its checks inside `updateContract`, on the contract as it
+    // is read there under its lock, and prints from what was written: what `contract` above holds may be older.
     if (command === 'freeze') {
-      if (contract.frozenAt !== null) throw new EyesError(`${id} was frozen at ${contract.frozenAt}`);
-      const frozen = [...new Set([...contract.frozen, ...a.all('--frozen')])];
-      const missing = frozen.filter((path) => !existsSync(join(project, path)));
-      if (missing.length > 0) throw new EyesError(`not there to freeze: ${missing.join(', ')}. Paths are relative to the project; write the flow or test first.`);
-      writeContract(file, { ...contract, frozen, frozenPrints: fingerprints(project, frozen), frozenAt: new Date().toISOString() });
-      out(`frozen: ${id}. Whoever builds it does not edit ${file}${contract.frozen.length + a.all('--frozen').length > 0 ? ' or the files it names' : ''}.`);
+      const frozen = updateContract(file, (contract) => {
+        if (contract.frozenAt !== null) throw new EyesError(`${id} was frozen at ${contract.frozenAt}`);
+        const frozen = [...new Set([...contract.frozen, ...a.all('--frozen')])];
+        const missing = frozen.filter((path) => !existsSync(join(project, path)));
+        if (missing.length > 0) throw new EyesError(`not there to freeze: ${missing.join(', ')}. Paths are relative to the project; write the flow or test first.`);
+        return { ...contract, frozen, frozenPrints: fingerprints(project, frozen), frozenAt: new Date().toISOString() };
+      });
+      out(`frozen: ${id}. Whoever builds it does not edit ${file}${frozen.frozen.length > 0 ? ' or the files it names' : ''}.`);
       return 0;
     }
     if (command === 'dispute') {
       // A claim found false whose own words are what is wrong. Its words stay as they were agreed; it is set
       // aside for the owner with the ruling, and it no longer stops the work from being closed.
-      if (contract.frozenAt === null || contract.closedAt !== null) throw new EyesError(`a dispute is recorded on a contract that is frozen and open; ${id} is ${contract.closedAt !== null ? 'closed' : 'not frozen yet'}`);
-      const claim = contract.claims.find((c) => c.id === a.words[1]);
-      if (!claim) throw new EyesError(`contract ${id} has no claim "${a.words[1] ?? ''}". Its claims: ${contract.claims.map((c) => c.id).join(', ')}`);
-      if (claim.status !== 'refuted') throw new EyesError(`${id}/${claim.id} is ${claim.status}: a dispute is about a claim that was looked at and found false. Have it verified first.`);
-      const ruling = (a.one('--ruling') ?? '').replace(/\s+/g, ' ').trim();
-      if (ruling.length < 30) throw new EyesError('sz-eyes contract dispute <id> <claim-id> --ruling "<what the claim says, what is so, and where that is read (the address, the sentence)>" [--evidence <file>]...');
-      const folder = evidenceFolder(project, id);
-      const shown = a.all('--evidence').map((path) => evidencePath(project, id, path));
-      for (const path of shown) if (!existsSync(join(folder, path))) throw new EyesError(`${join(folder, path)}: no such file. Evidence is a file under ${folder}, named from there`);
-      Object.assign(claim, { status: 'disputed', note: `약속의 문구가 사실과 다름: ${ruling}`, evidence: [...new Set([...claim.evidence, ...shown])], at: new Date().toISOString() });
-      writeContract(file, contract);
+      const claimId = a.words[1];
+      const saved = updateContract(file, (contract) => {
+        if (contract.frozenAt === null || contract.closedAt !== null) throw new EyesError(`a dispute is recorded on a contract that is frozen and open; ${id} is ${contract.closedAt !== null ? 'closed' : 'not frozen yet'}`);
+        const claim = contract.claims.find((c) => c.id === claimId);
+        if (!claim) throw new EyesError(`contract ${id} has no claim "${claimId ?? ''}". Its claims: ${contract.claims.map((c) => c.id).join(', ')}`);
+        if (claim.status !== 'refuted') throw new EyesError(`${id}/${claim.id} is ${claim.status}: a dispute is about a claim that was looked at and found false. Have it verified first.`);
+        const ruling = (a.one('--ruling') ?? '').replace(/\s+/g, ' ').trim();
+        if (ruling.length < 30) throw new EyesError('sz-eyes contract dispute <id> <claim-id> --ruling "<what the claim says, what is so, and where that is read (the address, the sentence)>" [--evidence <file>]...');
+        const folder = evidenceFolder(project, id);
+        const shown = a.all('--evidence').map((path) => evidencePath(project, id, path));
+        for (const path of shown) if (!existsSync(join(folder, path))) throw new EyesError(`${join(folder, path)}: no such file. Evidence is a file under ${folder}, named from there`);
+        return withClaim(contract, claim.id, (c) => ({ ...c, status: 'disputed', note: `약속의 문구가 사실과 다름: ${ruling}`, evidence: [...new Set([...c.evidence, ...shown])], at: new Date().toISOString() }));
+      });
+      const claim = saved.claims.find((c) => c.id === claimId)!;
       out(`${id}/${claim.id}: disputed. Its words are unchanged and it does not stand; it waits for the owner (sz-eyes contract judged ${id} ${claim.id} --verdict yes|no --said "<their words>": yes = the claim was wrong, no = the product must do what it says).`);
       return 0;
     }
@@ -916,55 +928,67 @@ async function main(argv: string[]): Promise<number> {
       // A contract frozen with its claims and without their checks: the check for a claim is written by whoever
       // verifies it, on the product as it stands, and from then on it is held like any other frozen file. Files
       // are only ever added here; what is frozen is not taken off or replaced.
-      if (contract.frozenAt === null) throw new EyesError(`${id} is not frozen yet: freeze it first (its claims are what is agreed), then add the checks as they are written`);
-      const added = a.all('--frozen').filter((path) => !contract.frozen.includes(path));
-      if (added.length === 0) throw new EyesError('sz-eyes contract add-check <id> --frozen <flow or test file>... (a file the contract does not hold yet)');
-      const missing = added.filter((path) => !existsSync(join(project, path)));
-      if (missing.length > 0) throw new EyesError(`not there to hold: ${missing.join(', ')}. Paths are relative to the project; write the flow or test first.`);
-      const frozen = [...contract.frozen, ...added];
-      writeContract(file, { ...contract, frozen, frozenPrints: { ...contract.frozenPrints, ...fingerprints(project, added) } });
-      out(`held: ${added.join(', ')} (contract ${id} now holds ${frozen.length} file(s))`);
+      let added: string[] = [];
+      const saved = updateContract(file, (contract) => {
+        if (contract.frozenAt === null) throw new EyesError(`${id} is not frozen yet: freeze it first (its claims are what is agreed), then add the checks as they are written`);
+        added = a.all('--frozen').filter((path) => !contract.frozen.includes(path));
+        if (added.length === 0) throw new EyesError('sz-eyes contract add-check <id> --frozen <flow or test file>... (a file the contract does not hold yet)');
+        const missing = added.filter((path) => !existsSync(join(project, path)));
+        if (missing.length > 0) throw new EyesError(`not there to hold: ${missing.join(', ')}. Paths are relative to the project; write the flow or test first.`);
+        return { ...contract, frozen: [...contract.frozen, ...added], frozenPrints: { ...contract.frozenPrints, ...fingerprints(project, added) } };
+      });
+      out(`held: ${added.join(', ')} (contract ${id} now holds ${saved.frozen.length} file(s))`);
       return 0;
     }
     if (command === 'claim') {
       // A closed contract is the record of what was shown then. What is found of it later is a look at a
       // standing claim, written where it cannot quietly take a promise off the list.
-      if (contract.closedAt !== null) throw new EyesError(`contract ${id} is closed: its verdicts are the record of what was shown then. What is found now is recorded with \`sz-eyes standing record ${id}/<claim> --status holds|broken|unchecked\`; the owner's own verdict on a claim left for them, with \`sz-eyes contract judged ${id} <claim> --verdict yes|no --said "<their words>"\`.`);
       const claimId = a.words[1];
-      const claim = contract.claims.find((c) => c.id === claimId);
-      if (!claim) throw new EyesError(`contract ${id} has no claim "${claimId ?? ''}". Its claims: ${contract.claims.map((c) => c.id).join(', ')}`);
-      const status = ClaimStatus.parse(a.one('--status'));
-      const folder = evidenceFolder(project, id);
-      const shown = a.all('--evidence').map((path) => evidencePath(project, id, path));
-      for (const path of shown) if (!existsSync(join(folder, path))) throw new EyesError(`${join(folder, path)}: no such file. Evidence is a file under ${folder}, named from there (look/home.png)`);
-      // A claim is not called proven on someone's word: there is something to look at, or a command that said so.
-      if (status === 'proven' && shown.length === 0 && !a.one('--note')) throw new EyesError('a claim is proven by something that shows it: give --evidence (a picture, a film, a log under the evidence folder) or a --note that says what was run and what it said');
-      Object.assign(claim, { status, evidence: [...new Set([...claim.evidence, ...shown])], note: a.one('--note') ?? claim.note, at: new Date().toISOString() });
-      writeContract(file, contract);
-      out(`${claimId}: ${status}`);
+      const saved = updateContract(file, (contract) => {
+        if (contract.closedAt !== null) throw new EyesError(`contract ${id} is closed: its verdicts are the record of what was shown then. What is found now is recorded with \`sz-eyes standing record ${id}/<claim> --status holds|broken|unchecked\`; the owner's own verdict on a claim left for them, with \`sz-eyes contract judged ${id} <claim> --verdict yes|no --said "<their words>"\`.`);
+        const claim = contract.claims.find((c) => c.id === claimId);
+        if (!claim) throw new EyesError(`contract ${id} has no claim "${claimId ?? ''}". Its claims: ${contract.claims.map((c) => c.id).join(', ')}`);
+        const status = ClaimStatus.parse(a.one('--status'));
+        const folder = evidenceFolder(project, id);
+        const shown = a.all('--evidence').map((path) => evidencePath(project, id, path));
+        for (const path of shown) if (!existsSync(join(folder, path))) throw new EyesError(`${join(folder, path)}: no such file. Evidence is a file under ${folder}, named from there (look/home.png)`);
+        // A claim is not called proven on someone's word: there is something to look at, or a command that said so.
+        if (status === 'proven' && shown.length === 0 && !a.one('--note')) throw new EyesError('a claim is proven by something that shows it: give --evidence (a picture, a film, a log under the evidence folder) or a --note that says what was run and what it said');
+        return withClaim(contract, claim.id, (c) => ({ ...c, status, evidence: [...new Set([...c.evidence, ...shown])], note: a.one('--note') ?? c.note, at: new Date().toISOString() }));
+      });
+      out(`${claimId}: ${saved.claims.find((c) => c.id === claimId)!.status}`);
       return 0;
     }
     if (command === 'judged') {
       // What only the owner can say is said by the owner, usually after the work is closed and in a few words.
       // Their words are the evidence. Nobody else's verdict is taken this way: a claim a machine can show is shown.
       const claimId = a.words[1];
-      const claim = contract.claims.find((c) => c.id === claimId);
-      if (!claim) throw new EyesError(`contract ${id} has no claim "${claimId ?? ''}". Its claims: ${contract.claims.map((c) => c.id).join(', ')}`);
-      const disputed = claim.status === 'disputed';
-      if (claim.shownBy.kind !== 'owner' && !disputed) throw new EyesError(`${id}/${claim.id} is shown by ${claim.shownBy.kind}, not left for the owner to judge: it is shown by running it (${claim.shownBy.ref})`);
-      if (contract.frozenAt === null) throw new EyesError(`contract ${id} is not agreed yet (not frozen): there is nothing built to judge`);
       const verdict = a.one('--verdict');
       const said = (a.one('--said') ?? '').replace(/\s+/g, ' ').trim();
-      if ((verdict !== 'yes' && verdict !== 'no') || said === '') throw new EyesError('sz-eyes contract judged <id> <claim-id> --verdict yes|no --said "<the owner\'s words, as they said them>"');
       const at = new Date();
       const day = localDay(at.toISOString());
+      // Whether the claim was disputed when it was judged, as the contract was read under its lock.
+      const was = { disputed: false };
+      const saved = updateContract(file, (contract) => {
+        const claim = contract.claims.find((c) => c.id === claimId);
+        if (!claim) throw new EyesError(`contract ${id} has no claim "${claimId ?? ''}". Its claims: ${contract.claims.map((c) => c.id).join(', ')}`);
+        const disputed = claim.status === 'disputed';
+        if (claim.shownBy.kind !== 'owner' && !disputed) throw new EyesError(`${id}/${claim.id} is shown by ${claim.shownBy.kind}, not left for the owner to judge: it is shown by running it (${claim.shownBy.ref})`);
+        if (contract.frozenAt === null) throw new EyesError(`contract ${id} is not agreed yet (not frozen): there is nothing built to judge`);
+        if ((verdict !== 'yes' && verdict !== 'no') || said === '') throw new EyesError('sz-eyes contract judged <id> <claim-id> --verdict yes|no --said "<the owner\'s words, as they said them>"');
+        if (contract.closedAt !== null) needLedger(project);
+        was.disputed = disputed;
+        // Disputed, yes: the claim's words were wrong; it is retired as it stands, with their word on it. No: the
+        // product is to do what the claim says, so it is false again and goes to the list of what is left.
+        return withClaim(contract, claim.id, (c) =>
+          disputed
+            ? { ...c, status: verdict === 'yes' ? 'disputed' : 'refuted', note: `${c.note} / 주인이 정함 (${day}): "${said}"`, at: at.toISOString() }
+            : { ...c, status: verdict === 'yes' ? 'proven' : 'refuted', note: `주인이 봄 (${day}): "${said}"`, at: at.toISOString() },
+        );
+      });
+      const claim = saved.claims.find((c) => c.id === claimId)!;
       const key = `${id}/${claim.id}`;
-      if (contract.closedAt !== null) needLedger(project);
-      if (disputed) {
-        // Yes: the claim's words were wrong; it is retired as it stands, with their word on it. No: the product
-        // is to do what the claim says, so it is false again and goes to the list of what is left.
-        Object.assign(claim, { status: verdict === 'yes' ? 'disputed' : 'refuted', note: `${claim.note} / 주인이 정함 (${day}): "${said}"`, at: at.toISOString() });
-        writeContract(file, contract);
+      if (was.disputed) {
         const done: string[] = [];
         try {
           doneInBacklog(project, `주인이 정할 것: ${claim.says.replace(/\s+/g, ' ').trim()}`, `주인의 판단 ${day}: "${said}"`);
@@ -976,10 +1000,8 @@ async function main(argv: string[]): Promise<number> {
         out(`${key}: ${verdict === 'yes' ? 'the owner agrees the claim was wrong; it is retired' : 'the owner wants it as written; it is false again and the product has to change'}${done.length > 0 ? ` (${done.join('; ')})` : ''}`);
         return 0;
       }
-      Object.assign(claim, { status: verdict === 'yes' ? 'proven' : 'refuted', note: `주인이 봄 (${day}): "${said}"`, at: at.toISOString() });
-      writeContract(file, contract);
       const did: string[] = [];
-      if (contract.closedAt !== null) {
+      if (saved.closedAt !== null) {
         // Closing wrote a line for it in the list of what is left; their verdict ends that line.
         try {
           doneInBacklog(project, `주인이 볼 것: ${claim.says.replace(/\s+/g, ' ').trim()}`, `주인의 판단 ${day}: "${said}"`);
@@ -999,17 +1021,22 @@ async function main(argv: string[]): Promise<number> {
       const target = a.one('--file');
       const why = a.one('--why') ?? '';
       if (!target || why.trim().length < 12) throw new EyesError('sz-eyes contract amend <id> --file <a frozen file> --why "<what was wrong about how it checked, and what was changed>"');
-      if (!contract.frozen.includes(target)) throw new EyesError(`${target} is not a file contract ${id} froze. Frozen: ${contract.frozen.join(', ') || '(none)'}`);
-      // The file as the arbiter left it is what the contract is now proven against.
-      writeContract(file, { ...contract, frozenPrints: { ...contract.frozenPrints, [target]: fingerprint(project, target) }, amendments: [...contract.amendments, { file: target, why: why.trim(), at: new Date().toISOString() }] });
+      updateContract(file, (contract) => {
+        if (!contract.frozen.includes(target)) throw new EyesError(`${target} is not a file contract ${id} froze. Frozen: ${contract.frozen.join(', ') || '(none)'}`);
+        // The file as the arbiter left it is what the contract is now proven against.
+        return { ...contract, frozenPrints: { ...contract.frozenPrints, [target]: fingerprint(project, target) }, amendments: [...contract.amendments, { file: target, why: why.trim(), at: new Date().toISOString() }] };
+      });
       out(`amended: ${target}`);
       return 0;
     }
     if (command === 'supersede') {
-      if (contract.closedAt !== null) throw new EyesError(`${id} is closed: a closed contract replaces nothing more`);
-      const replaced = supersedeOf(project, a.words[1] ?? '', a.one('--why') ?? '');
-      if (replaced.contract === id) throw new EyesError('a contract does not replace its own claim');
-      writeContract(file, { ...contract, supersedes: [...contract.supersedes, replaced] });
+      const saved = updateContract(file, (contract) => {
+        if (contract.closedAt !== null) throw new EyesError(`${id} is closed: a closed contract replaces nothing more`);
+        const replaced = supersedeOf(project, a.words[1] ?? '', a.one('--why') ?? '');
+        if (replaced.contract === id) throw new EyesError('a contract does not replace its own claim');
+        return { ...contract, supersedes: [...contract.supersedes, replaced] };
+      });
+      const replaced = saved.supersedes.at(-1)!;
       out(`${replaced.contract}/${replaced.claim} no longer stands: replaced by ${id}`);
       return 0;
     }
@@ -1019,30 +1046,34 @@ async function main(argv: string[]): Promise<number> {
       const folder = evidenceFolder(project, id);
       const shown = a.all('--evidence').map((path) => evidencePath(project, id, path));
       for (const path of shown) if (!existsSync(join(folder, path))) throw new EyesError(`${join(folder, path)}: no such file. Evidence is a file under ${folder}, named from there (look/home.png)`);
-      writeContract(file, { ...contract, noticed: [...contract.noticed, { text, evidence: shown }] });
+      updateContract(file, (contract) => ({ ...contract, noticed: [...contract.noticed, { text, evidence: shown }] }));
       out('noted');
       return 0;
     }
     if (command === 'close') {
-      if (contract.closedAt !== null) throw new EyesError(`contract ${id} was closed at ${contract.closedAt}`);
-      needLedger(project);
-      const owes = owed(contract);
-      if (owes.length > 0) throw new EyesError(`contract ${id} still owes:\n${owes.map((line) => `  - ${line}`).join('\n')}`);
-      const also = alsoOwed(project, contract);
-      if (also.length > 0) throw new EyesError(`contract ${id} is not closed yet:\n${also.map((line) => `  - ${line}`).join('\n')}\nWhat stood before and broke: fix the product so it holds again (then \`sz-eyes standing record <key> --status holds\`), or, if what was asked has changed, the arbiter records which claim this work replaces.`);
-      const gap = notLookedAt(contract);
       const accepted = (a.one('--accepted') ?? '').trim();
-      if (gap.most && accepted === '') {
-        throw new EyesError(
-          `contract ${id} was not looked at: ${gap.unseen.length} of its ${gap.of} claims are unchecked:\n${gap.unseen.map((claim) => `  - ${claim.id}: ${claim.note ?? 'no note'}`).join('\n')}\nA contract does not close on claims nobody looked at, and nothing is built on top of it. Get the product running and have them shown: what stops it from starting is the builder's to fix. If what stops it is outside the product (a download that does not arrive, a key, a device), tell the owner what it is and ask. Only when the owner says to close it as it is: --accepted "<their words>".`,
-        );
-      }
-      const at = new Date().toISOString();
-      const closed = { ...contract, closedAt: at, ...(gap.most ? { noticed: [...contract.noticed, { text: `closed with ${gap.unseen.length} of ${gap.of} claims not looked at, on the owner's word: "${accepted}"`, evidence: [] }] } : {}) };
-      // Its proven claims are stamped first: a contract is never left closed with nothing to say when its
-      // claims last held. From here they stand, and what it left is written where the next work is picked from.
-      stampClosed(project, closed, at);
-      writeContract(file, closed);
+      // The record of what stands is stamped inside the contract's lock (the contract's, then the record's,
+      // never the other way round), so that nobody comes between "closed" and "its promises start to stand".
+      const closed = updateContract(file, (contract) => {
+        if (contract.closedAt !== null) throw new EyesError(`contract ${id} was closed at ${contract.closedAt}`);
+        needLedger(project);
+        const owes = owed(contract);
+        if (owes.length > 0) throw new EyesError(`contract ${id} still owes:\n${owes.map((line) => `  - ${line}`).join('\n')}`);
+        const also = alsoOwed(project, contract);
+        if (also.length > 0) throw new EyesError(`contract ${id} is not closed yet:\n${also.map((line) => `  - ${line}`).join('\n')}\nWhat stood before and broke: fix the product so it holds again (then \`sz-eyes standing record <key> --status holds\`), or, if what was asked has changed, the arbiter records which claim this work replaces.`);
+        const gap = notLookedAt(contract);
+        if (gap.most && accepted === '') {
+          throw new EyesError(
+            `contract ${id} was not looked at: ${gap.unseen.length} of its ${gap.of} claims are unchecked:\n${gap.unseen.map((claim) => `  - ${claim.id}: ${claim.note ?? 'no note'}`).join('\n')}\nA contract does not close on claims nobody looked at, and nothing is built on top of it. Get the product running and have them shown: what stops it from starting is the builder's to fix. If what stops it is outside the product (a download that does not arrive, a key, a device), tell the owner what it is and ask. Only when the owner says to close it as it is: --accepted "<their words>".`,
+          );
+        }
+        const at = new Date().toISOString();
+        const closed = { ...contract, closedAt: at, ...(gap.most ? { noticed: [...contract.noticed, { text: `closed with ${gap.unseen.length} of ${gap.of} claims not looked at, on the owner's word: "${accepted}"`, evidence: [] }] } : {}) };
+        // Its proven claims are stamped first: a contract is never left closed with nothing to say when its
+        // claims last held. From here they stand, and what it left is written where the next work is picked from.
+        stampClosed(project, closed, at);
+        return closed;
+      });
       const left = addToBacklog(project, leftBy(closed));
       out(`closed: ${id}${left > 0 ? ` (${left} line(s) added to ${BACKLOG_FILE})` : ''}`);
       return 0;
