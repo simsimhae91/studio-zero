@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
-type Call = { prompt: string; label: string; effort?: string };
+type Call = { prompt: string; label: string; effort?: string; model?: string };
 type Answer = (call: Call, nth: number) => unknown;
 
 const SOURCE = readFileSync(fileURLToPath(new URL('../../../plugin/workflows/build.js', import.meta.url)), 'utf8').replace('export const meta', 'const meta');
@@ -16,8 +16,8 @@ async function run(args: unknown, answers: Record<string, Answer>): Promise<{ re
   const calls: Call[] = [];
   const logs: string[] = [];
   const seen = new Map<string, number>();
-  const agent = async (prompt: string, opts: { label: string; effort?: string }): Promise<unknown> => {
-    calls.push({ prompt, label: opts.label, ...(opts.effort ? { effort: opts.effort } : {}) });
+  const agent = async (prompt: string, opts: { label: string; effort?: string; model?: string }): Promise<unknown> => {
+    calls.push({ prompt, label: opts.label, ...(opts.effort ? { effort: opts.effort } : {}), ...(opts.model ? { model: opts.model } : {}) });
     const key = Object.keys(answers).find((k) => opts.label.startsWith(k));
     // Nobody set a claim aside unless the test says so: the ruling on claims still false finds the product wrong.
     if (!key && opts.label.startsWith('rule:')) return { disputed: [] };
@@ -125,10 +125,12 @@ test('a claim whose own words are wrong is set aside for the owner, and the run 
 
   // Two fixes and still false, the fixer said nothing: it is ruled on once at the end, and when the product is wrong the run stops as before.
   const wrong = await run(
-    { request: 'x' },
+    { request: 'x', model: 'sonnet' },
     table({ verify: () => ({ proven: ['one'], refuted: [{ id: 'two', fact: '합계가 0' }], unchecked: [] }), fix: () => ({ fixed: [] }), close: () => ({ report: 'r.html', closed: false, line: 'l' }) }),
   );
   assert.deepEqual(wrong.calls.map((c) => c.label), ['plan', 'build:m1', 'verify:m1', 'fix:m1:1', 'verify:m1:again', 'fix:m1:2', 'verify:m1:again', 'rule:m1:last', 'close:m1']);
+  // Whoever mends a milestone runs on the model that built it; those who verify and rule are not given one.
+  assert.deepEqual(wrong.calls.map((c) => c.model), [undefined, 'sonnet', undefined, 'sonnet', undefined, 'sonnet', undefined, undefined, undefined]);
   assert.match(wrong.result.stopped, /still has 1 claim\(s\) shown false/);
   assert.deepEqual(wrong.result.forOwner, []);
 
@@ -290,6 +292,12 @@ test('a new product with screens is planned, drawn and measured first, and the r
   assert.deepEqual(labels(ran.calls), ['plan', 'screens', 'refs', 'design', 'sweep:design']);
   for (const label of ['screens', 'refs', 'design']) assert.deepEqual(startedWith[label], ['screens', 'refs', 'design'], `${label} was started beside the other two, not after them`);
   assert.deepEqual(ran.calls.map((c) => [c.label, c.effort]), [['plan', undefined], ['screens', undefined], ['refs', 'high'], ['design', 'high'], ['sweep:design', 'low']]);
+  // The builders' word does not move the drawing: the board and the drawing have a name of their own, and the
+  // screens are planned on the plan's model.
+  const drawnBy = async (model: unknown): Promise<(string | undefined)[][]> =>
+    (await run({ request: 'x', model }, drawing({ plan: needed }))).calls.map((c) => [c.label, c.model]);
+  assert.deepEqual(await drawnBy('sonnet'), [['plan', undefined], ['screens', undefined], ['refs', undefined], ['design', undefined], ['sweep:design', undefined]]);
+  assert.deepEqual(await drawnBy({ plan: 'opus', design: 'sonnet' }), [['plan', 'opus'], ['screens', 'opus'], ['refs', 'sonnet'], ['design', 'sonnet'], ['sweep:design', undefined]]);
   const prompt = (label: string): string => ran.calls.find((c) => c.label === label)!.prompt;
 
   assert.match(prompt('plan'), /^Before anything else, find out where this product's design stands[\s\S]*`ls \.sz \.sz\/design` and `sz-eyes contract show design`/);
@@ -335,6 +343,9 @@ test('screens the measurement finds wanting are mended by the part, twice at mos
   assert.match(fix.prompt, /Mend the part, not the screen/);
   assert.match(fix.prompt, /run the same sweep yourself[\s\S]*until it reports nothing/);
   assert.equal(fix.effort, 'high');
+  assert.equal(fix.model, undefined);
+  const mendedBy = await run({ request: 'x', model: { design: 'sonnet' } }, drawing({ plan: needed, sweep: (_c, nth) => (nth === 0 ? wanting : holding()), fix: () => ({ changed: '행 부품의 이름 칸' }) }));
+  assert.equal(mendedBy.calls.find((c) => c.label === 'fix:design:1')!.model, 'sonnet');
   assert.match(mended.result.stopped, /^the prototype waits for the owner/);
   assert.ok(mended.logs.some((l) => /^DESIGN READY/.test(l)));
 
@@ -573,6 +584,17 @@ test('every agent is told from its first line when the session is sandboxed, an 
   // Staging and joining are mechanical too; the look at the joined product is a verification.
   const sideways = await run({ request: 'x', side: 2 }, { ...answers, plan: graph({ id: 'm1' }, { id: 'm2', after: ['m1'] }, { id: 'm3', after: ['m1'] }), stage: staged, join: joinedAll, gate: held(6) });
   assert.deepEqual(sideways.calls.filter((c) => /^(stage|join|gate)/.test(c.label)).map((c) => [c.label, c.effort]), [['stage:m2+m3', 'low'], ['join:m2+m3', 'low'], ['gate:m2+m3', undefined]]);
+
+  // Unsaid, no agent is given a model: each runs on the session's, the verifier on the one its definition names.
+  assert.deepEqual(inside.calls.map((c) => c.model), [undefined, undefined, undefined, undefined]);
+  // One word puts the builders on another model and nothing else. The plan can be named. Verification is not
+  // moved from here, and a word that is no model of ours is not passed on.
+  const sonnet = await run({ request: 'x', model: 'sonnet' }, { ...answers, plan: earlier(false) });
+  assert.deepEqual(sonnet.calls.map((c) => [c.label, c.model]), [['plan', undefined], ['build:m2', 'sonnet'], ['verify:m2', undefined], ['close:m2', undefined]]);
+  const named = await run({ request: 'x', model: { plan: 'opus', build: 'sonnet', verify: 'sonnet', close: 'sonnet' } }, { ...answers, plan: earlier(false) });
+  assert.deepEqual(named.calls.map((c) => [c.label, c.model]), [['plan', 'opus'], ['build:m2', 'sonnet'], ['verify:m2', undefined], ['close:m2', undefined]]);
+  const unknown = await run({ request: 'x', model: 'fable' }, { ...answers, plan: earlier(false) });
+  assert.deepEqual(unknown.calls.map((c) => c.model), [undefined, undefined, undefined, undefined]);
 });
 
 // ---- what may be left not real, and who says so

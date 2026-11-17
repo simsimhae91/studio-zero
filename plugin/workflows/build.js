@@ -11,7 +11,7 @@ export const meta = {
   ],
 }
 
-// args: { request: string, asked: 'owner' | 'away', answers?: string, design?: 'go', maxMilestones?: number, side?: 1|2|3, effort?: string | object }
+// args: { request: string, asked: 'owner' | 'away', answers?: string, design?: 'go', maxMilestones?: number, side?: 1|2|3, effort?: string | object, model?: string | object }
 // `request` is the owner's words. `asked` says whether the owner was put the questions only they can answer
 // before this run: 'owner' = they were, and `answers` holds what they chose, word for word; 'away' = they said to
 // go on without questions, or nobody is in the session. The run asks nobody anything, and it does not start
@@ -58,6 +58,21 @@ const effort = (stage) => {
   if (word === 'session') return {}
   const chosen = EFFORTS.includes(word) ? word : DEFAULT_EFFORT[stage]
   return chosen ? { effort: chosen } : {}
+}
+// Which model each kind of agent runs on. Unsaid, an agent runs on the session's model. The verifier and the
+// arbiter run on the one their own definitions name, whatever the session is, and nothing here moves them:
+// verification is the last door, and it is what lets another model build. args.model overrides: one word
+// ("sonnet" or "opus") for those who build and mend a milestone, or { plan, design, build } each a word: "plan"
+// is the plan and the screens' plan, "design" the board, the drawing and its mending. (2026-11-17: a first pass
+// built and mended by Sonnet under an Opus verifier had every flow and rule proven at the first look, as many
+// claims refuted as Opus builders have had, and 11 of its 32 screens unlike the drawing; a product of another
+// kind built by Opus that night had 5 of 42. Two different products, so the default stays the session's model
+// until one product has been built both ways.)
+const MODELS = ['sonnet', 'opus']
+const model = (stage) => {
+  const said = args && args.model
+  const word = typeof said === 'string' ? (stage === 'build' ? said : undefined) : said && typeof said === 'object' ? said[stage] : undefined
+  return MODELS.includes(word) ? { model: word } : {}
 }
 // Agents started together, each answering in its own time; one that fails answers null and the others go on.
 const beside = typeof parallel === 'function' ? parallel : (thunks) => Promise.all(thunks.map((thunk) => thunk().catch(() => null)))
@@ -331,7 +346,7 @@ What holds for every milestone, this one and those planned later:
 - Do not write product code in this step. Add a line to \`.sz/progress.md\` saying the spec is written, and commit \`.sz/\`.
 
 Return the plan.`,
-  { label: stage === 'after' ? 'plan:after' : 'plan', phase: 'Plan', schema: PLAN, ...effort('plan') },
+  { label: stage === 'after' ? 'plan:after' : 'plan', phase: 'Plan', schema: PLAN, ...effort('plan'), ...model('plan') },
 )
 
 // ------------------------------------------------------------------ Design: a new product's screens, before anything is built
@@ -426,7 +441,7 @@ ${said || '(the plan did not bring their words: read them in the note of the cla
 The plan of the screens (\`.sz/plan/\`) and the reference board (\`.sz/design/refs.md\`) stand. Read \`.sz/design/direction.md\`, and look at the prototype as it is (\`.sz/design/prototype.html\`, a picture of each screen under \`.sz/design/shots/\`). Change what they said and nothing they did not: where it is about a part or a token, change it there, and every screen made from it changes with it; what they did not speak of stays as it is. Where what they said changes the plan itself (a screen to drop or to add, a step taken out), change \`.sz/plan/\` for exactly that as well, so that the plan and the drawing say the same: whoever measures after you goes by the plan's screens. Measure as the skill says before you return, and correct \`direction.md\` where it no longer says what is drawn. Start no other agent.
 
 Return what you changed for each thing they said.`,
-      { label: 'design:again', phase: 'Design', ...effort('build'), schema: { type: 'object', properties: { changed: { type: 'array', items: { type: 'string' } }, couldNot: { type: 'array', items: { type: 'string' } } }, required: ['changed'] } },
+      { label: 'design:again', phase: 'Design', ...effort('build'), ...model('design'), schema: { type: 'object', properties: { changed: { type: 'array', items: { type: 'string' } }, couldNot: { type: 'array', items: { type: 'string' } } }, required: ['changed'] } },
     )
     if (!redrawn) return 'the prototype could not be drawn again from what the owner said (the designer did not answer)'
   } else {
@@ -450,7 +465,7 @@ A designer starts drawing the moment \`.sz/plan/frame.md\` exists, and takes eac
 What is real is found before any screen is written (sections 2 and 10 of the frame), by this rule: ${REAL} Return that list under "notReal", an entry each, with what the one thing needs and is not at hand as entries on its path: the owner is asked for those while they look at the drawing, and the build does not start without them.
 
 Write no spec, no code and no picture. Return the screen ids in the order of their files, and the list.`,
-          { label: 'screens', phase: 'Design', schema: PLANNED, ...effort('plan') },
+          { label: 'screens', phase: 'Design', schema: PLANNED, ...effort('plan'), ...model('plan') },
         ),
       () =>
         agent(
@@ -466,7 +481,7 @@ Take up what is there: if \`.sz/design/refs.md\` is there, an earlier run made t
 Load the \`sz:design\` skill and do its step 1 ("Look at how shipped products do these screens"), and only that: a designer beside you does the rest, and waits for your board. Do not wait for the plan of the screens, which is being written at the same time: name the kinds of screen this product stands on from the request, and start with the house library. Before you write the board, read \`.sz/plan/frame.md\` (wait for it if it is not there yet: \`until [ -e .sz/plan/frame.md ]; do sleep 10; done\`) and check your kinds against its one thing and its list of screens; change a kind it shows to be wrong. Write \`.sz/design/refs.md\` last, whole, under another name and renamed when it is: the designer starts the moment it exists. (Made alone, a board took 10 minutes.)
 
 Return the primary reference and the kinds of screen the board covers.`,
-          { label: 'refs', phase: 'Design', schema: BOARD, ...effort('build') },
+          { label: 'refs', phase: 'Design', schema: BOARD, ...effort('build'), ...model('design') },
         ),
       () =>
         agent(
@@ -482,7 +497,7 @@ If either is still not there after twenty minutes, draw nothing and return sayin
 Take up what is there: if \`.sz/design/prototype.html\` is there when you start, an earlier run began the drawing and stopped. Read \`.sz/design/direction.md\` and the file, keep its direction, its tokens, its parts and every screen it has, and draw only what is missing (a screen of the plan with no address in it, a section of \`direction.md\` not written), then measure all of it.
 
 Return as the skill says.`,
-          { label: 'design', phase: 'Design', schema: DRAWN, ...effort('build') },
+          { label: 'design', phase: 'Design', schema: DRAWN, ...effort('build'), ...model('design') },
         ),
     ])
     drawnList = notRealOf(planned)
@@ -502,7 +517,7 @@ Someone who did not draw it measured \`.sz/design/prototype.html\` at phone size
 ${findings}
 
 Mend the part, not the screen: a name cut off in one row is cut off in every row made from that part, so the cause is mended where the part is defined, and every screen made from it has the mend. A screen of the plan that the prototype does not have is drawn now, from its file under \`.sz/plan/screens/\`, of the same parts. Then run the same sweep yourself until it reports nothing (a third run means a part is wrong, not a screen). Change nothing in the plan, and start no other agent. Return what you changed.`,
-      { label: `fix:design:${round}`, phase: 'Design', ...effort('build'), schema: { type: 'object', properties: { changed: { type: 'string' } }, required: ['changed'] } },
+      { label: `fix:design:${round}`, phase: 'Design', ...effort('build'), ...model('design'), schema: { type: 'object', properties: { changed: { type: 'string' } }, required: ['changed'] } },
     )
     swept = await sweepDesign(state === 'again')
   }
@@ -612,7 +627,7 @@ Milestone "${m.title}" (${m.id}), contract \`${m.contractId}\` (read it: \`sz-ey
 4. If it cannot be started for a reason outside the product (a download that does not arrive, a tool that is not on this machine), do not wait on it: a download or a build that shows nothing new for a minute is stopped, and you say what stopped it under "blocked", with the figure.
 
 Stop what you started, and return the exact command that starts it now.`,
-        { label: `start:${m.id}`, phase: 'Build', schema: STARTED, ...effort('build') },
+        { label: `start:${m.id}`, phase: 'Build', schema: STARTED, ...effort('build'), ...model('build') },
       )
   const built = resumed ? (started ? { contractId: m.contractId, summary: started.summary || 'built in an earlier run', launch: started.launch || m.launch, blocked: started.blocked || '', disputes: m.disputes || [] } : null) : await agent(
     `You are building milestone ${n} of ${milestones.length} of a product, with nobody watching. ${GROUND}${SAND} ${TOOLS}${PLACE}
@@ -640,7 +655,7 @@ ${m.first ? FIRST_STEPS(m) : `2. Write the oracle first: every flow or test file
 6. Commit the work on the current branch with a message that says what the milestone built.
 
 Do not judge your own claims and do not record verdicts: someone who did not build this will operate it. Do not leave a server running.`,
-    { label: `build:${m.id}`, phase: 'Build', schema: BUILT, ...effort('build') },
+    { label: `build:${m.id}`, phase: 'Build', schema: BUILT, ...effort('build'), ...model('build') },
   )
   // A builder that found something cannot be made real stopped there: nobody verifies an example in its place.
   const unreal = !resumed && built && Array.isArray(built.notReal) ? built.notReal.filter((e) => e && plainWords(e.what) !== '') : []
@@ -747,7 +762,7 @@ ${wrong}
 ${broke ? `And these were true before this work and are not now (each is a promise of earlier work: \`sz-eyes standing\` shows how it is checked):\n${broke}` : ''}
 
 Find the cause of each in the product and fix it there. Where a claim is shown by pictures kept in the evidence folder (a look the owner will go through), take those pictures again from the product as you leave it: a picture from before your fix shows the fault you mended, and the claim is false again for that alone. Where a claim says something of every screen (nothing cut off, nothing too small to press), mend the cause wherever the same thing is shown, not only in the place named, and run that claim's flow over the whole product until it reports nothing before you return. Do not edit the contract, the flows or the tests it names, or those of earlier work, and do not record verdicts. Check that what was already true still is (run the project's checks). Commit the fix. If a claim cannot be made true without changing what was asked, change nothing for it and say why. Nothing is put in as an example to make a claim true: what cannot be made real with what is at hand goes under "notFixed", with what it needs.`,
-      { label: `fix:${m.id}:${round}`, phase: 'Build', ...effort('build'), schema: { type: 'object', properties: { fixed: { type: 'array', items: { type: 'string' } }, notFixed: { type: 'array', items: { type: 'string' } } }, required: ['fixed'] } },
+      { label: `fix:${m.id}:${round}`, phase: 'Build', ...effort('build'), ...model('build'), schema: { type: 'object', properties: { fixed: { type: 'array', items: { type: 'string' } }, notFixed: { type: 'array', items: { type: 'string' } } }, required: ['fixed'] } },
     )
     // What the fixer says cannot be made true is ruled on before anyone looks again: a claim set aside is not looked at twice more.
     if (mended && Array.isArray(mended.notFixed) && mended.notFixed.length > 0) await rule(mended.notFixed.join('\n'))
@@ -891,7 +906,7 @@ Do everything in that folder (start every command with \`cd ${whereOf.get(m.id)}
 3. Run the project's whole check command and this milestone's own flows and tests there, and fix the product until they pass.
 4. Commit.
 Do not merge anything into the project's own folder yourself, and do not record verdicts.`,
-      { label: `resolve:${m.id}`, phase: 'Build', ...effort('build'), schema: { type: 'object', properties: { settled: { type: 'string', description: 'what conflicted and how each was settled' }, cannot: { type: 'string', description: 'empty unless two milestones cannot both be true: then which claims, and why' } }, required: ['settled'] } },
+      { label: `resolve:${m.id}`, phase: 'Build', ...effort('build'), ...model('build'), schema: { type: 'object', properties: { settled: { type: 'string', description: 'what conflicted and how each was settled' }, cannot: { type: 'string', description: 'empty unless two milestones cannot both be true: then which claims, and why' } }, required: ['settled'] } },
     )
   }
   if (stuck.length > 0) {
@@ -922,7 +937,7 @@ Each was proven alone. Together, these promises do not hold (each is a standing 
 ${broke}
 
 Find the cause in the product (usually two milestones that each changed the same thing their own way) and fix it there so that all of them hold. Do not edit a contract or the flows and tests one names, and do not record verdicts. Run the project's checks. Commit the fix.`,
-        { label: `mend:${group.map((m) => m.id).join('+')}:${round}`, phase: 'Build', ...effort('build'), schema: { type: 'object', properties: { fixed: { type: 'array', items: { type: 'string' } }, notFixed: { type: 'array', items: { type: 'string' } } }, required: ['fixed'] } },
+        { label: `mend:${group.map((m) => m.id).join('+')}:${round}`, phase: 'Build', ...effort('build'), ...model('build'), schema: { type: 'object', properties: { fixed: { type: 'array', items: { type: 'string' } }, notFixed: { type: 'array', items: { type: 'string' } } }, required: ['fixed'] } },
       )
       const again = await look(gate.broken.map((b) => b.key))
       if (!again) break
