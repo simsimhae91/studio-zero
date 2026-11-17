@@ -2,6 +2,7 @@
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
+import { ArmError, armCommand } from './arms.ts';
 import { BACKLOG_FILE, addToBacklog, doneInBacklog, leftBy, openBacklog } from './backlog.ts';
 import { CONTRACTS_DIR, EVIDENCE_DIR, ClaimStatus, Contract, Lane, ShownBy, localDay, notLookedAt, openContracts, owed, readContract, renderContract, updateContract, writeContract, type Claim } from './contract.ts';
 import { ElectronError, renderAppLook, renderAppWalk, walkElectron } from './electron.ts';
@@ -200,6 +201,23 @@ const USAGE = `sz-eyes: launch what was built, look at it, operate it, and put w
         A key is in no argument, no file and no line of the session: if the command prints it, it is taken out
   sz-eyes secret has <vault id>...                       which of these the vault holds (names only); exits 1 when one is missing
   sz-eyes secret set <vault id>                          the owner's: puts what comes on stdin in the vault (pbpaste | sz-eyes secret set host/cloudflare/api-token)
+
+  sz-eyes arm list [--json]
+        the arms a product's server can take: services it calls with a key of the owner's (public data, a model
+        that reads a picture into fields, sign-in with Kakao and Google), one file each in plugin/skills/backend/arms/.
+        Each in a line, with whether the vault holds each of its keys (names only, never a value)
+  sz-eyes arm need <name>... [--json]
+        the step before building on arms: for each key of theirs the vault does not hold, the owner's steps from the
+        arm's file, the line that stores it (! pbpaste | sz-eyes secret set <id>) and what to run next. Exits 1 while
+        a key is missing, so that a workflow stops on it, and 0, in one line, when none is. What it prints goes to
+        the owner as it stands; a missing key is never worked around with an example. An arm not in the catalogue
+        is named, with the arms there are
+  sz-eyes arm check <name> [--json]
+        prove the arm's key works: the smallest real call the service allows, made here with the key read from the
+        vault. Says "works", or the service's own reason for refusing, and what the call cost where the service
+        bills; never the key, never a header. It reaches the service and can cost the owner: run it on their word.
+        Exits 1 when it does not work. $SZ_ARMS_DIR is another catalogue, $SZ_ARM_<NAME>_URL another address for
+        an arm's calls (both for tests)
 
   sz-eyes docker <args>...                               the container engine on this machine, reached without touching the owner's settings
   sz-eyes supabase <args>...                             the Supabase stack that runs on this machine for this project (never a hosted one)
@@ -498,6 +516,13 @@ async function main(argv: string[]): Promise<number> {
     } catch (err) {
       throw new EyesError(err instanceof Error ? err.message : String(err));
     }
+  }
+  if (area === 'arm') {
+    const done = await armCommand(command, rest, { store: ownersVault(), env: process.env }).catch((err: unknown) => {
+      throw err instanceof ArmError ? new EyesError(err.message) : err;
+    });
+    out(done.text);
+    return done.code;
   }
   if (area === 'docker' || area === 'supabase') {
     const args = argv.slice(1);

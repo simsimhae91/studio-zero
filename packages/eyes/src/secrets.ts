@@ -25,6 +25,8 @@ export interface Binding {
 }
 
 const ID = /^[a-z0-9]+(\/[a-z0-9-]+){1,3}$/;
+/** What a vault id looks like: lower-case words joined by slashes, like host/cloudflare/api-token. */
+export const VAULT_ID = ID;
 
 /** `NAME=vault/id ... -- command args...`: which secrets a command gets under which names, and the command. */
 export function parseRun(words: readonly string[]): { bindings: Binding[]; command: string[] } {
