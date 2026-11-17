@@ -5,6 +5,7 @@ export * from './engine.ts';
 export * from './evidence.ts';
 export * from './feedback.ts';
 export * from './fingerprint.ts';
+export * from './image.ts';
 export * from './ios.ts';
 export * from './leaks.ts';
 export * from './live.ts';

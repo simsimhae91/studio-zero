@@ -11,6 +11,7 @@ import { engineEnv, findTool, hostedSupabaseCall } from './engine.ts';
 import { writeEvidencePage } from './evidence.ts';
 import { changedSinceFrozen, fingerprint, fingerprints } from './fingerprint.ts';
 import { Status, addSaid, latestRound, newRound, noteSaid, readRound, renderRound, writeRoundPage } from './feedback.ts';
+import { IMAGE_ASSETS_DIR, ImageError, imageCommand } from './image.ts';
 import { EyesError, installApp, restSimulator, runFlow, screenText, screenshot, spareSimulator } from './ios.ts';
 import { downloadsOf, filesOf, leakReport, renderLeaks } from './leaks.ts';
 import { lookAtLive, renderLive } from './live.ts';
@@ -215,6 +216,22 @@ const USAGE = `sz-eyes: launch what was built, look at it, operate it, and put w
   sz-eyes refs show <id> [--json]                        one reference in full, notes and all
         The library is the owner's own, on this machine ($SZ_REFS_DIR, or ~/.studio-zero/references): pictures of other
         products' screens kept to look at, never put into a product, never committed to a repository, never passed on
+
+  sz-eyes image make --prompt "<what it shows and what it is for>" --name <name> [--size <WxH>] [--out <folder>] [--dir <project>] [--json]
+        make one original picture for the product's screens, on the subscription the owner already pays for: the
+        Codex CLI makes it with its own image generation, signed in with ChatGPT, with every API key kept from it.
+        Never through an API that bills for each image, and never any other way: when codex is not installed, not
+        signed in, or signed in with an API key, nothing is made, and it says which and what the owner does about it.
+        It is written to <out>/<name>.png (${IMAGE_ASSETS_DIR} by default) only when a PNG of exactly the asked size
+        came back; a picture already there under that name stays as it was until then. --name: lower-case letters,
+        digits and dashes. --size: hero 1600x900, square 1024x1024 (the default), OG 1200x630, share card
+        1080x1350, story 1080x1920, favicon or app icon 512x512. No words inside the picture (they are set in HTML,
+        and Korean letters come out wrong) and nothing that is someone else's (characters, logos, mascots, a living
+        artist's style). One picture takes one to three minutes and is stopped at five: start it in the background
+        and go on working; several may run at once under different names. codex keeps what it makes in ~/.codex,
+        so run it outside the session's command sandbox. Prints the path, the size and how long it took. Exits 1,
+        with nothing made, when codex refuses (its words, such as its own limit reached, are passed on as they are)
+        or brings back no picture of exactly that size
 `;
 
 /** `--flag value` pairs and bare words, in order. A flag given twice is a list. */
@@ -823,6 +840,14 @@ async function main(argv: string[]): Promise<number> {
   if (area === 'refs') {
     const done = await refsCommand(command, parse(rest, ['--json'])).catch((err: unknown) => {
       throw err instanceof RefsError ? new EyesError(err.message) : err;
+    });
+    out(done.text);
+    return done.code;
+  }
+  if (area === 'image') {
+    const done = await imageCommand(command, parse(rest, ['--json'])).catch((err: unknown) => {
+      if (err instanceof ImageError) throw err.sandboxed ? new SandboxError(err.message) : new EyesError(err.message);
+      throw err;
     });
     out(done.text);
     return done.code;
