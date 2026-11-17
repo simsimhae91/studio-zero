@@ -17,6 +17,7 @@ import { lookAtLive, renderLive } from './live.ts';
 import { DANGEROUS, changesInCode, classify, renderMigrations } from './migrations.ts';
 import { findProducts, overviewPage, renderOverview, viewOf } from './overview.ts';
 import { freePort } from './port.ts';
+import { RefsError, refsCommand } from './refs.ts';
 import { heldSecrets, ownersVault, parseRun, runWithSecrets, setSecret } from './secrets.ts';
 import { GATE_LINES, lastRelease, releaseContract, releases, renderReleases, type Gate } from './release.ts';
 import { reviewWeb } from './review.ts';
@@ -197,6 +198,23 @@ const USAGE = `sz-eyes: launch what was built, look at it, operate it, and put w
   sz-eyes port                                           a port nothing listens on, from the machine: start what you
         launch on it (PORT=$(sz-eyes port)), keep its process id ($!), and end it by that id. Never choose a
         number, and never end whatever holds a port: other work of the owner's runs on this machine
+
+  sz-eyes refs add --kind "<kind of screen or journey>" --product "<name>" --what "<which screen, one line>" --link <the page it came from>
+        (--file <picture on disk> | --image <https address of the picture>) --notes <file.md> [--platform ios|android|web] [--lang ko|en|...] [--for <project>] [--json]
+        keep a reference: a picture of how a shipped product does a screen, and what is seen in it (--notes, 80
+        characters at least: a picture with nothing said about it is not a reference). A picture is downloaded over
+        https only, an image of 10 MB at most. The same link or the same picture is kept once, with the newer notes.
+        A kind that is new lists the kinds there are: give one of their names when it is the same kind of screen
+  sz-eyes refs find [<words>...] [--kind <kind>] [--product <name>] [--json]
+        the kept references that have every word (in kind, product, what or notes), with where each picture is and
+        the first lines of its notes; with nothing asked, how many are kept of each kind
+  sz-eyes refs kinds [--json]                            each kind, how many references it holds, and whether it has a page
+  sz-eyes refs kind "<kind>" [--write <file.md>] [--json]
+        the page of what a kind's references teach, and its references. After keeping some, read them all and
+        rewrite the page from them: --write replaces it, and the page before is kept as <kind>.prev.md
+  sz-eyes refs show <id> [--json]                        one reference in full, notes and all
+        The library is the owner's own, on this machine ($SZ_REFS_DIR, or ~/.studio-zero/references): pictures of other
+        products' screens kept to look at, never put into a product, never committed to a repository, never passed on
 `;
 
 /** `--flag value` pairs and bare words, in order. A flag given twice is a list. */
@@ -801,6 +819,13 @@ async function main(argv: string[]): Promise<number> {
       const issues = (err as { issues?: { path: (string | number)[]; message: string }[] }).issues;
       throw new EyesError(Array.isArray(issues) ? `${issues.map((issue) => `${issue.path.join('.') || 'a value'}: ${issue.message}`).join('; ')} (sz-eyes help shows each flag and the words it takes)` : err instanceof Error ? err.message : String(err));
     }
+  }
+  if (area === 'refs') {
+    const done = await refsCommand(command, parse(rest, ['--json'])).catch((err: unknown) => {
+      throw err instanceof RefsError ? new EyesError(err.message) : err;
+    });
+    out(done.text);
+    return done.code;
   }
   if (area === 'sandbox') {
     // Asked once, by whoever plans the work, as an ordinary command: is this session's command sandbox in the way.
