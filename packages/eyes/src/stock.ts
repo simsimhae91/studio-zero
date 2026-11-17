@@ -4,7 +4,7 @@ import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameS
 import { homedir, tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { withFileLock, writeFileAtomic } from './lock.ts';
-import { closestIds, refSlug } from './refs.ts';
+import { closestIds, keptInside, refSlug } from './refs.ts';
 
 /**
  * The owner's stock of pictures: every picture made for a product's screens, kept with the words it was made
@@ -319,7 +319,7 @@ export function editPicture(dir: string, id: string, edit: PictureEdit): EditedP
     if (moving) {
       const holder = others.find((picture) => picture.file === file);
       if (holder) throw new StockError(`the picture would go to ${join(dir, file)}, which is ${holder.id}'s picture: nothing was changed`);
-      if (!existsSync(join(dir, before.file))) throw new StockError(`${id}'s picture is not where its line says (${join(dir, before.file)}), so it cannot be moved into "${kind}": nothing was changed. sz-eyes image remove ${id} takes the line out`);
+      if (!keptInside(dir, before.file) || !existsSync(join(dir, before.file))) throw new StockError(`${id}'s picture is not where its line says (${join(dir, before.file)}), so it cannot be moved into "${kind}": nothing was changed. sz-eyes image remove ${id} takes the line out`);
     }
     const picture: StockPicture = { ...before, kind, file, what: edit.what ?? before.what, prompt: edit.prompt !== undefined ? edit.prompt : before.prompt };
     const changes = EDITABLE.filter((field) => picture[field] !== before[field]).map((field) => ({ field, was: before[field], now: picture[field] }));
@@ -355,7 +355,7 @@ export function removePicture(dir: string, id: string): RemovedPicture {
     const others = pictures.filter((one) => one.id !== id);
     writeIndex(dir, others);
     const path = join(dir, picture.file);
-    const pictureDeleted = existsSync(path) && !others.some((one) => one.file === picture.file);
+    const pictureDeleted = keptInside(dir, picture.file) && existsSync(path) && !others.some((one) => one.file === picture.file);
     if (pictureDeleted) {
       rmSync(path, { force: true });
       dropIfEmpty(dirname(path));

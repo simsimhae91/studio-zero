@@ -857,6 +857,24 @@ test('image edit --kind moves the picture into the new kind, its name and hash k
   }
 });
 
+test('image remove: a line that names a file outside the stock (a line put there by hand) loses its line, and that file stays', async () => {
+  const p = place();
+  try {
+    assert.equal((await keep(p, png(64, 64, 'face'), 'face', 'smiling woman in her thirties')).code, 0);
+    const outside = join(p.root, 'not-the-stocks.png');
+    writeFileSync(outside, png(64, 64, 'other'));
+    const [line] = stockLines(p) as { id: string; file: string }[];
+    writeFileSync(join(p.stock, 'index.jsonl'), JSON.stringify({ ...line, file: join('..', 'not-the-stocks.png') }) + '\n');
+
+    const ran = await image(p, NO_CODEX, ['remove', line!.id]);
+    assert.equal(ran.code, 0, ran.text);
+    assert.deepEqual(stockLines(p), [], 'its line is out');
+    assert.deepEqual(readFileSync(outside), png(64, 64, 'other'), 'a file outside the stock is not deleted');
+  } finally {
+    p.done();
+  }
+});
+
 test('image remove: the line and the picture leave the stock, a copy put in a project stays, and show then says it is not there', async () => {
   const p = place();
   try {

@@ -507,6 +507,31 @@ test('remove: the line and the picture are gone, it says what was removed so it 
   }
 });
 
+test('a line that names a picture outside the library (a line put there by hand): remove takes the line out and leaves that file, and edit --kind does not move it', async () => {
+  const { lib, input, put, done } = setup();
+  try {
+    assert.equal((await add(lib, put, 1)).code, 0);
+    assert.equal((await add(lib, put, 2)).code, 0);
+    const outside = put('not-the-librarys.png', picture(9));
+    const byHand = lines(lib).map((ref, i) => ({ ...ref, file: i === 0 ? join('..', 'input', 'not-the-librarys.png') : ref.file }));
+    writeFileSync(join(lib, 'index.jsonl'), byHand.map((ref) => JSON.stringify(ref)).join('\n') + '\n');
+    const [astray, stays] = lines(lib) as { id: string; file: string }[];
+
+    const moved = await refs(lib, ['edit', astray!.id, '--kind', 'Pay']);
+    assert.equal(moved.code, 1, moved.text);
+    assert.match(moved.text, /nothing was changed/);
+    assert.deepEqual(readFileSync(outside), picture(9), 'a file outside the library is not moved');
+
+    const ran = await refs(lib, ['remove', astray!.id]);
+    assert.equal(ran.code, 0, ran.text);
+    assert.deepEqual(lines(lib).map((ref) => ref.id), [stays!.id], 'its line is out');
+    assert.deepEqual(readFileSync(outside), picture(9), 'a file outside the library is not deleted');
+    assert.ok(existsSync(input));
+  } finally {
+    done();
+  }
+});
+
 test('an id that is not kept is refused with exit 1, naming the closest ids when a prefix matches, and nothing changes', async () => {
   const { lib, put, done } = setup();
   try {

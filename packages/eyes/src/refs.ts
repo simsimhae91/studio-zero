@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, rmdirSync, statSync } from 'node:fs';
 import * as http from 'node:http';
 import { homedir } from 'node:os';
-import { basename, dirname, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve, sep } from 'node:path';
 import { withFileLock, writeFileAtomic } from './lock.ts';
 
 /**
@@ -320,6 +320,13 @@ function notKept(dir: string, id: string, refs: readonly Ref[]): RefsError {
   return new RefsError(`no reference ${id} is kept in ${dir} (sz-eyes refs find lists them)${near.length > 0 ? `. The closest: ${near.map((ref) => `${ref.id} ([${ref.kind}] ${ref.product}: ${ref.what})`).join(', ')}` : ''}`);
 }
 
+/**
+ * Whether the picture a line names is a file of this library. A line is written by these commands and names a
+ * file under the library; one put there by hand can name any path, and nothing outside the library is moved or
+ * deleted on a line's word.
+ */
+export const keptInside = (dir: string, file: string): boolean => resolve(dir, file).startsWith(resolve(dir) + sep);
+
 /** A kind's folder of pictures is taken away when nothing is left in it. */
 function dropIfEmpty(folder: string): void {
   try {
@@ -425,7 +432,7 @@ export async function editRef(dir: string, id: string, edit: RefEdit): Promise<E
     if (moving) {
       const holder = others.find((ref) => ref.file === file);
       if (holder) throw new RefsError(`the picture would go to ${join(dir, file)}, which is ${holder.id}'s picture: nothing was changed`);
-      if (!existsSync(join(dir, before.file))) throw new RefsError(`${id}'s picture is not where its line says (${join(dir, before.file)}), so it cannot be moved into "${kind}": nothing was changed. sz-eyes refs remove ${id} takes the line out, and refs add keeps it again`);
+      if (!keptInside(dir, before.file) || !existsSync(join(dir, before.file))) throw new RefsError(`${id}'s picture is not where its line says (${join(dir, before.file)}), so it cannot be moved into "${kind}": nothing was changed. sz-eyes refs remove ${id} takes the line out, and refs add keeps it again`);
     }
     const ref: Ref = {
       ...before,
@@ -470,7 +477,7 @@ export async function removeRef(dir: string, id: string): Promise<Removed> {
     const others = refs.filter((one) => one.id !== id);
     writeIndex(dir, others);
     const picture = join(dir, ref.file);
-    const pictureDeleted = existsSync(picture) && !others.some((one) => one.file === ref.file);
+    const pictureDeleted = keptInside(dir, ref.file) && existsSync(picture) && !others.some((one) => one.file === ref.file);
     if (pictureDeleted) {
       rmSync(picture, { force: true });
       dropIfEmpty(dirname(picture));
