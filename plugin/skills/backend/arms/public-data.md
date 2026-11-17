@@ -72,8 +72,9 @@ One institution and one item chosen before the build: the figure on the product'
 `getNonPaymentItemCodeList` and `getNonPaymentItemHospList` hold what was before March 2016.
 
 Not in it, or not confirmed:
-- `clCd` takes 01 상급종합, 11 종합병원, 41 치과병원 [guide]. A dental clinic (치과의원) is not among them. **Whether the data holds clinics (의원) today was not confirmed** (that needs a key): before a product compares a clinic's estimate with it, ask `getNonPaymentItemHospList2` with a dental item and that clinic's name, with the owner's key.
-- Which dental items have codes was not seen (the code list needs a key).
+- **It holds hospitals and no clinics** (asked with the owner's key, 2026-11-17). For dental items every row is a 상급종합 (`clCd` 01), 종합병원 (11), 병원 (21) or 치과병원 (41); 의원 (31) and 치과의원 (51) return 0 for every dental item tried. An implant with a PFM crown (`UB0010012`): 287 institutions in the country (27, 127, 13, 117). Composite resin, one surface (`U02390000`): 489. So a product that sets a neighbourhood clinic's estimate beside "the clinics nearby" cannot be made from this service, and setting a clinic's price beside hospitals' prices would mislead (hospitals charge more). HIRA's own site and app show clinics; how that is read was not looked into.
+- **Rows hang on an item's leaf code.** A class code returns 0 (`1180Z010` 치과임플란트, `1180Z020` 크라운, `1100Z030` 광중합형 복합레진 충전); its leaves return the institutions: implants `UB0010001` 기타, `UB0010011` Metal, `UB0010012` PFM, `UB0010021` Gold, `UB0010022` PFG, `UB0010041` 올세라믹, `UB0010051` Zirconia; crowns `UW607F310` Metal, `UW607F320` Gold, `UW608F310` PFM, `UW608F320` PFG, `UW609F340` 올세라믹, `UW609F350` Zirconia, `UW613F300` 기타; composite resin `U02390000` 1면, `U02400000` 2면, `U02410000` 3면 이상. 943 codes in all, 66 of them dental; prices were those published from 2026-09-03.
+- `getNonPaymentItemClcdList` and `getNonPaymentItemSidoCdList` did not answer within 25 seconds that day (tried twice): their fields are as the page gives them, not seen.
 - `ykiho` comes from these answers; HIRA's 병원정보서비스 (`getHospBasisList1`, applied for apart) lists institutions with theirs (https://www.data.go.kr/data/15094093/openapi.do).
 
 ## 주인이 할 일
