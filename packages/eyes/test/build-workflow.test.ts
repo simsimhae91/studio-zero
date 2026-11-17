@@ -599,10 +599,10 @@ test('a plan that leaves the one thing\'s path not real builds nothing, and says
   assert.match(planned, /The claim of the one thing is worded on real input and real data/);
   assert.match(planned, /Nothing pretends/);
   assert.match(ran.result.stopped, /^nothing was built/);
-  assert.match(ran.result.stopped, /견적서 사진 읽기: it is on the path of the one thing[\s\S]*사진을 읽는 모델의 키, 사장님 것[\s\S]*pbpaste \| sz-eyes secret set model\/anthropic\/api-key/);
+  assert.match(ran.result.stopped, /견적서 사진 읽기: it is on the path of the one thing[\s\S]*사진을 읽는 모델의 키, 사장님 것[\s\S]*run `sz-eyes secret has model\/anthropic\/api-key` and put the line it prints to the owner as it stands/);
   assert.match(ran.result.stopped, /start this workflow again with asked: "owner" and their words, word for word, in answers/);
   assert.doesNotMatch(ran.result.stopped, /병원 후기/, 'what may stand off the path is not asked for');
-  assert.deepEqual(ran.result.needed.map((n: { what: string; give: string }) => [n.what, n.give]), [['견적서 사진 읽기', 'pbpaste | sz-eyes secret set model/anthropic/api-key']]);
+  assert.deepEqual(ran.result.needed.map((n: { what: string; give: string }) => [n.what, n.give]), [['견적서 사진 읽기', 'sz-eyes secret has model/anthropic/api-key']]);
   assert.ok(ran.logs.includes(ran.result.stopped), 'the log says it as the return does');
   assert.deepEqual(ran.result.milestones, []);
   assert.deepEqual(ran.result.notBuilt, ['첫 판']);
@@ -667,13 +667,13 @@ test('an entry off the path with one of the four reasons goes on; a builder that
   // The builder found it cannot be made real: it stops and brings it back, and nobody verifies an example.
   const found = await run({ request: ESTIMATE }, { plan: plan('m1', 'm2'), build: (c: Call) => ({ ...built(c), notReal: [{ what: '동네 평균 가격', tried: '오픈 API가 키 없이 401', needs: '사장님이 받는 무료 키', vault: 'data/hira/service-key' }] }), verify: allProven, close: closed });
   assert.deepEqual(labels(found.calls), ['plan', 'build:m1']);
-  assert.match(found.result.stopped, /^milestone "title m1" stopped on what cannot be made real with what is at hand[\s\S]*동네 평균 가격: 사장님이 받는 무료 키[\s\S]*pbpaste \| sz-eyes secret set data\/hira\/service-key/);
+  assert.match(found.result.stopped, /^milestone "title m1" stopped on what cannot be made real with what is at hand[\s\S]*동네 평균 가격: 사장님이 받는 무료 키[\s\S]*run `sz-eyes secret has data\/hira\/service-key` and put the line it prints to the owner as it stands/);
   assert.deepEqual(found.result.needed.map((n: { what: string }) => n.what), ['동네 평균 가격']);
   assert.deepEqual(found.result.notBuilt, ['title m1', 'title m2']);
 
   // A vault id that is not one is never put in a command the owner pastes.
   const odd = await run({ request: ESTIMATE }, goes({ ...reading, vault: 'key; rm -rf ~' }));
-  assert.doesNotMatch(odd.result.stopped, /secret set key; rm/);
+  assert.doesNotMatch(odd.result.stopped, /secret (set|has) key; rm/);
   assert.match(odd.result.stopped, /"key; rm -rf ~" is not a vault id/);
 
   // What comes after the first pass is held to the same list before its builders start.
@@ -688,9 +688,19 @@ test('the stop at the drawing says what the build needs from the owner and how e
   const ran = await run({ request: ESTIMATE, asked: 'owner', answers: '계정: 없이' }, drawing({ plan: needed, screens: () => ({ ...planned, notReal: [reading, reviews] }) }));
   assert.deepEqual(labels(ran.calls), ['plan', 'screens', 'refs', 'design', 'sweep:design']);
   const ready = ran.logs.find((l) => /^DESIGN READY/.test(l))!;
-  assert.match(ready, /all 3 hold at phone size and at their limits\. Before the build, from the owner: 견적서 사진 읽기: 사진을 읽는 모델의 키, 사장님 것 \(pbpaste \| sz-eyes secret set model\/anthropic\/api-key\)\. Not real yet in the first pass, each said on its screen: 병원 후기 \(people\)\.$/);
-  assert.match(ran.result.stopped, /^the prototype waits for the owner[\s\S]*Before the build, from the owner: 견적서 사진 읽기[\s\S]*a key they put in the vault themselves, in their own terminal, or their words that it may be an example for now, which go word for word into answers \(asked: "owner"\) when this workflow is started again/);
+  assert.match(ready, /all 3 hold at phone size and at their limits\. Before the build, from the owner: 견적서 사진 읽기: 사진을 읽는 모델의 키, 사장님 것 \(`sz-eyes secret has model\/anthropic\/api-key`\)\. Not real yet in the first pass, each said on its screen: 병원 후기 \(people\)\.$/);
+  assert.match(ran.result.stopped, /^the prototype waits for the owner[\s\S]*Before the build, from the owner: 견적서 사진 읽기[\s\S]*a key they put in the vault themselves, in their own terminal \(run the command in brackets and put what it prints to them as it stands: their steps and the line that stores the key\), or their words that it may be an example for now, which go word for word into answers \(asked: "owner"\) when this workflow is started again/);
   assert.deepEqual(ran.result.needed.map((n: { what: string }) => n.what), ['견적서 사진 읽기']);
+  // No stop carries a storing line of its own: `sz-eyes` is not on the PATH of the owner's shell, and only the tool
+  // can print the line whole. Where the key is an arm's, the bracket names the arm's guide.
+  assert.doesNotMatch(`${ready} ${ran.result.stopped}`, /pbpaste/);
+  const armed = await run({ request: ESTIMATE, asked: 'owner', answers: '계정: 없이' }, drawing({ plan: needed, screens: () => ({ ...planned, notReal: [{ ...reading, arm: 'read' }] }) }));
+  assert.match(armed.logs.find((l) => /^DESIGN READY/.test(l))!, /사진을 읽는 모델의 키, 사장님 것 \(`sz-eyes arm need read`\)\.$/);
+  // The sweep's line counts every drawing (states and limits too) and calls each a screen: the stop says both
+  // numbers, so 3 screens beside "7 screens" is not read as a disagreement (the first real run: 24 and 44).
+  const many = await run({ request: ESTIMATE, asked: 'owner', answers: '계정: 없이' }, drawing({ plan: needed, sweep: () => ({ ...holding(), drawings: 7, summary: '7 screens, 7 hold, 0 findings above minor in all; every screen holds (4 s)' }) }));
+  assert.match(many.logs.find((l) => /^DESIGN READY/.test(l))!, /^DESIGN READY: open \.sz\/design\/prototype\.html\. 3 screen\(s\) of the plan drawn \(7 drawings with their states and limits\), all 3 hold at phone size and at their limits/);
+  assert.match(many.calls.find((c) => c.label === 'sweep:design')!.prompt, /how many drawings the sweep measured/);
   const screens = ran.calls.find((c) => c.label === 'screens')!.prompt;
   assert.match(screens, /everything is real, or nothing is built[\s\S]*"Not connected yet" and "nobody has read it yet" are not reasons/);
   assert.match(screens, /Return that list under "notReal"/);

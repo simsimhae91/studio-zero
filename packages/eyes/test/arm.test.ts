@@ -10,7 +10,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { ARMS_DIR, ArmError, armCommand, readCatalogue } from '../src/arms.ts';
+import { ARMS_DIR, ArmError, armCommand, heldLines, ownCommand, readCatalogue } from '../src/arms.ts';
 import { LOGIN_VAULT_IDS } from '../src/login.ts';
 import type { SecretStore } from '../src/secrets.ts';
 
@@ -336,4 +336,16 @@ test('the four arms of the catalogue are read by the same code, with the vault i
   assert.deepEqual(ids('read'), ['model/anthropic/api-key', 'model/openai/api-key']);
   assert.deepEqual(ids('public-data'), ['data/data-go-kr/service-key']);
   for (const a of arms) for (const k of a.keys) assert.ok(a.steps.some((s) => s.ids.includes(k.id) && s.text.includes(`! pbpaste | sz-eyes secret set ${k.id}`)), `${a.name}: ${k.id}`);
+});
+
+test('secret has gives, for a missing key, the line that stores it by the tool\'s whole path, and nothing more for a key that is held', () => {
+  // A plan or a stopped run names the vault id only. The first run that stopped for keys printed
+  // `pbpaste | sz-eyes secret set ...` from its own words, which answers "command not found" in the owner's shell.
+  const both = heldLines([{ id: 'login/kakao/client-id', held: true }, { id: 'login/apple/team-id', held: false }]);
+  assert.match(both, /^held    login\/kakao\/client-id\nMISSING login\/apple\/team-id\n\n/);
+  assert.ok(both.includes(`  ! pbpaste | ${ownCommand()} secret set login/apple/team-id`), both);
+  assert.ok(ownCommand().endsWith('/plugin/bin/sz-eyes'), ownCommand());
+  assert.match(both, /the line goes into the prompt of this session first, without being run; then the key is copied; then Enter/);
+  assert.doesNotMatch(both, /secret set login\/kakao/);
+  assert.equal(heldLines([{ id: 'login/kakao/client-id', held: true }]), 'held    login/kakao/client-id');
 });

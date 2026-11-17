@@ -73,7 +73,7 @@ const beside = typeof parallel === 'function' ? parallel : (thunks) => Promise.a
 // their request or their answers; otherwise nothing is built, and the run says what is needed and how it is given.
 // (Written only in a skill, three rules were skipped by a session in one week.)
 const REASONS = ['owner', 'people', 'device', 'later']
-const REAL = `On the path of the one thing the product is for (what a person gives it, what is done with it, what they get back), everything is real, or nothing is built. Look before anything is called not real: a public source, an open API, a free way (a key the owner applies for at no cost is one), and whether a key is at hand already: the services a product's server can take with a key of the owner's are the arms (\`sz-eyes arm list\`), and \`sz-eyes arm need <name>\` says whether an arm's keys are in the vault, with the owner's steps when they are not (for a key that is no arm's, \`sz-eyes secret has <vault id>\`). "Not connected yet" and "nobody has read it yet" are not reasons: finding the source and reading it is the work. Anything else may be not real yet for one of four reasons only: "owner" (a key, an account, money or publishing that only the owner can give), "people" (others who are not there yet: partners, reviews, the other side of a market), "device" (a device, a store's review or a machine this Mac does not have), "later" (the owner said later). Each entry says what was tried (where it was looked for: the address, what \`sz-eyes secret has\` said) and what it needs to be real, from whom (for a key, the vault id it is to be kept under: lower-case words joined by slashes, like data/<the source>/api-key). Three are never on the list without the owner's own words, quoted under "said" from the request or the answers above: what is on the one thing's path, what the owner's request names, and what is put off as later. What is built for real and only waits for people to use it (an empty list with its plain line) is real, and not on the list. This is about what is real, not how much is built: nothing is left out of a pass to keep it off the list.`
+const REAL = `On the path of the one thing the product is for (what a person gives it, what is done with it, what they get back), everything is real, or nothing is built. Look before anything is called not real: a public source, an open API, a free way (a key the owner applies for at no cost is one), and whether a key is at hand already: the services a product's server can take with a key of the owner's are the arms (\`sz-eyes arm list\`), and \`sz-eyes arm need <name>\` says whether an arm's keys are in the vault, with the owner's steps when they are not (for a key that is no arm's, \`sz-eyes secret has <vault id>\`). "Not connected yet" and "nobody has read it yet" are not reasons: finding the source and reading it is the work. Anything else may be not real yet for one of four reasons only: "owner" (a key, an account, money or publishing that only the owner can give), "people" (others who are not there yet: partners, reviews, the other side of a market), "device" (a device, a store's review or a machine this Mac does not have), "later" (the owner said later). Each entry says what was tried (where it was looked for: the address, what \`sz-eyes secret has\` said) and what it needs to be real, from whom (for a key, the vault id it is to be kept under: lower-case words joined by slashes, like data/<the source>/api-key; never a command that stores it, which you would get wrong: \`sz-eyes arm need\` and \`sz-eyes secret has\` print that line whole, for the owner's own terminal). Three are never on the list without the owner's own words, quoted under "said" from the request or the answers above: what is on the one thing's path, what the owner's request names, and what is put off as later. What is built for real and only waits for people to use it (an empty list with its plain line) is real, and not on the list. This is about what is real, not how much is built: nothing is left out of a pass to keep it off the list.`
 const NOT_REAL = {
   type: 'array',
   description: 'what is left not real yet, an entry each, by the rule on what is real; empty when all of it is real',
@@ -109,12 +109,15 @@ const waitsFor = (e) => {
   if (!REASONS.includes(e.reason) || plainWords(e.tried) === '') return 'it is listed without looking: none of the four reasons, or nothing said of where it was looked for'
   return null
 }
-// A key is given by the owner in their own terminal; a vault id that is not one is never put in a command they paste.
-const keyLine = (e) => (e.vault && VAULT_ID.test(String(e.vault)) ? `pbpaste | sz-eyes secret set ${e.vault}` : '')
+// A key is given by the owner in their own terminal, with a line only the tool can print: `sz-eyes` is not on the
+// PATH of the owner's shell, and this script does not know where the tool is. (In the first run that stopped for
+// keys the stop carried `pbpaste | sz-eyes secret set ...`, which answers "command not found" there.) So the stop
+// names the command the session runs to get that line. A vault id that is not one is never put in a command.
+const keyLine = (e) => (e.vault && VAULT_ID.test(String(e.vault)) ? `sz-eyes secret has ${e.vault}` : '')
 // Where the key is an arm's, the arm's own guide is what the owner is shown: where to get the key, step by step, and the line that stores it.
 const armLine = (e) => (e.arm && /^[a-z][a-z0-9-]{0,40}$/.test(String(e.arm)) ? `sz-eyes arm need ${e.arm}` : '')
 const asNeed = (e, why, milestone) => ({ milestone, what: String(e.what || ''), why: why || '', needs: String(e.needs || ''), give: keyLine(e), steps: armLine(e), tried: String(e.tried || ''), ...(e.vault && !keyLine(e) ? { badVault: String(e.vault) } : {}) })
-const needLine = (n) => `${n.what}: ${n.why ? `${n.why}. It needs: ` : ''}${n.needs || '(what it needs was not said)'}${n.steps ? `; run \`${n.steps}\` and put what it prints to the owner as it stands (where they get the key, step by step, and the line that stores it)` : n.give ? `; the owner puts the key in the vault themselves, in their own terminal: ${n.give}` : n.badVault ? `; "${n.badVault}" is not a vault id (lower-case words joined by slashes), so no command is given for it` : ''}${n.tried ? `. Looked for: ${n.tried}` : ''}`
+const needLine = (n) => `${n.what}: ${n.why ? `${n.why}. It needs: ` : ''}${n.needs || '(what it needs was not said)'}${n.steps ? `; run \`${n.steps}\` and put what it prints to the owner as it stands (where they get the key, step by step, and the line that stores it)` : n.give ? `; the owner puts the key in the vault themselves, in their own terminal: run \`${n.give}\` and put the line it prints to the owner as it stands` :n.badVault ? `; "${n.badVault}" is not a vault id (lower-case words joined by slashes), so no command is given for it` : ''}${n.tried ? `. Looked for: ${n.tried}` : ''}`
 const ASK = 'Put each to the owner: they give it, or say in their words that it may be an example for now (or wait for later). Then start this workflow again with asked: "owner" and their words, word for word, in answers.'
 // What the owner is asked for in this run, as the return gives it to the session.
 const needed = []
@@ -361,6 +364,7 @@ const SWEPT = {
   properties: {
     screens: { type: 'number', description: 'how many screens the plan has' },
     hold: { type: 'number', description: 'how many of the plan\'s screens are in the prototype and hold' },
+    drawings: { type: 'number', description: 'how many drawings the sweep measured: the plan\'s screens and their states and limits, the number its summary line gives' },
     findings: { type: 'array', description: 'every screen that does not hold (a drawing at its limits too), each with what was found', items: { type: 'object', properties: { screen: { type: 'string' }, found: { type: 'string' } }, required: ['screen', 'found'] } },
     summary: { type: 'string', description: 'the sweep\'s summary line, as it printed it' },
     sandbox: { type: 'string', description: 'empty unless the session\'s command sandbox stopped the browser and the call outside it was refused: then the exact refusal' },
@@ -376,14 +380,14 @@ const atDrawing = () => {
   const list = drawnList || []
   const owed = list.filter((e) => waitsFor(e))
   const rest = list.filter((e) => !waitsFor(e))
-  const line = `${owed.length > 0 ? ` Before the build, from the owner: ${owed.map((e) => `${e.what}: ${e.needs || '(what it needs was not said)'}${keyLine(e) ? ` (${keyLine(e)})` : ''}`).join('; ')}.` : ''}${rest.length > 0 ? ` Not real yet in the first pass, each said on its screen: ${rest.map((e) => `${e.what} (${e.reason})`).join('; ')}.` : ''}`
+  const line = `${owed.length > 0 ? ` Before the build, from the owner: ${owed.map((e) => `${e.what}: ${e.needs || '(what it needs was not said)'}${armLine(e) || keyLine(e) ? ` (\`${armLine(e) || keyLine(e)}\`)` : ''}`).join('; ')}.` : ''}${rest.length > 0 ? ` Not real yet in the first pass, each said on its screen: ${rest.map((e) => `${e.what} (${e.reason})`).join('; ')}.` : ''}`
   return { owed: owed.map((e) => asNeed(e, waitsFor(e), 'design')), line }
 }
 const askAtDrawing = () => {
   const { owed, line } = atDrawing()
   if (owed.length === 0) return line
   needed.push(...owed)
-  return `${line} While they look, put to them what the build needs from them: for each, a key they put in the vault themselves, in their own terminal, or their words that it may be an example for now, which go word for word into answers (asked: "owner") when this workflow is started again. The build does not start without one or the other.`
+  return `${line} While they look, put to them what the build needs from them: for each, a key they put in the vault themselves, in their own terminal (run the command in brackets and put what it prints to them as it stands: their steps and the line that stores the key), or their words that it may be an example for now, which go word for word into answers (asked: "owner") when this workflow is started again. The build does not start without one or the other.`
 }
 
 // again: the owner said no, and the contract `design` is there to record on; its claim feel goes back to them.
@@ -402,7 +406,7 @@ const sweepDesign = (again) =>
 Then \`sz-eyes contract claim design screens --status proven|refuted --note "<the sweep's summary line>"\`: proven only when every screen of the plan is there and holds. Leave **feel** to the owner.`
     }
 
-Change nothing in the prototype or the plan. Return how many screens the plan has, how many of them hold, and every screen that does not hold (a drawing at its limits too) with what was found.`,
+Change nothing in the prototype or the plan. Return how many screens the plan has, how many of them hold, how many drawings the sweep measured (its summary line counts every drawing, a screen's states and limits too, and calls each a screen), and every screen that does not hold (a drawing at its limits too) with what was found.`,
     { label: 'sweep:design', phase: 'Design', schema: SWEPT, ...effort('close') },
   )
 const holds = (swept) => Number(swept.screens) > 0 && Number(swept.hold) >= Number(swept.screens) && (swept.findings || []).length === 0
@@ -507,7 +511,10 @@ Mend the part, not the screen: a name cut off in one row is cut off in every row
   if ((swept.sandbox || '').trim() !== '') return `the prototype was drawn and could not be measured: the session's command sandbox stopped the browser and the call outside it was refused (${swept.sandbox.trim().slice(0, 200)}). The owner chooses one: run sessions in auto mode, approve the unsandboxed command when asked, or turn the sandbox off for this project (/sandbox); then ask to continue.`
   if (!holds(swept)) return `the prototype was drawn and still does not hold after two rounds of mending: ${Math.max(0, Number(swept.screens) - Number(swept.hold))} of the plan's ${swept.screens} screen(s) do not hold: ${(swept.findings || []).map((f) => `${f.screen} (${f.found})`).join('; ') || '(the measurement named none)'}. Nothing is put before the owner that does not hold: run this workflow again to take the drawing up where it stopped.`
   const asks = atDrawing().line
-  log(`DESIGN READY: open .sz/design/prototype.html. ${swept.screens} screen(s) of the plan drawn, all ${swept.screens} hold at phone size and at their limits${asks ? `.${asks}` : ''}`)
+  // The sweep's own line counts drawings (a screen's states and limits too) and calls each a screen: both numbers
+  // are said, so that 24 screens and "44 screens" are not read as a disagreement.
+  const drawings = Number(swept.drawings) > Number(swept.screens) ? ` (${swept.drawings} drawings with their states and limits)` : ''
+  log(`DESIGN READY: open .sz/design/prototype.html. ${swept.screens} screen(s) of the plan drawn${drawings}, all ${swept.screens} hold at phone size and at their limits${asks ? `.${asks}` : ''}`)
   return null
 }
 

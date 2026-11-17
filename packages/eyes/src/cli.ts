@@ -2,7 +2,7 @@
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
-import { ArmError, armCommand } from './arms.ts';
+import { ArmError, armCommand, heldLines } from './arms.ts';
 import { BACKLOG_FILE, addToBacklog, doneInBacklog, leftBy, openBacklog } from './backlog.ts';
 import { CONTRACTS_DIR, EVIDENCE_DIR, ClaimStatus, Contract, Lane, ShownBy, localDay, notLookedAt, openContracts, owed, readContract, renderContract, updateContract, writeContract, type Claim } from './contract.ts';
 import { ElectronError, renderAppLook, renderAppWalk, walkElectron } from './electron.ts';
@@ -199,7 +199,7 @@ const USAGE = `sz-eyes: launch what was built, look at it, operate it, and put w
   sz-eyes secret run <NAME>=<vault id>... -- <command>...
         run a command with the owner's keys in its environment, by their names in the vault (the macOS Keychain).
         A key is in no argument, no file and no line of the session: if the command prints it, it is taken out
-  sz-eyes secret has <vault id>...                       which of these the vault holds (names only); exits 1 when one is missing
+  sz-eyes secret has <vault id>...                       which of these the vault holds (names only), and for a missing one the line the owner stores it with; exits 1 when one is missing
   sz-eyes secret set <vault id>                          the owner's: puts what comes on stdin in the vault (pbpaste | sz-eyes secret set host/cloudflare/api-token)
 
   sz-eyes arm list [--json]
@@ -501,7 +501,7 @@ async function main(argv: string[]): Promise<number> {
       if (command === 'has') {
         if (words.length === 0) throw new Error('sz-eyes secret has <vault id>...');
         const held = await heldSecrets(ownersVault(), words);
-        out(held.map((entry) => `${entry.held ? 'held   ' : 'MISSING'} ${entry.id}`).join('\n'));
+        out(heldLines(held));
         return held.every((entry) => entry.held) ? 0 : 1;
       }
       if (command === 'set') {

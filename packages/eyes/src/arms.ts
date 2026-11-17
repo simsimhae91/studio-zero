@@ -72,6 +72,24 @@ export function ownCommand(): string {
 /** A line of the owner's steps, with the command they can run in place of its short name. */
 const runnable = (text: string): string => text.replaceAll('pbpaste | sz-eyes ', `pbpaste | ${ownCommand()} `);
 
+/** Why the line is put in the prompt before the key is copied. */
+const ORDER = 'The order matters, because copying the line takes the key\'s place on the clipboard: the line goes into the prompt of this session first, without being run; then the key is copied; then Enter.';
+
+/**
+ * What `secret has` prints: each id held or MISSING, and for a missing one the line that stores it, as the owner
+ * can run it. A plan or a stopped run names the vault id only; the line comes from here, because only the tool
+ * knows where it is (a line written by hand as `pbpaste | sz-eyes ...` fails in the owner's own shell).
+ */
+export function heldLines(held: { id: string; held: boolean }[]): string {
+  const missing = held.filter((entry) => !entry.held);
+  return [
+    ...held.map((entry) => `${entry.held ? 'held   ' : 'MISSING'} ${entry.id}`),
+    ...(missing.length === 0
+      ? []
+      : ['', `A missing key is stored by the owner, in their own session, with its line. Put the line to them as it stands. ${ORDER}`, ...missing.map((entry) => `  ${runnable(storeLine(entry.id))}`)]),
+  ].join('\n');
+}
+
 const unquote = (value: string): string => {
   const v = value.trim();
   return v.length >= 2 && ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) ? v.slice(1, -1) : v;
@@ -239,7 +257,7 @@ export async function armCommand(command: string | undefined, words: readonly st
         ...keys.map((k) => `${k.id}: ${k.what}; the server gets it as ${k.env}. Costs: ${k.costs}.`),
         '',
         ...stepsFor(arm, keys).flatMap((text) => [runnable(text), '']),
-        `The order matters, because copying the line takes the key's place on the clipboard: the line goes into the prompt of this session first, without being run; then the key is copied; then Enter. ${keys.length === 1 ? 'The line' : missing.oneOf.length > 0 && missing.stops.length === 0 ? 'The line of the one that was made' : 'A line for each'}:`,
+        `${ORDER} ${keys.length === 1 ? 'The line' : missing.oneOf.length > 0 && missing.stops.length === 0 ? 'The line of the one that was made' : 'A line for each'}:`,
         ...keys.map((k) => `  ${runnable(storeLine(k.id))}`),
         `Then: ${thenOf(arm)}`,
       ].join('\n');
