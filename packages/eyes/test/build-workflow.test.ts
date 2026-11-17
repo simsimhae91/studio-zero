@@ -565,3 +565,119 @@ test('every agent is told from its first line when the session is sandboxed, an 
   const sideways = await run({ request: 'x', side: 2 }, { ...answers, plan: graph({ id: 'm1' }, { id: 'm2', after: ['m1'] }, { id: 'm3', after: ['m1'] }), stage: staged, join: joinedAll, gate: held(6) });
   assert.deepEqual(sideways.calls.filter((c) => /^(stage|join|gate)/.test(c.label)).map((c) => [c.label, c.effort]), [['stage:m2+m3', 'low'], ['join:m2+m3', 'low'], ['gate:m2+m3', undefined]]);
 });
+
+// ---- what may be left not real, and who says so
+// The product that showed it: a photographed dental estimate set item by item against the neighbourhood's published
+// prices. Its plan had the prices as examples, "not connected yet", and the photograph was said to be unread: its one
+// thing would have run on made-up figures, every claim proven. The prices were an open API for a free key; reading the
+// photograph needed a model key of the owner's. Nobody had asked them for either.
+type Entry = { what: string; reason: string; tried: string; needs: string; vault?: string; onPath: boolean; named: boolean; said?: string };
+const ESTIMATE = '치과 견적서를 찍으면 항목마다 우리 동네 평균 가격과 비교해 줘. 보험이 안 되는 항목은 경고해 주고';
+const reading: Entry = { what: '견적서 사진 읽기', reason: 'owner', tried: 'sz-eyes secret has model/anthropic/api-key: MISSING', needs: '사진을 읽는 모델의 키, 사장님 것', vault: 'model/anthropic/api-key', onPath: true, named: false };
+const prices: Entry = { what: '동네 평균 가격', reason: 'owner', tried: '심평원 비급여 진료비 공개: 공공데이터포털 오픈 API, 무료 키. sz-eyes secret has data/hira/service-key: MISSING', needs: '공공데이터포털에서 사장님이 활용 신청해 받는 무료 키', vault: 'data/hira/service-key', onPath: true, named: true };
+const warnings: Entry = { what: '보험이 안 되는 항목 경고', reason: 'owner', tried: '심평원 급여 기준 고시', needs: '급여 기준을 읽어 규칙으로', onPath: false, named: true };
+const reviews: Entry = { what: '병원 후기', reason: 'people', tried: '후기를 쓸 사람이 아직 없다', needs: '쓰는 사람들', onPath: false, named: false };
+const passWith = (...notReal: Entry[]) => () => ({ mode: 'new', summary: 's', milestones: [{ ...firstPass, notReal }] });
+const goes = (...notReal: Entry[]): Record<string, Answer> => ({ plan: passWith(...notReal), build: built, verify: allProven, close: closed });
+
+test('a plan that leaves the one thing\'s path not real builds nothing, and says what is needed from the owner and how it is given', async () => {
+  const ran = await run({ request: ESTIMATE, asked: 'owner', answers: '계정: 없이 (이 기기에만)' }, goes(reading, reviews));
+  assert.deepEqual(labels(ran.calls), ['plan'], 'no builder starts');
+  const planned = ran.calls[0]!.prompt;
+  assert.match(planned, /On the path of the one thing the product is for \(what a person gives it, what is done with it, what they get back\), everything is real, or nothing is built/);
+  assert.match(planned, /"Not connected yet" and "nobody has read it yet" are not reasons: finding the source and reading it is the work/);
+  assert.match(planned, /`sz-eyes secret has <vault id>`/);
+  assert.match(planned, /The claim of the one thing is worded on real input and real data/);
+  assert.match(planned, /Nothing pretends/);
+  assert.match(ran.result.stopped, /^nothing was built/);
+  assert.match(ran.result.stopped, /견적서 사진 읽기: it is on the path of the one thing[\s\S]*사진을 읽는 모델의 키, 사장님 것[\s\S]*pbpaste \| sz-eyes secret set model\/anthropic\/api-key/);
+  assert.match(ran.result.stopped, /start this workflow again with asked: "owner" and their words, word for word, in answers/);
+  assert.doesNotMatch(ran.result.stopped, /병원 후기/, 'what may stand off the path is not asked for');
+  assert.deepEqual(ran.result.needed.map((n: { what: string; give: string }) => [n.what, n.give]), [['견적서 사진 읽기', 'pbpaste | sz-eyes secret set model/anthropic/api-key']]);
+  assert.ok(ran.logs.includes(ran.result.stopped), 'the log says it as the return does');
+  assert.deepEqual(ran.result.milestones, []);
+  assert.deepEqual(ran.result.notBuilt, ['첫 판']);
+});
+
+test('what the owner\'s request names, or puts off as later, is not left out or made an example without their words, found in what they said', async () => {
+  const named = await run({ request: ESTIMATE, asked: 'owner', answers: '계정: 없이' }, goes(warnings));
+  assert.deepEqual(labels(named.calls), ['plan']);
+  assert.match(named.result.stopped, /보험이 안 되는 항목 경고: the owner's request names it/);
+  // Words the plan gives as the owner's that are not in what they said are not their word.
+  const made = await run({ request: ESTIMATE, asked: 'owner', answers: '계정: 없이' }, goes({ ...warnings, said: '경고는 나중에 해도 돼요' }));
+  assert.deepEqual(labels(made.calls), ['plan']);
+  assert.match(made.result.stopped, /the words given as theirs, "경고는 나중에 해도 돼요", are not in their request or their answers/);
+  // With the owner away, what the session wrote is not their word.
+  const away = await run({ request: ESTIMATE, asked: 'away', answers: '경고는 나중에 해도 돼요' }, goes({ ...warnings, said: '경고는 나중에 해도 돼요' }));
+  assert.deepEqual(labels(away.calls), ['plan']);
+  // "Later" is the owner's to say.
+  const later = await run({ request: ESTIMATE, asked: 'owner', answers: '계정: 없이' }, goes({ ...reviews, reason: 'later' }));
+  assert.deepEqual(labels(later.calls), ['plan']);
+  assert.match(later.result.stopped, /병원 후기: it is put off as later/);
+  // Listed without saying where it was looked for: nothing is built on a list nobody looked behind.
+  const unlooked = await run({ request: ESTIMATE }, goes({ ...reviews, tried: ' ' }));
+  assert.deepEqual(labels(unlooked.calls), ['plan']);
+  assert.match(unlooked.result.stopped, /병원 후기: it is listed without looking/);
+});
+
+test('with the owner\'s words the same entries go on, the builder is handed the list and adds nothing to it, and the one thing is shown from a real input', async () => {
+  const answers = '계정: 없이 (이 기기에만)\n가격 데이터: 키 받기 전에는 일단 예시로 지어\n경고: 나중에';
+  const ran = await run({ request: ESTIMATE, asked: 'owner', answers }, goes({ ...prices, said: '“키 받기 전에는  일단 예시로 지어”' }, { ...warnings, reason: 'later', said: '경고: 나중에' }, reviews));
+  assert.deepEqual(labels(ran.calls), ['plan', 'build:m1', 'verify:m1', 'close:m1']);
+  assert.equal(ran.result.stopped, null);
+  assert.deepEqual(ran.result.needed, []);
+  const builder = ran.calls.find((c) => c.label === 'build:m1')!.prompt;
+  assert.match(builder, /What is not real yet in this milestone, as the plan lists it[^\n]*\n- 동네 평균 가격 \| owner \| [^\n]*\| the owner allowed it for now: "키 받기 전에는 일단 예시로 지어"\n- 보험이 안 되는 항목 경고 \| later \| [^\n]*\n- 병원 후기 \| people \| 쓰는 사람들\n/);
+  assert.match(builder, /Whoever builds adds nothing to this list[\s\S]*do not put an example and a line on the screen in its place: stop, commit what you built, and return it under "notReal"/);
+  const look = ran.calls.find((c) => c.label === 'verify:m1')!.prompt;
+  assert.match(look, /The claim of the one thing the product is for \(the spec names it\) is shown from a real input to a real result[\s\S]*Shown on an example, a fixture or figures the product made up, it is refuted, whatever the screen says about itself/);
+  assert.match(look, /except what the owner allowed to be an example for now: 동네 평균 가격/);
+  assert.ok(ran.logs.some((l) => /^not real yet in "첫 판": 동네 평균 가격 \(owner; the owner: "키 받기 전에는 일단 예시로 지어"\); 보험이 안 되는 항목 경고 \(later; the owner: "경고: 나중에"\); 병원 후기 \(people\)$/.test(l)), ran.logs.join('\n'));
+});
+
+test('an entry off the path with one of the four reasons goes on; a builder that finds something cannot be made real stops the run, and so does a plan after the first pass', async () => {
+  const off = await run({ request: ESTIMATE }, goes(reviews));
+  assert.deepEqual(labels(off.calls), ['plan', 'build:m1', 'verify:m1', 'close:m1']);
+  assert.equal(off.result.stopped, null);
+  // A plan with nothing listed: the builder is told so, and still that it adds nothing; the fixer puts in no example either.
+  const plain = await run({ request: 'x' }, { plan: plan('m1'), build: built, fix: () => ({ fixed: ['two'] }), verify: (_c: Call, nth: number) => (nth === 0 ? { proven: ['one'], refuted: [{ id: 'two', fact: '예시 가격으로 나온다' }], unchecked: [] } : allProven()), close: closed });
+  assert.match(plain.calls.find((c) => c.label === 'build:m1')!.prompt, /Nothing in this milestone is listed as not real: all of it is real\. Whoever builds adds nothing to this list/);
+  assert.match(plain.calls.find((c) => c.label === 'verify:m1')!.prompt, /shown from a real input to a real result/);
+  assert.match(plain.calls.find((c) => c.label === 'verify:m1:again')!.prompt, /shown from a real input to a real result/);
+  assert.match(plain.calls.find((c) => c.label === 'fix:m1:1')!.prompt, /Nothing is put in as an example to make a claim true/);
+
+  // The builder found it cannot be made real: it stops and brings it back, and nobody verifies an example.
+  const found = await run({ request: ESTIMATE }, { plan: plan('m1', 'm2'), build: (c: Call) => ({ ...built(c), notReal: [{ what: '동네 평균 가격', tried: '오픈 API가 키 없이 401', needs: '사장님이 받는 무료 키', vault: 'data/hira/service-key' }] }), verify: allProven, close: closed });
+  assert.deepEqual(labels(found.calls), ['plan', 'build:m1']);
+  assert.match(found.result.stopped, /^milestone "title m1" stopped on what cannot be made real with what is at hand[\s\S]*동네 평균 가격: 사장님이 받는 무료 키[\s\S]*pbpaste \| sz-eyes secret set data\/hira\/service-key/);
+  assert.deepEqual(found.result.needed.map((n: { what: string }) => n.what), ['동네 평균 가격']);
+  assert.deepEqual(found.result.notBuilt, ['title m1', 'title m2']);
+
+  // A vault id that is not one is never put in a command the owner pastes.
+  const odd = await run({ request: ESTIMATE }, goes({ ...reading, vault: 'key; rm -rf ~' }));
+  assert.doesNotMatch(odd.result.stopped, /secret set key; rm/);
+  assert.match(odd.result.stopped, /"key; rm -rf ~" is not a vault id/);
+
+  // What comes after the first pass is held to the same list before its builders start.
+  const cut = { ...firstPass, notReal: [reviews] };
+  const after = await run({ request: ESTIMATE }, { plan: (_c: Call, nth: number) => (nth === 0 ? { mode: 'new', summary: 's', milestones: [cut], later: [{ title: '가격 깊이', what: 'w' }] } : { mode: 'continue', summary: 's', milestones: [{ ...cut, state: 'closed' }, { id: 'm2', title: '가격 깊이', builds: 'b', claims: [claim('one')], notReal: [prices] }] }), build: built, verify: allProven, close: closed });
+  assert.deepEqual(labels(after.calls), ['plan', 'build:m1', 'verify:m1', 'close:m1', 'plan:after']);
+  assert.match(after.result.stopped, /^the first pass stands; nothing after it was built[\s\S]*동네 평균 가격: it is on the path of the one thing/);
+  assert.deepEqual(after.result.milestones.map((m: { id: string }) => m.id), ['m1']);
+});
+
+test('the stop at the drawing says what the build needs from the owner and how each is given, and the screens are planned by the same rule', async () => {
+  const ran = await run({ request: ESTIMATE, asked: 'owner', answers: '계정: 없이' }, drawing({ plan: needed, screens: () => ({ ...planned, notReal: [reading, reviews] }) }));
+  assert.deepEqual(labels(ran.calls), ['plan', 'screens', 'refs', 'design', 'sweep:design']);
+  const ready = ran.logs.find((l) => /^DESIGN READY/.test(l))!;
+  assert.match(ready, /all 3 hold at phone size and at their limits\. Before the build, from the owner: 견적서 사진 읽기: 사진을 읽는 모델의 키, 사장님 것 \(pbpaste \| sz-eyes secret set model\/anthropic\/api-key\)\. Not real yet in the first pass, each said on its screen: 병원 후기 \(people\)\.$/);
+  assert.match(ran.result.stopped, /^the prototype waits for the owner[\s\S]*Before the build, from the owner: 견적서 사진 읽기[\s\S]*a key they put in the vault themselves, in their own terminal, or their words that it may be an example for now, which go word for word into answers \(asked: "owner"\) when this workflow is started again/);
+  assert.deepEqual(ran.result.needed.map((n: { what: string }) => n.what), ['견적서 사진 읽기']);
+  const screens = ran.calls.find((c) => c.label === 'screens')!.prompt;
+  assert.match(screens, /everything is real, or nothing is built[\s\S]*"Not connected yet" and "nobody has read it yet" are not reasons/);
+  assert.match(screens, /Return that list under "notReal"/);
+  // Nothing asked of the owner: the stop reads as before.
+  const plainStop = await run({ request: 'x' }, drawing({ plan: needed }));
+  assert.match(plainStop.logs.find((l) => /^DESIGN READY/.test(l))!, /hold at phone size and at their limits$/);
+  assert.doesNotMatch(plainStop.result.stopped, /Before the build, from the owner/);
+});

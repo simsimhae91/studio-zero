@@ -21,6 +21,7 @@ A look the sandbox stopped is not a look. It is never a verdict on the product, 
 - **State over pictures.** Decide by what can be read exactly: the words on the screen, the controls and their sizes, a flow's steps, a command's exit, a row that was saved. A vision model misses most subtle visual defects; do not call a layout right because a screenshot looks fine to you.
 - **Pictures are for the owner.** Keep a picture of every state a claim is about, and a before/after pair when something changed. They go in the evidence folder and on the evidence page.
 - **Try to break it.** The empty case, the long name, the second time, the wrong input, going back. One happy path proves one happy path.
+- **The one thing, from a real input.** The claim of the one thing the product is for is shown from what a person would really give it to what the product really gives back. Shown on an example, a fixture or figures the product made up, it is `refuted`, whatever the screen says about itself, unless the owner's own words allowed that example (`sz:work`, section 4).
 - **What cannot be checked is said.** No device, no account, needs a human ear or judgement (is it fun, does it feel right): the claim is `unchecked`, with the reason. Never `proven` by assumption.
 
 ## The eyes

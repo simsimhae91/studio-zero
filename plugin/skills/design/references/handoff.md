@@ -15,7 +15,7 @@ With no reference tool connected, the library is the source; where it has nothin
 ## `.sz/plan/frame.md`: written first, whole, before any screen
 
 1. **무엇이고 누구를 위한 것인가.** Two or three sentences: who, at what moment, doing what.
-2. **반드시 잘해야 하는 한 가지.** The one thing. The designer builds the product's key screen around it.
+2. **반드시 잘해야 하는 한 가지.** The one thing. The designer builds the product's key screen around it. Then what it needs to be real, found before any screen is written: each key, source of data or service on its path (what a person gives, what is done with it, what they get back), where it was found (the address), and whether it is at hand (`sz-eyes secret has <vault id>`). Look for a public source, an open API, a free key the owner applies for; "not connected yet" is not an answer. What is not at hand is asked of the owner at the drawing, each with what it costs them and how it is given (a key: its vault id, and `pbpaste | sz-eyes secret set <vault id>`).
 3. **주인이 말한 것.** The owner's answers and words about feel, as they said them, and any product they named.
 4. **본 것.** What shipped products do in these journeys, as above.
 5. **시나리오.** Three to six, each as the steps one person takes, from opening the app to the outcome. Every screen in the list below is passed through by at least one of them: a screen no scenario reaches is not in this version.
@@ -23,7 +23,7 @@ With no reference tool connected, the library is the source; where it has nothin
 7. **화면 목록.** One line a screen: an id (`HM-01`: two letters for the area, a number), its name, the section, what it is for, its states by name.
 8. **흐름.** Each scenario as a row of screen ids with what is pressed between them: `HM-01 —대결 시작→ MT-01 —상대 찾기→ MT-02`.
 9. **규칙과 숫자.** Every rule a screen shows and every limit that shapes a screen: the longest name, the longest sentence a person may write, the largest figure, how a score is worked out. A limit nobody stated is decided here and marked as decided here.
-10. **아직 진짜가 아닌 것.** What a screen must say plainly is not connected yet.
+10. **아직 진짜가 아닌 것.** What a screen must say plainly is not real yet, an entry each in four parts: what it is; which of four reasons (`owner`: a key, an account, money or publishing only the owner can give; `people`: others not there yet, partners, reviews, the other side of a market; `device`: a device, a store's review or a machine this Mac does not have; `later`: the owner said later, in their words); what was tried and found (the address looked at, what `sz-eyes secret has` said); what it needs to be real, and from whom. "Not connected yet" and "nobody has read it yet" are not reasons: finding the source and reading it is the work. Never on it unless the owner said so, quoted: anything on the one thing's path, and anything the request names. What is built for real and only waits for people (an empty list with its plain line) is real.
 
 ## `.sz/plan/screens/<NN>-<id>.md`: one file a screen, ten to twenty-five lines
 

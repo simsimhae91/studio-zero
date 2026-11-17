@@ -21,6 +21,8 @@ export const meta = {
 // without the owner's verdict on it (their claim on how it feels stays theirs, as owner claims do). Without it a
 // run stops at the prototype, the owner away or not: a prototype waits fifteen minutes, a build nobody wanted
 // costs two hours. Only the owner can ask for it.
+// `answers` is also where the owner's word that something may be an example for now, or wait for later, comes in
+// (what is real, below): the run finds those words there, or in the request, and nowhere else.
 const request = args && typeof args.request === 'string' ? args.request.trim() : ''
 const answers = args && typeof args.answers === 'string' ? args.answers.trim() : ''
 const asked = args && (args.asked === 'owner' || args.asked === 'away') ? args.asked : ''
@@ -60,6 +62,88 @@ const effort = (stage) => {
 // Agents started together, each answering in its own time; one that fails answers null and the others go on.
 const beside = typeof parallel === 'function' ? parallel : (thunks) => Promise.all(thunks.map((thunk) => thunk().catch(() => null)))
 
+// What is real, and who may say that something is not. (A product meant to set each item of a photographed dental
+// estimate against the neighbourhood's published prices was planned with the prices as examples, "not connected
+// yet", and the session preparing its build wrote, on its own and without looking, that reading the photograph was
+// not connected either: its one thing would have run on made-up figures from a photograph nobody read, every claim
+// proven. Ten minutes of looking found the prices published for every clinic in the country as an open API for a
+// free key, and reading the photograph needing a model key of the owner's. Nobody had asked the owner for either.)
+// The list of what is not real is structure, checked here before any builder starts: an entry on the one thing's
+// path, one the owner's request names, or one put off as later stands only on the owner's own words, found in
+// their request or their answers; otherwise nothing is built, and the run says what is needed and how it is given.
+// (Written only in a skill, three rules were skipped by a session in one week.)
+const REASONS = ['owner', 'people', 'device', 'later']
+const REAL = `On the path of the one thing the product is for (what a person gives it, what is done with it, what they get back), everything is real, or nothing is built. Look before anything is called not real: a public source, an open API, a free way (a key the owner applies for at no cost is one), and whether a key is at hand already (\`sz-eyes secret has <vault id>\`). "Not connected yet" and "nobody has read it yet" are not reasons: finding the source and reading it is the work. Anything else may be not real yet for one of four reasons only: "owner" (a key, an account, money or publishing that only the owner can give), "people" (others who are not there yet: partners, reviews, the other side of a market), "device" (a device, a store's review or a machine this Mac does not have), "later" (the owner said later). Each entry says what was tried (where it was looked for: the address, what \`sz-eyes secret has\` said) and what it needs to be real, from whom (for a key, the vault id it is to be kept under: lower-case words joined by slashes, like data/<the source>/api-key). Three are never on the list without the owner's own words, quoted under "said" from the request or the answers above: what is on the one thing's path, what the owner's request names, and what is put off as later. What is built for real and only waits for people to use it (an empty list with its plain line) is real, and not on the list. This is about what is real, not how much is built: nothing is left out of a pass to keep it off the list.`
+const NOT_REAL = {
+  type: 'array',
+  description: 'what is left not real yet, an entry each, by the rule on what is real; empty when all of it is real',
+  items: {
+    type: 'object',
+    properties: {
+      what: { type: 'string', description: 'what is not real yet, as a person would meet it' },
+      reason: { type: 'string', enum: REASONS },
+      tried: { type: 'string', description: 'never empty: where it was looked for and what was found (the address of the source or the page, what `sz-eyes secret has <id>` said)' },
+      needs: { type: 'string', description: 'what it needs to be real, and from whom' },
+      vault: { type: 'string', description: 'for a key: the vault id it is to be kept under, lower-case words joined by slashes' },
+      onPath: { type: 'boolean', description: 'true when it is on the path of the one thing: what a person gives the product for it, what is done with it, what they get back' },
+      named: { type: 'boolean', description: 'true when the owner\'s request, or what they answered, names it' },
+      said: { type: 'string', description: 'only where the owner allowed it to be an example for now, or said it is for later: their words, quoted word for word from the request or the answers' },
+    },
+    required: ['what', 'reason', 'tried', 'needs', 'onPath', 'named'],
+  },
+}
+const VAULT_ID = /^[a-z0-9]+(\/[a-z0-9-]+){1,3}$/
+const plainWords = (text) => String(text || '').normalize('NFC').replace(/["'“”‘’「」『』]/g, '').replace(/\s+/g, ' ').trim()
+// The owner's own words: their request, and what they answered when asked. The session's notes are not theirs.
+const OWNERS_WORDS = [request, asked === 'owner' ? answers : ''].map(plainWords).filter(Boolean)
+const ownerSaid = (said) => plainWords(said) !== '' && OWNERS_WORDS.some((theirs) => theirs.includes(plainWords(said)))
+const notRealOf = (holder) => (holder && Array.isArray(holder.notReal) ? holder.notReal : []).filter((e) => e && typeof e === 'object')
+// Why an entry of the list cannot stand without the owner, or null when it may.
+const waitsFor = (e) => {
+  if (ownerSaid(e.said)) return null
+  const theirs = plainWords(e.said) !== '' ? ` (the words given as theirs, "${plainWords(e.said)}", are not in their request or their answers)` : ''
+  if (e.onPath === true) return `it is on the path of the one thing the product is for${theirs}`
+  if (e.named === true) return `the owner's request names it${theirs}`
+  if (e.reason === 'later') return `it is put off as later, which only the owner says${theirs}`
+  if (!REASONS.includes(e.reason) || plainWords(e.tried) === '') return 'it is listed without looking: none of the four reasons, or nothing said of where it was looked for'
+  return null
+}
+// A key is given by the owner in their own terminal; a vault id that is not one is never put in a command they paste.
+const keyLine = (e) => (e.vault && VAULT_ID.test(String(e.vault)) ? `pbpaste | sz-eyes secret set ${e.vault}` : '')
+const asNeed = (e, why, milestone) => ({ milestone, what: String(e.what || ''), why: why || '', needs: String(e.needs || ''), give: keyLine(e), tried: String(e.tried || ''), ...(e.vault && !keyLine(e) ? { badVault: String(e.vault) } : {}) })
+const needLine = (n) => `${n.what}: ${n.why ? `${n.why}. It needs: ` : ''}${n.needs || '(what it needs was not said)'}${n.give ? `; the owner puts the key in the vault themselves, in their own terminal: ${n.give}` : n.badVault ? `; "${n.badVault}" is not a vault id (lower-case words joined by slashes), so no command is given for it` : ''}${n.tried ? `. Looked for: ${n.tried}` : ''}`
+const ASK = 'Put each to the owner: they give it, or say in their words that it may be an example for now (or wait for later). Then start this workflow again with asked: "owner" and their words, word for word, in answers.'
+// What the owner is asked for in this run, as the return gives it to the session.
+const needed = []
+// Before any builder starts: returns why the run stops, or null when every entry of the milestones' lists may stand.
+const holdFor = (ms, head) => {
+  const open = ms.filter((m) => m.state !== 'closed')
+  const owed = open.flatMap((m) => notRealOf(m).map((e) => ({ e, m, why: waitsFor(e) }))).filter((x) => x.why).map(({ e, m, why }) => asNeed(e, why, m.id))
+  if (owed.length === 0) {
+    for (const m of open) {
+      const list = notRealOf(m)
+      if (list.length > 0) log(`not real yet in "${m.title}": ${list.map((e) => `${e.what} (${e.reason}${ownerSaid(e.said) ? `; the owner: "${plainWords(e.said)}"` : ''})`).join('; ')}`)
+    }
+    return null
+  }
+  needed.push(...owed)
+  const unlooked = owed.some((n) => n.why.startsWith('it is listed without looking'))
+  return `${head}: ${owed.map((n) => `[${needLine(n)}]`).join(' ')} ${ASK}${unlooked ? ' What was listed without looking is looked for when it starts again.' : ''}`
+}
+// The list as it stands is handed to whoever builds, who adds nothing to it.
+const UNREAL = (m) => {
+  const list = notRealOf(m)
+  const shown = list.length === 0
+    ? 'Nothing in this milestone is listed as not real: all of it is real.'
+    : `What is not real yet in this milestone, as the plan lists it (what | why | what it needs | the owner's words, where they allowed it):\n${list.map((e) => `- ${e.what} | ${e.reason} | ${e.needs || ''}${ownerSaid(e.said) ? ` | the owner allowed it for now: "${plainWords(e.said)}"` : ''}`).join('\n')}\nEach says so in one plain line on its screen, and the spec names it.`
+  return `${shown} Whoever builds adds nothing to this list. If you find that something cannot be made real with what is at hand (a key that is not in the vault, a source that does not answer), do not put an example and a line on the screen in its place: stop, commit what you built, and return it under "notReal", with where you looked and what it needs. The run stops there and the owner is asked for it.`
+}
+// Whoever verifies takes the one thing's claim from a real input to a real result.
+const REAL_LOOK = (m) => {
+  const allowed = notRealOf(m).filter((e) => e.onPath === true && ownerSaid(e.said))
+  return ` The claim of the one thing the product is for (the spec names it) is shown from a real input to a real result: what a person would really give it, through what the product really does with it, to what it really gives back. Shown on an example, a fixture or figures the product made up, it is refuted, whatever the screen says about itself${allowed.length > 0 ? `, except what the owner allowed to be an example for now: ${allowed.map((e) => `${e.what} ("${plainWords(e.said)}")`).join('; ')}` : ''}.`
+}
+
 const CLAIM = {
   type: 'object',
   properties: {
@@ -93,6 +177,7 @@ const PLAN = {
           title: { type: 'string' },
           builds: { type: 'string', description: 'what is built in it, in two or three sentences' },
           claims: { type: 'array', items: CLAIM },
+          notReal: NOT_REAL,
           notDoing: { type: 'array', items: { type: 'string' } },
           risks: { type: 'array', items: { type: 'string' } },
           supersedes: {
@@ -110,7 +195,7 @@ const PLAN = {
           launch: { type: 'string', description: 'for a milestone that is built: the exact command that starts the product and where it is seen' },
           disputes: { type: 'array', description: 'for a milestone that is built: frozen checks an earlier run found to be wrong about how they check', items: { type: 'object', properties: { file: { type: 'string' }, problem: { type: 'string' } }, required: ['file', 'problem'] } },
         },
-        required: ['id', 'title', 'builds', 'claims'],
+        required: ['id', 'title', 'builds', 'claims', 'notReal'],
       },
     },
   },
@@ -127,6 +212,11 @@ const BUILT = {
       type: 'array',
       description: 'frozen checks you found to be wrong about how they check (not the product being wrong): each with the file and exactly what is wrong. Empty when there are none.',
       items: { type: 'object', properties: { file: { type: 'string' }, problem: { type: 'string' } }, required: ['file', 'problem'] },
+    },
+    notReal: {
+      type: 'array',
+      description: 'empty unless you found that something cannot be made real with what is at hand: then each, and you stopped there',
+      items: { type: 'object', properties: { what: { type: 'string' }, tried: { type: 'string', description: 'where you looked and what it said' }, needs: { type: 'string', description: 'what it needs to be real, and from whom' }, vault: { type: 'string', description: 'for a key: the vault id it is to be kept under' } }, required: ['what', 'tried', 'needs'] },
     },
   },
   required: ['contractId', 'summary', 'launch'],
@@ -192,7 +282,7 @@ This run was started with design "go": the owner said to go on from the measured
 `
 // What the owner said yes to is what the first pass is built to, and what its first look holds it to.
 const DRAWN_PLAN = `
-- When the design is "approved": the screens are planned (\`.sz/plan/frame.md\` and one file a screen under \`.sz/plan/screens/\`) and drawn (\`.sz/design/prototype.html\`; \`.sz/design/direction.md\` ends with what the builder needs: tokens, parts, each screen's parts and address), and the owner has ${designGo ? 'said to go on from the drawing without judging it first' : 'said yes to the drawing'}. The spec is cut from them and does not decide again what they decided: its areas are the frame's sections, its limits the frame's rules and numbers. Among the first pass's claims: every screen of the plan built as drawn, one claim shown by a look (each built screen beside its picture under \`.sz/design/shots/\`: the same content in the same order, made of the same parts, in the same tokens), and the claim about every screen at its limits, as below.`
+- When the design is "approved": the screens are planned (\`.sz/plan/frame.md\` and one file a screen under \`.sz/plan/screens/\`) and drawn (\`.sz/design/prototype.html\`; \`.sz/design/direction.md\` ends with what the builder needs: tokens, parts, each screen's parts and address), and the owner has ${designGo ? 'said to go on from the drawing without judging it first' : 'said yes to the drawing'}. The spec is cut from them and does not decide again what they decided: its areas are the frame's sections, its limits the frame's rules and numbers. Among the first pass's claims: every screen of the plan built as drawn, one claim shown by a look (each built screen beside its picture under \`.sz/design/shots/\`: the same content in the same order, made of the same parts, in the same tokens), and the claim about every screen at its limits, as below. What is real starts from the frame's sections 2 and 10, the list the owner saw at the drawing: look again at each (a key may be at hand since).`
 const planIt = (stage) => agent(
   `${stage === 'after' ? '' : DESIGN_CHECK}You are planning a product (or a large change to one) that will then be built milestone by milestone with nobody watching. ${GROUND}${SAND} ${TOOLS}${stage === 'after' ? AFTER : ''}
 
@@ -214,13 +304,14 @@ Write \`.sz/spec.md\` in the owner's language: what the product is and for whom,
 
 **The first pass** is the one milestone you return: the whole product, at the quality it will be used at, built in one stretch by one builder who keeps all of it in mind, and then looked at whole by someone who did not build it. (Cut into slices, each wrapped in a contract, a verification and a close of its own, one product was a single page after three hours, with every claim proven and none refuted; another had nothing to look at after four.)
 - All of it: every area the spec lists, each to the depth a person needs to use it for real: what happens when there is nothing yet, when something fails, the second time someone comes. The one thing the product is for is made first and carried furthest.
-- Nothing pretends. No made-up figures, no button that does nothing, no screen that only looks finished: what cannot be real yet (it needs a key of the owner's, a device, data nobody has given) says so in one plain line on the screen and is named in the spec.
+- Nothing pretends. No made-up figures, no button that does nothing, no screen that only looks finished. What may be left not real, and who says so, is below (**What is real**).
 - What a person enters is theirs from the start, with the least account the product can be used with (a guest of this device, or a code by e-mail).
 - Its claims are the product's list of what a person can do, and the definition of done the builder works down: 8 to 20 of them, grouped by area, each shown by a flow (name the file it will be kept in: whoever verifies writes it), a test of what is pure rule (written before the code), a look or a command, with the figure or the words where there are any. Among them: every area's screen at phone size as pictures the owner can go through in one sitting (a look, kept in the evidence folder), and how it feels, which is the owner's to judge on those pictures (owner).${stage === 'after' ? '' : DRAWN_PLAN}
 
 **Hardening** comes after it. List under "later", a line each, what makes the product safe to give to people (signing in through other services, deleting an account, one person unable to reach another's data, the phone itself, what the law asks), and anything in the request that is too uncertain or too large for the first pass, said as that. Give these no claims: they are planned when the first pass stands and has been looked at. ${Math.max(1, Math.min(maxMilestones, 6) - 1)} lines at most.
 
 What holds for every milestone, this one and those planned later:
+- **What is real.** ${REAL} Return under each milestone's "notReal" what it leaves not real yet, an entry each (empty when all of it is real), with "onPath" and "named" marked. Before any builder starts, the workflow looks for the words under "said" in the request and the answers; where they are not there, it builds nothing and asks the owner for what is needed. Each entry says so in one plain line on its screen, and the spec names it. The claim of the one thing is worded on real input and real data (the photograph a person takes, the prices as published), never on examples.
 - If the owner had a case made for this service (\`sz-eyes worth show\` lists one: who it is for, what they use instead, the rows of the whole job), the spec is cut from it: the product is for the person and the moment of its \`who\` line; the first pass carries the row of kind \`edge\` furthest, and the first milestone after it delivers that row whole; the rows of kind \`stake\` (what two or more of the things people already use have in common) are all in a milestone or named in the spec as deliberately not built, with the reason; rows of kind \`more\` wait. Name in each milestone the rows it covers, by their ids. If there is no case, plan without one: making a case is done only when the owner asks for it.
 - An app for the phone made with a toolkit that also runs in a browser (Expo and React Native do): it is built so that the same app runs in a browser, and until the last pass it is shown there, at phone size, where a look takes seconds. What only a phone has (what the app keeps when it is closed and opened again, coming back from another app after signing in, the camera, health data, notifications, the keyboard over a button) gets a plain fallback in the browser, and is named in the line "on the phone" under "later": that milestone makes the native build and shows those things, and the main path once, on a simulator. (A first native build took four hours before one screen was seen, and most of what it found was its own toolchain.) Only when the toolkit cannot run in a browser does the first pass begin with the empty app running on a simulator, before any screen of the product is written.
 - Every milestone leaves the product working. A later milestone never depends on something a milestone before it left broken.
@@ -246,7 +337,7 @@ Return the plan.`,
 const DESIGN_GROUND = 'You are working in the project\'s folder, on a new product whose screens are drawn and put before its owner before anything of it is built. The command `sz-eyes` is on your PATH (the sz plugin\'s). Read `.sz/owner.md` if it is there (what the owner has said they want of this product: it comes before your own taste). What an earlier run of this stage left under `.sz/plan/` and `.sz/design/` is taken up where it stopped, not started again.'
 const SWEEP = 'sz-eyes web sweep "file://$PWD/.sz/design/prototype.html" --from .sz/design/sweep.txt --size phone --out .sz/design/shots'
 const WAITS = 'the prototype waits for the owner: nothing is built until they have seen it and said. Open .sz/design/prototype.html for them (at a phone\'s width each screen is shown alone at prototype.html#<id>; the pictures are in .sz/design/shots/), and record what they say, in their words: sz-eyes contract judged design feel --verdict yes|no --said "<their words>". Their verdict is theirs: nobody gives it for them. Then run this workflow again: on yes it plans the first pass and builds it to the drawing, on no it draws again what they said.'
-const PLANNED = { type: 'object', properties: { screens: { type: 'array', items: { type: 'string' }, description: 'the screen ids, in the order of their files' }, decided: { type: 'array', items: { type: 'string' }, description: 'what the request and the answers left open and how you decided it' }, problem: { type: 'string', description: 'empty unless the screens could not be planned: then why' } }, required: ['screens'] }
+const PLANNED = { type: 'object', properties: { screens: { type: 'array', items: { type: 'string' }, description: 'the screen ids, in the order of their files' }, decided: { type: 'array', items: { type: 'string' }, description: 'what the request and the answers left open and how you decided it' }, notReal: { ...NOT_REAL, description: 'section 10 of the frame, an entry each, and what the one thing needs and is not at hand (section 2) as entries on its path' }, problem: { type: 'string', description: 'empty unless the screens could not be planned: then why' } }, required: ['screens', 'notReal'] }
 const BOARD = { type: 'object', properties: { primary: { type: 'string', description: 'the primary reference: the product, and what of its way this product follows' }, kinds: { type: 'array', items: { type: 'string' } }, problem: { type: 'string', description: 'empty unless the board has a gap: no reference tool and nothing in the library for a kind' } }, required: ['primary'] }
 const DRAWN = {
   type: 'object',
@@ -275,6 +366,22 @@ const SWEPT = {
 }
 // What the last measurement of the prototype showed, for the session the run returns to.
 let designed = null
+// What the screens' planner listed as not real: the owner sees it at the drawing, before anything is built, and is
+// asked there for what the build needs from them.
+let drawnList = null
+const atDrawing = () => {
+  const list = drawnList || []
+  const owed = list.filter((e) => waitsFor(e))
+  const rest = list.filter((e) => !waitsFor(e))
+  const line = `${owed.length > 0 ? ` Before the build, from the owner: ${owed.map((e) => `${e.what}: ${e.needs || '(what it needs was not said)'}${keyLine(e) ? ` (${keyLine(e)})` : ''}`).join('; ')}.` : ''}${rest.length > 0 ? ` Not real yet in the first pass, each said on its screen: ${rest.map((e) => `${e.what} (${e.reason})`).join('; ')}.` : ''}`
+  return { owed: owed.map((e) => asNeed(e, waitsFor(e), 'design')), line }
+}
+const askAtDrawing = () => {
+  const { owed, line } = atDrawing()
+  if (owed.length === 0) return line
+  needed.push(...owed)
+  return `${line} While they look, put to them what the build needs from them: for each, a key they put in the vault themselves, in their own terminal, or their words that it may be an example for now, which go word for word into answers (asked: "owner") when this workflow is started again. The build does not start without one or the other.`
+}
 
 // again: the owner said no, and the contract `design` is there to record on; its claim feel goes back to them.
 const sweepDesign = (again) =>
@@ -331,7 +438,9 @@ Load the \`sz:design\` skill with the Skill tool only to learn where its folder 
 
 A designer starts drawing the moment \`.sz/plan/frame.md\` exists, and takes each screen as its file appears. So write the frame whole and as soon as you can, before any screen; then the screens in order, without going back to change one that is written. (Planned whole first and drawn after, 25 screens took 19 minutes to plan before the drawing could start.) What the request and the answers leave open is decided in the frame and marked as decided there.
 
-Write no spec, no code and no picture. Return the screen ids in the order of their files.`,
+What is real is found before any screen is written (sections 2 and 10 of the frame), by this rule: ${REAL} Return that list under "notReal", an entry each, with what the one thing needs and is not at hand as entries on its path: the owner is asked for those while they look at the drawing, and the build does not start without them.
+
+Write no spec, no code and no picture. Return the screen ids in the order of their files, and the list.`,
           { label: 'screens', phase: 'Design', schema: PLANNED, ...effort('plan') },
         ),
       () =>
@@ -363,6 +472,7 @@ Return as the skill says.`,
           { label: 'design', phase: 'Design', schema: DRAWN, ...effort('build') },
         ),
     ])
+    drawnList = notRealOf(planned)
     if (!drew || (drew.missing || '').trim() !== '') {
       const why = [drew ? drew.missing.trim() : 'the designer did not answer', planned ? (planned.problem || '').trim() : 'the screens were not planned (nobody answered)', board ? (board.problem || '').trim() : 'the reference board was not made (nobody answered)'].filter(Boolean)
       return `the screens could not be drawn: ${why.join('; ')}. Run this workflow again to take them up where they stopped.`
@@ -387,14 +497,20 @@ Mend the part, not the screen: a name cut off in one row is cut off in every row
   if (!swept) return 'the prototype was drawn and could not be measured (nobody answered)'
   if ((swept.sandbox || '').trim() !== '') return `the prototype was drawn and could not be measured: the session's command sandbox stopped the browser and the call outside it was refused (${swept.sandbox.trim().slice(0, 200)}). The owner chooses one: run sessions in auto mode, approve the unsandboxed command when asked, or turn the sandbox off for this project (/sandbox); then ask to continue.`
   if (!holds(swept)) return `the prototype was drawn and still does not hold after two rounds of mending: ${Math.max(0, Number(swept.screens) - Number(swept.hold))} of the plan's ${swept.screens} screen(s) do not hold: ${(swept.findings || []).map((f) => `${f.screen} (${f.found})`).join('; ') || '(the measurement named none)'}. Nothing is put before the owner that does not hold: run this workflow again to take the drawing up where it stopped.`
-  log(`DESIGN READY: open .sz/design/prototype.html. ${swept.screens} screen(s) of the plan drawn, all ${swept.screens} hold at phone size and at their limits`)
+  const asks = atDrawing().line
+  log(`DESIGN READY: open .sz/design/prototype.html. ${swept.screens} screen(s) of the plan drawn, all ${swept.screens} hold at phone size and at their limits${asks ? `.${asks}` : ''}`)
   return null
 }
 
 // The run stops at the prototype: what came of the design stage goes back to the session, and nothing is built.
 const stopAtDesign = (stopped) => {
   log(stopped)
-  return { mode: plan.mode || 'new', summary: plan.summary || '', decided: plan.decided || [], spec: null, design: designed, milestones: [], joins: [], forOwner: [], notBuilt: [], stopped }
+  return { mode: plan.mode || 'new', summary: plan.summary || '', decided: plan.decided || [], spec: null, design: designed, milestones: [], joins: [], forOwner: [], notBuilt: [], needed, stopped }
+}
+// Nothing is built while the plan leaves not real what only the owner can let be so.
+const stopNotReal = (stopped) => {
+  log(stopped)
+  return { mode: plan.mode || null, summary: plan.summary || '', decided: plan.decided || [], spec: '.sz/spec.md', design: designed, milestones: [], joins: [], forOwner: [], notBuilt: [...milestones.filter((m) => m.state !== 'closed').map((m) => m.title), ...(more ? later : [])], needed, stopped }
 }
 
 let plan = await planIt('start')
@@ -405,7 +521,7 @@ let design = DESIGNS.includes(plan.design) ? plan.design : 'none'
 if (design === 'needed' || design === 'again') {
   const short = await drawScreens(design, typeof plan.said === 'string' ? plan.said.trim() : '')
   if (short) return stopAtDesign(short)
-  if (!designGo) return stopAtDesign(WAITS)
+  if (!designGo) return stopAtDesign(WAITS + askAtDrawing())
   log('the owner said to go on without judging the prototype first (design: "go"): the first pass is planned from it and built to it, and how it feels stays theirs to say')
   phase('Plan')
   plan = await planIt('start')
@@ -426,6 +542,8 @@ const fresh = cutAt >= 0
 let milestones = fresh ? plan.milestones.slice(0, cutAt + 1).map((m, k) => ({ ...m, first: k === cutAt })) : plan.milestones.slice(0, maxMilestones)
 const later = fresh ? [...(plan.later || []).map((l) => l.title), ...plan.milestones.slice(cutAt + 1).map((m) => m.title)] : []
 let more = later.length > 0
+const owedAtStart = holdFor(milestones, 'nothing was built: the plan leaves something not real that may be so only on the owner\'s own word')
+if (owedAtStart) return stopNotReal(owedAtStart)
 // How long to expect is said before the first milestone: 20 to 30 minutes each is what a small web product took
 // with building at "high" (docs/runs/2026-11-16-speed). An owner who is told nothing learns the length of a run
 // by waiting through it.
@@ -493,6 +611,8 @@ ${m.notDoing && m.notDoing.length > 0 ? `Not done in this milestone: ${m.notDoin
 ${m.risks && m.risks.length > 0 ? `Risks named when it was planned: ${m.risks.join('; ')}` : ''}
 ${replaces ? `Promises of earlier work that this milestone replaces, because what was asked has changed (contract/claim | why):\n${replaces}` : ''}
 
+${UNREAL(m)}
+
 What earlier work proved still stands (\`sz-eyes standing\` lists it), except what is named above as replaced: this milestone keeps all of it true. A flow or test from earlier work that fails after your change means the product is wrong, not the check.
 
 Do this, in order:
@@ -506,6 +626,15 @@ ${m.first ? FIRST_STEPS(m) : `2. Write the oracle first: every flow or test file
 Do not judge your own claims and do not record verdicts: someone who did not build this will operate it. Do not leave a server running.`,
     { label: `build:${m.id}`, phase: 'Build', schema: BUILT, ...effort('build') },
   )
+  // A builder that found something cannot be made real stopped there: nobody verifies an example in its place.
+  const unreal = !resumed && built && Array.isArray(built.notReal) ? built.notReal.filter((e) => e && plainWords(e.what) !== '') : []
+  if (unreal.length > 0) {
+    const list = unreal.map((e) => asNeed(e, '', m.id))
+    needed.push(...list)
+    stopped = `milestone "${m.title}" stopped on what cannot be made real with what is at hand, and nothing was made an example in its place: ${list.map((n) => `[${needLine(n)}]`).join(' ')} ${ASK}`
+    log(stopped)
+    return { entry: null, stopped }
+  }
   if (!built || (built.blocked && built.blocked.trim() !== '')) {
     stopped = `milestone "${m.title}" ${resumed ? 'was built by an earlier run and could not be started' : 'could not be built'}: ${built ? built.blocked : 'the builder did not answer'}${built ? '. If what stopped it is outside the product, tell the owner what it is and ask how to get past it: that is theirs to choose.' : ''}`
     log(stopped)
@@ -531,7 +660,7 @@ Do not judge your own claims and do not record verdicts: someone who did not bui
         again
           ? `This is a second look, after a fix. ${again.claims.length > 0 ? `These claims of the contract were shown false before: ${again.claims.join(', ')}. Check each from the start, on the product as it is now, and record it with \`sz-eyes contract claim\`. ` : ''}${again.standing.length > 0 ? `These promises of earlier work were found broken: ${again.standing.join(', ')}. Show each again and record it with ${record}. ` : ''}A fix can break a neighbour: show again this contract's other claims and what stood before (\`sz-eyes standing\`) by the project's whole check command run once where it has one, and a flow, test or command by itself only where that run failed or says nothing of a claim; report whatever fails now (a claim of this contract under "refuted", recorded with \`sz-eyes contract claim\`; a promise of earlier work under "broken", recorded as above). Claims you did not look at again keep their verdict: leave them out. A claim about every screen at the product's limits is judged by its flow, at the limits the spec states: an input the product does not accept shows nothing about it. Before the fix, this was noticed outside the claims: ${again.noticed.length > 0 ? again.noticed.map((n) => `[${n}]`).join(' ') : '(nothing)'}. Under "noticed" return each of those that is still so on the product as it is now (drop one the fix has ended) and whatever you notice that is new.`
           : `Give every claim a verdict and record each with \`sz-eyes contract claim\`. Then show again what stood before this work (\`sz-eyes standing\`) and record each with ${record}.`
-      }${share ? ` You are one of ${share.of} verifiers looking at this contract at the same time. Yours are these claims: ${share.part.join(', ')}. Give a verdict to these and to no other. ${share.k === 0 ? 'You are also the one who shows again what stood before this work.' : 'Do not show again what stood before this work: another verifier does.'} Start a copy of the product of your own, on a port of your own and with a place of its own for what it stores (the map says how it is launched; never the same database file or folder as another copy), and stop it when you are done.` : ''}${m.first && !again ? WRITE_FLOWS(built.contractId) : ''}${m.first && !again && toDrawing ? AS_DRAWN : ''} I am telling you nothing about whether any claim is true. Record what you notice that no claim covers with \`sz-eyes contract notice\`, stop any server you start, and return the verdicts: under "broken" every promise of earlier work that does not hold now, under "held" every one you showed again that holds.`,
+      }${share ? ` You are one of ${share.of} verifiers looking at this contract at the same time. Yours are these claims: ${share.part.join(', ')}. Give a verdict to these and to no other. ${share.k === 0 ? 'You are also the one who shows again what stood before this work.' : 'Do not show again what stood before this work: another verifier does.'} Start a copy of the product of your own, on a port of your own and with a place of its own for what it stores (the map says how it is launched; never the same database file or folder as another copy), and stop it when you are done.` : ''}${m.first && !again ? WRITE_FLOWS(built.contractId) : ''}${m.first && !again && toDrawing ? AS_DRAWN : ''}${REAL_LOOK(m)} I am telling you nothing about whether any claim is true. Record what you notice that no claim covers with \`sz-eyes contract notice\`, stop any server you start, and return the verdicts: under "broken" every promise of earlier work that does not hold now, under "held" every one you showed again that holds.`,
       { label: `verify:${m.id}${again ? ':again' : share ? `:${share.k + 1}of${share.of}` : ''}`, phase: 'Verify', agentType: 'sz:verifier', schema: VERDICT, ...effort('verify') },
     )
   // A first pass has many claims and its flows are still to be written: it is looked at by up to three verifiers
@@ -601,7 +730,7 @@ Someone who did not build it operated the product and found these claims false:
 ${wrong}
 ${broke ? `And these were true before this work and are not now (each is a promise of earlier work: \`sz-eyes standing\` shows how it is checked):\n${broke}` : ''}
 
-Find the cause of each in the product and fix it there. Where a claim is shown by pictures kept in the evidence folder (a look the owner will go through), take those pictures again from the product as you leave it: a picture from before your fix shows the fault you mended, and the claim is false again for that alone. Where a claim says something of every screen (nothing cut off, nothing too small to press), mend the cause wherever the same thing is shown, not only in the place named, and run that claim's flow over the whole product until it reports nothing before you return. Do not edit the contract, the flows or the tests it names, or those of earlier work, and do not record verdicts. Check that what was already true still is (run the project's checks). Commit the fix. If a claim cannot be made true without changing what was asked, change nothing for it and say why.`,
+Find the cause of each in the product and fix it there. Where a claim is shown by pictures kept in the evidence folder (a look the owner will go through), take those pictures again from the product as you leave it: a picture from before your fix shows the fault you mended, and the claim is false again for that alone. Where a claim says something of every screen (nothing cut off, nothing too small to press), mend the cause wherever the same thing is shown, not only in the place named, and run that claim's flow over the whole product until it reports nothing before you return. Do not edit the contract, the flows or the tests it names, or those of earlier work, and do not record verdicts. Check that what was already true still is (run the project's checks). Commit the fix. If a claim cannot be made true without changing what was asked, change nothing for it and say why. Nothing is put in as an example to make a claim true: what cannot be made real with what is at hand goes under "notFixed", with what it needs.`,
       { label: `fix:${m.id}:${round}`, phase: 'Build', ...effort('build'), schema: { type: 'object', properties: { fixed: { type: 'array', items: { type: 'string' } }, notFixed: { type: 'array', items: { type: 'string' } } }, required: ['fixed'] } },
     )
     // What the fixer says cannot be made true is ruled on before anyone looks again: a claim set aside is not looked at twice more.
@@ -811,6 +940,12 @@ while (!stopped) {
     milestones = [...milestones.filter((m) => done.some((d) => d.id === m.id)), ...todo].slice(0, maxMilestones)
     ids = new Set(milestones.map((m) => m.id))
     plan = { ...plan, decided: [...(plan.decided || []), ...(next.decided || [])] }
+    const owedAfter = holdFor(milestones.filter((m) => !done.some((d) => d.id === m.id)), 'the first pass stands; nothing after it was built: the plan for what comes after it leaves something not real that may be so only on the owner\'s own word')
+    if (owedAfter) {
+      stopped = owedAfter
+      log(stopped)
+      break
+    }
     const left = milestones.length - done.length
     log(`planned after the first pass: ${left} milestone(s): ${todo.slice(0, left).map((m) => m.title).join(' / ')}; expect about ${left * 20} to ${left * 30} minutes in a line`)
     continue
@@ -896,5 +1031,8 @@ return {
   // Claims whose own words turned out wrong about the world: set aside, not changed. Each is the owner's to settle (sz-eyes contract judged <contract> <claim> --verdict yes|no --said "...").
   forOwner: done.flatMap((d) => (d.setAside || []).map((a) => `${d.contractId}/${a.id}: ${a.ruling}`)),
   notBuilt: [...milestones.filter((m) => !done.some((d) => d.id === m.id)).map((m) => m.title), ...(more ? later : [])],
+  // What the owner is asked for before what stopped can be built: each with why, what it needs and, for a key, the
+  // command they run in their own terminal to put it in the vault.
+  needed,
   stopped,
 }
