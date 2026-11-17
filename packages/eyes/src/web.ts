@@ -1,6 +1,6 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { chromium, devices, type Browser, type BrowserContextOptions, type Page } from 'playwright-core';
+import { chromium, devices, type Browser, type BrowserContext, type BrowserContextOptions, type Page } from 'playwright-core';
 import { contract } from '@studio-zero/design';
 import { forForeignProduct, runDomChecks } from '@studio-zero/daemon/src/qa/checks.ts';
 import { PageDigest, collectDigest } from '@studio-zero/daemon/src/qa/collector.ts';
@@ -70,7 +70,7 @@ export interface LookOptions {
 const READING_ORDER = (a: { y: number; x: number }, b: { y: number; x: number }): number => (Math.abs(a.y - b.y) > 6 ? a.y - b.y : a.x - b.x);
 
 /** How long a look waits for a loaded page to stop asking for things. */
-const QUIET_MS = 4_000;
+export const QUIET_MS = 4_000;
 export const quiet = (page: Page, ms = QUIET_MS): Promise<void> => page.waitForLoadState('networkidle', { timeout: ms }).catch(() => undefined);
 
 /** How long `see` and `expect` let the screen catch up with what was just done before saying it is not so. */
@@ -160,6 +160,25 @@ export async function describePage(page: Page, at: { viewport: ViewportId; width
   return { title: digest.success ? digest.data.title : await page.title().catch(() => ''), texts, controls, findings, overflowsSideways: digest.success ? digest.data.scrollWidth > digest.data.width + 1 : false };
 }
 
+/** A browser context as a person at this size would have it: the device, its touch, and the light or dark scheme. */
+export const openContext = (browser: Browser, size: Size, dark: boolean): Promise<BrowserContext> => browser.newContext({ ...SIZES[size].context, colorScheme: dark ? 'dark' : 'light' });
+
+/**
+ * What is measured on a page that is open and has settled, once its faces have loaded: the same for one look
+ * and for a sweep of many screens, so that both say the same of the same screen.
+ */
+export async function measureOpen(page: Page, url: string, size: Size, house: boolean): Promise<Pick<Look, 'title' | 'texts' | 'controls' | 'findings' | 'overflowsSideways'>> {
+  const at = SIZES[size];
+  await page.evaluate(() => document.fonts.ready).catch(() => undefined);
+  return describePage(page, { viewport: at.id, width: at.context.viewport!.width, touch: at.touch, route: new URL(url).pathname }, house);
+}
+
+/** Where the picture of a look is kept: `<out>/<name>-<size>.png`, and `-dark` after it in the dark scheme. */
+export const pictureFile = (out: string, name: string, size: Size, dark: boolean): string => join(out, `${name}-${size}${dark ? '-dark' : ''}.png`);
+
+/** One measured finding, as a line. */
+export const renderFinding = (f: Look['findings'][number]): string => `- ${f.severity} ${f.rule}: ${f.message}${f.selector ? ` at ${f.selector}` : ''}`;
+
 /**
  * Opens a page as a person would meet it and says what is there: the words, what can be pressed and how big it
  * is, what the page logged, and what was measured on it. The measurement is the universal one by default (text
@@ -167,10 +186,9 @@ export async function describePage(page: Page, at: { viewport: ViewportId; width
  */
 export async function lookAtWeb(url: string, opts: LookOptions = {}): Promise<Look> {
   const size = opts.size ?? 'phone';
-  const at = SIZES[size];
   const scheme = opts.dark ? 'dark' : 'light';
   const browser = opts.browser ?? (await openBrowser());
-  const context = await browser.newContext({ ...at.context, colorScheme: scheme });
+  const context = await openContext(browser, size, opts.dark ?? false);
   const consoleErrors: string[] = [];
   const failedRequests: string[] = [];
   try {
@@ -197,14 +215,13 @@ export async function lookAtWeb(url: string, opts: LookOptions = {}): Promise<Lo
     // From here the page's own time stands at one second after it opened, whatever the machine was doing.
     if (opts.clock) await page.clock.pauseAt(CLOCK_START + 1_000);
     if (opts.before) await opts.before(page);
-    await page.evaluate(() => document.fonts.ready).catch(() => undefined);
 
-    const seen = await describePage(page, { viewport: at.id, width: at.context.viewport!.width, touch: at.touch, route: new URL(url).pathname }, opts.house ?? false);
+    const seen = await measureOpen(page, url, size, opts.house ?? false);
 
     let screenshot: string | null = null;
     if (opts.out) {
       mkdirSync(opts.out, { recursive: true });
-      screenshot = join(opts.out, `${opts.name ?? 'look'}-${size}${opts.dark ? '-dark' : ''}.png`);
+      screenshot = pictureFile(opts.out, opts.name ?? 'look', size, opts.dark ?? false);
       writeFileSync(screenshot, await page.screenshot({ type: 'png', fullPage: false }));
     }
     return {
@@ -234,7 +251,7 @@ export function renderLook(look: Look): string {
     look.overflowsSideways ? 'the page scrolls sideways at this size' : '',
     look.consoleErrors.length > 0 ? `errors the page logged:\n${look.consoleErrors.map((line) => `  - ${line}`).join('\n')}` : 'the page logged no error',
     look.failedRequests.length > 0 ? `requests that failed:\n${look.failedRequests.map((line) => `  - ${line}`).join('\n')}` : '',
-    heavy.length > 0 ? `measured (${look.bar} bar), above minor:\n${heavy.map((f) => `  - ${f.severity} ${f.rule}: ${f.message}${f.selector ? ` at ${f.selector}` : ''}`).join('\n')}` : `measured (${look.bar} bar): nothing above minor`,
+    heavy.length > 0 ? `measured (${look.bar} bar), above minor:\n${heavy.map((f) => `  ${renderFinding(f)}`).join('\n')}` : `measured (${look.bar} bar): nothing above minor`,
   ];
   return lines.filter(Boolean).join('\n');
 }

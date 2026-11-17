@@ -25,6 +25,7 @@ import { reviewWeb } from './review.ts';
 import { renderStrangers, strangers } from './strangers.ts';
 import { Shown, brokenDuring, keptFor, ledgerProblem, recordShown, renderStanding, stampClosed, standing, standingSummary, mendLedger, STANDING_FILE } from './standing.ts';
 import { Felt, TrialFinding, TrialKind, Verdict, addAsk, addFinding, addNote, addPersona, latestTrial, newTrial, readTrial, renderTrial, setVerdict, unfinished, writeTrialPage, setCanary } from './trial.ts';
+import { planScreens, renderSweep, screensFromArgs, sweepWeb, type Screen } from './sweep.ts';
 import { SIZES, lookAtWeb, renderLook, renderWalk, walkWeb, type Size, SandboxError, closeBrowser, openBrowser } from './web.ts';
 
 const USAGE = `sz-eyes: launch what was built, look at it, operate it, and put what was seen on one page
@@ -32,6 +33,16 @@ const USAGE = `sz-eyes: launch what was built, look at it, operate it, and put w
   sz-eyes web look <url> [--size phone|tablet|desktop] [--dark] [--wait <text or selector>] [--out <folder>] [--name <n>] [--house] [--json]
         open a page in a headless Chrome of its own and say what is on it: the words, what can be pressed, what it
         logged, and what was measured (text that can be read, controls that can be pressed, nothing cut off)
+
+  sz-eyes web sweep <address> (--hash <id>... | --path <path>... | --from <file>) [--size phone|tablet|desktop] [--dark] [--wait <ms>] [--out <folder>] [--house] [--json]
+        measure many screens in one browser, each as web look measures it, and say all that was found at once: for
+        each screen in the order given, "nothing above minor" or its findings above minor, and its picture kept as
+        <out>/<name>-<size>.png (a new folder under the system's temporary folder unless --out is given); then how
+        many hold and which do not. --hash <id> is <address>#<id>, changed on the page that is open, not reloaded;
+        --path <path> is that path on the address's origin; --from reads one screen a line (#<id>, /<path> or a
+        full address). --wait <ms> waits that much more on each screen. A screen that cannot be opened does not
+        hold, and the sweep goes on. Exits 1 when a screen does not hold. For every screen of a prototype or a
+        product in one go, each at its limits, before saying that no screen is cut off
 
   sz-eyes web do <url> --step "<step>"... [--size ...] [--out <folder>] [--name <n>] [--clock] [--json]
         do things on a page as a person would and keep a picture of what each led to. Steps: tap:<words>,
@@ -307,6 +318,27 @@ async function main(argv: string[]): Promise<number> {
     const look = await lookAtWeb(url, { size, dark: a.has('--dark'), house: a.has('--house'), ...(a.one('--wait') ? { waitFor: a.one('--wait')! } : {}), ...(a.one('--out') ? { out: resolve(a.one('--out')!) } : {}), ...(a.one('--name') ? { name: a.one('--name')! } : {}) });
     out(a.has('--json') ? JSON.stringify(look, null, 2) : renderLook(look));
     return 0;
+  }
+  if (area === 'web' && command === 'sweep') {
+    const a = parse(rest, ['--dark', '--house', '--json']);
+    const address = a.words[0];
+    const usage = 'sz-eyes web sweep <address> (--hash <id>... | --path <path>... | --from <file>) [--size phone|tablet|desktop] [--dark] [--wait <ms>] [--out <folder>]';
+    if (!address || !/^(https?|file):\/\//i.test(address)) throw new EyesError(`which page: ${usage}. The address is http… or file://…`);
+    const size = (a.one('--size') ?? 'phone') as Size;
+    if (!(size in SIZES)) throw new EyesError(`--size is one of ${Object.keys(SIZES).join(', ')}`);
+    const waitMs = Number(a.one('--wait') ?? 0);
+    if (!Number.isFinite(waitMs) || waitMs < 0) throw new EyesError('--wait <ms>: milliseconds more to wait on each screen (500, 2000)');
+    let screens: Screen[];
+    try {
+      // Read from the words as given, not from the flags: the order across --hash, --path and --from is the order measured.
+      screens = planScreens(address, screensFromArgs(rest));
+    } catch (err) {
+      throw new EyesError(err instanceof Error ? err.message : String(err));
+    }
+    if (screens.length === 0) throw new EyesError(`which screens: ${usage}`);
+    const swept = await sweepWeb(address, screens, { size, dark: a.has('--dark'), house: a.has('--house'), waitMs, ...(a.one('--out') ? { out: resolve(a.one('--out')!) } : {}) });
+    out(a.has('--json') ? JSON.stringify(swept, null, 2) : renderSweep(swept));
+    return swept.notHolding.length > 0 ? 1 : 0;
   }
   if (area === 'web' && command === 'do') {
     const a = parse(rest, ['--dark', '--house', '--json', '--clock']);
