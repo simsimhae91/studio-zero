@@ -172,6 +172,7 @@ test('a new product is planned twice: its first pass alone, and what comes after
   const laterBuild = ran.calls.find((c) => c.label === 'build:m2')!.prompt;
   assert.doesNotMatch(laterBuild, /This milestone is the product's first pass/);
   assert.match(laterBuild, /Write the oracle first: every flow or test file a claim points at/, 'work on a product that stands keeps its checks before its code');
+  assert.match(laterBuild, /where the product's screens were drawn before it was built \(`\.sz\/design\/direction\.md` is there\), the look is the one drawn/, 'a later milestone keeps to the drawing');
   assert.match(ran.calls.find((c) => c.label === 'verify:m1')!.prompt, /The flows of this contract have not been written[\s\S]*sz-eyes contract add-check m1 --frozen/);
   assert.doesNotMatch(ran.calls.find((c) => c.label === 'verify:m2')!.prompt, /The flows of this contract have not been written/);
   assert.match(ran.calls.find((c) => c.label === 'plan:after')!.prompt, /This run has just built and closed the product's first pass[\s\S]*go through the pictures of every area and what its verifiers noticed[\s\S]*what the owner has said since the first pass comes before the spec/);
@@ -351,6 +352,7 @@ test('a prototype the owner said yes to is what the first pass is planned from, 
   assert.match(planned, /every screen of the plan built as drawn, one claim shown by a look \(each built screen beside its picture under `\.sz\/design\/shots\/`: the same content in the same order, made of the same parts, in the same tokens\), and the claim about every screen at its limits/);
   const builder = prompt('build:m1');
   assert.match(builder, /The look first, and it is settled[\s\S]*do not settle it again/);
+  assert.match(builder, /`\.sz\/design\/direction\.md` ends with what you need \(빌더에게: the tokens, the parts, each screen's parts and its address in the prototype\)/, 'the first builder is handed the design\'s direction');
   assert.match(builder, /Carry the prototype's tokens and parts: for a web product its markup and CSS as they are; for a phone app the tokens, the parts and each screen's order, written again in the toolkit/);
   assert.match(builder, /`sz:taste` is for what the design leaves open/);
   assert.doesNotMatch(builder, /The look first \(load `sz:taste`/);
