@@ -157,14 +157,14 @@ export function withFileLock<T>(target: string, run: () => T): T {
 }
 
 /**
- * Writes a file whole in one step: the text goes to a file of its own beside it, which then takes its place. A
+ * Writes a file whole in one step: what is written goes to a file of its own beside it, which then takes its place. A
  * reader with no lock sees the whole file as it was or the whole file as it is now, never half of one.
  */
-export function writeFileAtomic(target: string, text: string): void {
+export function writeFileAtomic(target: string, data: string | Uint8Array): void {
   mkdirSync(dirname(target), { recursive: true });
   const tmp = `${target}.${unique()}.tmp`;
   try {
-    writeFileSync(tmp, text);
+    writeFileSync(tmp, data);
     renameSync(tmp, target);
   } catch (err) {
     rmSync(tmp, { force: true });

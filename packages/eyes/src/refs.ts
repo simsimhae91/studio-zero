@@ -1,8 +1,9 @@
-import { createHash, randomBytes } from 'node:crypto';
-import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, statSync } from 'node:fs';
 import * as http from 'node:http';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { withFileLock, writeFileAtomic } from './lock.ts';
 
 /**
  * The house reference library: pictures of how shipped products do a screen, each with what is seen in it, and
@@ -92,50 +93,12 @@ export function readRefs(dir: string): Ref[] {
     });
 }
 
-/** Written whole beside where it goes and renamed over it: a reader sees the file before or after, never half of it. */
-function writeWhole(path: string, data: string | Buffer): void {
-  const temporary = `${path}.${process.pid}.${randomBytes(4).toString('hex')}.tmp`;
-  writeFileSync(temporary, data);
-  renameSync(temporary, path);
-}
+const writeIndex = (dir: string, refs: readonly Ref[]): void => writeFileAtomic(join(dir, REFS_INDEX), refs.map((ref) => `${JSON.stringify(ref)}\n`).join(''));
 
-const writeIndex = (dir: string, refs: readonly Ref[]): void => writeWhole(join(dir, REFS_INDEX), refs.map((ref) => `${JSON.stringify(ref)}\n`).join(''));
-
-/**
- * One writer of the library at a time: a lock folder beside the index (making a folder either succeeds or finds
- * it there, in one step), let go in `finally`, waited for up to ten seconds, and taken over when it is older
- * than thirty (whoever made it died holding it). Kept small and private here: a general lock.ts is being added
- * on another branch, and this should be folded into it once both are merged.
- */
+/** One writer of the library at a time, under the lock every sz-eyes file that several processes change is written under. */
 async function exclusively<T>(dir: string, work: () => T): Promise<T> {
   mkdirSync(dir, { recursive: true });
-  const lock = join(dir, `${REFS_INDEX}.lock`);
-  const until = Date.now() + 10_000;
-  for (;;) {
-    try {
-      mkdirSync(lock);
-      break;
-    } catch (err) {
-      if ((err as NodeJS.ErrnoException).code !== 'EEXIST') throw err;
-    }
-    let age: number;
-    try {
-      age = Date.now() - statSync(lock).mtimeMs;
-    } catch {
-      continue; // let go between the two looks
-    }
-    if (age > 30_000) {
-      rmSync(lock, { recursive: true, force: true });
-      continue;
-    }
-    if (Date.now() > until) throw new RefsError(`the library is being written by another sz-eyes refs (${lock} is there): try again in a moment`);
-    await new Promise((done) => setTimeout(done, 15 + Math.random() * 35));
-  }
-  try {
-    return work();
-  } finally {
-    rmSync(lock, { recursive: true, force: true });
-  }
+  return withFileLock(join(dir, REFS_INDEX), work);
 }
 
 /** What the bytes are, from their first bytes: only pictures of the kinds a screen is kept in. */
@@ -319,7 +282,7 @@ export async function addRef(dir: string, input: RefInput, now = new Date().toIS
     let id = `${productSlug}-${sha256.slice(0, 8)}`;
     for (let n = 12; refs.some((ref) => ref.id === id); n += 4) id = `${productSlug}-${sha256.slice(0, n)}`;
     mkdirSync(join(dir, 'shots', kindSlug), { recursive: true });
-    writeWhole(join(dir, file), picture.bytes);
+    writeFileAtomic(join(dir, file), picture.bytes);
     const ref: Ref = { id, kind, product: given.product, what: given.what, platform: given.platform, lang: given.lang, link: given.link, file, sha256, addedAt: now, for: given.for, notes: given.notes };
     writeIndex(dir, [...refs, ref]);
     return { status: 'kept', sameAs: null, notesReplaced: false, newKind: !there, kindsBefore, ref, path: join(dir, file) };
@@ -348,7 +311,7 @@ export async function writeKindPage(dir: string, kind: string, text: string): Pr
     mkdirSync(join(dir, 'kinds'), { recursive: true });
     const previous = existsSync(page) ? join(dir, 'kinds', `${slug}.prev.md`) : null;
     if (previous) copyFileSync(page, previous);
-    writeWhole(page, text);
+    writeFileAtomic(page, text);
     return { page, previous };
   });
 }
