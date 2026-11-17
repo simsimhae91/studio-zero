@@ -37,8 +37,8 @@ How sign-in works is in `../SKILL.md` (Accounts): one app for every product, the
 4. [카카오 로그인] > [동의항목]에서 닉네임, 프로필 사진, 카카오계정(이메일)을 켭니다.
 5. [앱] > [플랫폼 키] > [REST API 키]를 열고, 리다이렉트 URI 칸에 `http://localhost:49210/oauth/callback` 을 그대로 넣습니다(http, localhost, 끝에 / 없음).
 6. 같은 화면의 [클라이언트 시크릿]에서 코드를 발급하고 활성화가 ON인지 봅니다.
-7. REST API 키를 복사하고, 이 세션의 입력창에 이 한 줄을 실행합니다: `! pbpaste | sz-eyes secret set login/kakao/client-id`
-8. 클라이언트 시크릿 코드를 복사하고 이 한 줄을 실행합니다: `! pbpaste | sz-eyes secret set login/kakao/client-secret`
+7. 아래 줄을 이 세션의 입력창에 붙여 넣기만 하고 Enter는 아직 누르지 않습니다. 줄을 복사하면 클립보드가 그 줄로 바뀌므로, 키보다 먼저 붙여 넣습니다: `! pbpaste | sz-eyes secret set login/kakao/client-id` 그다음 REST API 키를 복사하고, 이 세션으로 돌아와 Enter를 누릅니다.
+8. 같은 순서로 한 번 더 합니다. 이 줄을 먼저 붙여 넣고: `! pbpaste | sz-eyes secret set login/kakao/client-secret` 클라이언트 시크릿 코드를 복사한 뒤, 돌아와 Enter를 누릅니다.
 9. 제품 폴더에서 `sz-eyes supabase start` 가 카카오가 켜졌다고 말하면, 제품의 카카오 단추를 눌러 끝까지 로그인해 봅니다.
 
 안 될 때(KOE006, KOE205 등)는 `docs/guides/studio-zero/shared-login-apps.html` 의 표를 봅니다.

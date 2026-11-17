@@ -617,6 +617,9 @@ test('a command is given the owner\'s keys by name, and a key it prints does not
   assert.equal(kept.get('host/cloudflare/api-token'), 'k9Qw7LmZp2Xv4Ra8Tn3Yb6Ue', 'the newline a clipboard adds is not part of the key');
   await assert.rejects(setSecret(store, 'Bad Id', 'x'), /is not a vault id/);
   await assert.rejects(setSecret(store, 'host/x/y', ' \n'), /nothing came on stdin/);
+  // Copying the line that stores a key puts the line on the clipboard in the key's place: it is refused, and nothing is kept.
+  await assert.rejects(setSecret(store, 'data/data-go-kr/service-key', 'pbpaste | /Users/someone/plugin/bin/sz-eyes secret set data/data-go-kr/service-key\n'), /is the line that stores a key, not the key[\s\S]*Nothing was stored/);
+  assert.deepEqual(await heldSecrets(store, ['data/data-go-kr/service-key']), [{ id: 'data/data-go-kr/service-key', held: false }]);
   assert.deepEqual(await heldSecrets(store, ['host/cloudflare/api-token', 'host/fly/api-token']), [{ id: 'host/cloudflare/api-token', held: true }, { id: 'host/fly/api-token', held: false }]);
 
   let [out, err] = ['', ''];

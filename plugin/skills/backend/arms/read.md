@@ -96,9 +96,10 @@ One real document whose fields were typed by hand beforehand (kept with the prod
 1. https://platform.claude.com 에서 Claude Console 계정을 만들거나 로그인합니다.
 2. 결제(Billing)에 결제 수단을 넣습니다. 사진을 읽을 때마다 쓴 만큼 이 계정에 청구됩니다.
 3. https://platform.claude.com/settings/keys 에서 키를 만듭니다. 이름은 Studio Zero 같은 것으로 합니다.
-4. 만든 키를 복사합니다.
-5. 이 세션의 입력창에 이 한 줄을 그대로 실행합니다: `! pbpaste | sz-eyes secret set model/anthropic/api-key`
-6. `sz-eyes arm check read` 로 확인합니다. 아주 짧은 호출 한 번이라 1센트도 들지 않습니다.
+4. 아래 줄을 이 세션의 입력창에 붙여 넣기만 하고 Enter는 아직 누르지 않습니다. 줄을 복사하면 클립보드가 그 줄로 바뀌므로, 키보다 먼저 붙여 넣습니다: `! pbpaste | sz-eyes secret set model/anthropic/api-key`
+5. 만든 키를 복사합니다.
+6. 이 세션으로 돌아와 Enter를 누릅니다.
+7. 넣었다고 말해 주면 세션이 확인합니다. 아주 짧은 호출 한 번이라 1센트도 들지 않습니다.
 
 ### OpenAI API 키 (`model/openai/api-key`)
 
@@ -106,6 +107,7 @@ Anthropic 키가 없을 때만 씁니다.
 
 1. https://platform.openai.com 에 로그인합니다.
 2. https://platform.openai.com/account/billing/overview 에서 크레딧을 충전합니다.
-3. https://platform.openai.com/api-keys 에서 키를 만들고 복사합니다.
-4. 이 세션의 입력창에 이 한 줄을 그대로 실행합니다: `! pbpaste | sz-eyes secret set model/openai/api-key`
-5. `sz-eyes arm check read` 로 확인합니다.
+3. 아래 줄을 이 세션의 입력창에 붙여 넣기만 하고 Enter는 아직 누르지 않습니다. 줄을 복사하면 클립보드가 그 줄로 바뀌므로, 키보다 먼저 붙여 넣습니다: `! pbpaste | sz-eyes secret set model/openai/api-key`
+4. https://platform.openai.com/api-keys 에서 키를 만들고 복사합니다.
+5. 이 세션으로 돌아와 Enter를 누릅니다.
+6. 넣었다고 말해 주면 세션이 확인합니다.

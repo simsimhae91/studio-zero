@@ -134,17 +134,17 @@ test('need: a missing key gets the owner\'s steps from the arm\'s file, the exac
     const said = await arm(['need', 'public-data', 'read'], { dir: c.dir, vault: {} });
     assert.equal(said.code, 1, 'a workflow stops on it');
     assert.match(said.out, /1\. 사이트에 들어가 키를 만듭니다\./, 'the steps as the file has them');
-    assert.match(said.out, /! pbpaste \| sz-eyes secret set data\/data-go-kr\/service-key/);
+    assert.match(said.out, /! pbpaste \| \S*\/plugin\/bin\/sz-eyes secret set data\/data-go-kr\/service-key/);
     assert.match(said.out, /sz-eyes arm check public-data/);
-    assert.match(said.out, /! pbpaste \| sz-eyes secret set model\/anthropic\/api-key/);
-    assert.match(said.out, /! pbpaste \| sz-eyes secret set model\/openai\/api-key/);
+    assert.match(said.out, /! pbpaste \| \S*\/plugin\/bin\/sz-eyes secret set model\/anthropic\/api-key/);
+    assert.match(said.out, /! pbpaste \| \S*\/plugin\/bin\/sz-eyes secret set model\/openai\/api-key/);
     assert.match(said.out, /one is enough/, 'either provider\'s key will do');
     assert.match(said.out, /sz-eyes arm check read/);
 
     // Only what is missing: the half of a pair that is there is not asked for again.
     const half = await arm(['need', 'login-kakao'], { dir: c.dir, vault: { 'login/kakao/client-id': 'kakao-id-1234' } });
     assert.equal(half.code, 1);
-    assert.match(half.out, /! pbpaste \| sz-eyes secret set login\/kakao\/client-secret/);
+    assert.match(half.out, /! pbpaste \| \S*\/plugin\/bin\/sz-eyes secret set login\/kakao\/client-secret/);
     assert.doesNotMatch(half.out.split('Store')[1] ?? '', /secret set login\/kakao\/client-id\b/, 'the key that is there is not among the lines to run');
     assert.match(half.out, /shown by signing in on a product/, 'an arm with no call to check it says how it is shown instead');
 

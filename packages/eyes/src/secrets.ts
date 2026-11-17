@@ -96,6 +96,9 @@ export async function setSecret(store: SecretStore, id: string, value: string): 
   if (!ID.test(id)) throw new Error(`"${id}" is not a vault id: lower-case words joined by slashes, like host/cloudflare/api-token`);
   const trimmed = value.replace(/\r?\n$/, '');
   if (trimmed.trim() === '') throw new Error('nothing came on stdin: pbpaste | sz-eyes secret set <id>');
+  // The line that stores a key is itself copied to be run, and copying it takes the key's place on the clipboard.
+  if (/\bpbpaste\b/.test(trimmed) || /\bsecret set\b/.test(trimmed))
+    throw new Error('what came on stdin is the line that stores a key, not the key: copying that line put it on the clipboard in the key\'s place. Nothing was stored. Put the line in the prompt first without running it, copy the key, then press Enter');
   await store.set(id, new Secret(trimmed));
 }
 

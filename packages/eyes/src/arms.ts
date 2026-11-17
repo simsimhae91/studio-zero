@@ -59,6 +59,19 @@ export const armsDir = (env: NodeJS.ProcessEnv = process.env): string => (env.SZ
 /** The line the owner runs at the prompt of a session, with the key on the clipboard. */
 export const storeLine = (id: string): string => `! pbpaste | sz-eyes secret set ${id}`;
 
+/**
+ * The command as the owner can run it from any session. `sz-eyes` is on the shell's PATH only where the plugin is
+ * enabled, and the owner's own session may not be one (the first key ever stored this way failed with "command
+ * not found"), so the lines they are given name this checkout's command by its whole path.
+ */
+export function ownCommand(): string {
+  const bin = fileURLToPath(new URL('../../../plugin/bin/sz-eyes', import.meta.url));
+  if (!existsSync(bin)) return 'sz-eyes';
+  return /^[A-Za-z0-9_\/.-]+$/.test(bin) ? bin : `'${bin.replace(/'/g, `'\\''`)}'`;
+}
+/** A line of the owner's steps, with the command they can run in place of its short name. */
+const runnable = (text: string): string => text.replaceAll('pbpaste | sz-eyes ', `pbpaste | ${ownCommand()} `);
+
 const unquote = (value: string): string => {
   const v = value.trim();
   return v.length >= 2 && ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) ? v.slice(1, -1) : v;
@@ -225,9 +238,9 @@ export async function armCommand(command: string | undefined, words: readonly st
         `── ${arm.name} · ${why.join('; ')}`,
         ...keys.map((k) => `${k.id}: ${k.what}; the server gets it as ${k.env}. Costs: ${k.costs}.`),
         '',
-        ...stepsFor(arm, keys).flatMap((text) => [text, '']),
-        `Store ${keys.length === 1 ? 'it' : missing.oneOf.length > 0 && missing.stops.length === 0 ? 'the one that was made' : 'each'}, right after copying it, as one line at the prompt of this session:`,
-        ...keys.map((k) => `  ${storeLine(k.id)}`),
+        ...stepsFor(arm, keys).flatMap((text) => [runnable(text), '']),
+        `The order matters, because copying the line takes the key's place on the clipboard: the line goes into the prompt of this session first, without being run; then the key is copied; then Enter. ${keys.length === 1 ? 'The line' : missing.oneOf.length > 0 && missing.stops.length === 0 ? 'The line of the one that was made' : 'A line for each'}:`,
+        ...keys.map((k) => `  ${runnable(storeLine(k.id))}`),
         `Then: ${thenOf(arm)}`,
       ].join('\n');
     });

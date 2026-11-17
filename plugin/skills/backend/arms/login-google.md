@@ -35,8 +35,8 @@ How sign-in works is in `../SKILL.md` (Accounts): one client for every product, 
 2. Google Auth Platform > Overview > Get started 에서 앱 이름과 지원 이메일을 넣고, Audience는 External을 고르고, 연락처를 넣습니다.
 3. Audience > Test users 에 로그인해 볼 Google 계정을 넣습니다. 게시 상태가 Testing인 동안은 이 계정들만 로그인됩니다.
 4. Clients > Create client 에서 유형을 Web application으로 하고, Authorized redirect URIs에 `http://localhost:49210/oauth/callback` 을 그대로 넣습니다. Authorized JavaScript origins는 비워 둡니다.
-5. Client ID를 복사하고, 이 세션의 입력창에 이 한 줄을 실행합니다: `! pbpaste | sz-eyes secret set login/google/client-id`
-6. Client secret을 복사하고 이 한 줄을 실행합니다: `! pbpaste | sz-eyes secret set login/google/client-secret` (시크릿 전체는 만들 때 한 번만 보입니다. 놓쳤으면 새로 만듭니다.)
+5. 아래 줄을 이 세션의 입력창에 붙여 넣기만 하고 Enter는 아직 누르지 않습니다. 줄을 복사하면 클립보드가 그 줄로 바뀌므로, 키보다 먼저 붙여 넣습니다: `! pbpaste | sz-eyes secret set login/google/client-id` 그다음 Client ID를 복사하고, 이 세션으로 돌아와 Enter를 누릅니다.
+6. 같은 순서로 한 번 더 합니다. 이 줄을 먼저 붙여 넣고: `! pbpaste | sz-eyes secret set login/google/client-secret` Client secret을 복사한 뒤, 돌아와 Enter를 누릅니다. (시크릿 전체는 만들 때 한 번만 보입니다. 놓쳤으면 새로 만듭니다.)
 7. 설정이 반영되는 데 5분에서 몇 시간이 걸릴 수 있습니다. 제품 폴더에서 `sz-eyes supabase start` 가 Google이 켜졌다고 말하면, 제품의 Google 단추를 눌러 테스트 사용자 계정으로 끝까지 로그인해 봅니다.
 
 안 될 때(redirect_uri_mismatch, access_denied)는 `docs/guides/studio-zero/shared-login-apps.html` 의 표를 봅니다.
