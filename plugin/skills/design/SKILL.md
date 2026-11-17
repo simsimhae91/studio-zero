@@ -75,6 +75,8 @@ At the top of `prototype.html`, once: the tokens as CSS custom properties (colou
 
 One hand, one file, one set of parts is what makes eighteen screens read as one product. Do not hand screens out to other agents.
 
+**The product's colour is the owner's to choose, and they choose it by pressing.** The colour is one token, and every colour that follows from it (pressed, soft, its glow, its form on a light surface) is derived from that one in CSS (`color-mix`, `oklch(from …)` with a fallback), so that one value changes them all. Beside the colour in the parts gallery, and as a strip at the top of the overview, put three or four swatches: your choice first, then the candidates most worth offering, each with its name and value. Pressing one sets the token on the root element and every screen follows at once. The choice stays across screens and across a reload (`localStorage` inside try/catch: a file opened from disk may refuse it), and the address can carry it (`?c=<name>`), so that a picture can be taken in any of them. A candidate is offered only if it keeps the screen's other meanings apart (a state colour, another service's own colour) and text on it can still be read; say in `direction.md` which were left out and why. No screen carries a colour as a literal value: a literal does not follow the switch. (An owner who said only "a fluorescent colour" chose among three in a minute; adding the switch took three.) The switch belongs to the prototype, not to the product: say so under 빌더에게.
+
 Hangul is set in Pretendard, SUIT or SUITE (the handbook says which and when), linked from a CDN with a system fallback. Icons come from one set, as inline SVG.
 
 ## 4. Every screen, as it will be
@@ -104,7 +106,7 @@ ls .sz/plan/screens | sed -n 's/^[0-9]*-\(.*\)\.md$/#\1/p' > .sz/design/screens.
 sz-eyes web sweep "file://$PWD/.sz/design/prototype.html" --from .sz/design/screens.txt --size phone --out .sz/design/shots
 ```
 
-It prints, for each screen, either that it holds or what it found (text cut off, a page that scrolls sideways, something to press under 44px, text that cannot be read), and saves a picture of each. Fix everything it reports in one pass, cause by cause: a name cut off in one row is cut off in every row made from that part, so mend the part. Run it once more. A third run means a part is wrong, not a screen. If the session's command sandbox stops the browser, run that command outside it.
+Measure with your own choice of colour, and take one picture of the key screen in each candidate (`…prototype.html?c=<name>#<id>`). It prints, for each screen, either that it holds or what it found (text cut off, a page that scrolls sideways, something to press under 44px, text that cannot be read), and saves a picture of each. Fix everything it reports in one pass, cause by cause: a name cut off in one row is cut off in every row made from that part, so mend the part. Run it once more. A third run means a part is wrong, not a screen. If the session's command sandbox stops the browser, run that command outside it.
 
 Then open the pictures of the key screen and of the three or four screens a person sees most, beside the primary reference. Two questions: is each principle really kept in what was measured (is the contrast between the figure and the body really large, does the main action really stand alone), and is this different enough from the reference (not its colours, not its face, not its signature move)? Write the three largest gaps and fix them. Once.
 
