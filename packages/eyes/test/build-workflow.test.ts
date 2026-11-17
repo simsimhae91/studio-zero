@@ -580,7 +580,7 @@ test('every agent is told from its first line when the session is sandboxed, an 
 // prices. Its plan had the prices as examples, "not connected yet", and the photograph was said to be unread: its one
 // thing would have run on made-up figures, every claim proven. The prices were an open API for a free key; reading the
 // photograph needed a model key of the owner's. Nobody had asked them for either.
-type Entry = { what: string; reason: string; tried: string; needs: string; vault?: string; onPath: boolean; named: boolean; said?: string };
+type Entry = { what: string; reason: string; tried: string; needs: string; vault?: string; arm?: string; onPath: boolean; named: boolean; said?: string };
 const ESTIMATE = '치과 견적서를 찍으면 항목마다 우리 동네 평균 가격과 비교해 줘. 보험이 안 되는 항목은 경고해 주고';
 const reading: Entry = { what: '견적서 사진 읽기', reason: 'owner', tried: 'sz-eyes secret has model/anthropic/api-key: MISSING', needs: '사진을 읽는 모델의 키, 사장님 것', vault: 'model/anthropic/api-key', onPath: true, named: false };
 const prices: Entry = { what: '동네 평균 가격', reason: 'owner', tried: '심평원 비급여 진료비 공개: 공공데이터포털 오픈 API, 무료 키. sz-eyes secret has data/hira/service-key: MISSING', needs: '공공데이터포털에서 사장님이 활용 신청해 받는 무료 키', vault: 'data/hira/service-key', onPath: true, named: true };
@@ -606,6 +606,15 @@ test('a plan that leaves the one thing\'s path not real builds nothing, and says
   assert.ok(ran.logs.includes(ran.result.stopped), 'the log says it as the return does');
   assert.deepEqual(ran.result.milestones, []);
   assert.deepEqual(ran.result.notBuilt, ['첫 판']);
+});
+
+test('a key that is an arm\'s is asked for with the arm\'s own guide, and a name that is not an arm\'s is never put in a command', async () => {
+  const ran = await run({ request: ESTIMATE, asked: 'away' }, goes({ ...reading, arm: 'read' }, { ...prices, arm: 'public-data; rm -rf ~' }));
+  assert.deepEqual(labels(ran.calls), ['plan'], 'no builder starts');
+  assert.match(ran.calls[0]!.prompt, /the arms \(`sz-eyes arm list`\), and `sz-eyes arm need <name>` says whether an arm's keys are in the vault, with the owner's steps when they are not/);
+  assert.match(ran.result.stopped, /견적서 사진 읽기[^\]]*run `sz-eyes arm need read` and put what it prints to the owner as it stands/);
+  assert.doesNotMatch(ran.result.stopped, /rm -rf/);
+  assert.deepEqual(ran.result.needed.map((n: { steps: string }) => n.steps), ['sz-eyes arm need read', '']);
 });
 
 test('what the owner\'s request names, or puts off as later, is not left out or made an example without their words, found in what they said', async () => {
