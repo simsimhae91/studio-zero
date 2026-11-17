@@ -1,6 +1,6 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { chromium, devices, type Browser, type BrowserContext, type BrowserContextOptions, type Page } from 'playwright-core';
+import { chromium, devices, type Browser, type BrowserContext, type BrowserContextOptions, type Locator, type Page } from 'playwright-core';
 import { contract } from '@studio-zero/design';
 import { forForeignProduct, runDomChecks } from '@studio-zero/daemon/src/qa/checks.ts';
 import { PageDigest, collectDigest } from '@studio-zero/daemon/src/qa/collector.ts';
@@ -218,7 +218,7 @@ export async function lookAtWeb(url: string, opts: LookOptions = {}): Promise<Lo
     if (!opts.clock) await quiet(page);
     if (opts.waitFor) {
       const target = /^[.#[]|^data-|>>/.test(opts.waitFor) ? page.locator(opts.waitFor) : page.getByText(opts.waitFor, { exact: false });
-      await target.first().waitFor({ state: 'visible', timeout }).catch(() => undefined);
+      await shown(page, target).first().waitFor({ state: 'visible', timeout }).catch(() => undefined);
     }
     // From here the page's own time stands at one second after it opened, whatever the machine was doing.
     if (opts.clock) await page.clock.pauseAt(CLOCK_START + 1_000);
@@ -281,6 +281,9 @@ export function renderLook(look: Look): string {
  *   expect:<expression>                     it must be so now (the expression is true in the page; it too gets two seconds), or the walk stops here
  *   hold:<key>=<ms>                         hold a key down for that long
  *   run:<ms>                                let that much of the page's time pass (with the clock held: see `clock`)
+ *
+ * What a step finds by its words, a label or a selector, it finds among what is shown, as a person would: what
+ * the page holds and does not show (another screen, a closed dialog) is not on screen.
  */
 export type Step = string;
 
@@ -321,32 +324,63 @@ export async function settled(page: Page): Promise<Buffer> {
 
 const isSelector = (target: string): boolean => /^[.#[]|^data-|>>|^css=|^text=/.test(target);
 
-/** The controls a person could mean by these words. */
-const controlsNamed = (page: Page, target: string): ReturnType<Page['locator']> =>
-  page.getByRole('button', { name: target }).or(page.getByRole('link', { name: target })).or(page.getByRole('tab', { name: target })).or(page.getByRole('checkbox', { name: target }));
-
-/** Anything on the page that these words name or show: for waiting until it is there, or gone. */
-function pointAt(page: Page, target: string): ReturnType<Page['locator']> {
-  if (isSelector(target)) return page.locator(target).first();
-  return controlsNamed(page, target).or(page.getByText(target, { exact: false })).first();
+/**
+ * Of what a lookup found, what a person can see. A page can hold more than it shows: a clickable prototype keeps
+ * all its screens in one file and shows one, a closed dialog or details keeps its words, a screen stays in the
+ * page marked aria-hidden while another is shown. A person presses, types into and reads only what is shown, so
+ * every step that finds something by its words, its label, its field or a selector finds it here: drawn (not
+ * display: none, not visibility: hidden, not in a closed dialog or details, not `hidden`, not of zero size) and
+ * not aria-hidden. Among what is shown, the choice is what it always was. (A designer agent could not press
+ * through its own prototype with `tap:`: the words were found first in a screen that was not shown.)
+ */
+function shown(page: Page, found: Locator): Locator {
+  return found.filter({ visible: true }).and(page.locator(':not([aria-hidden="true"], [aria-hidden="true"] *)'));
 }
+
+/** The controls a person could mean by these words; with `hidden`, those that are not shown as well. */
+const controlsNamed = (page: Page, target: string, hidden = false): Locator => {
+  const by = { name: target, ...(hidden ? { includeHidden: true } : {}) };
+  return page.getByRole('button', by).or(page.getByRole('link', by)).or(page.getByRole('tab', by)).or(page.getByRole('checkbox', by));
+};
+
+/** Everything on the page that these words name or show, or that the selector finds, shown or not. */
+const named = (page: Page, target: string, hidden = false): Locator =>
+  isSelector(target) ? page.locator(target) : controlsNamed(page, target, hidden).or(page.getByText(target, { exact: false }));
+
+/** The fields these words name by their label or placeholder, or that the selector finds, shown or not. */
+const fieldsNamed = (page: Page, target: string, hidden = false): Locator =>
+  isSelector(target) ? page.locator(target) : page.getByLabel(target).or(page.getByPlaceholder(target)).or(page.getByRole('textbox', { name: target, ...(hidden ? { includeHidden: true } : {}) }));
+
+/** The first thing shown that these words name or show: for waiting until it is there, or gone. */
+const pointAt = (page: Page, target: string): Locator => shown(page, named(page, target)).first();
 
 /**
  * What a person would press with these words: the control named so, else whatever shows them. A row whose
  * words, read together, are the same as the name of a button inside it comes first on the page; a person
  * means the button.
  */
-async function toPress(page: Page, target: string, patience: number): Promise<ReturnType<Page['locator']>> {
-  if (isSelector(target)) return page.locator(target).first();
+async function toPress(page: Page, target: string, patience: number): Promise<Locator> {
+  if (isSelector(target)) return pointAt(page, target);
   const any = pointAt(page, target);
   await any.waitFor({ state: 'visible', timeout: patience });
-  const controls = controlsNamed(page, target).filter({ visible: true });
+  const controls = shown(page, controlsNamed(page, target));
   return (await controls.count()) > 0 ? controls.first() : any;
 }
 
-function field(page: Page, target: string): ReturnType<Page['locator']> {
-  if (isSelector(target)) return page.locator(target).first();
-  return page.getByLabel(target).or(page.getByPlaceholder(target)).or(page.getByRole('textbox', { name: target })).first();
+const field = (page: Page, target: string): Locator => shown(page, fieldsNamed(page, target)).first();
+
+/**
+ * Why a step that looks for something did not find it, when what it looked for is on the page only where nothing
+ * is shown: it stopped as it would if it were not there at all, and this says that it is, so that whoever reads
+ * it knows why. Null when it is shown somewhere, or nowhere, or the step looks for nothing.
+ */
+async function foundOnlyHidden(page: Page, verb: string, rest: string): Promise<string | null> {
+  const eq = rest.indexOf('=');
+  const sought = verb === 'tap' || verb === 'wait' || verb === 'see' ? { what: `"${rest}"`, all: named(page, rest, true) } : verb === 'type' && eq > 0 ? { what: `the field "${rest.slice(0, eq)}"`, all: fieldsNamed(page, rest.slice(0, eq), true) } : null;
+  if (!sought) return null;
+  const [anywhere, onScreen] = await Promise.all([sought.all.count(), shown(page, sought.all).count()]).catch(() => [0, 0]);
+  if (anywhere === 0 || onScreen > 0) return null;
+  return `${sought.what} is not on screen: it was found only where nothing is shown (a screen or part of the page not shown, a closed dialog or details, hidden, aria-hidden or of no size)`;
 }
 
 /** Carries out one step on a page. Returns why it could not be done, in a line, or null when it was. */
@@ -413,7 +447,8 @@ export async function doStep(page: Page, step: Step, patience = 10_000, more: { 
     } else if (verb !== 'shot') throw new Error(`no such step: ${verb}. Steps are tap, type, press, hold, wait, gone, see, read, expect, run, shot, go`);
     return null;
   } catch (err) {
-    return (err instanceof Error ? err.message : String(err)).split('\n')[0]!.slice(0, 240);
+    const said = (err instanceof Error ? err.message : String(err)).split('\n')[0]!;
+    return ((await foundOnlyHidden(page, verb, rest)) ?? said).slice(0, 240);
   }
 }
 
