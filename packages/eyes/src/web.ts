@@ -6,9 +6,17 @@ import { forForeignProduct, runDomChecks } from '@studio-zero/daemon/src/qa/chec
 import { PageDigest, collectDigest } from '@studio-zero/daemon/src/qa/collector.ts';
 import type { Finding, ViewportId } from '@studio-zero/protocol';
 
-/** The sizes a page is looked at in. A phone unless said otherwise: that is where a product is first met. */
+/**
+ * The sizes a page is looked at in. A phone unless said otherwise: that is where a product is first met.
+ *
+ * The phone is a current one at its whole screen (an iPhone 17: 402 by 874). The browser library's own figure for
+ * a phone is what is left under a browser's bars (393 by 659 for the phone used before), and pictures taken at it
+ * have the short shape of a phone from years ago: the owner said so of every picture shown to them. The id is the
+ * name the studio's records have always given the phone's place, and stays.
+ */
+export const PHONE = { width: 402, height: 874 } as const;
 export const SIZES = {
-  phone: { id: 'iphone-15-pro', touch: true, context: devices['iPhone 15 Pro']! },
+  phone: { id: 'iphone-15-pro', touch: true, context: { ...devices['iPhone 17']!, viewport: { ...PHONE }, screen: { ...PHONE } } },
   tablet: { id: 'ipad-pro-11', touch: true, context: devices['iPad Pro 11']! },
   desktop: { id: 'desktop-1440', touch: false, context: { viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 } },
 } as const satisfies Record<string, { id: ViewportId; touch: boolean; context: BrowserContextOptions }>;

@@ -85,7 +85,7 @@ In the plan's order, each screen once, in the state a person most often sees it.
 
 The words are the plan's and the product's own: a sentence a person would say, a button that names its outcome ("결과 보기", not "확인"), 해요체 throughout, the number near the front of the sentence. No slogan for a title, no line that explains the screen, nothing the plan does not give (no invented reviews, counts or names of companies).
 
-A phone app is drawn at 390 by 844 with its status bar and home indicator, the tab bar on every screen a person lands on. A web product is one responsive page a screen: the same markup at 1280 and at 390, with real breakpoints, never two drawings.
+A phone app is drawn at 402 by 874 (a current phone's whole screen, and the size `sz-eyes` measures a phone at) with its status bar and home indicator, the tab bar on every screen a person lands on. A web product is one responsive page a screen: the same markup at 1280 and at 402, with real breakpoints, never two drawings.
 
 **At their limits.** What a person typed and a figure that grows are shown by parts (a row, a versus block, a card), and a part that holds at its limits holds on every screen made from it. So the limits are drawn where they are cheap: the parts gallery shows each such part once more with the longest values the plan allows (the longest name, the longest sentence, the largest figure, two long things side by side), and the key screen is drawn once more whole at its limits. Those drawings are measured with the rest.
 
