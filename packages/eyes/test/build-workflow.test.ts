@@ -260,6 +260,140 @@ test('a claim about every screen is shown once at the product\'s limits, mended 
   assert.deepEqual(ran.result.milestones[0].proven, ['one', 'two']);
 });
 
+// ---- a new product's screens, designed and shown to the owner before anything is built
+const planned = { screens: ['HM-01', 'MT-01', 'RS-01'], decided: [] };
+const holding = () => ({ screens: 3, hold: 3, findings: [], summary: '3 screens, 3 hold, 0 findings above minor in all; every screen holds (4 s)' });
+const needed = () => ({ mode: 'new', summary: 's', design: 'needed', milestones: [] });
+const drawing = (extra: Record<string, Answer> = {}): Record<string, Answer> => ({
+  screens: () => planned,
+  refs: () => ({ primary: '토스 (홈의 큰 숫자 하나)', kinds: ['홈', '대결'] }),
+  design: () => ({ drawn: 3, idea: 'i' }),
+  sweep: holding,
+  ...extra,
+});
+const firstPass = { id: 'm1', title: '첫 판', builds: '온 제품', claims: [claim('one'), claim('two')] };
+const allProven = () => ({ proven: ['one', 'two'], refuted: [], unchecked: [] });
+
+test('a new product with screens is planned, drawn and measured first, and the run stops there: nothing is built before the owner has seen it', async () => {
+  // The three start together: each answers only after a turn of the clock, and says which had been started by then.
+  const begun: string[] = [];
+  const startedWith: Record<string, string[]> = {};
+  const late = (label: string, value: unknown) => {
+    begun.push(label);
+    return new Promise((resolve) => setTimeout(() => { startedWith[label] = [...begun]; resolve(value); }, 0));
+  };
+  const ran = await run(
+    { request: '다이어트 배틀 앱', asked: 'owner', answers: '계정: 필요 (기록 저장)' },
+    drawing({ plan: needed, screens: () => late('screens', planned), refs: () => late('refs', { primary: '토스', kinds: ['홈'] }), design: () => late('design', { drawn: 3 }) }),
+  );
+  assert.deepEqual(labels(ran.calls), ['plan', 'screens', 'refs', 'design', 'sweep:design']);
+  for (const label of ['screens', 'refs', 'design']) assert.deepEqual(startedWith[label], ['screens', 'refs', 'design'], `${label} was started beside the other two, not after them`);
+  assert.deepEqual(ran.calls.map((c) => [c.label, c.effort]), [['plan', undefined], ['screens', undefined], ['refs', 'high'], ['design', 'high'], ['sweep:design', 'low']]);
+  const prompt = (label: string): string => ran.calls.find((c) => c.label === label)!.prompt;
+
+  assert.match(prompt('plan'), /^Before anything else, find out where this product's design stands[\s\S]*`ls \.sz \.sz\/design` and `sz-eyes contract show design`/);
+  assert.match(prompt('plan'), /"needed": `\.sz\/design\/prototype\.html` is not there[\s\S]*Return at once: mode "new"[\s\S]*no milestones\. Write no spec/);
+  const screens = prompt('screens');
+  assert.match(screens, /read its `references\/handoff\.md` whole/);
+  assert.match(screens, /A designer starts drawing the moment `\.sz\/plan\/frame\.md` exists/);
+  assert.match(screens, /What the owner answered when asked beforehand, in their words:\n계정: 필요 \(기록 저장\)/, 'the screens are planned from what the owner answered, as the spec is');
+  assert.match(prompt('refs'), /do its step 1[\s\S]*and only that[\s\S]*Do not wait for the plan of the screens/);
+  assert.match(prompt('refs'), /Write `\.sz\/design\/refs\.md` last/);
+  const designer = prompt('design');
+  assert.match(designer, /until \[ -e \.sz\/plan\/frame\.md \] && \[ -e \.sz\/design\/refs\.md \]; do sleep 10; done/);
+  assert.match(designer, /by yourself: start no other agent/);
+  const sweep = prompt('sweep:design');
+  assert.match(sweep, /You did not draw it and you take nobody's word for it/);
+  assert.match(sweep, /sz-eyes web sweep "file:\/\/\$PWD\/\.sz\/design\/prototype\.html" --from \.sz\/design\/sweep\.txt --size phone --out \.sz\/design\/shots/);
+  assert.match(sweep, /sz-eyes contract new design --lane M --request "[^"]+" --claim "screens\|[^"]+\|command:[^"]+" --claim "feel\|[^"]+\|owner:\.sz\/design\/prototype\.html"/);
+  assert.match(sweep, /`sz-eyes contract freeze design`, with no files/);
+  assert.match(sweep, /sz-eyes contract claim design screens --status proven\|refuted --note "<the sweep's summary line>"/);
+
+  assert.equal(ran.calls.some((c) => c.label.startsWith('build:')), false, 'nothing is built in this run');
+  assert.match(ran.result.stopped, /^the prototype waits for the owner: nothing is built until they have seen it/);
+  assert.match(ran.result.stopped, /sz-eyes contract judged design feel --verdict yes\|no --said "<their words>"[\s\S]*Then run this workflow again/);
+  assert.ok(ran.logs.some((l) => /^DESIGN READY: open \.sz\/design\/prototype\.html\. 3 screen\(s\) of the plan drawn, all 3 hold/.test(l)), ran.logs.join('\n'));
+  assert.deepEqual(ran.result.milestones, []);
+});
+
+test('screens the measurement finds wanting are mended by the part, twice at most, and the run stops naming those that still do not hold', async () => {
+  const wanting = { screens: 3, hold: 1, findings: [{ screen: 'HM-01', found: '12자 닉네임이 잘린다' }, { screen: 'RS-01', found: '시안에 없는 화면: 개요가 보인다' }], summary: '3 screens, 1 holds' };
+  const mended = await run({ request: 'x' }, drawing({ plan: needed, sweep: (_c, nth) => (nth === 0 ? wanting : holding()), fix: () => ({ changed: '행 부품의 이름 칸' }) }));
+  assert.deepEqual(labels(mended.calls), ['plan', 'screens', 'refs', 'design', 'sweep:design', 'fix:design:1', 'sweep:design']);
+  const fix = mended.calls.find((c) => c.label === 'fix:design:1')!;
+  assert.match(fix.prompt, /- HM-01: 12자 닉네임이 잘린다\n- RS-01: 시안에 없는 화면: 개요가 보인다/);
+  assert.match(fix.prompt, /Mend the part, not the screen/);
+  assert.match(fix.prompt, /run the same sweep yourself[\s\S]*until it reports nothing/);
+  assert.equal(fix.effort, 'high');
+  assert.match(mended.result.stopped, /^the prototype waits for the owner/);
+  assert.ok(mended.logs.some((l) => /^DESIGN READY/.test(l)));
+
+  const still = await run({ request: 'x' }, drawing({ plan: needed, sweep: () => wanting, fix: () => ({ changed: '' }) }));
+  assert.deepEqual(labels(still.calls), ['plan', 'screens', 'refs', 'design', 'sweep:design', 'fix:design:1', 'sweep:design', 'fix:design:2', 'sweep:design']);
+  assert.match(still.result.stopped, /still does not hold after two rounds of mending: 2 of the plan's 3 screen\(s\) do not hold: HM-01 \(12자 닉네임이 잘린다\); RS-01 \(시안에 없는 화면/);
+  assert.ok(!still.logs.some((l) => /^DESIGN READY/.test(l)), 'a prototype that does not hold is not called ready');
+  assert.equal(still.calls.some((c) => c.label.startsWith('build:')), false);
+});
+
+test('a prototype the owner has not judged yet: nothing runs, and the run says it waits for them', async () => {
+  const ran = await run({ request: 'x' }, { plan: () => ({ mode: 'new', summary: 's', design: 'waiting', milestones: [] }) });
+  assert.deepEqual(labels(ran.calls), ['plan']);
+  assert.match(ran.result.stopped, /^the prototype waits for the owner[\s\S]*sz-eyes contract judged design feel --verdict yes\|no --said "<their words>"/);
+});
+
+test('a prototype the owner said yes to is what the first pass is planned from, built to, and held to at its first look', async () => {
+  const ran = await run({ request: '다이어트 배틀 앱' }, { plan: () => ({ mode: 'new', summary: 's', design: 'approved', milestones: [firstPass] }), build: built, verify: allProven, close: closed });
+  assert.deepEqual(labels(ran.calls), ['plan', 'build:m1', 'verify:m1', 'close:m1']);
+  const prompt = (label: string): string => ran.calls.find((c) => c.label === label)!.prompt;
+  const planned = prompt('plan');
+  assert.match(planned, /the screens are planned \(`\.sz\/plan\/frame\.md` and one file a screen under `\.sz\/plan\/screens\/`\) and drawn \(`\.sz\/design\/prototype\.html`; `\.sz\/design\/direction\.md` ends with what the builder needs: tokens, parts, each screen's parts and address\)/);
+  assert.match(planned, /The spec is cut from them and does not decide again what they decided/);
+  assert.match(planned, /every screen of the plan built as drawn, one claim shown by a look \(each built screen beside its picture under `\.sz\/design\/shots\/`: the same content in the same order, made of the same parts, in the same tokens\), and the claim about every screen at its limits/);
+  const builder = prompt('build:m1');
+  assert.match(builder, /The look first, and it is settled[\s\S]*do not settle it again/);
+  assert.match(builder, /Carry the prototype's tokens and parts: for a web product its markup and CSS as they are; for a phone app the tokens, the parts and each screen's order, written again in the toolkit/);
+  assert.match(builder, /`sz:taste` is for what the design leaves open/);
+  assert.doesNotMatch(builder, /The look first \(load `sz:taste`/);
+  assert.match(prompt('verify:m1'), /take a picture of each built screen the way `sz-eyes web sweep` does[\s\S]*set it beside its drawing[\s\S]*A difference in content, order, parts or tokens is that claim shown false, with the screen named/);
+
+  // A plan with no word on the design is built as before: no drawing to carry, and none to be held to.
+  const plain = await run({ request: 'x' }, { plan: () => ({ mode: 'new', summary: 's', milestones: [firstPass] }), build: built, verify: allProven, close: closed });
+  assert.match(plain.calls.find((c) => c.label === 'build:m1')!.prompt, /The look first \(load `sz:taste`: colour, type and spacing settled once/);
+  assert.doesNotMatch(plain.calls.find((c) => c.label === 'build:m1')!.prompt, /it is settled/);
+  assert.doesNotMatch(plain.calls.find((c) => c.label === 'verify:m1')!.prompt, /beside its drawing/);
+});
+
+test('a prototype the owner said no to is drawn again from their words alone, measured, and put before them again', async () => {
+  const said = '너무 어두워요. 홈에서 내 점수가 제일 크게 보였으면 해요';
+  const ran = await run({ request: 'x' }, { plan: () => ({ mode: 'new', summary: 's', design: 'again', said, milestones: [] }), design: () => ({ changed: ['색'] }), sweep: holding });
+  assert.deepEqual(labels(ran.calls), ['plan', 'design:again', 'sweep:design']);
+  const again = ran.calls.find((c) => c.label === 'design:again')!;
+  assert.ok(again.prompt.includes(`What the owner said, in their words:\n${said}`), again.prompt);
+  assert.match(again.prompt, /Change what they said and nothing they did not/);
+  assert.match(again.prompt, /The plan of the screens \(`\.sz\/plan\/`\) and the reference board \(`\.sz\/design\/refs\.md`\) stand/);
+  const sweep = ran.calls.find((c) => c.label === 'sweep:design')!.prompt;
+  assert.match(sweep, /sz-eyes contract claim design screens --status proven\|refuted/);
+  assert.match(sweep, /sz-eyes contract claim design feel --status unchecked --note/);
+  assert.doesNotMatch(sweep, /sz-eyes contract new design/, 'the contract is there: it is recorded on, not made again');
+  assert.match(ran.result.stopped, /^the prototype waits for the owner/);
+});
+
+test('only an owner who said to go on without seeing it lets a run go from the measured prototype into the first pass', async () => {
+  const thenApproved = (_c: Call, nth: number) => (nth === 0 ? needed() : { mode: 'new', summary: 's', design: 'approved', milestones: [firstPass] });
+  const ran = await run({ request: 'x', design: 'go' }, drawing({ plan: thenApproved, build: built, verify: allProven, close: closed }));
+  assert.deepEqual(labels(ran.calls), ['plan', 'screens', 'refs', 'design', 'sweep:design', 'plan', 'build:m1', 'verify:m1', 'close:m1']);
+  assert.match(ran.calls[0]!.prompt, /This run was started with design "go"[\s\S]*Where you would return "waiting", return "approved"/);
+  assert.match(ran.calls.find((c) => c.label === 'build:m1')!.prompt, /The look first, and it is settled/);
+  assert.ok(ran.logs.some((l) => /^DESIGN READY/.test(l)));
+  assert.equal(ran.result.stopped, null);
+
+  // Without it the run stops at the prototype, the owner away or not.
+  const away = await run({ request: 'x', asked: 'away' }, drawing({ plan: thenApproved, build: built, verify: allProven, close: closed }));
+  assert.deepEqual(labels(away.calls), ['plan', 'screens', 'refs', 'design', 'sweep:design']);
+  assert.doesNotMatch(away.calls[0]!.prompt, /design "go"/);
+  assert.match(away.result.stopped, /^the prototype waits for the owner/);
+});
+
 test('the workflow tells every agent how to launch and end things on a machine it shares', async () => {
   const { calls, result } = await run({ request: '운영 준비' }, { plan: plan('m5'), build: built, verify: () => ({ proven: ['one', 'two'], refuted: [], unchecked: [], stood: 25, noticed: [] }), close: closed });
   assert.equal(result.stopped, null);

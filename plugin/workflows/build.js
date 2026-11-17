@@ -1,24 +1,30 @@
 export const meta = {
   name: 'build',
-  description: 'Build a product, or grow one that exists, to the end, unattended: a spec (new, or the existing one extended), then for each milestone a frozen contract, the build, a verification by an agent that did not build it which also shows again what stood before, fixes, and a page of evidence. Milestones follow one another unless the plan puts some side by side: those are built at the same time in folders of their own, brought together, and everything that stands is shown again on the product as joined',
-  whenToUse: 'A new product, or a change of several features to a product that already has a spec (lane L), after the owner has been put the questions only they can answer (a few, each a choice they can tap) and has asked for it to run to the end without them. Typing the command is not an answer to those questions: ask first, then start it with asked and answers (args is an object: { request, asked, answers }). For a new product, right after starting it, start in the background a wait for its first pass to stand (until [ -n "$(sz-eyes standing --summary)" ]; do sleep 20; done); when that returns, start the product as .sz/map.md says and tell the owner its address and where the page with every screen is: they see the whole product then, not when everything is finished.',
+  description: 'Build a product, or grow one that exists, to the end, unattended: for a new product with screens, first every screen planned, drawn as one clickable prototype, measured, and put before the owner, whose word it waits for; then a spec (new, or the existing one extended), then for each milestone a frozen contract, the build, a verification by an agent that did not build it which also shows again what stood before, fixes, and a page of evidence. Milestones follow one another unless the plan puts some side by side: those are built at the same time in folders of their own, brought together, and everything that stands is shown again on the product as joined',
+  whenToUse: 'A new product, or a change of several features to a product that already has a spec (lane L), after the owner has been put the questions only they can answer (a few, each a choice they can tap) and has asked for it to run to the end without them. Typing the command is not an answer to those questions: ask first, then start it with asked and answers (args is an object: { request, asked, answers, design? }). A new product with screens is drawn before anything of it is built: the first run plans and draws every screen, measures them, and stops with the prototype. Open .sz/design/prototype.html for the owner, record what they say in their words (sz-eyes contract judged design feel --verdict yes|no --said "<their words>"), and start the workflow again: on yes it builds the first pass to the drawing, on no it draws again what they said. Only design: "go" in args takes a run from the measured prototype straight into building without their word, and only the owner can ask for it (a prototype waits fifteen minutes; a build nobody wanted costs two hours). For a new product, right after starting the run that builds its first pass (after their yes, with design: "go", or for a product with no screens), start in the background a wait for its first pass to stand (until [ -n "$(sz-eyes standing --summary)" ]; do sleep 20; done); when that returns, start the product as .sz/map.md says and tell the owner its address and where the page with every screen is: they see the whole product then, not when everything is finished.',
   phases: [
     { title: 'Plan', detail: 'the spec and its milestones, each with the claims that make it done' },
+    { title: 'Design', detail: 'for a new product with screens: every screen planned, drawn as one prototype and measured, then put before the owner before anything is built' },
     { title: 'Build', detail: 'a milestone, or several side by side in folders of their own: contract, oracle, code' },
     { title: 'Verify', detail: 'each claim shown on the running product by an agent that did not build it; what was built side by side is shown again once joined' },
     { title: 'Close', detail: 'evidence page, progress line, commit' },
   ],
 }
 
-// args: { request: string, asked: 'owner' | 'away', answers?: string, maxMilestones?: number, side?: 1|2|3, effort?: string | object }
+// args: { request: string, asked: 'owner' | 'away', answers?: string, design?: 'go', maxMilestones?: number, side?: 1|2|3, effort?: string | object }
 // `request` is the owner's words. `asked` says whether the owner was put the questions only they can answer
 // before this run: 'owner' = they were, and `answers` holds what they chose, word for word; 'away' = they said to
 // go on without questions, or nobody is in the session. The run asks nobody anything, and it does not start
 // until it is told which. (In the owner's first run a session skipped the questions, passed answers it had
 // written itself, and the owner found out from the spec: "뭐야 질문 다섯개가 어디있었어요".)
+// `design: 'go'`: a new product's measured prototype goes straight into planning and building its first pass,
+// without the owner's verdict on it (their claim on how it feels stays theirs, as owner claims do). Without it a
+// run stops at the prototype, the owner away or not: a prototype waits fifteen minutes, a build nobody wanted
+// costs two hours. Only the owner can ask for it.
 const request = args && typeof args.request === 'string' ? args.request.trim() : ''
 const answers = args && typeof args.answers === 'string' ? args.answers.trim() : ''
 const asked = args && (args.asked === 'owner' || args.asked === 'away') ? args.asked : ''
+const designGo = Boolean(args && args.design === 'go')
 const maxMilestones = args && Number.isInteger(args.maxMilestones) ? args.maxMilestones : 6
 if (request === '') return { error: 'give args: { request: "<what to build, in the owner\'s words>", asked: "owner" | "away", answers?: "<what the owner chose, word for word>" }' }
 if (asked === '') return { error: 'not started: say whether the owner was asked. Before this runs, put to the owner what only they can answer, as the sz:work skill says: a few questions, each a choice they can tap (the AskUserQuestion tool). Then start again with asked: "owner" and what they chose, word for word, in answers. Only if they said to go on without questions, or nobody is in the session to answer: asked: "away".' }
@@ -38,6 +44,8 @@ const GROUND = 'You are working in the project\'s folder. Read `.sz/map.md` firs
 // model it was (three runs, 2026-11-16, docs/runs/2026-11-16-speed). The owner chose, that day: the plan and the
 // verification think as hard as the session (a wrong plan costs everything after it, and verification is the
 // last door); building and fixing at "high"; closing, staging and joining, which are mechanical, at "low".
+// A new product's design stage goes by the same words: its screens are planned as the plan is, the board, the
+// drawing and its mending are made as a build is, and measuring the prototype is mechanical, with the closing.
 // args.effort overrides: one word for the builders, or { plan, build, verify, close, join } each a word
 // ("session" for as hard as the session).
 const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max']
@@ -49,6 +57,8 @@ const effort = (stage) => {
   const chosen = EFFORTS.includes(word) ? word : DEFAULT_EFFORT[stage]
   return chosen ? { effort: chosen } : {}
 }
+// Agents started together, each answering in its own time; one that fails answers null and the others go on.
+const beside = typeof parallel === 'function' ? parallel : (thunks) => Promise.all(thunks.map((thunk) => thunk().catch(() => null)))
 
 const CLAIM = {
   type: 'object',
@@ -66,6 +76,8 @@ const PLAN = {
     mode: { type: 'string', enum: ['new', 'continue', 'extend'], description: 'new: there was no spec. continue: an earlier run stopped before finishing what the spec has. extend: the request asks for more than the spec had, and the spec was amended' },
     summary: { type: 'string', description: 'two or three sentences: what the product is, for whom, and the shape you chose (when extending: what is added or changed)' },
     sandboxed: { type: 'boolean', description: 'what `sz-eyes sandbox` said when run as an ordinary command: true when it said "sandboxed"' },
+    design: { type: 'string', enum: ['none', 'needed', 'waiting', 'again', 'approved'], description: 'where the design of a new product with screens stands, as the top of your instructions says how to find out; "none" for anything else' },
+    said: { type: 'string', description: 'only when design is "again": what the owner said about the prototype, in their words, as the claim feel of contract design records them' },
     decided: { type: 'array', items: { type: 'string' }, description: 'what the request and the answers left open and how you decided it' },
     later: {
       type: 'array',
@@ -162,13 +174,32 @@ phase('Plan')
 const AFTER = `
 
 This run has just built and closed the product's first pass. Plan now what comes after it (you will find yourself in the case "Continue" below). You are planning from what is there, not from what the spec guessed: go through the pictures of every area and what its verifiers noticed (the first pass's evidence folder under \`.sz/evidence/\`, the newest lines of \`.sz/backlog.md\`), and start the product yourself only where they leave a question (\`.sz/map.md\` says how). Read \`.sz/owner.md\` first: what the owner has said since the first pass comes before the spec. What the verifiers noticed and nobody has mended goes into the first milestone you plan.`
+// What the owner answered before the run, or that they were not asked: given as it is to whoever plans, the
+// product or its screens.
+const OWNER_ANSWERS = asked === 'owner' ? `What the owner answered when asked beforehand, in their words:\n${answers}` : 'The owner was not asked anything beforehand. Where the request leaves something open that only they could say (who it is for, how it should feel, accounts, keys, money), take the conservative answer and list it under "decided". Wherever you write this down (the spec, the progress line), say that they were not asked: never that they did not answer.' + (answers ? `\nNotes from the session that started this run (its own words, not the owner's):\n${answers}` : '')
+// A new product with screens is drawn before it is built, and its owner decides on the drawing. (Built whole and
+// shown afterwards, a product was called "an old flash game"; drawn first by one designer from a plan, as one
+// clickable prototype, the same request read as an app, and the owner chose that way.) Where the design stands
+// is found out first, so that a run that only draws, or only waits, costs a minute of planning and not a pass.
+const DESIGN_CHECK = `Before anything else, find out where this product's design stands: it decides whether you plan at all in this run, and finding out takes a minute. First run \`sz-eyes sandbox\` once, as an ordinary command (do not ask for it to run outside any sandbox), and return under "sandboxed" whether it answered "sandboxed": everyone who works after you is told what it said. Then run \`ls .sz .sz/design\` and \`sz-eyes contract show design\`, and return under "design" the first of these that is so:
+- "none": what was asked has no screen a person looks at (a command, a library, a service with no screen of its own); or \`.sz/spec.md\` is there, so the product has been worked on before (unless its first pass has not closed and contract \`design\` marks its claim **feel** [증명됨]: then "approved", and that first pass is still built to the drawing). Go on below as if this paragraph were not here.
+- "again": contract \`design\` marks its claim **feel** [반증됨]: the owner looked at the prototype and said no. Return their words, as the claim's note gives them, under "said", and return at once, as for "needed".
+- "approved": it marks **feel** [증명됨]: the owner said yes. Plan the first pass below, from the screens as planned and drawn.
+- "needed": \`.sz/design/prototype.html\` is not there, or there is no contract \`design\`, or it marks its claim **screens** other than [증명됨] (a design stage stopped before its screens held). Return at once: mode "new", what was asked in two sentences as "summary", no milestones. Write no spec, no map and nothing else: the screens are planned and drawn next, by others, who take up what is there.
+- "waiting": the prototype is there and measured, and **feel** is marked [아직] or [확인 못 함]: the owner has not judged it. Return at once, as for "needed".${designGo ? `
+This run was started with design "go": the owner said to go on from the measured prototype without waiting for their verdict. Where you would return "waiting", return "approved" and plan the first pass from the prototype as it is; its claim **feel** stays the owner's to judge, and nobody judges it for them.` : ''}
+
+`
+// What the owner said yes to is what the first pass is built to, and what its first look holds it to.
+const DRAWN_PLAN = `
+- When the design is "approved": the screens are planned (\`.sz/plan/frame.md\` and one file a screen under \`.sz/plan/screens/\`) and drawn (\`.sz/design/prototype.html\`; \`.sz/design/direction.md\` ends with what the builder needs: tokens, parts, each screen's parts and address), and the owner has ${designGo ? 'said to go on from the drawing without judging it first' : 'said yes to the drawing'}. The spec is cut from them and does not decide again what they decided: its areas are the frame's sections, its limits the frame's rules and numbers. Among the first pass's claims: every screen of the plan built as drawn, one claim shown by a look (each built screen beside its picture under \`.sz/design/shots/\`: the same content in the same order, made of the same parts, in the same tokens), and the claim about every screen at its limits, as below.`
 const planIt = (stage) => agent(
-  `You are planning a product (or a large change to one) that will then be built milestone by milestone with nobody watching. ${GROUND}${SAND} ${TOOLS}${stage === 'after' ? AFTER : ''}
+  `${stage === 'after' ? '' : DESIGN_CHECK}You are planning a product (or a large change to one) that will then be built milestone by milestone with nobody watching. ${GROUND}${SAND} ${TOOLS}${stage === 'after' ? AFTER : ''}
 
 The owner's request:
 ${request}
 
-${asked === 'owner' ? `What the owner answered when asked beforehand, in their words:\n${answers}` : 'The owner was not asked anything beforehand. Where the request leaves something open that only they could say (who it is for, how it should feel, accounts, keys, money), take the conservative answer and list it under "decided". Wherever you write this down (the spec, the progress line), say that they were not asked: never that they did not answer.' + (answers ? `\nNotes from the session that started this run (its own words, not the owner's):\n${answers}` : '')}
+${OWNER_ANSWERS}
 
 If \`.sz/spec.md\` already exists, the product has been worked on before. Read it, the contracts under \`.sz/contracts/\` (\`sz-eyes contract status\`, \`sz-eyes contract show <id>\`), \`.sz/progress.md\`, \`.sz/backlog.md\`, \`git log\` and \`sz-eyes standing\` (what earlier work proved and the product has to keep true). Do not plan again what is done and do not rewrite the spec's history. Then it is one of two cases, or both:
 - **Continue** (mode "continue"): an earlier run stopped before finishing what the spec has, and the request asks for that. Return the spec's milestones with their claims as the contracts and the spec have them, each with its "state": "closed" (its contract is closed), "built" (its contract is frozen and its code is committed, and it was not verified to the end: give "contractId", "launch", and under "disputes" any frozen check the earlier run reported as wrong about how it checks) or "todo". A milestone whose code was written and that nobody has seen run is still "built" (say under "launch" how it is meant to be started, and that it has not been): this run starts it, and fixes what keeps it from starting, before anyone looks at it. If the product's first pass is not closed yet (an earlier run stopped before it was), return it with "first": true and list what the spec has after it under "later", without claims: that is planned when the first pass stands. Once the first pass is closed, what the spec lists as coming after it and has no contract yet is planned now: write each as a milestone into the spec and return it as "todo" with its claims, ${Math.max(1, maxMilestones - 1)} at most, the rest left listed for a later run. The order of the milestones that are not built yet is decided afresh by the rule under "The order" below: some of them may go side by side now even if the spec lists them in a line (give them "after").
@@ -176,8 +207,7 @@ If \`.sz/spec.md\` already exists, the product has been worked on before. Read i
   - If \`git worktree list\` shows folders under \`.sz/trees/\`, an earlier run built milestones side by side and stopped before bringing them together: for each such milestone whose contract exists, state "built" (or "closed" if its contract is closed there) and "where": that folder's whole path.
   - "supersedes": the standing claims that will stop being true because what was asked has changed, each with the reason. Be exact: a standing claim you do not list stays a promise, and the milestone must keep it true. Prefer a change that keeps old promises (a new choice whose default is the old behaviour) to one that replaces them.
   - If it changes the shape of what is stored, one claim says that what was saved before the change is still there after it, shown by a test that starts from data in the old shape. The product carries over what exists; nobody is asked to delete their data.
-First, whichever mode it is: run \`sz-eyes sandbox\` once, as an ordinary command (do not ask for it to run outside any sandbox), and return under "sandboxed" whether it answered "sandboxed". Everyone who works after you is told what it said.
-
+${stage === 'after' ? 'First, whichever mode it is: run `sz-eyes sandbox` once, as an ordinary command (do not ask for it to run outside any sandbox), and return under "sandboxed" whether it answered "sandboxed". Everyone who works after you is told what it said.\n' : ''}
 Write no product code. Add a line to \`.sz/progress.md\` and commit \`.sz/\` if you amended the spec. If there is no spec yet (mode "new"):
 
 Write \`.sz/spec.md\` in the owner's language: what the product is and for whom, the one thing it must do well, every area of it a person will use (a line each), how it is launched and looked at, and what is deliberately not built. A new product is made in three passes, and you plan the first now.
@@ -186,7 +216,7 @@ Write \`.sz/spec.md\` in the owner's language: what the product is and for whom,
 - All of it: every area the spec lists, each to the depth a person needs to use it for real: what happens when there is nothing yet, when something fails, the second time someone comes. The one thing the product is for is made first and carried furthest.
 - Nothing pretends. No made-up figures, no button that does nothing, no screen that only looks finished: what cannot be real yet (it needs a key of the owner's, a device, data nobody has given) says so in one plain line on the screen and is named in the spec.
 - What a person enters is theirs from the start, with the least account the product can be used with (a guest of this device, or a code by e-mail).
-- Its claims are the product's list of what a person can do, and the definition of done the builder works down: 8 to 20 of them, grouped by area, each shown by a flow (name the file it will be kept in: whoever verifies writes it), a test of what is pure rule (written before the code), a look or a command, with the figure or the words where there are any. Among them: every area's screen at phone size as pictures the owner can go through in one sitting (a look, kept in the evidence folder), and how it feels, which is the owner's to judge on those pictures (owner).
+- Its claims are the product's list of what a person can do, and the definition of done the builder works down: 8 to 20 of them, grouped by area, each shown by a flow (name the file it will be kept in: whoever verifies writes it), a test of what is pure rule (written before the code), a look or a command, with the figure or the words where there are any. Among them: every area's screen at phone size as pictures the owner can go through in one sitting (a look, kept in the evidence folder), and how it feels, which is the owner's to judge on those pictures (owner).${stage === 'after' ? '' : DRAWN_PLAN}
 
 **Hardening** comes after it. List under "later", a line each, what makes the product safe to give to people (signing in through other services, deleting an account, one person unable to reach another's data, the phone itself, what the law asks), and anything in the request that is too uncertain or too large for the first pass, said as that. Give these no claims: they are planned when the first pass stands and has been looked at. ${Math.max(1, Math.min(maxMilestones, 6) - 1)} lines at most.
 
@@ -206,9 +236,187 @@ What holds for every milestone, this one and those planned later:
 Return the plan.`,
   { label: stage === 'after' ? 'plan:after' : 'plan', phase: 'Plan', schema: PLAN, ...effort('plan') },
 )
+
+// ------------------------------------------------------------------ Design: a new product's screens, before anything is built
+// The screens are planned, the references looked at and the screens drawn at the same time: the designer starts
+// the moment the plan's frame exists and takes each screen as it is written. (One after another, outside the
+// workflow: a plan of 25 screens took 19 minutes, a reference board 10, the drawing 27, every screen measured
+// clean.) Then someone who drew nothing measures every screen, and the run stops for the owner: a prototype waits
+// fifteen minutes, a build nobody wanted costs two hours.
+const DESIGN_GROUND = 'You are working in the project\'s folder, on a new product whose screens are drawn and put before its owner before anything of it is built. The command `sz-eyes` is on your PATH (the sz plugin\'s). Read `.sz/owner.md` if it is there (what the owner has said they want of this product: it comes before your own taste). What an earlier run of this stage left under `.sz/plan/` and `.sz/design/` is taken up where it stopped, not started again.'
+const SWEEP = 'sz-eyes web sweep "file://$PWD/.sz/design/prototype.html" --from .sz/design/sweep.txt --size phone --out .sz/design/shots'
+const WAITS = 'the prototype waits for the owner: nothing is built until they have seen it and said. Open .sz/design/prototype.html for them (at a phone\'s width each screen is shown alone at prototype.html#<id>; the pictures are in .sz/design/shots/), and record what they say, in their words: sz-eyes contract judged design feel --verdict yes|no --said "<their words>". Their verdict is theirs: nobody gives it for them. Then run this workflow again: on yes it plans the first pass and builds it to the drawing, on no it draws again what they said.'
+const PLANNED = { type: 'object', properties: { screens: { type: 'array', items: { type: 'string' }, description: 'the screen ids, in the order of their files' }, decided: { type: 'array', items: { type: 'string' }, description: 'what the request and the answers left open and how you decided it' }, problem: { type: 'string', description: 'empty unless the screens could not be planned: then why' } }, required: ['screens'] }
+const BOARD = { type: 'object', properties: { primary: { type: 'string', description: 'the primary reference: the product, and what of its way this product follows' }, kinds: { type: 'array', items: { type: 'string' } }, problem: { type: 'string', description: 'empty unless the board has a gap: no reference tool and nothing in the library for a kind' } }, required: ['primary'] }
+const DRAWN = {
+  type: 'object',
+  properties: {
+    idea: { type: 'string', description: 'the idea, in its one sentence' },
+    primary: { type: 'string' },
+    drawn: { type: 'number', description: 'how many screens were drawn' },
+    states: { type: 'number', description: 'how many drawings in all, states and limits included' },
+    measured: { type: 'string', description: 'what the last measurement reported' },
+    departures: { type: 'array', items: { type: 'string' }, description: 'what departs from the handbook, and why' },
+    couldNot: { type: 'array', items: { type: 'string' }, description: 'what you could not do: no reference tool, no image tool, a screen of the plan you could not draw and why' },
+    missing: { type: 'string', description: 'empty unless you drew nothing: then which of the plan\'s frame and the reference board never came' },
+  },
+  required: ['drawn'],
+}
+const SWEPT = {
+  type: 'object',
+  properties: {
+    screens: { type: 'number', description: 'how many screens the plan has' },
+    hold: { type: 'number', description: 'how many of the plan\'s screens are in the prototype and hold' },
+    findings: { type: 'array', description: 'every screen that does not hold (a drawing at its limits too), each with what was found', items: { type: 'object', properties: { screen: { type: 'string' }, found: { type: 'string' } }, required: ['screen', 'found'] } },
+    summary: { type: 'string', description: 'the sweep\'s summary line, as it printed it' },
+    sandbox: { type: 'string', description: 'empty unless the session\'s command sandbox stopped the browser and the call outside it was refused: then the exact refusal' },
+  },
+  required: ['screens', 'hold', 'findings'],
+}
+// What the last measurement of the prototype showed, for the session the run returns to.
+let designed = null
+
+// again: the owner said no, and the contract `design` is there to record on; its claim feel goes back to them.
+const sweepDesign = (again) =>
+  agent(
+    `Measure the prototype of a new product's screens before its owner sees it. You did not draw it and you take nobody's word for it. ${DESIGN_GROUND}${SAND}
+
+1. List the plan's screens yourself, from its files and not from the designer's list (a screen left out of the prototype is one of the things you look for): \`ls .sz/plan/screens | sed -n 's/^[0-9]*-\\(.*\\)\\.md$/#\\1/p' > .sz/design/sweep.txt\`. Then add the lines of the drawings at their limits that \`.sz/design/screens.txt\` has beyond those.
+2. \`${SWEEP}\`. It opens one browser, measures every screen in it, prints for each what it found and then a summary line, and keeps a picture of each.
+3. A screen the prototype does not have shows the overview, and the sweep counts it as holding. Pictures that are the same byte for byte (\`shasum .sz/design/shots/*-phone.png\`) show the same thing: open those, and a screen of the plan that is not shown alone at its address does not hold.
+4. ${
+      again
+        ? `Contract \`design\` is there: record on it. \`sz-eyes contract claim design screens --status proven|refuted --note "<the sweep's summary line>"\`: proven only when every screen of the plan is there and holds. When it is, the drawing is the owner's to judge again: \`sz-eyes contract claim design feel --status unchecked --note "<in the owner's language: what they said last time, and what was changed for it>"\`, as an owner's claim that waits for them is marked. While a screen does not hold, leave **feel** as it is.`
+        : `If there is no contract \`design\` yet (\`sz-eyes contract show design\`), record it, its words in the owner's language, then \`sz-eyes contract freeze design\`, with no files:
+\`sz-eyes contract new design --lane M --request "<the product in a sentence, in the owner's language>" --claim "screens|<every screen of the plan is in the prototype and none is cut off, at phone size and at its limits>|command:<the sweep command as you ran it>" --claim "feel|<the owner's own judgement: this is the product, build it as drawn>|owner:.sz/design/prototype.html"\`
+Then \`sz-eyes contract claim design screens --status proven|refuted --note "<the sweep's summary line>"\`: proven only when every screen of the plan is there and holds. Leave **feel** to the owner.`
+    }
+
+Change nothing in the prototype or the plan. Return how many screens the plan has, how many of them hold, and every screen that does not hold (a drawing at its limits too) with what was found.`,
+    { label: 'sweep:design', phase: 'Design', schema: SWEPT, ...effort('close') },
+  )
+const holds = (swept) => Number(swept.screens) > 0 && Number(swept.hold) >= Number(swept.screens) && (swept.findings || []).length === 0
+
+// Draws a new product's screens, or draws them again from what the owner said, and measures them. Returns why
+// the run stops short of putting them before the owner, or null when every screen holds.
+async function drawScreens(state, said) {
+  phase('Design')
+  if (state === 'again') {
+    log(`the owner said no to the prototype: it is drawn again from what they said, and put before them again`)
+    const redrawn = await agent(
+      `You are the designer of a new product, and its owner has looked at the prototype of its screens and said no. ${DESIGN_GROUND}${SAND} Load the \`sz:design\` skill: it is how the prototype was made, and how you change it.
+
+What the owner said, in their words:
+${said || '(the plan did not bring their words: read them in the note of the claim feel, `sz-eyes contract show design`)'}
+
+The plan of the screens (\`.sz/plan/\`) and the reference board (\`.sz/design/refs.md\`) stand. Read \`.sz/design/direction.md\`, and look at the prototype as it is (\`.sz/design/prototype.html\`, a picture of each screen under \`.sz/design/shots/\`). Change what they said and nothing they did not: where it is about a part or a token, change it there, and every screen made from it changes with it; what they did not speak of stays as it is. Where what they said changes the plan itself (a screen to drop or to add, a step taken out), change \`.sz/plan/\` for exactly that as well, so that the plan and the drawing say the same: whoever measures after you goes by the plan's screens. Measure as the skill says before you return, and correct \`direction.md\` where it no longer says what is drawn. Start no other agent.
+
+Return what you changed for each thing they said.`,
+      { label: 'design:again', phase: 'Design', ...effort('build'), schema: { type: 'object', properties: { changed: { type: 'array', items: { type: 'string' } }, couldNot: { type: 'array', items: { type: 'string' } } }, required: ['changed'] } },
+    )
+    if (!redrawn) return 'the prototype could not be drawn again from what the owner said (the designer did not answer)'
+  } else {
+    log('a new product with screens: every screen is planned and drawn first, and put before the owner before anything is built')
+    const [planned, board, drew] = await beside([
+      () =>
+        agent(
+          `You plan the screens of a new product, as files a designer draws from. ${DESIGN_GROUND}${SAND}
+
+The owner's request:
+${request}
+
+${OWNER_ANSWERS}
+
+Load the \`sz:design\` skill with the Skill tool only to learn where its folder is, and read its \`references/handoff.md\` whole. That file is what you follow (the skill itself is the designer's, who works beside you): look at how shipped products take a person through these journeys, then write \`.sz/plan/frame.md\` first and whole, then one file a screen under \`.sz/plan/screens/\` in the order of the product's main path, each under another name and renamed when it is whole, and when the last is written, the empty file \`.sz/plan/screens/DONE\`.
+
+A designer starts drawing the moment \`.sz/plan/frame.md\` exists, and takes each screen as its file appears. So write the frame whole and as soon as you can, before any screen; then the screens in order, without going back to change one that is written. (Planned whole first and drawn after, 25 screens took 19 minutes to plan before the drawing could start.) What the request and the answers leave open is decided in the frame and marked as decided there.
+
+Write no spec, no code and no picture. Return the screen ids in the order of their files.`,
+          { label: 'screens', phase: 'Design', schema: PLANNED, ...effort('plan') },
+        ),
+      () =>
+        agent(
+          `You make the reference board of a new product: how shipped products do the screens it stands on. ${DESIGN_GROUND}${SAND}
+
+The owner's request:
+${request}
+
+${OWNER_ANSWERS}
+
+Load the \`sz:design\` skill and do its step 1 ("Look at how shipped products do these screens"), and only that: a designer beside you does the rest, and waits for your board. Do not wait for the plan of the screens, which is being written at the same time: name the kinds of screen this product stands on from the request, and start with the house library. Before you write the board, read \`.sz/plan/frame.md\` (wait for it if it is not there yet: \`until [ -e .sz/plan/frame.md ]; do sleep 10; done\`) and check your kinds against its one thing and its list of screens; change a kind it shows to be wrong. Write \`.sz/design/refs.md\` last, whole, under another name and renamed when it is: the designer starts the moment it exists. (Made alone, a board took 10 minutes.)
+
+Return the primary reference and the kinds of screen the board covers.`,
+          { label: 'refs', phase: 'Design', schema: BOARD, ...effort('build') },
+        ),
+      () =>
+        agent(
+          `You are the designer of a new product: you draw every screen of it in its final look, as one clickable prototype, before anything of it is built. ${DESIGN_GROUND}${SAND}
+
+The owner's request:
+${request}
+
+Load the \`sz:design\` skill and follow it, the whole stage, by yourself: start no other agent (one hand, one file, one set of parts is what makes the screens read as one product). Two others started with you: one writes the plan of the screens (\`.sz/plan/frame.md\` first, then a file a screen), one the reference board (\`.sz/design/refs.md\`). Wait for both before you decide anything:
+until [ -e .sz/plan/frame.md ] && [ -e .sz/design/refs.md ]; do sleep 10; done
+If either is still not there after twenty minutes, draw nothing and return saying which. Then draw the screens that are written and wait for the next, as the skill shows, until \`.sz/plan/screens/DONE\` is there and every screen is drawn. Measure as the skill says before you return: someone who drew nothing measures it again after you.
+
+Return as the skill says.`,
+          { label: 'design', phase: 'Design', schema: DRAWN, ...effort('build') },
+        ),
+    ])
+    if (!drew || (drew.missing || '').trim() !== '') {
+      const why = [drew ? drew.missing.trim() : 'the designer did not answer', planned ? (planned.problem || '').trim() : 'the screens were not planned (nobody answered)', board ? (board.problem || '').trim() : 'the reference board was not made (nobody answered)'].filter(Boolean)
+      return `the screens could not be drawn: ${why.join('; ')}. Run this workflow again to take them up where they stopped.`
+    }
+  }
+  let swept = await sweepDesign(state === 'again')
+  // What does not hold is mended by whoever draws, as a build's claims are: twice at most.
+  for (let round = 1; round <= 2 && swept && !(swept.sandbox || '').trim() && !holds(swept); round++) {
+    const findings = (swept.findings || []).map((f) => `- ${f.screen}: ${f.found}`).join('\n') || `- ${Number(swept.screens) - Number(swept.hold)} of the plan's ${swept.screens} screen(s) do not hold (the measurement named none)`
+    await agent(
+      `You are the designer of a new product's prototype, mending what a measurement found. ${DESIGN_GROUND}${SAND} Load the \`sz:design\` skill: its parts, its words and its look hold here as when it was drawn.
+
+Someone who did not draw it measured \`.sz/design/prototype.html\` at phone size (\`${SWEEP}\`, the screens listed in \`.sz/design/sweep.txt\`), and these do not hold:
+${findings}
+
+Mend the part, not the screen: a name cut off in one row is cut off in every row made from that part, so the cause is mended where the part is defined, and every screen made from it has the mend. A screen of the plan that the prototype does not have is drawn now, from its file under \`.sz/plan/screens/\`, of the same parts. Then run the same sweep yourself until it reports nothing (a third run means a part is wrong, not a screen). Change nothing in the plan, and start no other agent. Return what you changed.`,
+      { label: `fix:design:${round}`, phase: 'Design', ...effort('build'), schema: { type: 'object', properties: { changed: { type: 'string' } }, required: ['changed'] } },
+    )
+    swept = await sweepDesign(state === 'again')
+  }
+  if (swept) designed = { prototype: '.sz/design/prototype.html', screens: swept.screens, hold: swept.hold, findings: swept.findings || [], summary: swept.summary || '' }
+  if (!swept) return 'the prototype was drawn and could not be measured (nobody answered)'
+  if ((swept.sandbox || '').trim() !== '') return `the prototype was drawn and could not be measured: the session's command sandbox stopped the browser and the call outside it was refused (${swept.sandbox.trim().slice(0, 200)}). The owner chooses one: run sessions in auto mode, approve the unsandboxed command when asked, or turn the sandbox off for this project (/sandbox); then ask to continue.`
+  if (!holds(swept)) return `the prototype was drawn and still does not hold after two rounds of mending: ${Math.max(0, Number(swept.screens) - Number(swept.hold))} of the plan's ${swept.screens} screen(s) do not hold: ${(swept.findings || []).map((f) => `${f.screen} (${f.found})`).join('; ') || '(the measurement named none)'}. Nothing is put before the owner that does not hold: run this workflow again to take the drawing up where it stopped.`
+  log(`DESIGN READY: open .sz/design/prototype.html. ${swept.screens} screen(s) of the plan drawn, all ${swept.screens} hold at phone size and at their limits`)
+  return null
+}
+
+// The run stops at the prototype: what came of the design stage goes back to the session, and nothing is built.
+const stopAtDesign = (stopped) => {
+  log(stopped)
+  return { mode: plan.mode || 'new', summary: plan.summary || '', decided: plan.decided || [], spec: null, design: designed, milestones: [], joins: [], forOwner: [], notBuilt: [], stopped }
+}
+
 let plan = await planIt('start')
-if (!plan || !Array.isArray(plan.milestones) || plan.milestones.length === 0) return { error: 'no plan came back' }
+if (!plan) return { error: 'no plan came back' }
 if (plan.sandboxed === true) SAND = IN_SANDBOX
+const DESIGNS = ['none', 'needed', 'waiting', 'again', 'approved']
+let design = DESIGNS.includes(plan.design) ? plan.design : 'none'
+if (design === 'needed' || design === 'again') {
+  const short = await drawScreens(design, typeof plan.said === 'string' ? plan.said.trim() : '')
+  if (short) return stopAtDesign(short)
+  if (!designGo) return stopAtDesign(WAITS)
+  log('the owner said to go on without judging the prototype first (design: "go"): the first pass is planned from it and built to it, and how it feels stays theirs to say')
+  phase('Plan')
+  plan = await planIt('start')
+  if (!plan) return { error: 'no plan came back' }
+  if (plan.sandboxed === true) SAND = IN_SANDBOX
+  design = DESIGNS.includes(plan.design) ? plan.design : 'none'
+}
+if (design === 'waiting' || design === 'needed' || design === 'again') return stopAtDesign(WAITS)
+if (!Array.isArray(plan.milestones) || plan.milestones.length === 0) return { error: 'no plan came back' }
+// A first pass whose screens were drawn and judged (or let go on) is built to the drawing and held to it.
+const toDrawing = design === 'approved'
 // Of a new product only the first pass is built from this plan; what comes after it is planned when it stands.
 // The first milestone of a new product is its first pass, marked or not; in a run that takes up a product whose
 // first pass never closed, it is the one the plan marks.
@@ -238,7 +446,11 @@ if (fresh) {
 const WRITE_FLOWS = (contractId) => ` The flows of this contract have not been written: its builder was told to leave them to you. For each claim of yours that names a flow file: show the claim on the product by operating it, then keep exactly what you did as that file, in the project's own format (the map says which), run it once and see it reach its last line, and have the contract hold it: \`sz-eyes contract add-check ${contractId} --frozen <the file>\`. Write it also when the claim turned out false: it fails now, for that reason, and it is what the fix will be proven against. A claim about every screen at the product's limits is one flow too: it fills every field a person can type into, and every figure that grows, with the longest value the spec allows (where the spec is silent, the longest the product accepts), opens every screen in every state at phone size and measures each (\`sz-eyes web look <address> --size phone\`, or the look a \`sz-eyes web do\` ends on), prints every finding above minor with its screen, and fails when there is one. Report every finding it prints, not the first: whoever mends them is handed the whole list at once. A flow starts a server of its own only when it is not handed one (\`SZ_URL\`). Commit the flows you wrote, and nothing else.`
 const FIRST_STEPS = (m) => `2. Write first only the tests of what is pure rule (a calculation, a table of what is allowed and what is not): they are quick, and they are the definition. Run them once and see them fail for the right reason. Do not write the flows: whoever verifies writes each of them on the product as it stands, so that no check is fitted to what was built, and so that you get to the product sooner.
 3. Freeze: \`sz-eyes contract freeze ${m.id} --frozen <each of those tests>\` (with no files if there are none). From here you edit neither the contract nor those tests. If you later find that one of them is itself wrong about how it checks, do not work around it and do not stop: finish the build, and list it under "disputes" with the file and exactly what is wrong.`
-const FIRST = `This milestone is the product's first pass: all of it, in one stretch, by you. Work in this order. The look first (load \`sz:taste\`: colour, type and spacing settled once, as names every screen uses). The frame: how a person gets from one area to another, and the shapes of everything that will be stored. Then the one thing the product is for, to the quality it will be used at. When that path works: start the product, write the command that starts it into \`.sz/map.md\`, put a picture of each of its screens at phone size into the contract's evidence folder under \`early/\`, and commit with a message that begins \"look:\". The owner may open it from then on, before anything else exists. Then every other area, each to its claims. Work down the claims, and run each flow as you finish what it shows. Before you return, fill every field with the longest value the spec allows and look at every screen at phone size (\`sz-eyes web look <address> --size phone\` says what is cut off, what scrolls sideways and what is too small to press): mend it wherever the same thing is shown, not on the one screen where you saw it. Do not stop to report in between: you are done when every claim's own check passes and the product has run in front of you.
+// The look of a first pass whose every screen was drawn before it was built is settled: the builder carries it,
+// and its first look sets each built screen beside its drawing.
+const DRAWN_BUILD = `, and it is settled: every screen was drawn before this build (\`.sz/design/prototype.html\`), and that drawing is what is built, so do not settle it again. \`.sz/design/direction.md\` ends with what you need (빌더에게: the tokens, the parts, each screen's parts and its address in the prototype). Carry the prototype's tokens and parts: for a web product its markup and CSS as they are; for a phone app the tokens, the parts and each screen's order, written again in the toolkit. Each screen is built as drawn: the same content in the same order, made of the same parts, in the same tokens. \`sz:taste\` is for what the design leaves open.`
+const AS_DRAWN = ` Every screen of this product was drawn before it was built (\`.sz/design/prototype.html\`, a picture of each under \`.sz/design/shots/\`), and the first pass was built to that drawing. For the claim that every screen is built as drawn, where it is yours: take a picture of each built screen the way \`sz-eyes web sweep\` does (one browser, every screen at phone size, \`--out\` a folder under the contract's evidence folder) and set it beside its drawing. A difference in content, order, parts or tokens is that claim shown false, with the screen named.`
+const FIRST = `This milestone is the product's first pass: all of it, in one stretch, by you. Work in this order. The look first${toDrawing ? DRAWN_BUILD : ' (load `sz:taste`: colour, type and spacing settled once, as names every screen uses).'} The frame: how a person gets from one area to another, and the shapes of everything that will be stored. Then the one thing the product is for, to the quality it will be used at. When that path works: start the product, write the command that starts it into \`.sz/map.md\`, put a picture of each of its screens at phone size into the contract's evidence folder under \`early/\`, and commit with a message that begins \"look:\". The owner may open it from then on, before anything else exists. Then every other area, each to its claims. Work down the claims, and run each flow as you finish what it shows. Before you return, fill every field with the longest value the spec allows and look at every screen at phone size (\`sz-eyes web look <address> --size phone\` says what is cut off, what scrolls sideways and what is too small to press): mend it wherever the same thing is shown, not on the one screen where you saw it. Do not stop to report in between: you are done when every claim's own check passes and the product has run in front of you.
 `
 async function milestone(m, n, before, where) {
   let stopped = null
@@ -287,7 +499,7 @@ Do this, in order:
 1. Record the contract: \`sz-eyes contract new ${m.id} --lane M --request "<the milestone in a sentence, in the owner's language>" --target <web|ios|...> --claim "<id>|<says>|<kind>:<ref>" ...\` with exactly the claims above, plus \`--not\` and \`--risk\` for the lines above${replaces ? ', and `--supersedes "<contract>/<claim>|<why>"` for each promise it replaces' : ''}.
 ${m.first ? FIRST_STEPS(m) : `2. Write the oracle first: every flow or test file a claim points at, in the project's own format, before the code it checks. They must fail now for the right reason.${replaces ? ' The flow or test a replaced promise was proven by is rewritten now to say the new truth (or removed if nothing of it remains), and frozen with this contract; every other flow and test of earlier work stays exactly as it is.' : ''}
 3. Run each of those files once before freezing, to see that it runs and fails for the right reason (the product is not there yet), not for a mistake in the file. Then freeze: \`sz-eyes contract freeze ${m.id} --frozen <each of those files>\`. From here you edit neither the contract nor those files. If you later find that a frozen file is itself wrong about how it checks (a quoting error, a selector that names nothing), do not work around it and do not stop: finish the build, and list it under "disputes" with the file and exactly what is wrong; someone who did not build this will settle it. If a claim is wrong about what was asked, build what you can and say so in "blocked".`}
-4. Build the milestone. For anything a person looks at, load \`sz:taste\` first. If it changes the shape of what is stored, it carries over what is already there (on start, or by a command the map names): data written by the version before must still open. Run the project's checks (type check, tests, the flows of earlier milestones) as you go and leave them passing.
+4. ${m.first && toDrawing ? 'Build the milestone, each screen as drawn (`sz:taste` only for what the drawing leaves open).' : 'Build the milestone. For anything a person looks at, load `sz:taste` first.'} If it changes the shape of what is stored, it carries over what is already there (on start, or by a command the map names): data written by the version before must still open. Run the project's checks (type check, tests, the flows of earlier milestones) as you go and leave them passing.
 5. Start the product yourself with one command and see it running before you return: its first screen in a browser, or for a phone app the build installed and opened on a simulator of your own (\`sz:verify\` says how, and what a first build of a phone app needs). Say exactly which command, and where it is seen. A milestone that has never run is not built: what stops it from starting is yours to fix here, not the verifier's to find. If it cannot be started for a reason outside the product (a download that does not arrive, a tool that is not on this machine), do not wait on it (a download or a build that shows nothing new for a minute is stopped) and say what stopped it under "blocked". ${where ? 'If this milestone changed how it is launched, say so in "summary" (the map is corrected when the milestones are brought together).' : 'If this milestone changed how it is launched, correct \`.sz/map.md\`.'}
 6. Commit the work on the current branch with a message that says what the milestone built.
 
@@ -319,7 +531,7 @@ Do not judge your own claims and do not record verdicts: someone who did not bui
         again
           ? `This is a second look, after a fix. ${again.claims.length > 0 ? `These claims of the contract were shown false before: ${again.claims.join(', ')}. Check each from the start, on the product as it is now, and record it with \`sz-eyes contract claim\`. ` : ''}${again.standing.length > 0 ? `These promises of earlier work were found broken: ${again.standing.join(', ')}. Show each again and record it with ${record}. ` : ''}A fix can break a neighbour: show again this contract's other claims and what stood before (\`sz-eyes standing\`) by the project's whole check command run once where it has one, and a flow, test or command by itself only where that run failed or says nothing of a claim; report whatever fails now (a claim of this contract under "refuted", recorded with \`sz-eyes contract claim\`; a promise of earlier work under "broken", recorded as above). Claims you did not look at again keep their verdict: leave them out. A claim about every screen at the product's limits is judged by its flow, at the limits the spec states: an input the product does not accept shows nothing about it. Before the fix, this was noticed outside the claims: ${again.noticed.length > 0 ? again.noticed.map((n) => `[${n}]`).join(' ') : '(nothing)'}. Under "noticed" return each of those that is still so on the product as it is now (drop one the fix has ended) and whatever you notice that is new.`
           : `Give every claim a verdict and record each with \`sz-eyes contract claim\`. Then show again what stood before this work (\`sz-eyes standing\`) and record each with ${record}.`
-      }${share ? ` You are one of ${share.of} verifiers looking at this contract at the same time. Yours are these claims: ${share.part.join(', ')}. Give a verdict to these and to no other. ${share.k === 0 ? 'You are also the one who shows again what stood before this work.' : 'Do not show again what stood before this work: another verifier does.'} Start a copy of the product of your own, on a port of your own and with a place of its own for what it stores (the map says how it is launched; never the same database file or folder as another copy), and stop it when you are done.` : ''}${m.first && !again ? WRITE_FLOWS(built.contractId) : ''} I am telling you nothing about whether any claim is true. Record what you notice that no claim covers with \`sz-eyes contract notice\`, stop any server you start, and return the verdicts: under "broken" every promise of earlier work that does not hold now, under "held" every one you showed again that holds.`,
+      }${share ? ` You are one of ${share.of} verifiers looking at this contract at the same time. Yours are these claims: ${share.part.join(', ')}. Give a verdict to these and to no other. ${share.k === 0 ? 'You are also the one who shows again what stood before this work.' : 'Do not show again what stood before this work: another verifier does.'} Start a copy of the product of your own, on a port of your own and with a place of its own for what it stores (the map says how it is launched; never the same database file or folder as another copy), and stop it when you are done.` : ''}${m.first && !again ? WRITE_FLOWS(built.contractId) : ''}${m.first && !again && toDrawing ? AS_DRAWN : ''} I am telling you nothing about whether any claim is true. Record what you notice that no claim covers with \`sz-eyes contract notice\`, stop any server you start, and return the verdicts: under "broken" every promise of earlier work that does not hold now, under "held" every one you showed again that holds.`,
       { label: `verify:${m.id}${again ? ':again' : share ? `:${share.k + 1}of${share.of}` : ''}`, phase: 'Verify', agentType: 'sz:verifier', schema: VERDICT, ...effort('verify') },
     )
   // A first pass has many claims and its flows are still to be written: it is looked at by up to three verifiers
@@ -462,8 +674,8 @@ Change no product code.`,
 // Most milestones stand on the one before, so a line is the default and nothing below changes for it. What the
 // plan puts side by side is built and proven at the same time, each in a folder of its own, then brought into
 // the project's folder; and because two things proven apart are not yet proven together, every claim that
-// stands is shown again on the product as joined before anything is built on it.
-const beside = typeof parallel === 'function' ? parallel : (thunks) => Promise.all(thunks.map((thunk) => thunk().catch(() => null)))
+// stands is shown again on the product as joined before anything is built on it. (`beside`, which starts them
+// together, is near the top: a new product's design stage uses it first.)
 // What the plan puts side by side is built side by side, three at once at most; args.side = 1 keeps a line.
 // Run for real twice on 2026-11-16 (docs/runs/2026-11-16-order): a pair, and three at once. Both met conflicts
 // when brought together (a table of routes, the map), both were settled by an agent and every claim that stood
@@ -676,6 +888,8 @@ return {
   summary: plan.summary,
   decided: plan.decided || [],
   spec: '.sz/spec.md',
+  // The last measurement of a new product's prototype when this run drew it; null when it drew nothing.
+  design: designed,
   milestones: done,
   // What was built side by side: which milestones, which came into the project's folder, and how many promises held on the product as joined.
   joins,
