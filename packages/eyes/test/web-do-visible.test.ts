@@ -52,11 +52,16 @@ const KINDS: Record<string, string> = {
   'a closed dialog': `<dialog>${INSIDE}</dialog>`,
   'a closed details': `<details><summary>더 보기</summary>${INSIDE}</details>`,
   'the hidden attribute': `<div hidden>${INSIDE}</div>`,
-  'aria-hidden': `<div aria-hidden="true">${INSIDE}</div>`,
   'zero size': `<style>.zero,.zero *{display:block;width:0;height:0;min-width:0;min-height:0;padding:0;margin:0;border:0;overflow:hidden}</style><div class="zero">${INSIDE}</div>`,
 };
 const kindPage = (name: string): string =>
   `<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>${name}</title></head><body>${KINDS[name]}<main><button onclick="window.pressed='shown'">누르기</button><label>메모 <input id="s"></label></main></body></html>`;
+
+// Drawn, and kept from a screen reader only: a number counted up beside the same number said once, and words
+// behind a mark that is not for the eye.
+const READ_ALOUD = `<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>읽어 주는 말</title></head><body>
+<p><span aria-hidden="true">32% 비싸요</span></p><div aria-hidden="true"><p>뒤에 깔린 화면</p></div>
+</body></html>`;
 
 let base = '';
 const server = createServer((req, res) => {
@@ -64,6 +69,7 @@ const server = createServer((req, res) => {
   const path = decodeURIComponent(new URL(req.url ?? '/', 'http://here').pathname);
   if (path === '/prototype') send(res, PROTOTYPE);
   else if (path === '/plain') send(res, PLAIN);
+  else if (path === '/read-aloud') send(res, READ_ALOUD);
   else if (path.startsWith('/kind/') && path.slice(6) in KINDS) send(res, kindPage(path.slice(6)));
   else res.writeHead(404).end();
 });
@@ -173,6 +179,13 @@ test('every way a page keeps something from being shown counts: what lies there 
       assert.match(seen.steps[0]!.why ?? '', ONLY_HIDDEN, kind);
     }),
   );
+});
+
+test('what is drawn and marked aria-hidden is on screen: the mark is for a screen reader, the eye reads it', async (t) => {
+  if (skipped(t)) return;
+  const [seen, gone] = await Promise.all([walk('/read-aloud', ['see:32% 비싸요', 'wait:뒤에 깔린 화면']), walk('/read-aloud', ['gone:32% 비싸요'], 1_500)]);
+  assert.equal(seen.passed, true, whys(seen));
+  assert.equal(gone.passed, false, 'words a person can read have not gone');
 });
 
 test('on an ordinary page with nothing hidden, the steps do what they did', async (t) => {

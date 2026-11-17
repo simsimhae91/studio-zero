@@ -218,7 +218,7 @@ export async function lookAtWeb(url: string, opts: LookOptions = {}): Promise<Lo
     if (!opts.clock) await quiet(page);
     if (opts.waitFor) {
       const target = /^[.#[]|^data-|>>/.test(opts.waitFor) ? page.locator(opts.waitFor) : page.getByText(opts.waitFor, { exact: false });
-      await shown(page, target).first().waitFor({ state: 'visible', timeout }).catch(() => undefined);
+      await shown(target).first().waitFor({ state: 'visible', timeout }).catch(() => undefined);
     }
     // From here the page's own time stands at one second after it opened, whatever the machine was doing.
     if (opts.clock) await page.clock.pauseAt(CLOCK_START + 1_000);
@@ -326,16 +326,15 @@ const isSelector = (target: string): boolean => /^[.#[]|^data-|>>|^css=|^text=/.
 
 /**
  * Of what a lookup found, what a person can see. A page can hold more than it shows: a clickable prototype keeps
- * all its screens in one file and shows one, a closed dialog or details keeps its words, a screen stays in the
- * page marked aria-hidden while another is shown. A person presses, types into and reads only what is shown, so
- * every step that finds something by its words, its label, its field or a selector finds it here: drawn (not
- * display: none, not visibility: hidden, not in a closed dialog or details, not `hidden`, not of zero size) and
- * not aria-hidden. Among what is shown, the choice is what it always was. (A designer agent could not press
- * through its own prototype with `tap:`: the words were found first in a screen that was not shown.)
+ * all its screens in one file and shows one, a closed dialog or details keeps its words. A person presses, types
+ * into and reads only what is shown, so every step that finds something by its words, its label, its field or a
+ * selector finds it here: drawn (not display: none, not visibility: hidden, not in a closed dialog or details,
+ * not `hidden`, not of zero size). Among what is shown, the choice is what it always was. What is drawn and
+ * marked aria-hidden is still shown: that mark is for a screen reader, and the eye reads the words all the same
+ * (a counted-up number, the page behind an open dialog). (A designer agent could not press through its own
+ * prototype with `tap:`: the words were found first in a screen that was not shown.)
  */
-function shown(page: Page, found: Locator): Locator {
-  return found.filter({ visible: true }).and(page.locator(':not([aria-hidden="true"], [aria-hidden="true"] *)'));
-}
+const shown = (found: Locator): Locator => found.filter({ visible: true });
 
 /** The controls a person could mean by these words; with `hidden`, those that are not shown as well. */
 const controlsNamed = (page: Page, target: string, hidden = false): Locator => {
@@ -352,7 +351,7 @@ const fieldsNamed = (page: Page, target: string, hidden = false): Locator =>
   isSelector(target) ? page.locator(target) : page.getByLabel(target).or(page.getByPlaceholder(target)).or(page.getByRole('textbox', { name: target, ...(hidden ? { includeHidden: true } : {}) }));
 
 /** The first thing shown that these words name or show: for waiting until it is there, or gone. */
-const pointAt = (page: Page, target: string): Locator => shown(page, named(page, target)).first();
+const pointAt = (page: Page, target: string): Locator => shown(named(page, target)).first();
 
 /**
  * What a person would press with these words: the control named so, else whatever shows them. A row whose
@@ -363,11 +362,11 @@ async function toPress(page: Page, target: string, patience: number): Promise<Lo
   if (isSelector(target)) return pointAt(page, target);
   const any = pointAt(page, target);
   await any.waitFor({ state: 'visible', timeout: patience });
-  const controls = shown(page, controlsNamed(page, target));
+  const controls = shown(controlsNamed(page, target));
   return (await controls.count()) > 0 ? controls.first() : any;
 }
 
-const field = (page: Page, target: string): Locator => shown(page, fieldsNamed(page, target)).first();
+const field = (page: Page, target: string): Locator => shown(fieldsNamed(page, target)).first();
 
 /**
  * Why a step that looks for something did not find it, when what it looked for is on the page only where nothing
@@ -378,9 +377,9 @@ async function foundOnlyHidden(page: Page, verb: string, rest: string): Promise<
   const eq = rest.indexOf('=');
   const sought = verb === 'tap' || verb === 'wait' || verb === 'see' ? { what: `"${rest}"`, all: named(page, rest, true) } : verb === 'type' && eq > 0 ? { what: `the field "${rest.slice(0, eq)}"`, all: fieldsNamed(page, rest.slice(0, eq), true) } : null;
   if (!sought) return null;
-  const [anywhere, onScreen] = await Promise.all([sought.all.count(), shown(page, sought.all).count()]).catch(() => [0, 0]);
+  const [anywhere, onScreen] = await Promise.all([sought.all.count(), shown(sought.all).count()]).catch(() => [0, 0]);
   if (anywhere === 0 || onScreen > 0) return null;
-  return `${sought.what} is not on screen: it was found only where nothing is shown (a screen or part of the page not shown, a closed dialog or details, hidden, aria-hidden or of no size)`;
+  return `${sought.what} is not on screen: it was found only where nothing is shown (a screen or part of the page not shown, a closed dialog or details, hidden or of no size)`;
 }
 
 /** Carries out one step on a page. Returns why it could not be done, in a line, or null when it was. */
