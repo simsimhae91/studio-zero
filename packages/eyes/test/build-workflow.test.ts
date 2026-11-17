@@ -317,6 +317,15 @@ test('a new product with screens is planned, drawn and measured first, and the r
   assert.deepEqual(ran.result.milestones, []);
 });
 
+test('a design stage run again takes up what an earlier run left: a whole plan and a board stand, and a drawing begun is gone on with', async () => {
+  const ran = await run({ request: 'r', asked: 'away' }, drawing({ plan: needed, screens: () => planned, refs: () => ({ primary: '토스', kinds: ['홈'] }), design: () => ({ drawn: 3 }) }));
+  const prompt = (label: string): string => ran.calls.find((c) => c.label === label)!.prompt;
+  assert.match(prompt('screens'), /If `\.sz\/plan\/screens\/DONE` is there, the plan is whole: write nothing/);
+  assert.match(prompt('screens'), /every screen already written stand as they are[^.]*: write only the screens that are missing/);
+  assert.match(prompt('refs'), /if `\.sz\/design\/refs\.md` is there, an earlier run made the board and it stands: search nothing/);
+  assert.match(prompt('design'), /if `\.sz\/design\/prototype\.html` is there when you start[^]*keep its direction, its tokens, its parts and every screen it has, and draw only what is missing/);
+});
+
 test('screens the measurement finds wanting are mended by the part, twice at most, and the run stops naming those that still do not hold', async () => {
   const wanting = { screens: 3, hold: 1, findings: [{ screen: 'HM-01', found: '12자 닉네임이 잘린다' }, { screen: 'RS-01', found: '시안에 없는 화면: 개요가 보인다' }], summary: '3 screens, 1 holds' };
   const mended = await run({ request: 'x' }, drawing({ plan: needed, sweep: (_c, nth) => (nth === 0 ? wanting : holding()), fix: () => ({ changed: '행 부품의 이름 칸' }) }));

@@ -434,6 +434,8 @@ ${request}
 
 ${OWNER_ANSWERS}
 
+Take up what is there: an earlier run may have stopped part of the way. If \`.sz/plan/screens/DONE\` is there, the plan is whole: write nothing, change nothing, and return the screen ids from its files and the list from the frame's sections 2 and 10. If \`.sz/plan/frame.md\` is there without it, the frame and every screen already written stand as they are (a designer may have drawn from them): write only the screens that are missing, then \`DONE\`.
+
 Load the \`sz:design\` skill with the Skill tool only to learn where its folder is, and read its \`references/handoff.md\` whole. That file is what you follow (the skill itself is the designer's, who works beside you): look at how shipped products take a person through these journeys, then write \`.sz/plan/frame.md\` first and whole, then one file a screen under \`.sz/plan/screens/\` in the order of the product's main path, each under another name and renamed when it is whole, and when the last is written, the empty file \`.sz/plan/screens/DONE\`.
 
 A designer starts drawing the moment \`.sz/plan/frame.md\` exists, and takes each screen as its file appears. So write the frame whole and as soon as you can, before any screen; then the screens in order, without going back to change one that is written. (Planned whole first and drawn after, 25 screens took 19 minutes to plan before the drawing could start.) What the request and the answers leave open is decided in the frame and marked as decided there.
@@ -452,6 +454,8 @@ ${request}
 
 ${OWNER_ANSWERS}
 
+Take up what is there: if \`.sz/design/refs.md\` is there, an earlier run made the board and it stands: search nothing, and return its primary reference and its kinds.
+
 Load the \`sz:design\` skill and do its step 1 ("Look at how shipped products do these screens"), and only that: a designer beside you does the rest, and waits for your board. Do not wait for the plan of the screens, which is being written at the same time: name the kinds of screen this product stands on from the request, and start with the house library. Before you write the board, read \`.sz/plan/frame.md\` (wait for it if it is not there yet: \`until [ -e .sz/plan/frame.md ]; do sleep 10; done\`) and check your kinds against its one thing and its list of screens; change a kind it shows to be wrong. Write \`.sz/design/refs.md\` last, whole, under another name and renamed when it is: the designer starts the moment it exists. (Made alone, a board took 10 minutes.)
 
 Return the primary reference and the kinds of screen the board covers.`,
@@ -467,6 +471,8 @@ ${request}
 Load the \`sz:design\` skill and follow it, the whole stage, by yourself: start no other agent (one hand, one file, one set of parts is what makes the screens read as one product). Two others started with you: one writes the plan of the screens (\`.sz/plan/frame.md\` first, then a file a screen), one the reference board (\`.sz/design/refs.md\`). Wait for both before you decide anything:
 until [ -e .sz/plan/frame.md ] && [ -e .sz/design/refs.md ]; do sleep 10; done
 If either is still not there after twenty minutes, draw nothing and return saying which. Then draw the screens that are written and wait for the next, as the skill shows, until \`.sz/plan/screens/DONE\` is there and every screen is drawn. Measure as the skill says before you return: someone who drew nothing measures it again after you.
+
+Take up what is there: if \`.sz/design/prototype.html\` is there when you start, an earlier run began the drawing and stopped. Read \`.sz/design/direction.md\` and the file, keep its direction, its tokens, its parts and every screen it has, and draw only what is missing (a screen of the plan with no address in it, a section of \`direction.md\` not written), then measure all of it.
 
 Return as the skill says.`,
           { label: 'design', phase: 'Design', schema: DRAWN, ...effort('build') },
