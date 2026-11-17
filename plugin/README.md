@@ -32,7 +32,7 @@ claude --plugin-dir /Users/hosoo/project/conclave/plugin
 | `/sz:tend` | 제품 점검, 다음에 할 것 | 10분 안팎부터 |
 | `/sz:onboard` | 하던 프로젝트 파악 (지도 쓰기) | 몇 분, 코드는 안 건드린다 |
 
-나머지(`backend`, `taste`, `verify`, `game`)는 일하는 쪽이 스스로 읽는 지식이라 메뉴에 없다.
+나머지(`backend`, `taste`, `design`, `verify`, `game`)는 일하는 쪽이 스스로 읽는 지식이라 메뉴에 없다.
 
 | 하고 싶은 것 | 이렇게 말한다 | 일어나는 일 |
 |---|---|---|
