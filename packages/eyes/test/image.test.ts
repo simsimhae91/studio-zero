@@ -769,7 +769,8 @@ test('inside a Studio Zero project, a tool that bills for each image is refused 
       assert.match(refused.err, /bills/);
       assert.match(refused.err, /for each image/);
       assert.match(refused.err, /subscription/);
-      assert.ok(refused.err.includes('sz-eyes image make --prompt "'), refused.err);
+      assert.ok(refused.err.includes('sz-eyes image find --kind face'), refused.err);
+      assert.ok(refused.err.includes('sz-eyes image make --kind <kind> --what "'), refused.err);
       assert.match(refused.err, /--name/);
       assert.match(refused.err, /--size WxH/);
       assert.match(refused.err, /background/);

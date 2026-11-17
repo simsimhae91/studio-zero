@@ -33,8 +33,11 @@ try {
 }
 
 process.stderr.write(`Not called: this tool bills the owner's OpenAI API key for each image it makes. In this project pictures are made only on the subscription the owner already pays for (codex signed in with ChatGPT), never through an API that bills per image.
-Make it this way instead, started in the background (one picture takes one to three minutes) while you go on working:
-  sz-eyes image make --prompt "<what it shows and what it is for>" --name <name> [--size WxH]
-It writes .sz/design/assets/<name>.png at exactly that size (sz-eyes help lists the sizes). codex keeps what it makes in ~/.codex, so run it outside the session's command sandbox.
+Look in the owner's stock first, where every picture made before is kept (faces above all are taken from it, not made again):
+  sz-eyes image find --kind face          (or food, object, place, or words)
+  sz-eyes image use <id> --name <name> [--size WxH]
+Only when nothing there fits, make one, started in the background (one picture takes one to three minutes) while you go on working:
+  sz-eyes image make --kind <kind> --what "<one line: what is in it>" --prompt "<what it shows and what it is for>" --name <name> [--size WxH]
+Both write .sz/design/assets/<name>.png (sz-eyes help lists the sizes). codex keeps what it makes in ~/.codex, so run image make outside the session's command sandbox.
 `);
 process.exit(2);
