@@ -28,7 +28,7 @@ sz-eyes web do <address> --clock \
   --step "read:after=window.__game.state()" --step "shot:after" --json
 ```
 
-`run:<ms>` lets that much of the game's time pass; `hold:<key>=<ms>` holds a key that long; `read:<name>=<expression>` keeps what the page says; `expect:<expression>` stops the walk when it is not so and says what it is instead. Without `--clock`, `run:` waits real time: use that only for what is about real time (below).
+`run:<ms>` lets that much of the game's time pass; `hold:<key>=<ms>` holds a key that long; `wait:<words>` passes time a frame at a time until the words are on screen and stops it there; `read:<name>=<expression>` keeps what the page says; `expect:<expression>` stops the walk when it is not so and says what it is instead. Without `--clock`, `run:` waits real time: use that only for what is about real time (below).
 
 A claim of a game is a rule a player would state, with its figures: "세 번 맞으면 끝난다", "벽에 닿으면 멈춘다", "판을 깨면 다음 판은 0.2초 빨라진다", "새로 고쳐도 최고 점수가 남는다". Each is a flow of the project's own that sets the seed, holds the clock, does the steps and reads the state. Also the edges: both keys at once, a key held across a pause, the last life and the level's end in the same frame, starting again ten times.
 

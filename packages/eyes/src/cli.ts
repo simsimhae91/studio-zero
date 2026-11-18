@@ -53,8 +53,11 @@ const USAGE = `sz-eyes: launch what was built, look at it, operate it, and put w
         type:<field>=<text>, press:<key>, wait:<words>, gone:<words>, see:<words>, shot:<name>, go:<path>,
         read:<name>=<expression> (keep what the page says), expect:<expression> (it must be true in the page),
         hold:<key>=<ms>, run:<ms>. Stops at the first step that cannot be done and says why; ends with a look
-        at where it arrived. --clock holds the page's own time still and moves it only with run: and hold:,
-        so that a game, or anything that moves by itself, does the same thing every time it is asked
+        at where it arrived. --clock holds the page's own time still, so that a game, or anything that
+        moves by itself, does the same thing every time it is asked. Time then passes only with run: and
+        hold: (by exactly that much) and while a wait: or gone: waits (a frame at a time, stopping the moment
+        the wait ends: what starts with a screen is read where it started, and run: moves it from there).
+        Every page, the first and one reached by go: or a press, is started the same way and then held.
 
   sz-eyes web review <url> [--size phone|tablet|desktop] [--dark] [--round <folder>] [--dir <project>]
         open the running product in a window for the owner: they use it as usual, press 말하기, point at what
