@@ -256,6 +256,13 @@ test('from the command line: closing makes claims stand, later work cannot close
     assert.equal(eyes(project, 'contract', 'new', 'm2-shares', '--request', '빠지는 사람', '--claim', 'shares|빠진 사람은 안 낸다|test:test/shares.test.mjs', '--supersedes', 'm1-split/split|이제 지출마다 낸 사람끼리만 나눈다').code, 0);
     assert.equal(guard(project, 'flows/split.sh').code, 0, 'the one writing the new contract rewrites the check of the claim it replaces');
     assert.match(eyes(project, 'contract', 'freeze', 'm2-shares', '--frozen', 'flows/nope.sh').text, /not there to freeze: flows\/nope\.sh/);
+    // Whoever built it says so, with how it is started: from then on the owner can be shown the product while it
+    // is still being verified. (2026-11-17: a first pass stood at 21:07 and was closed at 00:39; the only signal a
+    // session had was the close.)
+    assert.equal(eyes(project, 'contract', 'built').code, 1);
+    assert.match(eyes(project, 'contract', 'built').text, /nothing is built and waiting to be closed/);
+    assert.match(eyes(project, 'contract', 'built', 'm2-shares', '--launch', 'PORT=$(sz-eyes port) node server.mjs').text, /is not frozen yet/);
+
     // Words it does not know stop the freeze. (2026-11-18: a builder handed every --frozen in one string its shell
     // did not split, the contract was frozen with no file, and no correction to its checks could be recorded.)
     const unsplit = spawnSync(process.execPath, [join(HERE, '../src/cli.ts'), 'contract', 'freeze', 'm2-shares', '--frozen flows/split.sh --frozen flows/all.sh'], { encoding: 'utf8', cwd: project });
@@ -264,6 +271,14 @@ test('from the command line: closing makes claims stand, later work cannot close
     assert.match(eyes(project, 'contract', 'freeze', 'm2-shares', 'flows/split.sh').text, /not understood: "flows\/split\.sh"/);
     // Neither froze it: the freeze below is its first.
     assert.equal(eyes(project, 'contract', 'freeze', 'm2-shares', '--frozen', 'flows/split.sh').code, 0);
+    assert.match(eyes(project, 'contract', 'built', 'm2-shares').text, /--launch "<the command that starts it, and where it is seen>"/);
+    const said = eyes(project, 'contract', 'built', 'm2-shares', '--launch', 'PORT=$(sz-eyes port) node server.mjs, seen at http://127.0.0.1:$PORT/');
+    assert.equal(said.code, 0, said.text);
+    assert.match(said.text, /built: m2-shares/);
+    const waiting = eyes(project, 'contract', 'built');
+    assert.equal(waiting.code, 0);
+    assert.equal(waiting.text.trim(), 'm2-shares\tPORT=$(sz-eyes port) node server.mjs, seen at http://127.0.0.1:$PORT/');
+    assert.match(eyes(project, 'contract', 'show', 'm2-shares').text, /지은 때: 20\d\d-[^\n]* · 띄우는 법: PORT=\$\(sz-eyes port\) node server\.mjs/);
     assert.equal(guard(project, 'flows/split.sh').code, 2, 'and from the freeze it is the new contract’s');
     assert.match(eyes(project, 'standing').text, /1 claim\(s\) stand[\s\S]*no longer standing[\s\S]*m1-split\/split[\s\S]*replaced by contract m2-shares/);
 
@@ -275,6 +290,7 @@ test('from the command line: closing makes claims stand, later work cannot close
     assert.match(eyes(project, 'contract', 'close', 'm2-shares').text, /is not closed yet:[\s\S]*m1-split\/all: stood before this work and is broken now/);
     assert.equal(eyes(project, 'standing', 'record', 'm1-split/all', '--status', 'holds', '--during', 'm2-shares', '--note', '고친 뒤 0으로 끝난다').code, 0);
     assert.equal(eyes(project, 'contract', 'close', 'm2-shares').code, 0);
+    assert.equal(eyes(project, 'contract', 'built').code, 1, 'closed, it no longer waits');
     assert.ok(existsSync(join(project, '.sz/standing.json')));
     assert.match(readFileSync(eyes(project, 'evidence', 'm2-shares').text.trim(), 'utf8'), /전부터 지키던 것[\s\S]*이번에 다시 보임 1[\s\S]*이 작업으로 물러난 약속/);
 

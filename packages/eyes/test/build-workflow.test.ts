@@ -170,6 +170,9 @@ test('a new product is planned twice: its first pass alone, and what comes after
   assert.match(firstBuild, /This milestone is the product's first pass: all of it, in one stretch, by you/);
   assert.match(firstBuild, /commit with a message that begins \\?"look:\\?"/);
   assert.match(firstBuild, /Do not write the flows: whoever verifies writes each of them on the product as it stands/);
+  // The builder says when it stands, so that the owner can be shown it while it is verified, and the run says so too.
+  assert.match(firstBuild, /Then say that it stands: `sz-eyes contract built m1 --launch "<that command, and where it is seen>"`/);
+  assert.ok(ran.logs.some((l) => /^BUILT: "첫 판" stands and is being verified\. It can be looked at now: PORT=\$\(sz-eyes port\) node server\.mjs/.test(l)), ran.logs.join('\n'));
   assert.doesNotMatch(firstBuild, /Write the oracle first/);
   const laterBuild = ran.calls.find((c) => c.label === 'build:m2')!.prompt;
   assert.doesNotMatch(laterBuild, /This milestone is the product's first pass/);
@@ -243,6 +246,7 @@ test('a new product is planned twice: its first pass alone, and what comes after
   assert.match(second, /You are one of 3 verifiers[\s\S]*Yours are these claims: c4, c5, c6, c7\. Give a verdict to these and to no other\. Do not show again what stood before this work/);
   assert.match(second, /Start a copy of the product of your own, on a port of your own and with a place of its own for what it stores/);
   assert.match(second, /if it runs on a simulator, a simulator of your own/);
+  assert.match(second, /`sz-eyes copy <a folder outside the project>` makes one from what is committed/);
   // Ten tests are one verifier's work; thirteen flows, two looks over every screen and four small checks are five's.
   const shares = async (claims: unknown[]): Promise<string[][]> => {
     const looked = await run({ request: 'x' }, { plan: () => ({ mode: 'new', summary: 's', milestones: [{ id: 'm1', title: '첫 판', builds: 'b', claims }] }), build: built, verify: () => ({ proven: [], refuted: [], unchecked: [] }), close: closed });
@@ -285,7 +289,7 @@ test('a claim about every screen is shown once at the product\'s limits, mended 
   assert.doesNotMatch(mend, /Check that what was already true still is/);
   const again = ran.calls.find((c) => c.label === 'verify:m1:again')!.prompt;
   assert.match(again, /by the project's whole check command run once where it has one, and a flow, test or command by itself only where that run failed or says nothing of a claim/);
-  assert.match(again, /each on a copy of the product of its own, at the same time and not one after another/);
+  assert.match(again, /each on a copy of the product of its own \(`sz-eyes copy`\), at the same time and not one after another/);
   assert.doesNotMatch(again, /run once more every flow, test and command/, 'the second look is no longer told to run each check by itself');
   assert.match(again, /judged by its flow, at the limits the spec states: an input the product does not accept shows nothing about it/);
   assert.doesNotMatch(again, /The flows of this contract have not been written/, 'flows are written at the first look only');

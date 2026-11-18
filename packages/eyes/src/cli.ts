@@ -104,6 +104,10 @@ const USAGE = `sz-eyes: launch what was built, look at it, operate it, and put w
   sz-eyes contract new <id> --lane S|M|L --request <text> [--target web]... --claim "<id>|<what will be true>|<kind>:<ref>"... [--not "<text>"]... [--risk "<text>"]... [--supersedes "<contract>/<claim>|<why>"]... [--dir <project>]
         --supersedes names a standing claim of earlier work that this work deliberately replaces, and why
   sz-eyes contract freeze <id> [--frozen <path>]... [--dir <project>]
+  sz-eyes contract built <id> --launch "<the command that starts it, and where it is seen>" [--dir <project>]
+        said by whoever built it, once the product has run in front of them: from then until the close the owner
+        can be shown it while it is verified. With no id: the contracts that are built and not closed, each
+        with its launch line (exits 1 when there is none): what a session waits on
   sz-eyes contract claim <id> <claim-id> --status proven|refuted|unchecked [--evidence <file under the evidence folder>]... [--note <text>] [--dir <project>]
   sz-eyes contract judged <id> <claim-id> --verdict yes|no --said "<the owner's words>" [--dir <project>]
         the owner's own verdict on a claim that was left for them to judge (shown by owner), in their words; the
@@ -1047,6 +1051,16 @@ async function main(argv: string[]): Promise<number> {
       for (const { contract, owes } of open) out(`contract ${contract.id} (lane ${contract.lane}) still owes:\n${owes.map((line) => `  - ${line}`).join('\n')}`);
       return 1;
     }
+    if (area === 'contract' && command === 'built' && a.words.length === 0) {
+      // What stands and is not closed yet: a session waits on this to show the owner the product while it is verified.
+      const waiting = openContracts(project).filter(({ contract }) => contract.built !== null);
+      if (waiting.length === 0) {
+        out('nothing is built and waiting to be closed (a builder says so with: sz-eyes contract built <id> --launch "<the command that starts it, and where it is seen>")');
+        return 1;
+      }
+      for (const { contract } of waiting) out(`${contract.id}\t${contract.built!.launch}`);
+      return 0;
+    }
     const id = a.words[0];
     if (!id) throw new EyesError('which contract: give its id');
     const file = contractFile(project, id);
@@ -1088,6 +1102,18 @@ async function main(argv: string[]): Promise<number> {
     }
     // The commands below change the contract. Each does its checks inside `updateContract`, on the contract as it
     // is read there under its lock, and prints from what was written: what `contract` above holds may be older.
+    if (command === 'built') {
+      const launch = (a.one('--launch') ?? '').trim();
+      if (launch === '') throw new EyesError('sz-eyes contract built <id> --launch "<the command that starts it, and where it is seen>": said by whoever built it, once the product has run in front of them');
+      const head = spawnSync('git', ['-C', project, 'rev-parse', 'HEAD'], { encoding: 'utf8' });
+      updateContract(file, (contract) => {
+        if (contract.frozenAt === null) throw new EyesError(`${id} is not frozen yet: what is built is built against a contract that no longer moves`);
+        if (contract.closedAt !== null) throw new EyesError(`${id} is closed`);
+        return { ...contract, built: { at: new Date().toISOString(), launch, commit: head.status === 0 ? head.stdout.trim() : null } };
+      });
+      out(`built: ${id}. It can be shown to the owner from now on, while it is verified: ${launch}`);
+      return 0;
+    }
     if (command === 'freeze') {
       // A word it does not know is not passed over: the files would be left out and the contract frozen without them.
       const stray = [...a.words.slice(1), ...[...a.flags.keys()].filter((flag) => flag !== '--frozen' && flag !== '--dir')];

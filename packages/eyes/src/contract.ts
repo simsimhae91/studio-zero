@@ -111,6 +111,12 @@ export const Contract = z.object({
    * standing, and this work must keep it true.
    */
   supersedes: z.array(z.object({ contract: z.string().max(61), claim: z.string().max(31), why: z.string().min(8).max(600), at: z.string().nullable().default(null) })).max(30).default([]),
+  /**
+   * Set by whoever built it, when the product has run in front of them: when, the command that starts it and
+   * where it is seen, and the commit. From then until the close the owner can be shown the product while it is
+   * verified.
+   */
+  built: z.object({ at: z.string(), launch: z.string().min(1).max(1200), commit: z.string().max(60).nullable().default(null) }).nullable().default(null),
   /** Set when the contract is a release (or a look at what is live), with where and which version. */
   release: Release.nullable().default(null),
   /** Set when the work is closed: by whom, and with what left. */
@@ -233,6 +239,7 @@ export function renderContract(contract: Contract): string {
     ...(contract.risks.length > 0 ? [list('위험', contract.risks.map((line) => `- ${line}`))] : []),
     ...(contract.amendments.length > 0 ? [list('얼린 뒤 고친 검사', contract.amendments.map((a) => `- \`${a.file}\`: ${a.why}`))] : []),
     contract.frozenAt ? `얼린 때: ${contract.frozenAt}${contract.frozen.length > 0 ? ` (만드는 쪽이 못 고치는 파일: ${contract.frozen.join(', ')})` : ''}` : '아직 얼리지 않았습니다.',
+    ...(contract.built ? [`지은 때: ${contract.built.at} · 띄우는 법: ${contract.built.launch}`] : []),
   ];
   return `${blocks.join('\n\n')}\n`;
 }
