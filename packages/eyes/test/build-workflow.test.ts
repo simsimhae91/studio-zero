@@ -827,6 +827,10 @@ test('the frozen checks a builder disputes go to one arbiter in one sitting, and
   assert.match(prompt, /Settle 3 disputes about frozen checks/);
   assert.match(prompt, /Start what they need once[^.]*and settle them one after another on it/);
   assert.match(prompt, /return what you decided for each/);
+  // Said in the request itself, not only in the arbiter's own file: on a real session (2026-11-18) the arbiter
+  // found the fault in a third check and corrected it, and the command that records the correction was refused
+  // as something nobody had asked for, because the request named two files.
+  assert.match(prompt, /other frozen checks share[^.]*those are yours to correct too, though nobody disputed them[^.]*`sz-eyes contract amend`/);
   assert.ok(three.calls.findIndex((c) => c.label.startsWith('arbiter:')) < three.calls.findIndex((c) => c.label.startsWith('verify:')), 'settled before anyone verifies');
 
   const single = await run({ request: 'x' }, disputing([{ file: 'test/rule.test.mjs', problem: '기대값을 잘못 옮겨 적음' }]));
