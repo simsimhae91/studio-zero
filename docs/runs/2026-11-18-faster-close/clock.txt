@@ -1,0 +1,6 @@
+(the design front of 2026-11-17 is reused: 18:40:25 to 19:25:59, 45.5 minutes)
+10:08:06 build start
+13:00:31 build end (exit 1)
+11:52:25 the lid was closed (the Mac carried away); 12:47:27 the five verifiers ended on an API error; their work is on the branch cut-1152
+17:24:34 continue start
+19:32:55 continue end (exit 0)
