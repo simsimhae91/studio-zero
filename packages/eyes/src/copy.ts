@@ -99,7 +99,7 @@ export function copyText(copy: Copy, project: string): string {
   return [
     `a copy of ${resolve(project)} at ${copy.commit.slice(0, 7)}: its committed files${copy.cloned.length > 0 ? '' : ' (no installed dependencies were found to clone: install them there as the map says)'}`,
     ...(copy.cloned.length > 0 ? [`dependencies and built folders cloned: ${copy.cloned.join(', ')}`] : []),
-    ...(copy.stack ? [`its stack is named ${copy.stack} (supabase/config.toml): it shares no database with the project or with another copy`] : []),
+    ...(copy.stack ? [`its stack is its own: started in that folder (sz-eyes supabase start), it shares no database with the project or with another copy, and it is stopped from that folder (sz-eyes supabase stop). supabase/config.toml names it ${copy.stack}`] : []),
     'Nothing the product stored was copied. Launch it there the way the map says, on a port of its own (PORT=$(sz-eyes port)), keep the process id, and when you are done end what you started and remove the folder. It is not a repository: what you write to keep (a flow, a test) goes in the project\'s folder.',
     copy.folder,
   ].join('\n');

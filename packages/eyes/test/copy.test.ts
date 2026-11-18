@@ -70,6 +70,8 @@ test('a copy holds what is committed and the installed dependencies, under a sta
     assert.equal(existsSync(join(folder, '.stack')), false);
     assert.equal(existsSync(join(folder, 'dist')), false, 'a built folder only when asked for');
     assert.equal(made.stack, 'alpha-v1');
+    // The Supabase command line this house uses keeps a stack by the folder it was started in (seen on the first real copy,
+    // 2026-11-18: a copy's stack ran under the folder's name, whatever the file said), so the copy says where it is started and stopped.
     assert.match(readFileSync(join(folder, 'supabase/config.toml'), 'utf8'), /^# the stack\nproject_id = "alpha-v1"\n\n\[api\]\nport = 54321\n$/);
     assert.match(readFileSync(join(p.project, 'supabase/config.toml'), 'utf8'), /project_id = "alpha"\n/, 'the project is not touched');
 
@@ -115,7 +117,7 @@ test('from the command line: the folder is the last line, and a product with no 
     const lines = run.stdout.trim().split('\n');
     assert.equal(lines.at(-1), folder);
     assert.match(run.stdout, /dependencies and built folders cloned: node_modules, app\/node_modules, dist/);
-    assert.doesNotMatch(run.stdout, /its stack is named/);
+    assert.doesNotMatch(run.stdout, /its stack is its own/);
     assert.match(run.stdout, /Launch it there the way the map says, on a port of its own \(PORT=\$\(sz-eyes port\)\)/);
     const refused = spawnSync(process.execPath, [join(HERE, '../src/cli.ts'), 'copy', folder, '--dir', p.project], { encoding: 'utf8' });
     assert.equal(refused.status, 1);
