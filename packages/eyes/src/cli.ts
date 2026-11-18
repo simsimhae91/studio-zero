@@ -20,6 +20,7 @@ import { RelayError, loginCommand } from './login-relay.ts';
 import { DANGEROUS, changesInCode, classify, renderMigrations } from './migrations.ts';
 import { findProducts, overviewPage, renderOverview, viewOf } from './overview.ts';
 import { freePort } from './port.ts';
+import { copyText, makeCopy } from './copy.ts';
 import { RefsError, refsCommand } from './refs.ts';
 import { heldSecrets, ownersVault, parseRun, runWithSecrets, setSecret } from './secrets.ts';
 import { GATE_LINES, lastRelease, releaseContract, releases, renderReleases, type Gate } from './release.ts';
@@ -245,6 +246,13 @@ const USAGE = `sz-eyes: launch what was built, look at it, operate it, and put w
   sz-eyes port                                           a port nothing listens on, from the machine: start what you
         launch on it (PORT=$(sz-eyes port)), keep its process id ($!), and end it by that id. Never choose a
         number, and never end whatever holds a port: other work of the owner's runs on this machine
+  sz-eyes copy <folder> [--at <commit>] [--with <path>]... [--dir <project>]
+        a copy of the product to run beside it, in a folder outside the project: the files as committed (HEAD, or
+        --at), the dependencies as installed (node_modules, cloned), --with what the map says is built and not in
+        git (a built folder, a native app's Pods), and a stack name of its own (supabase/config.toml project_id
+        with the folder's name), so that it shares no database with the project or another copy. Nothing the
+        product stored is copied, and it is not a repository. The folder is the last line printed. Launch it
+        there the way the map says, on a port from sz-eyes port
 
   sz-eyes refs add --kind "<kind of screen or journey>" --product "<name>" --what "<which screen, one line>" --link <the page it came from>
         (--file <picture on disk> | --image <https address of the picture>) --notes <file.md> [--platform ios|android|web] [--lang ko|en|...] [--for <project>] [--json]
@@ -994,6 +1002,14 @@ async function main(argv: string[]): Promise<number> {
   }
   if (area === 'port') {
     out(String(await freePort()));
+    return 0;
+  }
+  if (area === 'copy') {
+    const a = parse(argv.slice(1), []);
+    const folder = a.words[0];
+    if (!folder || a.words.length > 1) throw new EyesError('sz-eyes copy <folder> [--at <commit>] [--with <path>]... [--dir <project>]: one folder, outside the project');
+    const project = resolve(a.one('--dir') ?? '.');
+    out(copyText(makeCopy(project, folder, { at: a.one('--at'), with: a.all('--with') }), project));
     return 0;
   }
   if (area === 'backlog') {
