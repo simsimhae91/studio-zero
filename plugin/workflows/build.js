@@ -490,7 +490,7 @@ Return the primary reference and the kinds of screen the board covers.`,
 The owner's request:
 ${request}
 
-Load the \`sz:design\` skill and follow it, the whole stage, by yourself: start no other agent (one hand, one file, one set of parts is what makes the screens read as one product). Two others started with you: one writes the plan of the screens (\`.sz/plan/frame.md\` first, then a file a screen), one the reference board (\`.sz/design/refs.md\`). Wait for both before you decide anything:
+Load the \`sz:design\` skill and follow it, the whole stage, by yourself: start no other agent (one hand, one file, one set of parts is what makes the screens read as one product). Two others started with you: one writes the plan of the screens (\`.sz/plan/frame.md\` first, then a file a screen), one the reference board (\`.sz/design/refs.md\`). Both take about ten minutes, and you decide nothing before both are there. Use the wait for what needs neither: read \`sz:taste\` and its handbook for this kind of product whole, and see what the owner's stock of pictures holds (\`sz-eyes image find --kind face\`, and the kinds this request will need). Then wait:
 until [ -e .sz/plan/frame.md ] && [ -e .sz/design/refs.md ]; do sleep 10; done
 If either is still not there after twenty minutes, draw nothing and return saying which. Then draw the screens that are written and wait for the next, as the skill shows, until \`.sz/plan/screens/DONE\` is there and every screen is drawn. Measure as the skill says before you return: someone who drew nothing measures it again after you.
 

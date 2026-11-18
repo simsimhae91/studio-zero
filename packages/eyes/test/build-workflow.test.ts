@@ -374,6 +374,11 @@ test('a new product with screens is planned, drawn and measured first, and the r
   const designer = prompt('design');
   assert.match(designer, /until \[ -e \.sz\/plan\/frame\.md \] && \[ -e \.sz\/design\/refs\.md \]; do sleep 10; done/);
   assert.match(designer, /by yourself: start no other agent/);
+  // The designer waits about ten minutes for the plan's frame and the board (9.4 of its 43 on 2026-11-17), and read the
+  // handbook and looked through the picture stock only afterwards: that needs neither. The screens stay one hand's:
+  // drawing them was 9 of those 43 minutes, so several hands would save four or five and cost what makes them read as one product.
+  assert.match(designer, /Use the wait for what needs neither: read `sz:taste` and its handbook[^.]*and see what the owner's stock of pictures holds/);
+  assert.match(designer, /you decide nothing before both are there/);
   const sweep = prompt('sweep:design');
   assert.match(sweep, /You did not draw it and you take nobody's word for it/);
   assert.match(sweep, /sz-eyes web sweep "file:\/\/\$PWD\/\.sz\/design\/prototype\.html" --from \.sz\/design\/sweep\.txt --size phone --out \.sz\/design\/shots/);
