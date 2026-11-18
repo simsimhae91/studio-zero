@@ -866,3 +866,94 @@ test('the frozen checks a builder disputes go to one arbiter in one sitting, and
   assert.match(arbiter, /one or more frozen files/);
   assert.match(arbiter, /\*\*The same fault in other checks\.\*\*[^\n]*passes by chance[^\n]*`sz-eyes contract amend`/);
 });
+
+test('a milestone an earlier run looked at whole and left with claims shown false is taken up at the fix', async () => {
+  // (2026-11-19: a first pass stopped with two of twenty claims shown false. Going on meant five verifiers looking
+  // at all twenty again, three quarters of an hour, before anyone mended the two.)
+  const left = (looked: unknown) => ({
+    plan: () => ({ mode: 'continue', summary: 's', milestones: [{ id: 'm1', title: '첫 판', builds: 'b', claims: [claim('one'), claim('two'), claim('three'), { id: 'feel', says: 'the owner says so', kind: 'owner', ref: 'the app' }], state: 'built', contractId: 'm1', launch: 'node server.mjs' }] }),
+    start: () => ({ launch: 'PORT=$(sz-eyes port) node server.mjs', ...(looked ? { looked } : {}) }),
+    build: built,
+    fix: () => ({ fixed: ['two'] }),
+    verify: ({ label }: Call) => (label === 'verify:m1:again' ? { proven: ['one', 'two', 'three'], refuted: [], unchecked: [{ id: 'feel', why: '주인이 볼 것' }], noticed: ['새로 본 것'] } : { proven: ['one', 'two', 'three'], refuted: [], unchecked: [{ id: 'feel', why: '주인이 볼 것' }] }),
+    close: closed,
+  });
+  const looked = { proven: ['one', 'three'], refuted: [{ id: 'two', fact: '2주 탭이 0.0kg으로 나옴' }], unchecked: [{ id: 'feel', why: '주인이 볼 것' }] };
+  const ran = await run({ request: '이어서' }, left(looked));
+  assert.deepEqual(ran.calls.map((c) => c.label), ['plan', 'start:m1', 'fix:m1:1', 'verify:m1:again', 'close:m1'], 'nobody looks at all of it again before the fix');
+  assert.match(ran.calls.find((c) => c.label === 'start:m1')!.prompt, /Say what the contract records of an earlier look[\s\S]*\[아직\] nobody has looked[\s\S]*If any claim is still \[아직\], leave "looked" out\. You only read them/);
+  assert.match(ran.calls.find((c) => c.label === 'fix:m1:1')!.prompt, /found these claims false:\n- two: 2주 탭이 0\.0kg으로 나옴/);
+  const again = ran.calls.find((c) => c.label === 'verify:m1:again')!.prompt;
+  assert.match(again, /These claims of the contract were shown false before: two\. Check each from the start/);
+  assert.match(again, /show again this contract's other claims and what stood before/, 'every claim is shown again after the fix, as after any fix');
+  assert.match(again, /Under "noticed" return only what you notice that is new/, 'what the earlier look noticed is in the contract, and is not called nothing');
+  assert.ok(ran.logs.some((l) => /첫 판: an earlier run looked at all of it and left 1 claim\(s\) shown false \(two\): those are mended first/.test(l)), ran.logs.join('\n'));
+  assert.equal(ran.result.stopped, null);
+  assert.deepEqual([...ran.result.milestones[0].proven].sort(), ['one', 'three', 'two']);
+  assert.deepEqual(ran.result.milestones[0].noticed, ['새로 본 것']);
+
+  // A look that was cut (a claim nobody has looked at), or that left nothing to mend, is not taken up: all of it is looked at.
+  const cut = await run({ request: '이어서' }, left({ proven: ['one'], refuted: [{ id: 'two', fact: 'x' }], unchecked: [] }));
+  assert.deepEqual(cut.calls.map((c) => c.label), ['plan', 'start:m1', 'verify:m1', 'close:m1']);
+  const whole = await run({ request: '이어서' }, left({ proven: ['one', 'two', 'three'], refuted: [], unchecked: [{ id: 'feel', why: '주인이 볼 것' }] }));
+  assert.deepEqual(whole.calls.map((c) => c.label), ['plan', 'start:m1', 'verify:m1', 'close:m1']);
+  const silent = await run({ request: '이어서' }, left(null));
+  assert.deepEqual(silent.calls.map((c) => c.label), ['plan', 'start:m1', 'verify:m1', 'close:m1']);
+
+  // A claim set aside for the owner then is still theirs, and a promise of earlier work found broken is mended too.
+  const more = await run({ request: '이어서' }, { ...left({ proven: ['one'], refuted: [], unchecked: [{ id: 'feel', why: '주인이 볼 것' }], aside: ['two', 'three'], broken: [{ key: 'm0/keeps', fact: '닫았다 열면 기록이 없음' }] }), verify: () => ({ proven: ['one'], refuted: [], unchecked: [], held: ['m0/keeps'] }) });
+  assert.deepEqual(more.calls.map((c) => c.label), ['plan', 'start:m1', 'fix:m1:1', 'verify:m1:again', 'close:m1']);
+  assert.match(more.calls.find((c) => c.label === 'fix:m1:1')!.prompt, /true before this work and are not now[\s\S]*- m0\/keeps: 닫았다 열면 기록이 없음/);
+  assert.deepEqual(more.result.forOwner.map((line: string) => line.split(':')[0]), ['m1/two', 'm1/three']);
+});
+
+test('a claim is handed to a fixer twice at most, and what a later look shows false for the first time still gets its fix', async () => {
+  // (2026-11-19: stopped "after two fixes" with two claims shown false, one found only at the third look and one
+  // mended once. Each fix had made true what it was handed; each look had found something the one before had not.)
+  const three = { plan: () => ({ mode: 'extend', summary: 's', milestones: [{ id: 'm1', title: 'title m1', builds: 'b', claims: [claim('one'), claim('two'), claim('three')] }] }), build: built, fix: () => ({ fixed: [] }), close: closed };
+  const looks = (...each: { id: string; fact: string }[][]) => (_: Call, nth: number) => {
+    const refuted = each[Math.min(nth, each.length - 1)]!;
+    return { proven: ['one', 'two', 'three'].filter((id) => !refuted.some((r) => r.id === id)), refuted, unchecked: [] };
+  };
+  const f = (id: string) => ({ id, fact: `${id} is not so` });
+
+  // Look 1 finds one; look 2 finds two; look 3 finds two still false and three for the first time: a third fix, and it closes.
+  const late = await run({ request: 'x' }, { ...three, verify: looks([f('one')], [f('two')], [f('two'), f('three')], []) });
+  assert.deepEqual(late.calls.map((c) => c.label), ['plan', 'build:m1', 'verify:m1', 'fix:m1:1', 'verify:m1:again', 'fix:m1:2', 'verify:m1:again', 'fix:m1:3', 'verify:m1:again', 'close:m1']);
+  assert.match(late.calls.find((c) => c.label === 'fix:m1:3')!.prompt, /- two: two is not so\n- three: three is not so/);
+  assert.equal(late.result.stopped, null);
+
+  // The same claim false after two fixes: the run stops there, as it always did, though another claim is new.
+  const stuck = await run({ request: 'x' }, { ...three, verify: looks([f('one')], [f('one')], [f('one'), f('three')]), close: () => ({ report: 'r.html', closed: false, line: 'l' }) });
+  assert.deepEqual(stuck.calls.map((c) => c.label), ['plan', 'build:m1', 'verify:m1', 'fix:m1:1', 'verify:m1:again', 'fix:m1:2', 'verify:m1:again', 'rule:m1:last', 'close:m1']);
+  assert.match(stuck.result.stopped, /still has 2 claim\(s\) shown false and 0 promise\(s\) of earlier work broken after two fixes \(a claim is handed to a fixer twice at most, and a milestone is mended four times at most\): one \(one is not so\); three \(three is not so\)/);
+
+  // Something new at every look: four fixes, and then it stops.
+  const rolling = (_: Call, nth: number) => { const id = ['one', 'two', 'three'][nth % 3]!; return { proven: ['one', 'two', 'three'].filter((other) => other !== id), refuted: [f(id)], unchecked: [] }; };
+  const endless = await run({ request: 'x' }, { ...three, verify: rolling, close: () => ({ report: 'r.html', closed: false, line: 'l' }) });
+  assert.deepEqual(endless.calls.filter((c) => c.label.startsWith('fix:')).map((c) => c.label), ['fix:m1:1', 'fix:m1:2', 'fix:m1:3', 'fix:m1:4']);
+  assert.match(endless.result.stopped, /still has 1 claim\(s\) shown false and 0 promise\(s\) of earlier work broken after four fixes \(a claim is handed/);
+});
+
+test('a session waits for the product on the signal its builder gives, and a look at every screen is weighed as one whatever its wording', async () => {
+  // (2026-11-19: the workflow's own description still named the wait from before there was a signal. The session
+  // waited on it for two hours, until the wait was ended, while the product had stood since minute 72.)
+  const when = /whenToUse: '([^\n]*)',\n/.exec(SOURCE)![1]!;
+  assert.match(when, /until sz-eyes contract built > \/dev\/null 2>&1; do sleep 20; done/);
+  assert.doesNotMatch(when, /standing --summary/, 'what stands is listed only once a contract is closed');
+  const work = readFileSync(fileURLToPath(new URL('../../../plugin/skills/work/SKILL.md', import.meta.url)), 'utf8');
+  assert.match(work, /until sz-eyes contract built > \/dev\/null 2>&1; do sleep 20; done/, 'the skill and the workflow name the same wait');
+  const first = await run({ request: 'x', asked: 'owner', answers: 'a' }, { plan: () => ({ mode: 'new', summary: 's', milestones: [{ id: 'm1', title: '첫 판', builds: 'b', first: true, claims: [claim('one')] }] }), build: built, verify: () => ({ proven: ['one'], refuted: [], unchecked: [] }), close: closed });
+  assert.ok(first.logs.some((l) => /the whole product can be looked at when its first pass stands \(this run logs BUILT then\)/.test(l)), first.logs.join('\n'));
+
+  // (The same night a look at "24화면 각 상태" was weighed as one flow and shared a verifier with the every-screen
+  // flow and the motion flow: 47 minutes, the others 21 to 33.)
+  const flow = (id: string, says = `${id} is true`) => ({ id, says, kind: 'flow', ref: `flows/${id}.sh` });
+  const shares = async (says: string): Promise<string[][]> => {
+    const claims = [flow('a'), flow('b'), flow('c'), { id: 'drawn', says, kind: 'look', ref: 'screens/' }, flow('e'), flow('f')];
+    const looked = await run({ request: 'x' }, { plan: () => ({ mode: 'extend', summary: 's', milestones: [{ id: 'm1', title: 't', builds: 'b', claims }] }), build: built, verify: () => ({ proven: [], refuted: [], unchecked: [] }), close: closed });
+    return looked.calls.filter((c) => c.label.startsWith('verify')).map((c) => (/Yours are these claims: ([^.]*)\./.exec(c.prompt)?.[1] ?? 'all').split(', '));
+  };
+  assert.deepEqual(await shares('a picture of the home screen is in the folder'), [['a', 'b', 'c'], ['drawn', 'e', 'f']]);
+  for (const says of ['24화면 각 상태의 휴대폰 크기 그림이 증거 폴더에 있다', '각 화면이 그림과 같다', 'each of the 24 screens is as drawn']) assert.deepEqual(await shares(says), [['a', 'b'], ['c', 'drawn'], ['e', 'f']], says);
+});

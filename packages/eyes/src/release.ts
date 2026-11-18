@@ -154,6 +154,7 @@ export function releaseContract(projectDir: string, id: string, g: Gate, extra: 
     amendments: [],
     supersedes: [],
     release: { place: g.place, url: g.url, candidate: g.candidate, commit: g.commit, previous: g.previous, wayBack: g.wayBack ? shownBy(g.wayBack).ref : '', takenBack: null },
+    built: null,
     closedAt: null,
   };
 }

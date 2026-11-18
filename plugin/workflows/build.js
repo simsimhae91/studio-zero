@@ -1,7 +1,7 @@
 export const meta = {
   name: 'build',
   description: 'Build a product, or grow one that exists, to the end, unattended: for a new product with screens, first every screen planned, drawn as one clickable prototype, measured, and put before the owner, whose word it waits for; then a spec (new, or the existing one extended), then for each milestone a frozen contract, the build, a verification by an agent that did not build it which also shows again what stood before, fixes, and a page of evidence. Milestones follow one another unless the plan puts some side by side: those are built at the same time in folders of their own, brought together, and everything that stands is shown again on the product as joined',
-  whenToUse: 'A new product, or a change of several features to a product that already has a spec (lane L), after the owner has been put the questions only they can answer (a few, each a choice they can tap) and has asked for it to run to the end without them. Typing the command is not an answer to those questions: ask first, then start it with asked and answers (args is an object: { request, asked, answers, design? }). A new product with screens is drawn before anything of it is built: the first run plans and draws every screen, measures them, and stops with the prototype. Open .sz/design/prototype.html for the owner, record what they say in their words (sz-eyes contract judged design feel --verdict yes|no --said "<their words>"), and start the workflow again: on yes it builds the first pass to the drawing, on no it draws again what they said. Only design: "go" in args takes a run from the measured prototype straight into building without their word, and only the owner can ask for it (a prototype waits fifteen minutes; a build nobody wanted costs two hours). For a new product, right after starting the run that builds its first pass (after their yes, with design: "go", or for a product with no screens), start in the background a wait for its first pass to stand (until [ -n "$(sz-eyes standing --summary)" ]; do sleep 20; done); when that returns, start the product as .sz/map.md says and tell the owner its address and where the page with every screen is: they see the whole product then, not when everything is finished.',
+  whenToUse: 'A new product, or a change of several features to a product that already has a spec (lane L), after the owner has been put the questions only they can answer (a few, each a choice they can tap) and has asked for it to run to the end without them. Typing the command is not an answer to those questions: ask first, then start it with asked and answers (args is an object: { request, asked, answers, design? }). A new product with screens is drawn before anything of it is built: the first run plans and draws every screen, measures them, and stops with the prototype. Open .sz/design/prototype.html for the owner, record what they say in their words (sz-eyes contract judged design feel --verdict yes|no --said "<their words>"), and start the workflow again: on yes it builds the first pass to the drawing, on no it draws again what they said. Only design: "go" in args takes a run from the measured prototype straight into building without their word, and only the owner can ask for it (a prototype waits fifteen minutes; a build nobody wanted costs two hours). For a new product, right after starting the run that builds its first pass (after their yes, with design: "go", or for a product with no screens), start in the background a wait for its builder to say it stands (until sz-eyes contract built > /dev/null 2>&1; do sleep 20; done; sz-eyes contract built: it prints the contract and how the product is started, about an hour in; nothing else answers before the first pass is closed, hours later). When that returns, make a copy of the product (sz-eyes copy <a folder outside the project> --with <what .sz/map.md says is built and not in git>), start the copy the way that line says and tell the owner its address, and that it is still being verified: they see the whole product then, not when everything is finished.',
   phases: [
     { title: 'Plan', detail: 'the spec and its milestones, each with the claims that make it done' },
     { title: 'Design', detail: 'for a new product with screens: every screen planned, drawn as one prototype and measured, then put before the owner before anything is built' },
@@ -248,6 +248,18 @@ const STARTED = {
     launch: { type: 'string', description: 'the exact command that starts the product now, as you ran it and saw it start, and the address or app it is seen at' },
     summary: { type: 'string', description: 'what you had to do to make it start, in two sentences at most; empty if it started as said' },
     blocked: { type: 'string', description: 'empty unless it could not be started for a reason outside the product: then what stopped it, with the figure' },
+    looked: {
+      type: 'object',
+      description: 'only when the contract records a verdict for every one of its claims (an earlier run looked at all of it): those verdicts, as the contract has them. Leave it out when any claim has none yet',
+      properties: {
+        proven: { type: 'array', items: { type: 'string' }, description: 'ids of the claims recorded as proven' },
+        refuted: { type: 'array', description: 'the claims recorded as shown false', items: { type: 'object', properties: { id: { type: 'string' }, fact: { type: 'string', description: 'what was found instead, from the claim\'s note, in a sentence or two' } }, required: ['id', 'fact'] } },
+        unchecked: { type: 'array', description: 'the claims recorded as not checked', items: { type: 'object', properties: { id: { type: 'string' }, why: { type: 'string' } }, required: ['id', 'why'] } },
+        aside: { type: 'array', items: { type: 'string' }, description: 'ids of the claims set aside for the owner' },
+        broken: { type: 'array', description: 'promises of earlier work that `sz-eyes standing` lists as broken', items: { type: 'object', properties: { key: { type: 'string', description: '<contract>/<claim>' }, fact: { type: 'string' } }, required: ['key', 'fact'] } },
+      },
+      required: ['proven', 'refuted', 'unchecked'],
+    },
   },
   required: ['launch'],
 }
@@ -582,7 +594,7 @@ const ahead = milestones.filter((m) => m.state !== 'closed').length
 const whose = asked === 'owner' ? 'planned from what the owner answered' : 'the owner was not asked beforehand: what was open is decided conservatively and listed in the spec'
 if (fresh) {
   log(`${plan.mode === 'new' ? 'spec written' : 'continuing'}. First pass: ${milestones[cutAt].title}${more ? `. After it, planned when it stands: ${later.join(' / ')}` : ''}`)
-  log(`${whose}; the whole product can be looked at when the first pass closes`)
+  log(`${whose}; the whole product can be looked at when its first pass stands (this run logs BUILT then), before it is verified and closed`)
 } else {
   log(`${plan.mode === 'extend' ? 'spec extended' : 'continuing'}: ${milestones.length} milestone(s): ${milestones.map((m) => m.title).join(' / ')}`)
   log(`${whose}; ${ahead} milestone(s) to go, expect about ${ahead * 20} to ${ahead * 30} minutes (a phone app's native build adds its own)`)
@@ -608,7 +620,7 @@ const FIRST = `This milestone is the product's first pass: all of it, in one str
 `
 // What a claim costs to show, in tests' worth: a flow is written and run against the product, a look is pictures
 // set beside drawings, and one that says something of every screen is the longest of all.
-const EVERY_SCREEN = /every screen|all (the )?screens|each screen|모든 화면|화면마다|화면 \d+개|\d+개 화면/i
+const EVERY_SCREEN = /every screen|all (the )?screens|each screen|\d+ screens|모든 화면|화면마다|각 화면|화면 \d+개|\d+\s*개 화면|\d+\s*화면/i
 const weightOf = (c) => (c.kind === 'owner' ? 0 : c.kind === 'flow' || c.kind === 'look' ? (EVERY_SCREEN.test(String(c.says || '')) ? 6 : 3) : 1)
 // The claims in the plan's order, cut where the running cost is nearest to an even share: null when one verifier
 // is enough (about four flows' worth at a first look), five shares at most. A look after a fix takes twice as
@@ -630,6 +642,22 @@ const sharesOf = (claims, each = 10, most = 5) => {
   }
   if (from < claims.length) parts.push(claims.slice(from).map((c) => c.id))
   return parts.length > 1 ? parts : null
+}
+// What an earlier run's look recorded, as whoever started the milestone read it from the contract: taken up only
+// when it covers every claim and leaves something to mend. Anything else is looked at whole.
+const lookedBefore = (looked, claims) => {
+  if (!looked || typeof looked !== 'object') return null
+  const list = (value) => (Array.isArray(value) ? value.filter(Boolean) : [])
+  const known = new Set(claims.map((c) => c.id))
+  const refuted = list(looked.refuted).filter((r) => known.has(r.id) && plainWords(r.fact) !== '').map((r) => ({ id: r.id, fact: String(r.fact) }))
+  const falseNow = new Set(refuted.map((r) => r.id))
+  const proven = list(looked.proven).map(String).filter((id) => known.has(id) && !falseNow.has(id))
+  const unchecked = list(looked.unchecked).filter((u) => known.has(u.id) && !falseNow.has(u.id)).map((u) => ({ id: u.id, why: String(u.why || '') }))
+  const aside = list(looked.aside).map(String).filter((id) => known.has(id) && !falseNow.has(id))
+  const broken = list(looked.broken).filter((b) => plainWords(b.key) !== '').map((b) => ({ key: String(b.key), fact: String(b.fact || '') }))
+  const seen = new Set([...proven, ...falseNow, ...unchecked.map((u) => u.id), ...aside])
+  if (claims.some((c) => !seen.has(c.id)) || refuted.length + broken.length === 0) return null
+  return { proven, refuted, unchecked, aside, broken }
 }
 async function milestone(m, n, before, where) {
   let stopped = null
@@ -655,6 +683,7 @@ Milestone "${m.title}" (${m.id}), contract \`${m.contractId}\` (read it: \`sz-ey
 2. Start the product that way and see it running: its first screen in a browser, or for a phone app the build installed and opened on a simulator of your own (\`sz:verify\` says how, and what a first build of a phone app needs).
 3. If it does not start, the cause is yours to find and to fix in the product. Do not edit the contract or the flows and tests it froze, and record no verdicts. Commit the fix, and correct \`.sz/map.md\` if how it is launched has changed.
 4. If it cannot be started for a reason outside the product (a download that does not arrive, a tool that is not on this machine), do not wait on it: a download or a build that shows nothing new for a minute is stopped, and you say what stopped it under "blocked", with the figure.
+5. Say what the contract records of an earlier look. \`sz-eyes contract show ${m.contractId}\` marks every claim: [증명됨] proven, [반증됨] shown false, [확인 못 함] not checked, [주인이 정할 것] set aside for the owner, [아직] nobody has looked. If no claim is marked [아직], return under "looked" the ids under each of the four, with for each claim shown false what was found instead (from its note, in a sentence or two), and under its "broken" each promise of earlier work that \`sz-eyes standing\` lists as broken. If any claim is still [아직], leave "looked" out. You only read them: a verdict is recorded by whoever looks, and that is not you.
 
 Stop what you started, and return the exact command that starts it now.`,
         { label: `start:${m.id}`, phase: 'Build', schema: STARTED, ...effort('build'), ...model('build') },
@@ -731,7 +760,7 @@ ${many ? 'Each' : 'It'} was frozen by that contract or by an earlier one that is
         again
           ? `This is a second look, after a fix. ${again.claims.length > 0 ? `These claims of the contract were shown false before: ${again.claims.join(', ')}. Check each from the start, on the product as it is now, and record it with \`sz-eyes contract claim\`. ` : ''}${again.standing.length > 0 ? `These promises of earlier work were found broken: ${again.standing.join(', ')}. Show each again and record it with ${record}. ` : ''}A fix can break a neighbour: ${share ? `show again your other claims, each by its own flow, test or command${share.k === 0 ? ', and what stood before this work (\`sz-eyes standing\`) with the project\'s quick checks (its type check and its tests of pure rule)' : ''}` : 'show again this contract\'s other claims and what stood before (\`sz-eyes standing\`) by the project\'s whole check command run once where it has one, and a flow, test or command by itself only where that run failed or says nothing of a claim'}; flows that would get in each other's way on one copy (one moves the clock, one restarts the backend, one fills the database to its limits) run each on a copy of the product of its own (\`sz-eyes copy\`), at the same time and not one after another; report whatever fails now (a claim of this contract under "refuted", recorded with \`sz-eyes contract claim\`; a promise of earlier work under "broken", recorded as above). Claims you did not look at again keep their verdict: leave them out. A claim about every screen at the product's limits is judged by its flow, at the limits the spec states: an input the product does not accept shows nothing about it. ${again.noticed === null ? 'Under "noticed" return only what you notice that is new.' : `Before the fix, this was noticed outside the claims: ${again.noticed.length > 0 ? again.noticed.map((n) => `[${n}]`).join(' ') : '(nothing)'}. Under "noticed" return each of those that is still so on the product as it is now (drop one the fix has ended) and whatever you notice that is new.`}`
           : `Give every claim a verdict and record each with \`sz-eyes contract claim\`. Then show again what stood before this work (\`sz-eyes standing\`) and record each with ${record}.`
-      }${share ? ` You are one of ${share.of} verifiers looking at this contract at the same time. Yours are these claims: ${share.part.join(', ')}. Give a verdict to these and to no other. ${share.k === 0 ? 'You are also the one who shows again what stood before this work.' : 'Do not show again what stood before this work: another verifier does.'} Start a copy of the product of your own, on a port of your own and with a place of its own for what it stores (\`sz-eyes copy <a folder outside the project>\` makes one from what is committed: its files, its installed dependencies, a stack name of its own, and \`--with <path>\` what the map says is built and not in git; the map says how it is launched; never the same database file or folder as another copy) and, if it runs on a simulator, a simulator of your own (\`sz-eyes ios spare --name sz-${m.id}-${share.k + 1}\`), and stop what you started when you are done.` : ''}${again ? '' : WRITE_FLOWS(built.contractId)}${m.first && !again && toDrawing ? AS_DRAWN : ''}${REAL_LOOK(m)} I am telling you nothing about whether any claim is true. Record what you notice that no claim covers with \`sz-eyes contract notice\`, stop any server you start, and return the verdicts: under "broken" every promise of earlier work that does not hold now, under "held" every one you showed again that holds.`,
+      }${share ? ` You are one of ${share.of} verifiers looking at this contract at the same time. Yours are these claims: ${share.part.join(', ')}. Give a verdict to these and to no other. ${share.k === 0 ? 'You are also the one who shows again what stood before this work.' : 'Do not show again what stood before this work: another verifier does.'} Start a copy of the product of your own, on a port of your own and with a place of its own for what it stores (\`sz-eyes copy <a folder outside the project>\` makes one from what is committed: its files, its installed dependencies, a stack name of its own, and \`--with <path>\` what the map says is built and not in git; the map says how it is launched; never the same database file or folder as another copy) and, if it runs on a simulator, a simulator of your own (\`sz-eyes ios spare --name sz-${m.id}-${share.k + 1}\`), and stop what you started when you are done: a server by its process id, then the copy with \`sz-eyes copy <its folder> --end\`, which stops its stack before the folder goes (never remove a copy's folder yourself).` : ''}${again ? '' : WRITE_FLOWS(built.contractId)}${m.first && !again && toDrawing ? AS_DRAWN : ''}${REAL_LOOK(m)} I am telling you nothing about whether any claim is true. Record what you notice that no claim covers with \`sz-eyes contract notice\`, stop any server you start, and return the verdicts: under "broken" every promise of earlier work that does not hold now, under "held" every one you showed again that holds.`,
       { label: `verify:${m.id}${again ? ':again' : ''}${share ? `:${share.k + 1}of${share.of}` : ''}`, phase: 'Verify', agentType: 'sz:verifier', schema: VERDICT, ...effort('verify') },
     )
   // A milestone with much to show, its flows still to be written, is looked at by up to five verifiers at once,
@@ -783,15 +812,22 @@ ${many ? 'Each' : 'It'} was frozen by that contract or by an earlier one that is
     })
     // What was noticed before is the first verifier's to carry on; the others add only what is new.
     const added = looks.slice(1).flatMap((look) => (look && look.noticed) || [])
-    all.noticed = looks[0] && looks[0].noticed !== undefined ? [...looks[0].noticed, ...added] : added.length > 0 ? [...again.noticed, ...added] : undefined
+    all.noticed = looks[0] && looks[0].noticed !== undefined ? [...looks[0].noticed, ...added] : added.length > 0 ? [...(again.noticed || []), ...added] : undefined
     return all
   }
-  let verdict = await lookTogether()
+  // A milestone an earlier run looked at whole and left with claims shown false is taken up at the fix: what was
+  // shown false is mended, and every claim is shown again after it, as after any fix. (2026-11-19: a first pass
+  // stopped with two of twenty claims shown false; to go on, it would have been looked at whole again by five
+  // verifiers, three quarters of an hour, before anyone mended the two.)
+  const earlier = resumed && started ? lookedBefore(started.looked, m.claims) : null
+  if (earlier) log(`${m.title}: an earlier run looked at all of it and left ${earlier.refuted.length} claim(s) shown false${earlier.broken.length > 0 ? ` and ${earlier.broken.length} promise(s) of earlier work broken` : ''} (${[...earlier.refuted.map((r) => r.id), ...earlier.broken.map((b) => b.key)].join(', ')}): those are mended first, and every claim is shown again after the fix`)
+  // noticed: null = what that look noticed is in the contract and was not handed on; whoever looks next adds what is new.
+  let verdict = earlier ? { proven: earlier.proven, refuted: earlier.refuted, unchecked: earlier.unchecked, broken: earlier.broken, held: [], noticed: null, stood: undefined, sandbox: '' } : await lookTogether()
   // A claim can be false because its own words are wrong: it repeats a fact about the world that the source
   // gives otherwise. No fix makes it true, and only the owner may change what was agreed. It is set aside for
   // them by someone who built nothing, with where the fact is read, and the work goes on. (Two of four runs on
   // one request stopped for the night on one such claim each; one of them had tried to fix the product twice.)
-  const setAside = []
+  const setAside = earlier ? earlier.aside.map((id) => ({ id, ruling: 'set aside for the owner by an earlier run: the contract has the ruling' })) : []
   const rule = async (unfixed) => {
     if (verdict.refuted.length === 0) return
     // After a fix, only what the fixer says cannot be made true is ruled on: the claims it mended are looked at
@@ -823,7 +859,17 @@ Change no product code, no flow, no test and no claim. Return what you decided f
     verdict = { ...verdict, refuted: verdict.refuted.filter((r) => !aside.some((d) => d.id === r.id)) }
     for (const d of aside) log(`${m.title}: claim "${d.id}" is set aside for the owner (its words are wrong, not the product): ${d.ruling.slice(0, 200)}`)
   }
-  for (let round = 1; round <= 2 && verdict && verdict.refuted.length + (verdict.broken || []).length > 0; round++) {
+  // A claim is handed to a fixer twice at most, and a milestone is mended four times at most: what a look shows
+  // false for the first time has not had its fix yet. (Until 2026-11-19 a milestone was mended twice, whatever was
+  // found when. A first pass stopped that night "after two fixes" with two claims shown false: one found only at
+  // the third look, one mended once. Each fix had made true what it was handed, and each look had found something
+  // the one before had not.)
+  const fixes = new Map()
+  const owing = () => (verdict ? [...verdict.refuted.map((r) => r.id), ...(verdict.broken || []).map((b) => b.key)] : [])
+  let rounds = 0
+  for (let round = 1; round <= 4 && owing().length > 0 && owing().every((key) => (fixes.get(key) || 0) < 2); round++) {
+    rounds = round
+    for (const key of owing()) fixes.set(key, (fixes.get(key) || 0) + 1)
     const wrong = verdict.refuted.map((r) => `- ${r.id}: ${r.fact}`).join('\n') || '(none)'
     const broke = (verdict.broken || []).map((b) => `- ${b.key}: ${b.fact}`).join('\n')
     const mended = await agent(
@@ -840,7 +886,7 @@ Find the cause of each in the product and fix it there. Where a claim is shown b
     // What the fixer says cannot be made true is ruled on before anyone looks again: a claim set aside is not looked at twice more.
     if (mended && Array.isArray(mended.notFixed) && mended.notFixed.length > 0) await rule(mended.notFixed.map((line) => String(line)))
     if (verdict.refuted.length + (verdict.broken || []).length === 0) break
-    const again = await lookAgain({ claims: verdict.refuted.map((r) => r.id), standing: (verdict.broken || []).map((b) => b.key), noticed: verdict.noticed || [] })
+    const again = await lookAgain({ claims: verdict.refuted.map((r) => r.id), standing: (verdict.broken || []).map((b) => b.key), noticed: verdict.noticed === null ? null : verdict.noticed || [] })
     if (!again) break
     // A claim keeps its earlier verdict unless this look gave it a new one: what was shown false and was not
     // looked at again is still false, and a promise found broken is mended only when it was shown to hold.
@@ -857,7 +903,7 @@ Find the cause of each in the product and fix it there. Where a claim is shown b
       broken: [...(verdict.broken || []).filter((b) => !held.has(b.key) && !brokenNow.has(b.key)), ...(again.broken || [])],
       stood: again.stood === undefined ? verdict.stood : again.stood,
       // The second look was handed what the first noticed and returns what of it is still so, plus what is new.
-      noticed: again.noticed === undefined ? verdict.noticed || [] : again.noticed,
+      noticed: again.noticed === undefined ? verdict.noticed : again.noticed,
     }
   }
   if (verdict && verdict.refuted.length > 0) await rule([])
@@ -895,7 +941,7 @@ Change no product code.`,
     return { entry, stopped }
   }
   if (verdict.refuted.length + broken.length > 0) {
-    stopped = `milestone "${m.title}" still has ${verdict.refuted.length} claim(s) shown false and ${broken.length} promise(s) of earlier work broken after two fixes: ${[...verdict.refuted.map((r) => `${r.id} (${r.fact})`), ...broken.map((b) => `${b.key} (${b.fact})`)].join('; ')}`
+    stopped = `milestone "${m.title}" still has ${verdict.refuted.length} claim(s) shown false and ${broken.length} promise(s) of earlier work broken after ${['no fix', 'one fix', 'two fixes', 'three fixes', 'four fixes'][rounds]}${rounds > 2 || owing().some((key) => (fixes.get(key) || 0) >= 2) ? ' (a claim is handed to a fixer twice at most, and a milestone is mended four times at most)' : ''}: ${[...verdict.refuted.map((r) => `${r.id} (${r.fact})`), ...broken.map((b) => `${b.key} (${b.fact})`)].join('; ')}`
     log(stopped)
     return { entry, stopped }
   }
