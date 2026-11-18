@@ -258,7 +258,20 @@ test('a new product is planned twice: its first pass alone, and what comes after
       close: closed,
     },
   );
-  assert.deepEqual(big.calls.filter((c) => c.label.startsWith('verify')).map((c) => c.label), ['verify:m1:1of3', 'verify:m1:2of3', 'verify:m1:3of3', 'verify:m1:again']);
+  // After the fix the look is shared too, by fewer: the flows are written, and each verifier shows its own claims
+  // again. (2026-11-18: one verifier took 33 minutes over 17 claims at the second look, the fix behind it.)
+  assert.deepEqual(big.calls.filter((c) => c.label.startsWith('verify')).map((c) => c.label), ['verify:m1:1of3', 'verify:m1:2of3', 'verify:m1:3of3', 'verify:m1:again:1of2', 'verify:m1:again:2of2']);
+  const [againFirst, againSecond] = ['verify:m1:again:1of2', 'verify:m1:again:2of2'].map((label) => big.calls.find((c) => c.label === label)!.prompt);
+  assert.match(againSecond!, /This is a second look, after a fix\. These claims of the contract were shown false before: c7\. Check each from the start/);
+  assert.match(againSecond!, /You are one of 2 verifiers[\s\S]*Yours are these claims: c6, c7, c8, c9, c10\. Give a verdict to these and to no other\. Do not show again what stood before this work/);
+  assert.match(againSecond!, /show again your other claims, each by its own flow, test or command; flows that would get in each other's way/);
+  assert.doesNotMatch(againSecond!, /whole check command|noticed outside the claims/, 'the whole check and what was noticed before are the first verifier\'s');
+  assert.match(againSecond!, /Under "noticed" return only what you notice that is new/);
+  assert.doesNotMatch(againFirst!, /were shown false before/, 'a verifier with no mended claim of its own only shows its claims again');
+  assert.match(againFirst!, /Yours are these claims: c1, c2, c3, c4, c5\./);
+  assert.match(againFirst!, /show again your other claims, each by its own flow, test or command, and what stood before this work \(`sz-eyes standing`\) with the project's quick checks/);
+  assert.match(againFirst!, /this was noticed outside the claims: \[첫째가 본 것\]/);
+  assert.match(againFirst!, /Start a copy of the product of your own/);
   const second = big.calls.find((c) => c.label === 'verify:m1:2of3')!.prompt;
   assert.match(second, /You are one of 3 verifiers[\s\S]*Yours are these claims: c4, c5, c6, c7\. Give a verdict to these and to no other\. Do not show again what stood before this work/);
   assert.match(second, /Start a copy of the product of your own, on a port of your own and with a place of its own for what it stores/);

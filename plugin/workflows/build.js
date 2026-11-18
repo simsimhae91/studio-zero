@@ -611,12 +611,13 @@ const FIRST = `This milestone is the product's first pass: all of it, in one str
 const EVERY_SCREEN = /every screen|all (the )?screens|each screen|모든 화면|화면마다|화면 \d+개|\d+개 화면/i
 const weightOf = (c) => (c.kind === 'owner' ? 0 : c.kind === 'flow' || c.kind === 'look' ? (EVERY_SCREEN.test(String(c.says || '')) ? 6 : 3) : 1)
 // The claims in the plan's order, cut where the running cost is nearest to an even share: null when one verifier
-// is enough (about four flows' worth), five shares at most.
-const sharesOf = (claims) => {
+// is enough (about four flows' worth at a first look), five shares at most. A look after a fix takes twice as
+// much a verifier and three at most: the flows are written by then.
+const sharesOf = (claims, each = 10, most = 5) => {
   const cost = claims.map(weightOf)
   const total = cost.reduce((a, b) => a + b, 0)
-  if (total <= 12) return null
-  const shares = Math.min(5, Math.ceil(total / 10))
+  if (total <= each + 2) return null
+  const shares = Math.min(most, Math.ceil(total / each))
   const parts = []
   let from = 0
   let sum = 0
@@ -728,10 +729,10 @@ ${many ? 'Each' : 'It'} was frozen by that contract or by an earlier one that is
     agent(
       `Verify contract \`${built.contractId}\` of the project in ${here}.${PLACE}${SAND} The product is launched like this: ${built.launch}. ${
         again
-          ? `This is a second look, after a fix. ${again.claims.length > 0 ? `These claims of the contract were shown false before: ${again.claims.join(', ')}. Check each from the start, on the product as it is now, and record it with \`sz-eyes contract claim\`. ` : ''}${again.standing.length > 0 ? `These promises of earlier work were found broken: ${again.standing.join(', ')}. Show each again and record it with ${record}. ` : ''}A fix can break a neighbour: show again this contract's other claims and what stood before (\`sz-eyes standing\`) by the project's whole check command run once where it has one, and a flow, test or command by itself only where that run failed or says nothing of a claim; flows that would get in each other's way on one copy (one moves the clock, one restarts the backend, one fills the database to its limits) run each on a copy of the product of its own (\`sz-eyes copy\`), at the same time and not one after another; report whatever fails now (a claim of this contract under "refuted", recorded with \`sz-eyes contract claim\`; a promise of earlier work under "broken", recorded as above). Claims you did not look at again keep their verdict: leave them out. A claim about every screen at the product's limits is judged by its flow, at the limits the spec states: an input the product does not accept shows nothing about it. Before the fix, this was noticed outside the claims: ${again.noticed.length > 0 ? again.noticed.map((n) => `[${n}]`).join(' ') : '(nothing)'}. Under "noticed" return each of those that is still so on the product as it is now (drop one the fix has ended) and whatever you notice that is new.`
+          ? `This is a second look, after a fix. ${again.claims.length > 0 ? `These claims of the contract were shown false before: ${again.claims.join(', ')}. Check each from the start, on the product as it is now, and record it with \`sz-eyes contract claim\`. ` : ''}${again.standing.length > 0 ? `These promises of earlier work were found broken: ${again.standing.join(', ')}. Show each again and record it with ${record}. ` : ''}A fix can break a neighbour: ${share ? `show again your other claims, each by its own flow, test or command${share.k === 0 ? ', and what stood before this work (\`sz-eyes standing\`) with the project\'s quick checks (its type check and its tests of pure rule)' : ''}` : 'show again this contract\'s other claims and what stood before (\`sz-eyes standing\`) by the project\'s whole check command run once where it has one, and a flow, test or command by itself only where that run failed or says nothing of a claim'}; flows that would get in each other's way on one copy (one moves the clock, one restarts the backend, one fills the database to its limits) run each on a copy of the product of its own (\`sz-eyes copy\`), at the same time and not one after another; report whatever fails now (a claim of this contract under "refuted", recorded with \`sz-eyes contract claim\`; a promise of earlier work under "broken", recorded as above). Claims you did not look at again keep their verdict: leave them out. A claim about every screen at the product's limits is judged by its flow, at the limits the spec states: an input the product does not accept shows nothing about it. ${again.noticed === null ? 'Under "noticed" return only what you notice that is new.' : `Before the fix, this was noticed outside the claims: ${again.noticed.length > 0 ? again.noticed.map((n) => `[${n}]`).join(' ') : '(nothing)'}. Under "noticed" return each of those that is still so on the product as it is now (drop one the fix has ended) and whatever you notice that is new.`}`
           : `Give every claim a verdict and record each with \`sz-eyes contract claim\`. Then show again what stood before this work (\`sz-eyes standing\`) and record each with ${record}.`
       }${share ? ` You are one of ${share.of} verifiers looking at this contract at the same time. Yours are these claims: ${share.part.join(', ')}. Give a verdict to these and to no other. ${share.k === 0 ? 'You are also the one who shows again what stood before this work.' : 'Do not show again what stood before this work: another verifier does.'} Start a copy of the product of your own, on a port of your own and with a place of its own for what it stores (\`sz-eyes copy <a folder outside the project>\` makes one from what is committed: its files, its installed dependencies, a stack name of its own, and \`--with <path>\` what the map says is built and not in git; the map says how it is launched; never the same database file or folder as another copy) and, if it runs on a simulator, a simulator of your own (\`sz-eyes ios spare --name sz-${m.id}-${share.k + 1}\`), and stop what you started when you are done.` : ''}${again ? '' : WRITE_FLOWS(built.contractId)}${m.first && !again && toDrawing ? AS_DRAWN : ''}${REAL_LOOK(m)} I am telling you nothing about whether any claim is true. Record what you notice that no claim covers with \`sz-eyes contract notice\`, stop any server you start, and return the verdicts: under "broken" every promise of earlier work that does not hold now, under "held" every one you showed again that holds.`,
-      { label: `verify:${m.id}${again ? ':again' : share ? `:${share.k + 1}of${share.of}` : ''}`, phase: 'Verify', agentType: 'sz:verifier', schema: VERDICT, ...effort('verify') },
+      { label: `verify:${m.id}${again ? ':again' : ''}${share ? `:${share.k + 1}of${share.of}` : ''}`, phase: 'Verify', agentType: 'sz:verifier', schema: VERDICT, ...effort('verify') },
     )
   // A milestone with much to show, its flows still to be written, is looked at by up to five verifiers at once,
   // each with claims of its own and a copy of the product of its own. The fix waits for the slowest of them, so
@@ -758,6 +759,31 @@ ${many ? 'Each' : 'It'} was frozen by that contract or by an earlier one that is
       if (look.stood !== undefined) all.stood = look.stood
       if (!all.sandbox && (look.sandbox || '').trim() !== '') all.sandbox = look.sandbox
     })
+    return all
+  }
+  // The look after a fix is shared as well, by fewer: each verifier checks from the start what was mended among
+  // its claims and shows its other claims again by their own checks, and the first also shows what stood before
+  // and is handed what was noticed. A claim nobody looked at again keeps its verdict, as with one verifier.
+  // (2026-11-18: one verifier took 33 minutes over 17 claims at this look, with the fix waiting behind it.)
+  const lookAgain = async (again) => {
+    const parts = sharesOf(m.claims, 20, 3)
+    if (!parts) return verify(again)
+    const looks = await beside(parts.map((part, k) => () => verify({ claims: again.claims.filter((id) => part.includes(id)), standing: k === 0 ? again.standing : [], noticed: k === 0 ? again.noticed : null }, { part, k, of: parts.length })))
+    if (looks.every((look) => !look)) return null
+    const all = { proven: [], refuted: [], unchecked: [], broken: [], held: [], noticed: undefined, stood: undefined }
+    looks.forEach((look, k) => {
+      if (!look) return
+      const mine = new Set(parts[k])
+      all.proven.push(...look.proven.filter((id) => mine.has(id)))
+      all.refuted.push(...look.refuted.filter((r) => mine.has(r.id)))
+      all.unchecked.push(...look.unchecked.filter((u) => mine.has(u.id)))
+      all.broken.push(...(look.broken || []))
+      all.held.push(...(look.held || []))
+      if (look.stood !== undefined) all.stood = look.stood
+    })
+    // What was noticed before is the first verifier's to carry on; the others add only what is new.
+    const added = looks.slice(1).flatMap((look) => (look && look.noticed) || [])
+    all.noticed = looks[0] && looks[0].noticed !== undefined ? [...looks[0].noticed, ...added] : added.length > 0 ? [...again.noticed, ...added] : undefined
     return all
   }
   let verdict = await lookTogether()
@@ -814,7 +840,7 @@ Find the cause of each in the product and fix it there. Where a claim is shown b
     // What the fixer says cannot be made true is ruled on before anyone looks again: a claim set aside is not looked at twice more.
     if (mended && Array.isArray(mended.notFixed) && mended.notFixed.length > 0) await rule(mended.notFixed.map((line) => String(line)))
     if (verdict.refuted.length + (verdict.broken || []).length === 0) break
-    const again = await verify({ claims: verdict.refuted.map((r) => r.id), standing: (verdict.broken || []).map((b) => b.key), noticed: verdict.noticed || [] })
+    const again = await lookAgain({ claims: verdict.refuted.map((r) => r.id), standing: (verdict.broken || []).map((b) => b.key), noticed: verdict.noticed || [] })
     if (!again) break
     // A claim keeps its earlier verdict unless this look gave it a new one: what was shown false and was not
     // looked at again is still false, and a promise found broken is mended only when it was shown to hold.
