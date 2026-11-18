@@ -173,10 +173,14 @@ test('a new product is planned twice: its first pass alone, and what comes after
   assert.doesNotMatch(firstBuild, /Write the oracle first/);
   const laterBuild = ran.calls.find((c) => c.label === 'build:m2')!.prompt;
   assert.doesNotMatch(laterBuild, /This milestone is the product's first pass/);
-  assert.match(laterBuild, /Write the oracle first: every flow or test file a claim points at/, 'work on a product that stands keeps its checks before its code');
+  // Work on a product that stands is checked the same way: its builder writes the tests of pure rule first and
+  // leaves the flows to whoever verifies. (2026-11-18: a phone milestone's builder wrote its flows before the
+  // code, drove a simulator against them for 92 minutes, and ten of them were then ruled wrong one by one.)
+  assert.doesNotMatch(laterBuild, /Write the oracle first/);
+  assert.match(laterBuild, /Write first only the tests of what is pure rule[\s\S]*Do not write the flows: whoever verifies writes each of them on the product as it stands/);
   assert.match(laterBuild, /where the product's screens were drawn before it was built \(`\.sz\/design\/direction\.md` is there\), the look is the one drawn/, 'a later milestone keeps to the drawing');
   assert.match(ran.calls.find((c) => c.label === 'verify:m1')!.prompt, /The flows of this contract have not been written[\s\S]*sz-eyes contract add-check m1 --frozen/);
-  assert.doesNotMatch(ran.calls.find((c) => c.label === 'verify:m2')!.prompt, /The flows of this contract have not been written/);
+  assert.match(ran.calls.find((c) => c.label === 'verify:m2')!.prompt, /The flows of this contract have not been written[\s\S]*sz-eyes contract add-check m2 --frozen/);
   assert.match(ran.calls.find((c) => c.label === 'plan:after')!.prompt, /This run has just built and closed the product's first pass[\s\S]*go through the pictures of every area and what its verifiers noticed[\s\S]*what the owner has said since the first pass comes before the spec/);
   assert.ok(ran.logs.some((l) => /After it, planned when it stands: 대결 깊이 \/ 폰에서/.test(l)), ran.logs.join('\n'));
   assert.ok(ran.logs.some((l) => /^FIRST PASS READY\. The whole product can be looked at now: PORT=\$\(sz-eyes port\) node server\.mjs\. Every screen: r\.html/.test(l)), ran.logs.join('\n'));
@@ -184,6 +188,12 @@ test('a new product is planned twice: its first pass alone, and what comes after
   assert.equal(ran.result.stopped, null);
   assert.deepEqual(ran.result.milestones.map((m: { id: string }) => m.id), ['m1', 'm2', 'm3']);
   assert.deepEqual(ran.result.notBuilt, []);
+
+  // A run asked to end with its first pass does not plan what comes after: the run that builds it plans it.
+  const capped = await run({ request: 'x', maxMilestones: 1 }, { plan: twice({ mode: 'continue', summary: 's', milestones: [{ ...cut, state: 'closed' }, deep('m2')] }), build: built, verify: proven, close: closed });
+  assert.deepEqual(capped.calls.map((c) => c.label), ['plan', 'build:m1', 'verify:m1', 'close:m1']);
+  assert.equal(capped.result.stopped, null);
+  assert.deepEqual(capped.result.notBuilt, ['대결 깊이', '폰에서']);
 
   // A planner that returns the later work as milestones at once: only the first pass is built from that plan.
   const eager = await run({ request: 'x' }, { plan: (_c: Call, nth: number) => (nth === 0 ? { mode: 'new', summary: 's', milestones: [cut, deep('m2'), deep('m3')] } : { mode: 'continue', summary: 's', milestones: [deep('m9')] }), build: built, verify: proven, close: closed });
@@ -208,8 +218,11 @@ test('a new product is planned twice: its first pass alone, and what comes after
   assert.match(resumed.calls.find((c) => c.label === 'build:m1')!.prompt, /This milestone is the product's first pass/);
   assert.ok(resumed.logs.some((l) => /^continuing\. First pass: 첫 판\. After it, planned when it stands: 대결 깊이/.test(l)), resumed.logs.join('\n'));
 
-  // A first pass with many claims is looked at by three verifiers at once, each with claims and a copy of the product of its own.
-  const many = Array.from({ length: 10 }, (_, k) => claim(`c${k + 1}`));
+  // A milestone with much to show is looked at by several verifiers at once, each with claims and a copy of the
+  // product of its own. How many, and which claims each has, goes by what the claims cost to show: a flow or a
+  // look is three tests' worth. (2026-11-17: twenty claims cut in three by their order gave one verifier seven
+  // flows and 74 minutes, the others 45 and 61; the fix waited for the slowest.)
+  const many = Array.from({ length: 10 }, (_, k) => ({ ...claim(`c${k + 1}`), kind: 'flow', ref: `flows/c${k + 1}.flow` }));
   const big = await run(
     { request: 'x' },
     {
@@ -227,8 +240,18 @@ test('a new product is planned twice: its first pass alone, and what comes after
   );
   assert.deepEqual(big.calls.filter((c) => c.label.startsWith('verify')).map((c) => c.label), ['verify:m1:1of3', 'verify:m1:2of3', 'verify:m1:3of3', 'verify:m1:again']);
   const second = big.calls.find((c) => c.label === 'verify:m1:2of3')!.prompt;
-  assert.match(second, /You are one of 3 verifiers[\s\S]*Yours are these claims: c5, c6, c7, c8\. Give a verdict to these and to no other\. Do not show again what stood before this work/);
+  assert.match(second, /You are one of 3 verifiers[\s\S]*Yours are these claims: c4, c5, c6, c7\. Give a verdict to these and to no other\. Do not show again what stood before this work/);
   assert.match(second, /Start a copy of the product of your own, on a port of your own and with a place of its own for what it stores/);
+  assert.match(second, /if it runs on a simulator, a simulator of your own/);
+  // Ten tests are one verifier's work; thirteen flows, two looks over every screen and four small checks are five's.
+  const shares = async (claims: unknown[]): Promise<string[][]> => {
+    const looked = await run({ request: 'x' }, { plan: () => ({ mode: 'new', summary: 's', milestones: [{ id: 'm1', title: '첫 판', builds: 'b', claims }] }), build: built, verify: () => ({ proven: [], refuted: [], unchecked: [] }), close: closed });
+    return looked.calls.filter((c) => c.label.startsWith('verify')).map((c) => (/Yours are these claims: ([^.]*)\./.exec(c.prompt)?.[1] ?? 'all').split(', '));
+  };
+  assert.deepEqual(await shares(Array.from({ length: 10 }, (_, k) => claim(`t${k + 1}`))), [['all']]);
+  const flow = (id: string, says = `${id} is true`) => ({ id, says, kind: 'flow', ref: `e2e/${id}.sh` });
+  const diet = [claim('rules'), claim('tips'), flow('signin'), { id: 'kakao', says: 'the owner signs in', kind: 'owner', ref: 'the app' }, ...['weigh', 'edge', 'random', 'invite', 'ai', 'battle', 'result', 'rank', 'collect', 'log', 'kept'].map((id) => flow(id)), { id: 'strangers', says: 's', kind: 'command', ref: 'c' }, { id: 'ops', says: 'o', kind: 'command', ref: 'c' }, { id: 'as-drawn', says: 'every screen is built as drawn', kind: 'look', ref: 'pairs' }, flow('limits', 'every screen holds at its limits'), { id: 'feel', says: 'the owner says it is the app', kind: 'owner', ref: 'the app' }];
+  assert.deepEqual(await shares(diet), [['rules', 'tips', 'signin', 'kakao', 'weigh', 'edge'], ['random', 'invite', 'ai'], ['battle', 'result', 'rank', 'collect'], ['log', 'kept', 'strangers', 'ops'], ['as-drawn', 'limits', 'feel']]);
   assert.match(big.calls.find((c) => c.label === 'verify:m1:1of3')!.prompt, /You are also the one who shows again what stood before this work/);
   const entry = big.result.milestones[0];
   assert.deepEqual([...entry.proven].sort(), ['c1', 'c2', 'c3', 'c5', 'c6', 'c7', 'c9'], 'a verdict counts only from the verifier that was given the claim (c9 from the first is not taken), and c7 is proven after its fix');
@@ -255,8 +278,14 @@ test('a claim about every screen is shown once at the product\'s limits, mended 
   assert.match(look, /Report every finding it prints, not the first/);
   const mend = ran.calls.find((c) => c.label === 'fix:m1:1')!.prompt;
   assert.match(mend, /mend the cause wherever the same thing is shown, not only in the place named, and run that claim's flow over the whole product until it reports nothing before you return/);
+  // Whoever mends runs the checks of what it mended and the quick ones; the rest is run once, by whoever looks
+  // again. (2026-11-17: a fixer ran sixteen flows one after another and waited 48 of its 74 minutes on them; the
+  // verifier then ran them all again.)
+  assert.match(mend, /Run the check of each claim you were handed until it passes[\s\S]*the project's quick checks \(its type check and its tests of pure rule\)\. Do not run the other flows/);
+  assert.doesNotMatch(mend, /Check that what was already true still is/);
   const again = ran.calls.find((c) => c.label === 'verify:m1:again')!.prompt;
   assert.match(again, /by the project's whole check command run once where it has one, and a flow, test or command by itself only where that run failed or says nothing of a claim/);
+  assert.match(again, /each on a copy of the product of its own, at the same time and not one after another/);
   assert.doesNotMatch(again, /run once more every flow, test and command/, 'the second look is no longer told to run each check by itself');
   assert.match(again, /judged by its flow, at the limits the spec states: an input the product does not accept shows nothing about it/);
   assert.doesNotMatch(again, /The flows of this contract have not been written/, 'flows are written at the first look only');
