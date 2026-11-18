@@ -1,0 +1,6 @@
+18:40:25 design start
+19:25:59 design end (exit 0)
+19:49:49 build start
+00:49:51 build end (exit 142)
+00:51:06 native start
+06:19:49 native end (exit 0)
