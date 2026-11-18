@@ -706,10 +706,18 @@ Do not judge your own claims and do not record verdicts: someone who did not bui
   // A frozen check the builder says is itself wrong goes to someone who neither built nor judges: the arbiter
   // corrects how it checks, never what it checks, and writes the correction into the contract. (The first real
   // run stopped here for good: a check its builder had written with a quoting error could be fixed by nobody.)
-  for (const dispute of built.disputes || []) {
+  // All of a milestone's disputes go to one arbiter in one sitting: what the checks need is started once, and what
+  // one check showed about the machine is known for the next. (2026-11-18: eleven disputes went to eleven arbiters
+  // one after another for 75 minutes, each starting the product again, three in a row stopped by the same tip of
+  // Safari's; and a fault one of them corrected in one flow was left in another that called the same helper.)
+  const disputes = (built.disputes || []).filter((d) => d && plainWords(d.file) !== '')
+  if (disputes.length > 0) {
+    const many = disputes.length > 1
     await agent(
-      `Settle a dispute about a frozen check, met while building contract \`${built.contractId}\` in the project in ${here}.${PLACE} The file: \`${dispute.file}\`. It was frozen by that contract or by an earlier one that is closed: the contracts under \`.sz/contracts/\` say which, and a correction is recorded on the contract that froze it. What the builder says is wrong with it: ${dispute.problem}. The product is launched like this: ${built.launch}. Decide which it is (the check, the product, the claim, or a claim that what the owner asked later has replaced), act as your instructions say for that case, and return what you decided.`,
-      { label: `arbiter:${m.id}`, phase: 'Build', agentType: 'sz:arbiter', ...effort('verify'), schema: { type: 'object', properties: { which: { type: 'string', enum: ['check', 'product', 'claim', 'replaced'] }, changed: { type: 'string' }, now: { type: 'string' } }, required: ['which', 'now'] } },
+      `Settle ${many ? `${disputes.length} disputes about frozen checks` : 'a dispute about a frozen check'}, met while building contract \`${built.contractId}\` in the project in ${here}.${PLACE} ${many ? 'The files, each with what the builder says is wrong with it' : 'The file, with what the builder says is wrong with it'}:
+${disputes.map((d) => `- \`${d.file}\`: ${d.problem}`).join('\n')}
+${many ? 'Each' : 'It'} was frozen by that contract or by an earlier one that is closed: the contracts under \`.sz/contracts/\` say which, and a correction is recorded on the contract that froze it. The product is launched like this: ${built.launch}.${many ? ' Start what they need once (the product, a simulator of your own) and settle them one after another on it; stop it when you are done.' : ''} Decide ${many ? 'for each ' : ''}which it is (the check, the product, the claim, or a claim that what the owner asked later has replaced), act as your instructions say for that case, and return what you decided${many ? ' for each' : ''}.`,
+      { label: `arbiter:${m.id}`, phase: 'Build', agentType: 'sz:arbiter', ...effort('verify'), schema: { type: 'object', properties: { rulings: { type: 'array', items: { type: 'object', properties: { file: { type: 'string' }, which: { type: 'string', enum: ['check', 'product', 'claim', 'replaced'] }, changed: { type: 'string' }, now: { type: 'string' } }, required: ['file', 'which', 'now'] } } }, required: ['rulings'] } },
     )
   }
 

@@ -800,3 +800,47 @@ test('an agent the workflow starts by type and tells to load skills has the Skil
   // on the run of the first look.
   assert.match(file('verifier'), /\*\*A check proves a claim only when it passes in front of you\.\*\*[^\n]*never left `proven` on an earlier run/);
 });
+
+test('the frozen checks a builder disputes go to one arbiter in one sitting, and a fault other checks share is corrected in them too', async () => {
+  // 2026-11-18, the phone milestone: eleven disputes, eleven arbiters one after another for 75 minutes, each
+  // starting the product again, three in a row stopped by the same Safari tip. One of them corrected a helper's
+  // call in one flow (`r=$(api ...)` loses the status the helper keeps); another flow called it the same way,
+  // passed by chance on the status of an earlier call, and was left as it was.
+  const proven = () => ({ proven: ['one', 'two'], refuted: [], unchecked: [] });
+  const disputing = (disputes: { file: string; problem: string }[]) => ({
+    plan: plan('m1'),
+    build: (call: Call) => ({ ...built(call), disputes }),
+    arbiter: () => ({ rulings: disputes.map((d) => ({ file: d.file, which: 'check', now: 'passes' })) }),
+    verify: proven,
+    close: closed,
+  });
+
+  const three = await run({ request: 'x' }, disputing([
+    { file: 'e2e/ios/01-signin.sh', problem: '따옴표가 잘못되어 셸이 다르게 읽음' },
+    { file: 'e2e/ios/02-weigh.sh', problem: '대기 시간이 10초라 스택이 깨기 전에 끝남' },
+    { file: 'e2e/ios/03-steps.sh', problem: 'r=$(api ...) 뒤에 $CODE가 비어 있음' },
+  ]));
+  const rulings = three.calls.filter((c) => c.label.startsWith('arbiter:'));
+  assert.equal(rulings.length, 1, `one arbiter for the three: ${three.calls.map((c) => c.label).join(', ')}`);
+  const prompt = rulings[0]!.prompt;
+  for (const part of ['`e2e/ios/01-signin.sh`: 따옴표가 잘못되어 셸이 다르게 읽음', '`e2e/ios/02-weigh.sh`: 대기 시간이 10초라', '`e2e/ios/03-steps.sh`: r=$(api ...) 뒤에 $CODE가 비어 있음']) assert.ok(prompt.includes(part), `the arbiter is handed: ${part}`);
+  assert.match(prompt, /Settle 3 disputes about frozen checks/);
+  assert.match(prompt, /Start what they need once[^.]*and settle them one after another on it/);
+  assert.match(prompt, /return what you decided for each/);
+  assert.ok(three.calls.findIndex((c) => c.label.startsWith('arbiter:')) < three.calls.findIndex((c) => c.label.startsWith('verify:')), 'settled before anyone verifies');
+
+  const single = await run({ request: 'x' }, disputing([{ file: 'test/rule.test.mjs', problem: '기대값을 잘못 옮겨 적음' }]));
+  const only = single.calls.filter((c) => c.label.startsWith('arbiter:'));
+  assert.equal(only.length, 1);
+  assert.match(only[0]!.prompt, /Settle a dispute about a frozen check/);
+  assert.ok(only[0]!.prompt.includes('`test/rule.test.mjs`: 기대값을 잘못 옮겨 적음'));
+  assert.doesNotMatch(only[0]!.prompt, /one after another/);
+
+  const none = await run({ request: 'x' }, disputing([]));
+  assert.ok(!none.calls.some((c) => c.label.startsWith('arbiter:')), 'nobody is started when nothing is disputed');
+
+  // The arbiter's own instructions: several files in one sitting, and the same fault wherever it is.
+  const arbiter = readFileSync(fileURLToPath(new URL('../../../plugin/agents/arbiter.md', import.meta.url)), 'utf8');
+  assert.match(arbiter, /one or more frozen files/);
+  assert.match(arbiter, /\*\*The same fault in other checks\.\*\*[^\n]*passes by chance[^\n]*`sz-eyes contract amend`/);
+});
