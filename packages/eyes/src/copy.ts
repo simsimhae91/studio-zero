@@ -63,7 +63,8 @@ export function makeCopy(project: string, folder: string, opts: { at?: string; w
   const hadFolder = existsSync(to);
   try {
     mkdirSync(to, { recursive: true });
-    const unpacked = spawnSync('sh', ['-c', 'git -C "$1" archive "$2" | tar -x -C "$3"', 'sh', from, commit, to], { encoding: 'utf8' });
+    // Everything of the commit but the pictures kept as evidence: thousands of files nobody runs.
+    const unpacked = spawnSync('sh', ['-c', 'git -C "$1" archive "$2" -- . ":(exclude).sz/evidence" | tar -x -C "$3"', 'sh', from, commit, to], { encoding: 'utf8' });
     if (unpacked.status !== 0) throw new EyesError(`the files of ${commit.slice(0, 7)} could not be laid out in ${to}: ${(unpacked.stderr ?? '').trim().split('\n')[0] ?? ''}`);
     // Dependencies where they are installed: beside each package file of the commit.
     const depth = (dir: string): number => (dir === '.' ? 0 : dir.split('/').length);

@@ -31,6 +31,8 @@ function product(): { root: string; project: string; first: string; cleanup: () 
   put(project, 'package.json', '{"name":"alpha"}\n');
   put(project, 'app/package.json', '{"name":"app"}\n');
   put(project, 'src/a.txt', 'committed\n');
+  put(project, '.sz/map.md', '# map\n');
+  put(project, '.sz/evidence/first/screens/a.png', 'a picture\n');
   put(project, 'supabase/config.toml', '# the stack\nproject_id = "alpha"\n\n[api]\nport = 54321\n');
   git(project, 'add', '-A');
   git(project, 'commit', '-q', '-m', 'first');
@@ -59,6 +61,8 @@ test('a copy holds what is committed and the installed dependencies, under a sta
     assert.equal(readFileSync(join(folder, 'src/b.txt'), 'utf8'), 'second\n');
     assert.equal(existsSync(join(folder, 'scratch.txt')), false, 'nothing uncommitted');
     assert.equal(existsSync(join(folder, '.git')), false, 'not a repository: nothing is committed from a copy');
+    assert.equal(readFileSync(join(folder, '.sz/map.md'), 'utf8'), '# map\n');
+    assert.equal(existsSync(join(folder, '.sz/evidence')), false, 'the pictures kept as evidence stay in the project');
     assert.equal(readFileSync(join(folder, 'node_modules/left-pad/index.js'), 'utf8'), 'module.exports = 1;\n');
     assert.equal(readFileSync(join(folder, 'app/node_modules/dep/index.js'), 'utf8'), 'module.exports = 2;\n');
     assert.deepEqual(made.cloned, ['node_modules', 'app/node_modules']);
