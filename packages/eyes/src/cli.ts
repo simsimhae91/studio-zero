@@ -1073,6 +1073,9 @@ async function main(argv: string[]): Promise<number> {
     // The commands below change the contract. Each does its checks inside `updateContract`, on the contract as it
     // is read there under its lock, and prints from what was written: what `contract` above holds may be older.
     if (command === 'freeze') {
+      // A word it does not know is not passed over: the files would be left out and the contract frozen without them.
+      const stray = [...a.words.slice(1), ...[...a.flags.keys()].filter((flag) => flag !== '--frozen' && flag !== '--dir')];
+      if (stray.length > 0) throw new EyesError(`not understood: ${stray.map((word) => `"${word}"`).join(', ')}. sz-eyes contract freeze <id> [--frozen <path>]...: each file is its own \`--frozen <path>\` (a list in one variable is split by bash and not by zsh)`);
       const frozen = updateContract(file, (contract) => {
         if (contract.frozenAt !== null) throw new EyesError(`${id} was frozen at ${contract.frozenAt}`);
         const frozen = [...new Set([...contract.frozen, ...a.all('--frozen')])];

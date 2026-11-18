@@ -256,6 +256,13 @@ test('from the command line: closing makes claims stand, later work cannot close
     assert.equal(eyes(project, 'contract', 'new', 'm2-shares', '--request', '빠지는 사람', '--claim', 'shares|빠진 사람은 안 낸다|test:test/shares.test.mjs', '--supersedes', 'm1-split/split|이제 지출마다 낸 사람끼리만 나눈다').code, 0);
     assert.equal(guard(project, 'flows/split.sh').code, 0, 'the one writing the new contract rewrites the check of the claim it replaces');
     assert.match(eyes(project, 'contract', 'freeze', 'm2-shares', '--frozen', 'flows/nope.sh').text, /not there to freeze: flows\/nope\.sh/);
+    // Words it does not know stop the freeze. (2026-11-18: a builder handed every --frozen in one string its shell
+    // did not split, the contract was frozen with no file, and no correction to its checks could be recorded.)
+    const unsplit = spawnSync(process.execPath, [join(HERE, '../src/cli.ts'), 'contract', 'freeze', 'm2-shares', '--frozen flows/split.sh --frozen flows/all.sh'], { encoding: 'utf8', cwd: project });
+    assert.equal(unsplit.status, 1);
+    assert.match(`${unsplit.stdout}${unsplit.stderr}`, /not understood: "--frozen flows\/split\.sh --frozen flows\/all\.sh"[\s\S]*each file is its own `--frozen <path>`/);
+    assert.match(eyes(project, 'contract', 'freeze', 'm2-shares', 'flows/split.sh').text, /not understood: "flows\/split\.sh"/);
+    // Neither froze it: the freeze below is its first.
     assert.equal(eyes(project, 'contract', 'freeze', 'm2-shares', '--frozen', 'flows/split.sh').code, 0);
     assert.equal(guard(project, 'flows/split.sh').code, 2, 'and from the freeze it is the new contract’s');
     assert.match(eyes(project, 'standing').text, /1 claim\(s\) stand[\s\S]*no longer standing[\s\S]*m1-split\/split[\s\S]*replaced by contract m2-shares/);
