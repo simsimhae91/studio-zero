@@ -20,7 +20,7 @@ import { RelayError, loginCommand } from './login-relay.ts';
 import { DANGEROUS, changesInCode, classify, renderMigrations } from './migrations.ts';
 import { findProducts, overviewPage, renderOverview, viewOf } from './overview.ts';
 import { freePort } from './port.ts';
-import { copyText, makeCopy } from './copy.ts';
+import { copyText, endCopy, makeCopy } from './copy.ts';
 import { RefsError, refsCommand } from './refs.ts';
 import { heldSecrets, ownersVault, parseRun, runWithSecrets, setSecret } from './secrets.ts';
 import { GATE_LINES, lastRelease, releaseContract, releases, renderReleases, type Gate } from './release.ts';
@@ -261,6 +261,11 @@ const USAGE = `sz-eyes: launch what was built, look at it, operate it, and put w
         with the folder's name), so that it shares no database with the project or another copy. Nothing the
         product stored is copied, and it is not a repository. The folder is the last line printed. Launch it
         there the way the map says, on a port from sz-eyes port
+  sz-eyes copy <folder> --end
+        ends a copy when you are done with it: stops its stack from its folder, then removes the folder (a stack
+        is known by the folder it was started in: with the folder gone, nothing stops it by name). It refuses a
+        folder sz-eyes copy did not make, and keeps the folder when the stack did not stop. A server you
+        started there is yours to end first, by its process id
 
   sz-eyes refs add --kind "<kind of screen or journey>" --product "<name>" --what "<which screen, one line>" --link <the page it came from>
         (--file <picture on disk> | --image <https address of the picture>) --notes <file.md> [--platform ios|android|web] [--lang ko|en|...] [--for <project>] [--json]
@@ -1013,9 +1018,16 @@ async function main(argv: string[]): Promise<number> {
     return 0;
   }
   if (area === 'copy') {
-    const a = parse(argv.slice(1), []);
+    const a = parse(argv.slice(1), ['--end']);
     const folder = a.words[0];
-    if (!folder || a.words.length > 1) throw new EyesError('sz-eyes copy <folder> [--at <commit>] [--with <path>]... [--dir <project>]: one folder, outside the project');
+    if (!folder || a.words.length > 1) throw new EyesError('sz-eyes copy <folder> [--at <commit>] [--with <path>]... [--dir <project>], or sz-eyes copy <folder> --end: one folder, outside the project');
+    if (a.has('--end')) {
+      const tool = findTool('supabase');
+      // Without the command line there is no stack to stop.
+      const ended = await endCopy(folder, async (cwd) => (tool ? supabaseCommand(['stop'], { tool, env: process.env, cwd, store: ownersVault(), out: (text) => void process.stdout.write(text), err: (text) => void process.stderr.write(text) }) : 0));
+      out(`ended: ${ended.folder} (${ended.stack ? 'its stack stopped, ' : ''}the folder removed). What you started there yourself (a server, a packager) is ended by its process id`);
+      return 0;
+    }
     const project = resolve(a.one('--dir') ?? '.');
     out(copyText(makeCopy(project, folder, { at: a.one('--at'), with: a.all('--with') }), project));
     return 0;

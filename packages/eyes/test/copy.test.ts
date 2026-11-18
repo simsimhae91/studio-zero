@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { makeCopy } from '../src/copy.ts';
+import { COPY_MARK, copyText, endCopy, makeCopy } from '../src/copy.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const git = (cwd: string, ...args: string[]): string => {
@@ -119,9 +119,57 @@ test('from the command line: the folder is the last line, and a product with no 
     assert.match(run.stdout, /dependencies and built folders cloned: node_modules, app\/node_modules, dist/);
     assert.doesNotMatch(run.stdout, /its stack is its own/);
     assert.match(run.stdout, /Launch it there the way the map says, on a port of its own \(PORT=\$\(sz-eyes port\)\)/);
+    assert.ok(run.stdout.includes(`end the copy: sz-eyes copy ${folder} --end (it removes the folder)`), run.stdout);
     const refused = spawnSync(process.execPath, [join(HERE, '../src/cli.ts'), 'copy', folder, '--dir', p.project], { encoding: 'utf8' });
     assert.equal(refused.status, 1);
     assert.match(refused.stderr, /is not empty/);
+  } finally {
+    p.cleanup();
+  }
+});
+
+test('a copy is ended in one step: its stack is stopped from its folder first, and the folder goes only when that worked', async () => {
+  // (2026-11-19: a verifier stopped two copies' stacks with a flag the command does not have, threw away what it
+  // said, and removed the folders. A stack is known by its folder: the two ran on with nothing to stop them from.)
+  const p = product();
+  try {
+    const folder = join(p.root, 'copies', 'v1');
+    const made = makeCopy(p.project, folder, {});
+    assert.deepEqual(Object.keys(JSON.parse(readFileSync(join(folder, COPY_MARK), 'utf8'))), ['of', 'commit', 'made']);
+    const said = copyText(made, p.project);
+    assert.ok(said.includes(`end the copy: sz-eyes copy ${folder} --end (it stops the copy's stack and then removes the folder; never remove the folder yourself`), said);
+    assert.equal(said.trim().split('\n').at(-1), folder);
+
+    // The stack does not stop: the folder stays, and it is said why.
+    const asked: string[] = [];
+    await assert.rejects(endCopy(folder, async (cwd) => (asked.push(cwd), 1)), /the stack of .*copies\/v1 did not stop \(sz-eyes supabase stop exited 1 there[^)]*\), so the folder is kept/);
+    assert.deepEqual(asked, [folder]);
+    assert.equal(existsSync(join(folder, 'src/a.txt')), true);
+
+    // It stops: then the folder is removed.
+    assert.deepEqual(await endCopy(folder, async (cwd) => (asked.push(cwd), 0)), { folder, stack: true });
+    assert.equal(existsSync(folder), false);
+    assert.deepEqual(asked, [folder, folder], 'stopped from the copy\'s own folder');
+
+    // A folder of the product's own, or any folder a copy was not made in, is never ended this way.
+    await assert.rejects(endCopy(p.project, async () => (asked.push('project'), 0)), /was not made by sz-eyes copy[^:]*: nothing was stopped and nothing removed/);
+    assert.equal(asked.includes('project'), false, 'its stack is not stopped either');
+    assert.equal(existsSync(join(p.project, 'src/a.txt')), true);
+    await assert.rejects(endCopy(join(p.root, 'gone'), async () => 0), /is not there/);
+
+    // From the command line, a copy of a product with no stack of this kind: the folder goes, and nothing else is asked.
+    rmSync(join(p.project, 'supabase'), { recursive: true });
+    git(p.project, 'add', '-A', 'supabase');
+    git(p.project, 'commit', '-q', '-m', 'no stack');
+    const plain = join(p.root, 'plain');
+    assert.equal(spawnSync(process.execPath, [join(HERE, '../src/cli.ts'), 'copy', plain, '--dir', p.project], { encoding: 'utf8' }).status, 0);
+    const ended = spawnSync(process.execPath, [join(HERE, '../src/cli.ts'), 'copy', plain, '--end'], { encoding: 'utf8' });
+    assert.equal(ended.status, 0, ended.stderr);
+    assert.match(ended.stdout, /^ended: .*plain \(the folder removed\)\. What you started there yourself/);
+    assert.equal(existsSync(plain), false);
+    const twice = spawnSync(process.execPath, [join(HERE, '../src/cli.ts'), 'copy', plain, '--end'], { encoding: 'utf8' });
+    assert.equal(twice.status, 1);
+    assert.match(twice.stderr, /is not there/);
   } finally {
     p.cleanup();
   }
