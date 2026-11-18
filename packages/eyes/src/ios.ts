@@ -51,7 +51,24 @@ export async function spareSimulator(opts: { name?: string; type?: string; run?:
     if (booted.exitCode !== 0 && !/current state: Booted/i.test(booted.stderr)) throw new EyesError(`the simulator did not boot: ${booted.stderr.trim().slice(0, 300)}`);
     await sh(run, 'xcrun', ['simctl', 'bootstatus', device.udid, '-b'], 180_000);
   }
+  await pastSafariFirstRun(device.udid, run);
   return device.udid;
+}
+
+/**
+ * On a simulator made or wiped just before, Safari shows a tip the first time it loads a page ("북마크, 공유 메뉴 및
+ * 열린 탭 보기"), in front of the "열기" prompt of a link that opens an app: a tap on "열기" then does nothing
+ * (2026-11-18: a builder and three rulings each stopped there). Whether the tip is shown is one entry among
+ * Safari's onboarding states (iOS 26.4); with it written before Safari's first page, no tip comes. Added to what
+ * Safari keeps, written every time the simulator is handed over (a simulator may have been wiped and booted by
+ * other hands), and never a reason not to hand it over: on a system that keeps this elsewhere the tip is closed
+ * by the flow, as `sz:verify` says.
+ */
+async function pastSafariFirstRun(udid: string, run: CommandRunner): Promise<void> {
+  const home = await sh(run, 'xcrun', ['simctl', 'get_app_container', udid, 'com.apple.mobilesafari', 'data'], 30_000).catch(() => null);
+  const folder = home && home.exitCode === 0 ? home.stdout.trim() : '';
+  if (folder === '') return;
+  await sh(run, 'xcrun', ['simctl', 'spawn', udid, 'defaults', 'write', `${folder}/Library/Preferences/com.apple.mobilesafari`, 'WBSOnboardingStatesDefaultsKeyV0.2', '-dict-add', 'TipForMoreButton', '-int', '3'], 30_000).catch(() => null);
 }
 
 /**

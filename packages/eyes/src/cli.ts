@@ -99,7 +99,8 @@ const USAGE = `sz-eyes: launch what was built, look at it, operate it, and put w
   sz-eyes ios flow <udid> <flow.yaml> --out <folder> [--video] [-e KEY=VALUE]...
         run a Maestro flow from a copy that cannot write outside <folder>; says each step, keeps screenshots and a film
   sz-eyes ios look <udid> [--out <folder>] [--name <n>]  a screenshot, and the words and ids on the screen
-  sz-eyes ios rest <udid> [--erase]                      shut it down (and wipe it)
+  sz-eyes ios rest <udid> [--erase]                      shut it down (and wipe it); take it again with ios spare, which
+        hands it over with Safari's first-run tip off (on a wiped simulator the tip covers the "열기" of a link that opens the app)
 
   sz-eyes contract new <id> --lane S|M|L --request <text> [--target web]... --claim "<id>|<what will be true>|<kind>:<ref>"... [--not "<text>"]... [--risk "<text>"]... [--supersedes "<contract>/<claim>|<why>"]... [--dir <project>]
         --supersedes names a standing claim of earlier work that this work deliberately replaces, and why
