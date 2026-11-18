@@ -69,7 +69,7 @@ checks (flows the builder wrote and froze before the code); one found the claim'
 |---|---|---|
 | screens | 13 | |
 | refs | 11 | 8 (for the frame) |
-| design | 43 | 9 (for the frame and the board); then 29 of model turns writing one 207 KB file |
+| design | 43 | 9 (for the frame and the board); then reading and the direction 6, the frame and parts 5, pictures 3, the screens 9 (eight groups, 105 KB, written as pieces and joined), measuring, mending and walking the flows 8.5 |
 | sweep | 1 | |
 
 ## What it showed about the harness
