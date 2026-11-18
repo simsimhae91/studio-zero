@@ -115,6 +115,23 @@ test('a claim whose own words are wrong is set aside for the owner, and the run 
   const ruling = ran.calls.find((c) => c.label === 'rule:m1')!.prompt;
   assert.match(ruling, /one: 착한택배가 X로 나옴[\s\S]*one: 공식 안내는 80cm라 약속대로는 만들 수 없음/);
   assert.match(ruling, /when in doubt it is this one[\s\S]*sz-eyes contract dispute m1 <claim id> --ruling/);
+  // Only what the fixer says cannot be made true is ruled on: the claim it mended is looked at again in any case.
+  // (2026-11-18: handed all three refuted claims, the arbiter ran the flows of the two just mended, 8 of its 16 minutes.)
+  assert.doesNotMatch(ruling, /two: 합계가 0/, 'a claim that was mended is not handed to whoever rules');
+  assert.match(ruling, /The other claims shown false at that look were mended and are looked at again after you/);
+  assert.match(ran.calls.find((c) => c.label === 'fix:m1:1')!.prompt, /each line of "notFixed" starts with the id of its claim and a colon/);
+  // A line that names no claim leaves every claim shown false to be ruled on, as before.
+  const unnamed = await run(
+    { request: 'x' },
+    table({
+      verify: ({ label }: Call) => (label === 'verify:m1' ? { proven: [], refuted: [{ id: 'one', fact: '착한택배가 X로 나옴' }, { id: 'two', fact: '합계가 0' }], unchecked: [] } : label === 'verify:m1:again' ? { proven: ['two'], refuted: [], unchecked: [] } : { proven: ['one', 'two'], refuted: [], unchecked: [] }),
+      fix: () => ({ fixed: ['two'], notFixed: ['one: 공식 안내는 80cm', '약속대로는 만들 수 없는 것이 하나 더 있음'] }),
+      rule: () => ({ disputed: [{ id: 'one', ruling: '약속은 100cm, 세븐일레븐 안내는 80cm' }], productWrong: [] }),
+    }),
+  );
+  const whole = unnamed.calls.find((c) => c.label === 'rule:m1')!.prompt;
+  assert.match(whole, /- one: 착한택배가 X로 나옴\n- two: 합계가 0/);
+  assert.doesNotMatch(whole, /The other claims shown false at that look were mended/);
   assert.match(ran.calls.find((c) => c.label === 'fix:m1:1')!.prompt, /take those pictures again from the product as you leave it/);
   assert.doesNotMatch(ran.calls.find((c) => c.label === 'verify:m1:again')!.prompt, /shown false before: one/, 'what was set aside is not looked at again');
   assert.match(ran.calls.find((c) => c.label === 'verify:m1:again')!.prompt, /These claims of the contract were shown false before: two\./);
@@ -763,4 +780,23 @@ test('the stop at the drawing says what the build needs from the owner and how e
   const plainStop = await run({ request: 'x' }, drawing({ plan: needed }));
   assert.match(plainStop.logs.find((l) => /^DESIGN READY/.test(l))!, /hold at phone size and at their limits$/);
   assert.doesNotMatch(plainStop.result.stopped, /Before the build, from the owner/);
+});
+
+test('an agent the workflow starts by type and tells to load skills has the Skill tool, and a verifier counts only a check that passes in front of it', () => {
+  // Every prompt carries "Load the skills you need with the Skill tool", and the verifier's own file says to read
+  // `sz:verify`. With `tools: Read, Grep, Glob, Bash` it could not: in two whole runs (2026-11-17, 2026-11-18) each
+  // verifier searched the disk for the file (`find / ... SKILL.md`, two minutes each), and two of five read the
+  // copy in another checkout of the repository, not the one of the plugin that was running.
+  const file = (name: string): string => readFileSync(fileURLToPath(new URL(`../../../plugin/agents/${name}.md`, import.meta.url)), 'utf8');
+  const types = [...new Set([...SOURCE.matchAll(/agentType: 'sz:([a-z-]+)'/g)].map((m) => m[1]!))];
+  assert.deepEqual(types.sort(), ['arbiter', 'verifier']);
+  assert.match(SOURCE, /Load the skills you need with the Skill tool/);
+  for (const type of types) {
+    const tools = /^tools:\s*(.+)$/m.exec(file(type))?.[1]?.split(',').map((t) => t.trim()) ?? [];
+    assert.ok(tools.includes('Skill'), `${type}: told to load skills, and has no Skill tool (${tools.join(', ')})`);
+    assert.ok(!tools.includes('Write'), `${type}: writes with commands under the evidence folder, and is given no tool that edits the product by hand`);
+  }
+  // 2026-11-18: a flow that did not walk to its end in any of ten runs at the second look, and its claim left proven
+  // on the run of the first look.
+  assert.match(file('verifier'), /\*\*A check proves a claim only when it passes in front of you\.\*\*[^\n]*never left `proven` on an earlier run/);
 });

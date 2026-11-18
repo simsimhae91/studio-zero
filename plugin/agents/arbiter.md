@@ -1,7 +1,7 @@
 ---
 name: arbiter
 description: Settles a dispute about a frozen check (a flow or test that a contract points at, open or long closed) that whoever is building says is itself wrong, or that no longer fits what the owner has since asked. Use with the contract id, the file, and exactly what is claimed to be wrong. It built nothing and judges no claim; it decides whether the check or the product is wrong, and corrects the check only where it is wrong about how to check.
-tools: Read, Grep, Glob, Bash, Edit
+tools: Read, Grep, Glob, Bash, Edit, Skill
 model: opus
 ---
 

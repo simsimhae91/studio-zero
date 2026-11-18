@@ -758,15 +758,23 @@ Do not judge your own claims and do not record verdicts: someone who did not bui
   // them by someone who built nothing, with where the fact is read, and the work goes on. (Two of four runs on
   // one request stopped for the night on one such claim each; one of them had tried to fix the product twice.)
   const setAside = []
-  const rule = async (said) => {
-    const open = verdict.refuted
-    if (open.length === 0) return
+  const rule = async (unfixed) => {
+    if (verdict.refuted.length === 0) return
+    // After a fix, only what the fixer says cannot be made true is ruled on: the claims it mended are looked at
+    // again by a verifier in any case. (Handed all three claims shown false, the arbiter ran the flows of the two
+    // just mended: 8 of its 16 minutes, 2026-11-18.) A line that names no claim leaves all of them to rule on.
+    const said = unfixed.join('\n')
+    const idOf = (line) => (verdict.refuted.find((r) => new RegExp(`^[\\s\\-*\`"'(]*${r.id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\w-])`).test(line)) || {}).id
+    const named = unfixed.map(idOf)
+    const narrowed = unfixed.length > 0 && named.every(Boolean)
+    const open = narrowed ? verdict.refuted.filter((r) => named.includes(r.id)) : verdict.refuted
     const ruled = await agent(
       `Claims of contract \`${built.contractId}\` of the project in ${here} were shown false on the running product by someone who did not build it.${PLACE}${SAND} ${TOOLS} The product is launched like this: ${built.launch}.
 
 The claims shown false, each with what happened instead:
 ${open.map((r) => `- ${r.id}: ${r.fact}`).join('\n')}
 ${said ? `What the one who was fixing them said could not be made true without changing what was asked:\n${said}` : ''}
+${narrowed && open.length < verdict.refuted.length ? 'The other claims shown false at that look were mended and are looked at again after you: they are not yours to check, and their flows are not yours to run.' : ''}
 
 For each, decide which it is. You built nothing and you take nobody's word: read the contract (\`sz-eyes contract show ${built.contractId}\`), look at the product, and open the source yourself.
 - **The product is wrong.** It can do what the claim says and does not. Leave the claim as it is: this is the common case, and when in doubt it is this one.
@@ -792,11 +800,11 @@ Someone who did not build it operated the product and found these claims false:
 ${wrong}
 ${broke ? `And these were true before this work and are not now (each is a promise of earlier work: \`sz-eyes standing\` shows how it is checked):\n${broke}` : ''}
 
-Find the cause of each in the product and fix it there. Where a claim is shown by pictures kept in the evidence folder (a look the owner will go through), take those pictures again from the product as you leave it: a picture from before your fix shows the fault you mended, and the claim is false again for that alone. Where a claim says something of every screen (nothing cut off, nothing too small to press), mend the cause wherever the same thing is shown, not only in the place named, and run that claim's flow over the whole product until it reports nothing before you return. Do not edit the contract, the flows or the tests it names, or those of earlier work, and do not record verdicts. Run the check of each claim you were handed until it passes (its flow, its test, its command), and the project's quick checks (its type check and its tests of pure rule). Do not run the other flows, of this contract or of earlier work: whoever looks again runs all of them once, side by side on copies of their own, and run here one after another they are most of an hour in which nothing is learned. Commit the fix. If a claim cannot be made true without changing what was asked, change nothing for it and say why. Nothing is put in as an example to make a claim true: what cannot be made real with what is at hand goes under "notFixed", with what it needs.`,
+Find the cause of each in the product and fix it there. Where a claim is shown by pictures kept in the evidence folder (a look the owner will go through), take those pictures again from the product as you leave it: a picture from before your fix shows the fault you mended, and the claim is false again for that alone. Where a claim says something of every screen (nothing cut off, nothing too small to press), mend the cause wherever the same thing is shown, not only in the place named, and run that claim's flow over the whole product until it reports nothing before you return. Do not edit the contract, the flows or the tests it names, or those of earlier work, and do not record verdicts. Run the check of each claim you were handed until it passes (its flow, its test, its command), and the project's quick checks (its type check and its tests of pure rule). Do not run the other flows, of this contract or of earlier work: whoever looks again runs all of them once, side by side on copies of their own, and run here one after another they are most of an hour in which nothing is learned. Commit the fix. If a claim cannot be made true without changing what was asked, change nothing for it and say why. Nothing is put in as an example to make a claim true: what cannot be made real with what is at hand goes under "notFixed", with what it needs; each line of "notFixed" starts with the id of its claim and a colon (\`<claim id>: why\`), one claim a line.`,
       { label: `fix:${m.id}:${round}`, phase: 'Build', ...effort('build'), ...model('build'), schema: { type: 'object', properties: { fixed: { type: 'array', items: { type: 'string' } }, notFixed: { type: 'array', items: { type: 'string' } } }, required: ['fixed'] } },
     )
     // What the fixer says cannot be made true is ruled on before anyone looks again: a claim set aside is not looked at twice more.
-    if (mended && Array.isArray(mended.notFixed) && mended.notFixed.length > 0) await rule(mended.notFixed.join('\n'))
+    if (mended && Array.isArray(mended.notFixed) && mended.notFixed.length > 0) await rule(mended.notFixed.map((line) => String(line)))
     if (verdict.refuted.length + (verdict.broken || []).length === 0) break
     const again = await verify({ claims: verdict.refuted.map((r) => r.id), standing: (verdict.broken || []).map((b) => b.key), noticed: verdict.noticed || [] })
     if (!again) break
@@ -818,7 +826,7 @@ Find the cause of each in the product and fix it there. Where a claim is shown b
       noticed: again.noticed === undefined ? verdict.noticed || [] : again.noticed,
     }
   }
-  if (verdict && verdict.refuted.length > 0) await rule('')
+  if (verdict && verdict.refuted.length > 0) await rule([])
   if (verdict && (verdict.sandbox || '').trim() !== '') {
     stopped = `milestone "${m.title}" was built and could not be looked at: the session's command sandbox stopped the browser and the call outside it was refused (${verdict.sandbox.trim().slice(0, 200)}). Nothing is known to be wrong with the product. The owner chooses one: run sessions in auto mode, approve the unsandboxed command when asked, or turn the sandbox off for this project (/sandbox); then ask to continue.`
     log(stopped)
