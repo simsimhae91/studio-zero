@@ -947,6 +947,9 @@ test('a session waits for the product on the signal its builder gives, and a loo
   assert.doesNotMatch(when, /standing --summary/, 'what stands is listed only once a contract is closed');
   const work = readFileSync(fileURLToPath(new URL('../../../plugin/skills/work/SKILL.md', import.meta.url)), 'utf8');
   assert.match(work, /until sz-eyes contract built > \/dev\/null 2>&1; do sleep 20; done/, 'the skill and the workflow name the same wait');
+  // (2026-11-19: the session copied the workflow's script, changed it and resumed the run on the copy to get past a
+  // stop. The stop was wrong and the run was saved; the first resume started a ruling on a closed contract.)
+  assert.match(work, /Where it stops, tell the owner what it returned as it is, and stop there: do not edit the workflow's script, run a changed copy of it, or resume the run on one/);
   const first = await run({ request: 'x', asked: 'owner', answers: 'a' }, { plan: () => ({ mode: 'new', summary: 's', milestones: [{ id: 'm1', title: '첫 판', builds: 'b', first: true, claims: [claim('one')] }] }), build: built, verify: () => ({ proven: ['one'], refuted: [], unchecked: [] }), close: closed });
   assert.ok(first.logs.some((l) => /the whole product can be looked at when its first pass stands \(this run logs BUILT then\)/.test(l)), first.logs.join('\n'));
 
@@ -1014,6 +1017,25 @@ test('a flow shown on a simulator is a verifier\'s whole share, and a fixer sear
   assert.deepEqual(again.map(yours), [['ios-path', 'ios-steps'], ['ios-fit', 'mends-play', 'mends-read', 'keeps', 'feel-phone']], 'the look after a fix, its flows written, is shared by two');
   // A command that names the device (a bundle searched for keys) is still a command.
   assert.ok(first.every((c) => !/Yours are these claims: keeps\./.test(c.prompt)));
+
+  // Claims shown by one check are one verifier's, and the check is weighed once: the path's three claims name one
+  // flow, as do the two of the steps and the two of the fit. (The builder of that night had recorded them so.)
+  const parted = [
+    ...['ios-path', 'ios-path-2', 'ios-path-3'].map((id) => ({ ...claims[0]!, id })),
+    ...['ios-steps', 'ios-steps-2'].map((id) => ({ ...claims[1]!, id })),
+    ...['ios-fit', 'ios-fit-2'].map((id) => ({ ...claims[2]!, id })),
+    ...claims.slice(3),
+  ];
+  const inParts = await run({ request: 'x' }, { plan: () => ({ mode: 'extend', summary: 's', milestones: [{ id: 'phone', title: '휴대폰에서', builds: 'b', claims: parted }] }), build: built, verify: (c) => ({ proven: yours(c).filter((id) => id !== 'feel-phone'), refuted: [], unchecked: [] }), close: closed });
+  assert.deepEqual(inParts.calls.filter((c) => c.label.startsWith('verify:')).map(yours), [['ios-path', 'ios-path-2', 'ios-path-3'], ['ios-steps', 'ios-steps-2'], ['ios-fit', 'ios-fit-2'], ['mends-play', 'mends-read', 'keeps', 'feel-phone']]);
+
+  // (No field of that app had an id. The flow pressed each by its words, Maestro pressed the label beside it, and
+  // what was typed went nowhere in five fields of six.)
+  const builder = calls.find((c) => c.label === 'build:phone')!.prompt;
+  assert.match(builder, /This milestone is shown on a simulator, by flows that whoever verifies writes: give every field a person types into a `testID`/);
+  assert.match(builder, /`sz-eyes ios look <the simulator's id>` on a screen lists its fields and says which have no id/);
+  const web = await run({ request: 'x' }, { plan: plan('m1'), build: built, verify: () => ({ proven: ['one', 'two'], refuted: [], unchecked: [] }), close: closed });
+  assert.doesNotMatch(web.calls.find((c) => c.label === 'build:m1')!.prompt, /testID/, 'a milestone shown in a browser is not told about a simulator');
 
   // (The same night a fix signed a percent that two frozen flows of the first pass read unsigned. Nobody ran them
   // until the next look: 37 minutes to learn it, a second fix, and a third look.)

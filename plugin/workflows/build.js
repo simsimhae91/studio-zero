@@ -624,6 +624,11 @@ const DRAWN_BUILD = `, and it is settled: every screen was drawn before this bui
 const AS_DRAWN = ` Every screen of this product was drawn before it was built (\`.sz/design/prototype.html\`, a picture of each under \`.sz/design/shots/\`), and the first pass was built to that drawing. For the claim that every screen is built as drawn, where it is yours: take a picture of each built screen the way \`sz-eyes web sweep\` does (one browser, every screen at phone size, \`--out\` a folder under the contract's evidence folder) and set it beside its drawing. A difference in content, order, parts or tokens is that claim shown false, with the screen named.`
 const FIRST = `This milestone is the product's first pass: all of it, in one stretch, by you. Work in this order. The look first${toDrawing ? DRAWN_BUILD : ' (load `sz:taste`: colour, type and spacing settled once, as names every screen uses).'} The frame: how a person gets from one area to another, and the shapes of everything that will be stored. Then the one thing the product is for, to the quality it will be used at. When that path works: start the product, write the command that starts it into \`.sz/map.md\`, put a picture of each of its screens at phone size into the contract's evidence folder under \`early/\`, and commit with a message that begins \"look:\". The owner may open it from then on, before anything else exists. Then every other area, each to its claims. Work down the claims, and run each flow as you finish what it shows. Before you return, fill every field with the longest value the spec allows and look at every screen at phone size (\`sz-eyes web look <address> --size phone\` says what is cut off, what scrolls sideways and what is too small to press): mend it wherever the same thing is shown, not on the one screen where you saw it. Do not stop to report in between: you are done when every claim's own check passes and the product has run in front of you.
 `
+// A milestone shown on a simulator is built so that its flows can be written: a flow presses a field by its id.
+// (2026-11-19: no field of a phone app had one. The verifier's flow pressed each by its words, Maestro pressed
+// the label beside it, and what was typed went nowhere in five fields of six: the claim stayed unchecked.)
+const onDevice = (m) => (m.claims || []).some((c) => ON_A_DEVICE.test(`${c.says || ''} ${c.ref || ''}`))
+const HANDLES = ' This milestone is shown on a simulator, by flows that whoever verifies writes: give every field a person types into a `testID`, and everything a person presses that has no words of its own (an icon, a picture). A flow presses a field by its id; by its words Maestro may press the label beside it, and what is typed goes nowhere. `sz-eyes ios look <the simulator\'s id>` on a screen lists its fields and says which have no id: run it on each screen with a field before you return.'
 // What a claim costs to show, in tests' worth: a flow is written and run against the product, a look is pictures
 // set beside drawings, and one that says something of every screen costs a flow more. One shown on a
 // simulator costs several of a browser's: the app is installed, every step waits on the device, and its flow is
@@ -641,22 +646,43 @@ const weightOf = (c) => {
 // The claims in the plan's order, cut where the running cost is nearest to an even share: null when one verifier
 // is enough (about four flows' worth at a first look), five shares at most. A look after a fix takes twice as
 // much a verifier and three at most: the flows are written by then.
+// Claims shown by one check are shared as one: the check is written once, by one verifier, and costs what its
+// heaviest claim does. (2026-11-19: a flow's two claims went to two verifiers at a look after a fix, and both ran
+// it; at a first look both would have been told to write the same file.)
+const unitsOf = (claims) => {
+  const units = []
+  const at = new Map()
+  for (const c of claims) {
+    const ref = String(c.ref || '').trim()
+    const key = c.kind === 'owner' || ref === '' ? null : `${c.kind}:${ref}`
+    if (key !== null && at.has(key)) {
+      const unit = units[at.get(key)]
+      unit.ids.push(c.id)
+      unit.cost = Math.max(unit.cost, weightOf(c))
+      continue
+    }
+    if (key !== null) at.set(key, units.length)
+    units.push({ ids: [c.id], cost: weightOf(c) })
+  }
+  return units
+}
 const sharesOf = (claims, each = 10, most = 5) => {
-  const cost = claims.map(weightOf)
+  const units = unitsOf(claims)
+  const cost = units.map((u) => u.cost)
   const total = cost.reduce((a, b) => a + b, 0)
   if (total <= each + 2) return null
   const shares = Math.min(most, Math.ceil(total / each))
   const parts = []
   let from = 0
   let sum = 0
-  for (let k = 1; k < shares && from < claims.length; k++) {
+  for (let k = 1; k < shares && from < units.length; k++) {
     const aim = (total * k) / shares
     let to = from
-    while (to < claims.length && (to === from || Math.abs(sum + cost[to] - aim) <= Math.abs(sum - aim))) sum += cost[to++]
-    parts.push(claims.slice(from, to).map((c) => c.id))
+    while (to < units.length && (to === from || Math.abs(sum + cost[to] - aim) <= Math.abs(sum - aim))) sum += cost[to++]
+    parts.push(units.slice(from, to).flatMap((u) => u.ids))
     from = to
   }
-  if (from < claims.length) parts.push(claims.slice(from).map((c) => c.id))
+  if (from < units.length) parts.push(units.slice(from).flatMap((u) => u.ids))
   return parts.length > 1 ? parts : null
 }
 // What an earlier run's look recorded, as whoever started the milestone read it from the contract: taken up only
@@ -725,7 +751,7 @@ Do this, in order:
 1. Record the contract: \`sz-eyes contract new ${m.id} --lane M --request "<the milestone in a sentence, in the owner's language>" --target <web|ios|...> --claim "<id>|<says>|<kind>:<ref>" ...\` with exactly the claims above, plus \`--not\` and \`--risk\` for the lines above${replaces ? ', and `--supersedes "<contract>/<claim>|<why>"` for each promise it replaces' : ''}.
 ${FIRST_STEPS(m, replaces)}${m.first ? '' : ' If a claim is wrong about what was asked, build what you can and say so in "blocked".'}
 4. ${m.first && toDrawing ? 'Build the milestone, each screen as drawn (`sz:taste` only for what the drawing leaves open).' : 'Build the milestone. For anything a person looks at, load `sz:taste` first; and where the product\'s screens were drawn before it was built (`.sz/design/direction.md` is there), the look is the one drawn: a new or changed screen is made of that file\'s tokens and parts (its last section, 빌더에게, lists them), and `sz:taste` is for what it leaves open.'} If it changes the shape of what is stored, it carries over what is already there (on start, or by a command the map names): data written by the version before must still open. Run the project's checks (type check, tests, the flows of earlier milestones) as you go and leave them passing.
-5. Start the product yourself with one command and see it running before you return: its first screen in a browser, or for a phone app the build installed and opened on a simulator of your own (\`sz:verify\` says how, and what a first build of a phone app needs). Say exactly which command, and where it is seen. Then say that it stands: \`sz-eyes contract built ${m.id} --launch "<that command, and where it is seen>"\` (from then on the owner can be shown the product while it is verified). A milestone that has never run is not built: what stops it from starting is yours to fix here, not the verifier's to find. If it cannot be started for a reason outside the product (a download that does not arrive, a tool that is not on this machine), do not wait on it (a download or a build that shows nothing new for a minute is stopped) and say what stopped it under "blocked". ${where ? 'If this milestone changed how it is launched, say so in "summary" (the map is corrected when the milestones are brought together).' : 'If this milestone changed how it is launched, correct \`.sz/map.md\`.'}
+5. Start the product yourself with one command and see it running before you return: its first screen in a browser, or for a phone app the build installed and opened on a simulator of your own (\`sz:verify\` says how, and what a first build of a phone app needs).${onDevice(m) ? HANDLES : ''} Say exactly which command, and where it is seen. Then say that it stands: \`sz-eyes contract built ${m.id} --launch "<that command, and where it is seen>"\` (from then on the owner can be shown the product while it is verified). A milestone that has never run is not built: what stops it from starting is yours to fix here, not the verifier's to find. If it cannot be started for a reason outside the product (a download that does not arrive, a tool that is not on this machine), do not wait on it (a download or a build that shows nothing new for a minute is stopped) and say what stopped it under "blocked". ${where ? 'If this milestone changed how it is launched, say so in "summary" (the map is corrected when the milestones are brought together).' : 'If this milestone changed how it is launched, correct \`.sz/map.md\`.'}
 6. Commit the work on the current branch with a message that says what the milestone built.
 
 Do not judge your own claims and do not record verdicts: someone who did not build this will operate it. Do not leave a server running.`,
