@@ -165,11 +165,17 @@ const REAL_LOOK = (m) => {
   return ` The claim of the one thing the product is for (the spec names it) is shown from a real input to a real result: what a person would really give it, through what the product really does with it, to what it really gives back. Shown on an example, a fixture or figures the product made up, it is refuted, whatever the screen says about itself${allowed.length > 0 ? `, except what the owner allowed to be an example for now: ${allowed.map((e) => `${e.what} ("${plainWords(e.said)}")`).join('; ')}` : ''}.`
 }
 
+// What `sz-eyes contract new` takes: a claim of 400 characters, a line of what is not done or of risk of 300. A
+// plan that writes more cannot be recorded as it stands. (2026-11-19: a plan wrote claims of up to 829 characters
+// for a phone milestone; its builder recorded them in parts under ids of its own making and said so under
+// "blocked", and the run stopped as not built, an hour's build standing and nothing verified.)
+const CLAIM_MOST = 400
+const LINE_MOST = 300
 const CLAIM = {
   type: 'object',
   properties: {
     id: { type: 'string', description: 'a short lowercase word with digits and dashes, unique in the milestone' },
-    says: { type: 'string', description: 'what will be true of the running product, as the owner would say it and could see it, with the figure where there is one' },
+    says: { type: 'string', maxLength: CLAIM_MOST, description: `what will be true of the running product, as the owner would say it and could see it, with the figure where there is one. One thing, shown by one check, in ${CLAIM_MOST} characters at most: the contract takes no more. What needs more words is more than one claim: cut it into claims with an id and a check each` },
     kind: { type: 'string', enum: ['flow', 'test', 'look', 'command', 'owner'] },
     ref: { type: 'string', description: 'how it is shown: the flow or test file that will exist, the screen and state to look at, the command' },
   },
@@ -199,8 +205,8 @@ const PLAN = {
           builds: { type: 'string', description: 'what is built in it, in two or three sentences' },
           claims: { type: 'array', items: CLAIM },
           notReal: NOT_REAL,
-          notDoing: { type: 'array', items: { type: 'string' } },
-          risks: { type: 'array', items: { type: 'string' } },
+          notDoing: { type: 'array', items: { type: 'string', maxLength: LINE_MOST } },
+          risks: { type: 'array', items: { type: 'string', maxLength: LINE_MOST } },
           supersedes: {
             type: 'array',
             description: 'standing claims of earlier, closed contracts (as `sz-eyes standing` lists them) that will stop being true because what was asked has changed. Empty for a new product, and for a milestone that only adds.',
@@ -228,7 +234,7 @@ const BUILT = {
     contractId: { type: 'string' },
     summary: { type: 'string', description: 'what was built, in three sentences at most' },
     launch: { type: 'string', description: 'the exact command that starts the product now, as you ran it and saw it start, and the address or app it is seen at' },
-    blocked: { type: 'string', description: 'empty unless the milestone could not be built at all, or could not be started for a reason outside the product (a download that does not arrive, a tool that is not on this machine): then what stopped it, with the figure' },
+    blocked: { type: 'string', description: 'empty unless the milestone could not be built at all, or could not be started for a reason outside the product (a download that does not arrive, a tool that is not on this machine): then what stopped it, with the figure. Anything written here stops the run before anyone verifies: where the milestone stands, leave it empty, and say what else there is to say (how you recorded something, what you did not see) in the summary' },
     disputes: {
       type: 'array',
       description: 'frozen checks you found to be wrong about how they check (not the product being wrong): each with the file and exactly what is wrong. Empty when there are none.',
@@ -619,9 +625,19 @@ const AS_DRAWN = ` Every screen of this product was drawn before it was built (\
 const FIRST = `This milestone is the product's first pass: all of it, in one stretch, by you. Work in this order. The look first${toDrawing ? DRAWN_BUILD : ' (load `sz:taste`: colour, type and spacing settled once, as names every screen uses).'} The frame: how a person gets from one area to another, and the shapes of everything that will be stored. Then the one thing the product is for, to the quality it will be used at. When that path works: start the product, write the command that starts it into \`.sz/map.md\`, put a picture of each of its screens at phone size into the contract's evidence folder under \`early/\`, and commit with a message that begins \"look:\". The owner may open it from then on, before anything else exists. Then every other area, each to its claims. Work down the claims, and run each flow as you finish what it shows. Before you return, fill every field with the longest value the spec allows and look at every screen at phone size (\`sz-eyes web look <address> --size phone\` says what is cut off, what scrolls sideways and what is too small to press): mend it wherever the same thing is shown, not on the one screen where you saw it. Do not stop to report in between: you are done when every claim's own check passes and the product has run in front of you.
 `
 // What a claim costs to show, in tests' worth: a flow is written and run against the product, a look is pictures
-// set beside drawings, and one that says something of every screen is the longest of all.
+// set beside drawings, and one that says something of every screen costs a flow more. One shown on a
+// simulator costs several of a browser's: the app is installed, every step waits on the device, and its flow is
+// written in the device's own driver. It is a verifier's whole share. (2026-11-19: three flows on a simulator were
+// weighed as three in a browser and went to one verifier, who took 144 minutes, 55 to 85 a flow; the other
+// verifier, with two browser flows and a command, took 40.)
 const EVERY_SCREEN = /every screen|all (the )?screens|each screen|\d+ screens|모든 화면|화면마다|각 화면|화면 \d+개|\d+\s*개 화면|\d+\s*화면/i
-const weightOf = (c) => (c.kind === 'owner' ? 0 : c.kind === 'flow' || c.kind === 'look' ? (EVERY_SCREEN.test(String(c.says || '')) ? 6 : 3) : 1)
+const ON_A_DEVICE = /simulator|emulator|maestro|시뮬레이터|에뮬레이터/i
+const weightOf = (c) => {
+  if (c.kind === 'owner') return 0
+  if (c.kind !== 'flow' && c.kind !== 'look') return 1
+  const one = ON_A_DEVICE.test(`${c.says || ''} ${c.ref || ''}`) ? 10 : 3
+  return EVERY_SCREEN.test(String(c.says || '')) ? one + 3 : one
+}
 // The claims in the plan's order, cut where the running cost is nearest to an even share: null when one verifier
 // is enough (about four flows' worth at a first look), five shares at most. A look after a fix takes twice as
 // much a verifier and three at most: the flows are written by then.
@@ -880,7 +896,7 @@ Someone who did not build it operated the product and found these claims false:
 ${wrong}
 ${broke ? `And these were true before this work and are not now (each is a promise of earlier work: \`sz-eyes standing\` shows how it is checked):\n${broke}` : ''}
 
-Find the cause of each in the product and fix it there. Where a claim is shown by pictures kept in the evidence folder (a look the owner will go through), take those pictures again from the product as you leave it: a picture from before your fix shows the fault you mended, and the claim is false again for that alone. Where a claim says something of every screen (nothing cut off, nothing too small to press), mend the cause wherever the same thing is shown, not only in the place named, and run that claim's flow over the whole product until it reports nothing before you return. Do not edit the contract, the flows or the tests it names, or those of earlier work, and do not record verdicts. Run the check of each claim you were handed until it passes (its flow, its test, its command), and the project's quick checks (its type check and its tests of pure rule). Do not run the other flows, of this contract or of earlier work: whoever looks again runs all of them once, side by side on copies of their own, and run here one after another they are most of an hour in which nothing is learned. Commit the fix. If a claim cannot be made true without changing what was asked, change nothing for it and say why. Nothing is put in as an example to make a claim true: what cannot be made real with what is at hand goes under "notFixed", with what it needs; each line of "notFixed" starts with the id of its claim and a colon (\`<claim id>: why\`), one claim a line.`,
+Find the cause of each in the product and fix it there. Where a claim is shown by pictures kept in the evidence folder (a look the owner will go through), take those pictures again from the product as you leave it: a picture from before your fix shows the fault you mended, and the claim is false again for that alone. Where a claim says something of every screen (nothing cut off, nothing too small to press), mend the cause wherever the same thing is shown, not only in the place named, and run that claim's flow over the whole product until it reports nothing before you return. Do not edit the contract, the flows or the tests it names, or those of earlier work, and do not record verdicts. Run the check of each claim you were handed until it passes (its flow, its test, its command), and the project's quick checks (its type check and its tests of pure rule). Do not run the other flows, of this contract or of earlier work: whoever looks again runs all of them once, side by side on copies of their own, and run here one after another they are most of an hour in which nothing is learned. One search comes first, though: before you commit, search the flows and tests of this contract and of earlier work for the words, figures and names your fix changes on a screen or in an answer (the old form, as it stood). A check that reads the old form fails at the next look, and that is another round of fixing and looking. Run each one that does, by itself, and keep what it reads as it was unless the claim you were handed says otherwise. Commit the fix. If a claim cannot be made true without changing what was asked, change nothing for it and say why. Nothing is put in as an example to make a claim true: what cannot be made real with what is at hand goes under "notFixed", with what it needs; each line of "notFixed" starts with the id of its claim and a colon (\`<claim id>: why\`), one claim a line.`,
       { label: `fix:${m.id}:${round}`, phase: 'Build', ...effort('build'), ...model('build'), schema: { type: 'object', properties: { fixed: { type: 'array', items: { type: 'string' } }, notFixed: { type: 'array', items: { type: 'string' } } }, required: ['fixed'] } },
     )
     // What the fixer says cannot be made true is ruled on before anyone looks again: a claim set aside is not looked at twice more.

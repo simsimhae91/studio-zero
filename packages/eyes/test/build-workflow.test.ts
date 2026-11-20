@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { Claim, Contract } from '../src/contract.ts';
 
 type Call = { prompt: string; label: string; effort?: string; model?: string };
 type Answer = (call: Call, nth: number) => unknown;
@@ -957,3 +958,65 @@ test('a session waits for the product on the signal its builder gives, and a loo
   assert.deepEqual(await shares('a picture of the home screen is in the folder'), [['a', 'b', 'c'], ['drawn', 'e', 'f']]);
   for (const says of ['24화면 각 상태의 휴대폰 크기 그림이 증거 폴더에 있다', '각 화면이 그림과 같다', 'each of the 24 screens is as drawn']) assert.deepEqual(await shares(says), [['a', 'b'], ['c', 'drawn'], ['e', 'f']], says);
 });
+
+test('a plan writes only what the contract can record, and a builder\'s remark is not a stop', async () => {
+  // (2026-11-19: a plan wrote claims of up to 829 characters for a phone milestone. The contract takes 400, so
+  // the builder recorded them in parts under ids of its own (ios-path, ios-path-2, ios-path-3), said so under
+  // "blocked", and the run stopped as "could not be built" with an hour's build standing and nothing verified.)
+  const most = Number(/const CLAIM_MOST = (\d+)\n/.exec(SOURCE)![1]);
+  const line = Number(/const LINE_MOST = (\d+)\n/.exec(SOURCE)![1]);
+  assert.equal(Claim.shape.says.safeParse('가'.repeat(most)).success, true, 'the longest claim a plan may write is one the contract records');
+  assert.equal(Claim.shape.says.safeParse('가'.repeat(most + 1)).success, false, 'and the plan may write the longest the contract records');
+  for (const field of ['risks', 'notDoing'] as const) {
+    assert.equal(Contract.shape[field].safeParse(['가'.repeat(line)]).success, true, field);
+    assert.equal(Contract.shape[field].safeParse(['가'.repeat(line + 1)]).success, false, field);
+    assert.ok(SOURCE.includes(`${field}: { type: 'array', items: { type: 'string', maxLength: LINE_MOST } }`), `the plan's ${field} are held to the contract's length`);
+  }
+  assert.match(SOURCE, /says: \{ type: 'string', maxLength: CLAIM_MOST, description: `[^`]*What needs more words is more than one claim: cut it into claims with an id and a check each` \}/);
+  assert.match(SOURCE, /blocked: \{ type: 'string', description: '[^']*Anything written here stops the run before anyone verifies: where the milestone stands, leave it empty[^']*in the summary' \}/);
+});
+
+test('a flow shown on a simulator is a verifier\'s whole share, and a fixer searches the checks of earlier work for what it changes', async () => {
+  // (2026-11-19: three flows on a simulator were weighed as three in a browser and went to one verifier, who took
+  // 144 minutes, while the other, with two browser flows and a command, took 40.)
+  const claims = [
+    { id: 'ios-path', says: 'eyes의 iOS 시뮬레이터에 깐 Release 빌드를 열면 ON-01이 뜬다', kind: 'flow', ref: 'flows/ios/path.sh' },
+    { id: 'ios-steps', says: '걸음 연결하기를 누르면 건강 접근 시트가 걸음 하나만 묻는다', kind: 'flow', ref: 'flows/ios/steps.sh (Maestro flows/ios/steps.yaml)' },
+    { id: 'ios-fit', says: '시뮬레이터에서 24화면 각 한 상태를 열어 찍은 그림이 있다', kind: 'flow', ref: 'flows/ios/fit.sh (Maestro)' },
+    { id: 'mends-play', says: '첫 판 검증이 본 놀이의 틈이 막혀 있다', kind: 'flow', ref: 'flows/mends-play.sh' },
+    { id: 'mends-read', says: '첫 판 검증이 본 말과 손잡이가 바르다', kind: 'flow', ref: 'flows/mends-read.sh' },
+    { id: 'keeps', says: 'iOS 앱 번들에는 서비스 키도 이 Mac의 주소도 없다', kind: 'command', ref: 'npm test' },
+    { id: 'feel-phone', says: '주인이 시뮬레이터 그림을 보고 판단한다', kind: 'owner', ref: '.sz/evidence/phone/ios/' },
+  ];
+  const yours = (c: Call): string[] => (/Yours are these claims: ([^.]*)\./.exec(c.prompt)?.[1] ?? 'all').split(', ');
+  const all = claims.filter((c) => c.kind !== 'owner').map((c) => c.id);
+  let looks = 0;
+  const { calls } = await run({ request: 'x' }, {
+    plan: () => ({ mode: 'extend', summary: 's', milestones: [{ id: 'phone', title: '휴대폰에서', builds: 'b', claims }] }),
+    build: built,
+    // Each verifier answers for its own share; at the first look one claim of the web part is shown false.
+    verify: (c) => {
+      const mine = yours(c);
+      const first = !c.label.includes(':again');
+      if (first) looks++;
+      return { proven: mine.filter((id) => all.includes(id) && !(first && id === 'mends-read')), refuted: first && mine.includes('mends-read') ? [{ id: 'mends-read', fact: 'BT-03 writes an ASCII minus' }] : [], unchecked: mine.includes('feel-phone') ? [{ id: 'feel-phone', why: 'the owner judges it' }] : [] };
+    },
+    fix: () => ({ fixed: ['mends-read: mended'] }),
+    close: closed,
+  });
+  const first = calls.filter((c) => /^verify:phone:\dof\d$/.test(c.label));
+  assert.deepEqual(first.map(yours), [['ios-path'], ['ios-steps'], ['ios-fit'], ['mends-play', 'mends-read', 'keeps', 'feel-phone']], 'each flow on a simulator has a verifier of its own, and the browser part stays together');
+  assert.equal(looks, 4);
+  const again = calls.filter((c) => c.label.startsWith('verify:phone:again'));
+  assert.deepEqual(again.map(yours), [['ios-path', 'ios-steps'], ['ios-fit', 'mends-play', 'mends-read', 'keeps', 'feel-phone']], 'the look after a fix, its flows written, is shared by two');
+  // A command that names the device (a bundle searched for keys) is still a command.
+  assert.ok(first.every((c) => !/Yours are these claims: keeps\./.test(c.prompt)));
+
+  // (The same night a fix signed a percent that two frozen flows of the first pass read unsigned. Nobody ran them
+  // until the next look: 37 minutes to learn it, a second fix, and a third look.)
+  const fix = calls.find((c) => c.label === 'fix:phone:1')!.prompt;
+  assert.match(fix, /before you commit, search the flows and tests of this contract and of earlier work for the words, figures and names your fix changes on a screen or in an answer \(the old form, as it stood\)/);
+  assert.match(fix, /Run each one that does, by itself, and keep what it reads as it was unless the claim you were handed says otherwise/);
+  assert.match(fix, /Do not run the other flows, of this contract or of earlier work/, 'the other flows are still left to whoever looks again');
+});
+
