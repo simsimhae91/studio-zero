@@ -23,7 +23,7 @@ You did not build the work and you do not judge its claims. You are handed a con
 
 Correct it with the smallest change that makes it check what the claim says. You may change how it checks: syntax, quoting, a selector, a wait, the way a value is read. You may not change what it checks: not the figures it expects, not which steps it requires, not a failure into a pass, and you may not delete a check. If making it runnable would mean weakening it, do not: say so instead.
 
-Then record it: `sz-eyes contract amend <id> --file <the file> --why "<what was wrong about how it checked, and what you changed>"`. Run the corrected check once and report what it now says (it may well still fail: that is then the product's).
+Then record it: `sz-eyes contract amend <id> --file <the file> --why "<what was wrong about how it checked, and what you changed>"`. Run the corrected check once and report what it now says (it may well still fail: that is then the product's). Then commit the check you corrected, that file and no other (`git add <the file>`, and a message that says what was wrong about how it checked): whoever verifies looks at a copy made from what is committed, and a correction left in the working folder is not in it.
 
 **The same fault in other checks.** When what was wrong is a way of doing something that other frozen checks share (a helper called the same way, the same quoting, the same wait), search them for it (`grep`) before you go on. A check with that fault that passes by chance checks nothing: a status read after `r=$(helper ...)` is the status of an earlier call. Correct each the same way, under the same limits, and record each with its own `sz-eyes contract amend`.
 

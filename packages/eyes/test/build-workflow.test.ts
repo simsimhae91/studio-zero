@@ -866,6 +866,9 @@ test('the frozen checks a builder disputes go to one arbiter in one sitting, and
   const arbiter = readFileSync(fileURLToPath(new URL('../../../plugin/agents/arbiter.md', import.meta.url)), 'utf8');
   assert.match(arbiter, /one or more frozen files/);
   assert.match(arbiter, /\*\*The same fault in other checks\.\*\*[^\n]*passes by chance[^\n]*`sz-eyes contract amend`/);
+  // (2026-11-19: three corrected flows stayed uncommitted to the end of the run, while every verifier's copy is
+  // made from what is committed.)
+  assert.match(arbiter, /Then commit the check you corrected, that file and no other[^\n]*a copy made from what is committed/);
 });
 
 test('a milestone an earlier run looked at whole and left with claims shown false is taken up at the fix', async () => {
