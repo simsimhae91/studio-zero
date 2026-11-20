@@ -17,7 +17,7 @@ import { reviewWeb } from '../src/review.ts';
 import { SandboxError, stoppedBySandbox, walkWeb } from '../src/web.ts';
 import { brokenDuring, keptFor, recordShown, stampClosed, standing } from '../src/standing.ts';
 import { evidencePage } from '../src/evidence.ts';
-import { quarantineFlow, screenText } from '../src/ios.ts';
+import { lookAt, quarantineFlow } from '../src/ios.ts';
 import { lockPathOf, withFileLock, writeFileAtomic } from '../src/lock.ts';
 
 const contract = (): Contract =>
@@ -526,12 +526,13 @@ test('a port is taken from the machine, not chosen', async () => {
 test('every call to Maestro brings a driver port of its own, so the simulator named is the one that answers', async () => {
   const seen: string[][] = [];
   const run = async (command: string, args: string[]) => {
+    if (command !== 'maestro') return { exitCode: command === 'xcrun' && args[0] === 'swift' ? 1 : 0, stdout: '', stderr: '', timedOut: false };
     seen.push([command, ...args]);
     return { exitCode: 0, stdout: 'noise before\n{ "attributes": { "text": "로그인" }, "children": [{ "attributes": { "accessibilityText": "코드 받기", "resource-id": "send" } }] }', stderr: '', timedOut: false };
   };
-  const first = await screenText('AAAA-1111', run as never);
-  await screenText('BBBB-2222', run as never);
-  assert.deepEqual(first, { texts: ['로그인', '코드 받기'], ids: ['send'] });
+  const first = await lookAt('AAAA-1111', { run: run as never });
+  await lookAt('BBBB-2222', { run: run as never });
+  assert.deepEqual([first.screen.texts, first.screen.ids], [['코드 받기'], ['send']], 'a tree with no places is still read for its words');
   for (const [k, udid] of [[0, 'AAAA-1111'], [1, 'BBBB-2222']] as const) {
     const [command, flag, port, device, named, verb] = seen[k]!;
     assert.deepEqual([command, flag, device, named, verb], ['maestro', '--driver-host-port', '--device', udid, 'hierarchy']);

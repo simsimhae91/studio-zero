@@ -13,7 +13,7 @@ import { writeEvidencePage } from './evidence.ts';
 import { changedSinceFrozen, fingerprint, fingerprints } from './fingerprint.ts';
 import { Status, addSaid, latestRound, newRound, noteSaid, readRound, renderRound, writeRoundPage } from './feedback.ts';
 import { IMAGE_ASSETS_DIR, ImageError, imageCommand } from './image.ts';
-import { EyesError, installApp, restSimulator, runFlow, screenText, screenshot, spareSimulator } from './ios.ts';
+import { EyesError, installApp, lookAt, lookText, restSimulator, runFlow, spareSimulator } from './ios.ts';
 import { downloadsOf, filesOf, leakReport, renderLeaks } from './leaks.ts';
 import { lookAtLive, renderLive } from './live.ts';
 import { RelayError, loginCommand } from './login-relay.ts';
@@ -101,7 +101,12 @@ const USAGE = `sz-eyes: launch what was built, look at it, operate it, and put w
         put a built app on it, fresh (a React Native debug build is told which packager to load from)
   sz-eyes ios flow <udid> <flow.yaml> --out <folder> [--video] [-e KEY=VALUE]...
         run a Maestro flow from a copy that cannot write outside <folder>; says each step, keeps screenshots and a film
-  sz-eyes ios look <udid> [--out <folder>] [--name <n>]  a screenshot, and the words and ids on the screen
+  sz-eyes ios look <udid> [--out <folder>] [--name <n>] [--json]
+        what is on its screen: the words and ids in the screen's tree; the words read in a picture of it (what a
+        person sees: the tree also holds what is behind a fixed bar or scrolled out of sight); the fields, with
+        how a flow presses each (by its id, or by its place when it has none); where the keyboard is and what it
+        is in front of; and what of the app shows under the status bar or in the home bar's band. --out keeps the
+        picture; --json gives every part with its place in points
   sz-eyes ios rest <udid> [--erase]                      shut it down (and wipe it); take it again with ios spare, which
         hands it over with Safari's first-run tip off (on a wiped simulator the tip covers the "열기" of a link that opens the app)
 
@@ -722,7 +727,7 @@ async function main(argv: string[]): Promise<number> {
     }
   }
   if (area === 'ios') {
-    const a = parse(rest, ['--video', '--erase']);
+    const a = parse(rest, ['--video', '--erase', '--json']);
     if (command === 'spare') {
       out(await spareSimulator({ ...(a.one('--type') ? { type: a.one('--type')! } : {}), ...(a.one('--name') ? { name: a.one('--name')! } : {}) }));
       return 0;
@@ -750,11 +755,8 @@ async function main(argv: string[]): Promise<number> {
     }
     if (command === 'look') {
       const folder = a.one('--out') ? resolve(a.one('--out')!) : null;
-      const shot = folder ? await screenshot(udid, join(folder, `${a.one('--name') ?? 'look'}.png`)) : null;
-      const seen = await screenText(udid);
-      if (shot) out(`screenshot: ${shot}`);
-      out(`words on it (${seen.texts.length}): ${seen.texts.slice(0, 80).map((text) => JSON.stringify(text)).join(' ')}`);
-      out(`ids on it (${seen.ids.length}): ${seen.ids.slice(0, 80).join(', ')}`);
+      const look = await lookAt(udid, folder ? { shot: join(folder, `${a.one('--name') ?? 'look'}.png`) } : {});
+      out(a.has('--json') ? JSON.stringify(look, null, 1) : lookText(look));
       return 0;
     }
     if (command === 'rest') {

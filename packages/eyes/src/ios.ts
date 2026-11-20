@@ -1,7 +1,9 @@
 import { spawn } from 'node:child_process';
 import { freePort } from './port.ts';
-import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { basename, dirname, extname, isAbsolute, join, relative, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { stoppedBySandbox } from './web.ts';
 import { runCommand, type CommandRunner, type RunResult } from '@studio-zero/daemon/src/util/run.ts';
 
@@ -104,21 +106,240 @@ async function ownDriver(udid: string): Promise<string[]> {
   return ['--driver-host-port', String(await freePort()), '--device', udid];
 }
 
-/** What is on the simulator's screen as Maestro reads it: the words, and what can be pressed, in reading order. */
-export async function screenText(udid: string, run: CommandRunner = runCommand): Promise<{ texts: string[]; ids: string[] }> {
-  const res = await sh(run, 'maestro', [...(await ownDriver(udid)), 'hierarchy'], 120_000);
-  const start = res.stdout.indexOf('{');
-  if (res.exitCode !== 0 || start === -1) throw new EyesError(`the screen could not be read: ${(res.stderr || res.stdout).trim().slice(-300)}`);
+export interface Box {
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+}
+
+/** One named part of a screen, as the screen's tree gives it: what it is called, and where it is laid out, in points. */
+export interface ScreenPart {
+  text: string;
+  id: string;
+  /** What a field shows while it is empty. */
+  hint: string;
+  value: string;
+  box: Box;
+}
+
+/** A row of words read in a picture of the screen, in points. */
+export interface SeenWords {
+  text: string;
+  box: Box;
+}
+
+export interface PhoneScreen {
+  /** The words of the app's parts, in the tree's order: no key of the keyboard, nothing of the status bar. */
+  texts: string[];
+  ids: string[];
+  /** In points; null when the tree does not say. */
+  size: { w: number; h: number } | null;
+  /** Where the status bar's own frame ends; 0 when the tree shows none. */
+  statusBar: number;
+  /** The height of the band at the foot of a phone with no home button, where the home bar is drawn; else 0. */
+  homeBar: number;
+  /** Where the keyboard is while it is up. */
+  keyboard: Box | null;
+  parts: ScreenPart[];
+  /** The parts a person types into, as far as the tree tells: it knows a field by the hint it shows while empty. */
+  fields: ScreenPart[];
+  /** The app's parts the keyboard is in front of, by name. */
+  behindKeyboard: string[];
+  /** Where the status bar's own words are (the time, the battery): not the app's. */
+  system: Box[];
+}
+
+type TreeNode = { attributes?: Record<string, string>; children?: TreeNode[] };
+const boxOf = (node: TreeNode): Box | null => {
+  const read = /^\[(-?\d+),(-?\d+)\]\[(-?\d+),(-?\d+)\]$/.exec(node.attributes?.bounds ?? '');
+  if (!read) return null;
+  const [x1, y1, x2, y2] = read.slice(1).map(Number) as [number, number, number, number];
+  return { x1, y1, x2, y2 };
+};
+const SCROLL_BAR = /scroll bar|스크롤 막대/i;
+const KEYBOARD = /^(inputView|UIKeyboard)/;
+/** A phone with no home button has a status bar of 44 points and more, and draws its home bar in the last 34. */
+const HOME_BAR = 34;
+
+/**
+ * What Maestro's tree of an iOS screen says: the app's parts with their names and places, the keyboard, the
+ * status bar. The tree is the app's first, with a window of its own for the keyboard, and the status bar's after
+ * it. It says how a screen is laid out, not what of it shows: a part behind a fixed bar, or scrolled out of
+ * sight, is in it like any other, and nothing in it tells the two apart (2026-11-19, 23 screens of one app: no
+ * container that scrolls was marked as one). What a person sees is read from a picture (`measureScreen`).
+ */
+export function readTree(tree: unknown): PhoneScreen {
+  const root = tree as TreeNode;
+  const [app, ...rest] = root.children ?? [];
+  const frame = app ? boxOf(app) : null;
+  const size = frame && frame.x1 === 0 && frame.y1 === 0 && frame.x2 > 0 && frame.y2 > 0 ? { w: frame.x2, h: frame.y2 } : null;
   const texts: string[] = [];
   const ids: string[] = [];
-  const walk = (node: { attributes?: Record<string, string>; children?: unknown[] }): void => {
+  const parts: ScreenPart[] = [];
+  const system: Box[] = [];
+  let keyboard: Box | null = null;
+  let statusBar = 0;
+
+  const holds = (node: TreeNode, test: (node: TreeNode) => boolean): boolean => test(node) || (node.children ?? []).some((child) => holds(child, test));
+  const isKeyboard = (node: TreeNode): boolean => KEYBOARD.test(node.attributes?.['resource-id'] ?? '');
+  const whole = (box: Box): boolean => size !== null && box.x1 <= 0 && box.y1 <= 0 && box.x2 >= size.w && box.y2 >= size.h;
+  const take = (node: TreeNode, skip: (box: Box | null) => boolean = () => false): void => {
     const a = node.attributes ?? {};
-    for (const text of [a.text, a.accessibilityText, a.hintText]) if (text && text.trim() !== '' && !texts.includes(text.trim())) texts.push(text.trim());
-    if (a['resource-id'] && !ids.includes(a['resource-id'])) ids.push(a['resource-id']);
-    for (const child of node.children ?? []) walk(child as never);
+    const box = boxOf(node);
+    if (skip(box)) {
+      for (const child of node.children ?? []) take(child, skip);
+      return;
+    }
+    const text = (a.accessibilityText || a.text || a.title || a.value || a.hintText || '').trim();
+    const id = (a['resource-id'] ?? '').trim();
+    // The frame of the whole screen carries the app's name, and a scroll bar its own: neither is the app's words.
+    if (!(box && whole(box)) && !SCROLL_BAR.test(text) && (text !== '' || id !== '')) {
+      for (const word of [a.text, a.accessibilityText, a.hintText]) if (word && word.trim() !== '' && !texts.includes(word.trim())) texts.push(word.trim());
+      if (id !== '' && !ids.includes(id)) ids.push(id);
+      // A part is one with a place: it can be pressed there, and measured.
+      if (box && box.x2 > box.x1 && box.y2 > box.y1) {
+        const part = { text, id, hint: (a.hintText ?? '').trim(), value: (a.value ?? '').trim(), box };
+        if (!parts.some((p) => p.text === part.text && p.id === part.id && p.box.x1 === box.x1 && p.box.y1 === box.y1 && p.box.x2 === box.x2 && p.box.y2 === box.y2)) parts.push(part);
+      }
+    }
+    for (const child of node.children ?? []) take(child, skip);
   };
-  walk(JSON.parse(res.stdout.slice(start)) as never);
-  return { texts, ids };
+
+  // The app's windows: its own first, then one for whatever is in front of it. The keyboard's is not the app's.
+  const windows = app?.children ?? [];
+  const own = windows.filter((window) => !holds(window, isKeyboard));
+  for (const window of windows) {
+    if (own.includes(window)) continue;
+    const find = (node: TreeNode): void => {
+      const box = boxOf(node);
+      if (box && isKeyboard(node) && box.y2 > box.y1) keyboard = keyboard ? { x1: Math.min(keyboard.x1, box.x1), y1: Math.min(keyboard.y1, box.y1), x2: Math.max(keyboard.x2, box.x2), y2: Math.max(keyboard.y2, box.y2) } : box;
+      for (const child of node.children ?? []) find(child);
+    };
+    find(window);
+  }
+  // The status bar's frame is the full width from the top, a strip; what is named inside it is the system's.
+  const strip = (node: TreeNode): void => {
+    const box = boxOf(node);
+    if (box && size && box.x1 === 0 && box.y1 === 0 && box.x2 >= size.w && box.y2 > 0 && box.y2 <= 120) statusBar = Math.max(statusBar, box.y2);
+    for (const child of node.children ?? []) strip(child);
+  };
+  for (const other of rest) strip(other);
+  const outside = (node: TreeNode): void => {
+    const a = node.attributes ?? {};
+    const box = boxOf(node);
+    const named = [a.accessibilityText, a.text, a.title, a.value].some((word) => (word ?? '').trim() !== '');
+    if (box && named && box.y2 > box.y1 && box.y2 <= statusBar + 2) system.push(box);
+    for (const child of node.children ?? []) outside(child);
+  };
+  for (const other of rest) outside(other);
+
+  for (const window of own) take(window);
+  // A tree that is not laid out as windows of one app is read as it stands.
+  if (windows.length === 0) take(app ?? root);
+  // What the system puts in front of the app (a sheet that asks for access) has words a flow presses too; what
+  // the status bar shows is not listed.
+  for (const other of rest) take(other, (box) => box !== null && box.y2 <= statusBar + 2);
+
+  const up = keyboard as Box | null;
+  const behindKeyboard = up ? [...new Set(parts.filter((part) => part.text !== '' && (part.box.y1 + part.box.y2) / 2 >= up.y1).map((part) => part.text))] : [];
+  return { texts, ids, size, statusBar, homeBar: statusBar >= 44 ? HOME_BAR : 0, keyboard: up, parts, fields: parts.filter((part) => part.hint !== ''), behindKeyboard, system };
+}
+
+/**
+ * What a person sees of the app where it does not belong: its words under the status bar, or in the band the home
+ * bar is drawn in. Measured on the words read in a picture of the screen, placed by what the tree says of the
+ * screen: where the status bar ends, where the keyboard is. `seen` is null when the picture could not be read.
+ */
+export function measureScreen(screen: PhoneScreen, seen: SeenWords[] | null, why = ''): string[] {
+  if (!screen.size) return ["the screen's size is not in its tree: nothing was measured"];
+  if (!seen) return [`the picture could not be read${why ? ` (${why})` : ''}: what shows under the status bar and in the home bar's band was not measured`];
+  const { h } = screen.size;
+  const findings: string[] = [];
+  for (const row of ownRows(screen, seen)) {
+    const said = `${JSON.stringify(row.text)} (from ${row.box.y1} to ${row.box.y2} of ${h} points down)`;
+    // A row of words is read with a point or two of air around it.
+    if (screen.statusBar > 0 && row.box.y1 < screen.statusBar - 2) findings.push(`under the status bar, which ends at ${screen.statusBar}: ${said}`);
+    if (screen.homeBar > 0 && row.box.y2 > h - screen.homeBar + 2 && row.box.y1 < h) findings.push(`in the home bar's band, the last ${screen.homeBar} points: ${said}`);
+  }
+  return findings;
+}
+
+const over = (a: Box, b: Box): boolean => a.x1 < b.x2 && b.x1 < a.x2 && a.y1 < b.y2 && b.y1 < a.y2;
+
+/** The rows read in a picture that are the app's: not the status bar's own words, not the keys of the keyboard. */
+export function ownRows(screen: PhoneScreen, rows: SeenWords[]): SeenWords[] {
+  return rows.filter((row) => !(screen.keyboard && (row.box.y1 + row.box.y2) / 2 >= screen.keyboard.y1) && !screen.system.some((box) => over(box, row.box)));
+}
+
+/** Parses what `ios-read.swift` prints. */
+export function readRows(printed: string): SeenWords[] {
+  const rows: SeenWords[] = [];
+  for (const line of printed.split('\n')) {
+    const read = /^(-?\d+)\t(-?\d+)\t(-?\d+)\t(-?\d+)\t(.+)$/.exec(line);
+    if (read) rows.push({ text: read[5]!.trim(), box: { x1: Number(read[1]), y1: Number(read[2]), x2: Number(read[3]), y2: Number(read[4]) } });
+  }
+  return rows;
+}
+
+const READER = fileURLToPath(new URL('./ios-read.swift', import.meta.url));
+
+export interface PhoneLook {
+  screen: PhoneScreen;
+  /** The words read in the picture, or null when it could not be read. */
+  seen: SeenWords[] | null;
+  findings: string[];
+  /** The picture, when one was asked to be kept. */
+  shot: string | null;
+}
+
+/**
+ * A look at a simulator's screen: its tree as Maestro reads it (names, places, the keyboard), a picture, the
+ * words read in the picture, and what of the app shows under the status bar or in the home bar's band.
+ * (2026-11-19: with a picture and a list of words to go on, a verifier wrote its own reader of pictures and its
+ * own measure of the tree, 85 minutes for the claim that every screen fits, and the claim stayed unchecked.)
+ */
+export async function lookAt(udid: string, opts: { shot?: string; run?: CommandRunner } = {}): Promise<PhoneLook> {
+  const run = opts.run ?? runCommand;
+  const kept = opts.shot ?? null;
+  const picture = kept ?? join(tmpdir(), `sz-ios-look-${udid}-${process.pid}.png`);
+  try {
+    await screenshot(udid, picture, run);
+    const res = await sh(run, 'maestro', [...(await ownDriver(udid)), 'hierarchy'], 120_000);
+    const start = res.stdout.indexOf('{');
+    if (res.exitCode !== 0 || start === -1) throw new EyesError(`the screen could not be read: ${(res.stderr || res.stdout).trim().slice(-300)}`);
+    const screen = readTree(JSON.parse(res.stdout.slice(start)));
+    let seen: SeenWords[] | null = null;
+    let why = '';
+    if (screen.size) {
+      const read = await sh(run, 'xcrun', ['swift', READER, picture, String(screen.size.w), String(screen.size.h)], 120_000);
+      if (read.exitCode === 0) seen = ownRows(screen, readRows(read.stdout));
+      else why = (read.stderr || read.stdout).trim().split('\n').slice(-1)[0]?.slice(0, 200) ?? '';
+    }
+    return { screen, seen, findings: measureScreen(screen, seen, why), shot: kept };
+  } finally {
+    if (!kept) rmSync(picture, { force: true });
+  }
+}
+
+/** The look as the command prints it. */
+export function lookText(look: PhoneLook): string {
+  const { screen, seen, findings } = look;
+  const quoted = (words: string[], most = 80): string => words.slice(0, most).map((word) => JSON.stringify(word)).join(' ');
+  const at = (box: Box): string => (screen.size ? `${Math.round(((box.x1 + box.x2) / 2 / screen.size.w) * 100)}%,${Math.round(((box.y1 + box.y2) / 2 / screen.size.h) * 100)}%` : `${Math.round((box.x1 + box.x2) / 2)},${Math.round((box.y1 + box.y2) / 2)}`);
+  const lines: string[] = [];
+  if (look.shot) lines.push(`screenshot: ${look.shot}`);
+  if (screen.size) lines.push(`screen: ${screen.size.w} by ${screen.size.h} points${screen.statusBar > 0 ? `, the status bar ends at ${screen.statusBar}` : ''}${screen.homeBar > 0 ? `, the home bar's band is the last ${screen.homeBar}` : ''}${screen.keyboard ? `, the keyboard is up from ${screen.keyboard.y1}` : ''}`);
+  lines.push(`words in its tree (${screen.texts.length}; what is behind a fixed bar or scrolled out of sight is among them): ${quoted(screen.texts)}`);
+  if (seen) lines.push(`words read in the picture, the app's (${seen.length} rows): ${quoted(seen.map((row) => row.text))}`);
+  lines.push(`ids on it (${screen.ids.length}): ${screen.ids.slice(0, 80).join(', ')}`);
+  if (screen.fields.length > 0) {
+    lines.push(`fields (${screen.fields.length}), as far as the tree knows one (by the hint it shows while empty):`);
+    for (const field of screen.fields) lines.push(`  ${JSON.stringify(field.text)}${field.value && field.value !== field.text ? ` holds ${JSON.stringify(field.value)}` : ''}, hint ${JSON.stringify(field.hint)}: ${field.id ? `a flow presses it by its id, ${field.id}` : `it has no id, so a flow presses it by its place, ${at(field.box)} (by its words Maestro may press the label beside it, and what is typed goes nowhere)`}`);
+  }
+  if (screen.keyboard) lines.push(`behind the keyboard (${screen.behindKeyboard.length}): ${quoted(screen.behindKeyboard, 40)}`);
+  lines.push(findings.length === 0 ? "measured on the picture: none of the app's words under the status bar or in the home bar's band" : `measured (${findings.length}):\n${findings.map((finding) => `  ${finding}`).join('\n')}`);
+  return lines.join('\n');
 }
 
 /**
