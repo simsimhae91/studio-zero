@@ -3,12 +3,13 @@
 // side by side made these by hand, each time (fourteen times in one first pass, 2026-11-17).
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { COPY_MARK, copyText, endCopy, makeCopy } from '../src/copy.ts';
+import { saysDown, stacksOf } from '../src/supabase.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const git = (cwd: string, ...args: string[]): string => {
@@ -128,7 +129,7 @@ test('from the command line: the folder is the last line, and a product with no 
   }
 });
 
-test('a copy is ended in one step: its stack is stopped from its folder first, and the folder goes only when that worked', async () => {
+test('a copy is ended in one step: every stack started in it is stopped by its id first, and the folder goes only when that worked', async () => {
   // (2026-11-19: a verifier stopped two copies' stacks with a flag the command does not have, threw away what it
   // said, and removed the folders. A stack is known by its folder: the two ran on with nothing to stop them from.)
   const p = product();
@@ -140,22 +141,29 @@ test('a copy is ended in one step: its stack is stopped from its folder first, a
     assert.ok(said.includes(`end the copy: sz-eyes copy ${folder} --end (it stops the copy's stack and then removes the folder; never remove the folder yourself`), said);
     assert.equal(said.trim().split('\n').at(-1), folder);
 
-    // The stack does not stop: the folder stays, and it is said why.
+    // A stack of the copy's does not stop: the folder stays, and it is said why and how it is stopped.
     const asked: string[] = [];
-    await assert.rejects(endCopy(folder, async (cwd) => (asked.push(cwd), 1)), /the stack of .*copies\/v1 did not stop \(sz-eyes supabase stop exited 1 there[^)]*\), so the folder is kept/);
-    assert.deepEqual(asked, [folder]);
+    const ID = 'a'.repeat(64);
+    const one = { of: () => [ID] };
+    await assert.rejects(endCopy(folder, { ...one, stop: async (id, cwd) => (asked.push(`${id.slice(0, 4)} ${cwd}`), false) }), /the stack aaaaaaaaaaaa of .*copies\/v1 did not stop[^,]*, so the folder is kept[^]*sz-eyes supabase stop --stack-id aaaaaaaaaaaa/);
+    assert.deepEqual(asked, [`aaaa ${folder}`]);
     assert.equal(existsSync(join(folder, 'src/a.txt')), true);
 
-    // It stops: then the folder is removed.
-    assert.deepEqual(await endCopy(folder, async (cwd) => (asked.push(cwd), 0)), { folder, stack: true });
+    // Two stacks were started in it (one before it was made a repository, one after): the folder goes only when
+    // both are down, and each is stopped by its id.
+    const TWO = ['a'.repeat(64), 'b'.repeat(64)];
+    await assert.rejects(endCopy(folder, { of: () => TWO, stop: async (id) => id.startsWith('a') }), /the stack bbbbbbbbbbbb of/);
+    assert.equal(existsSync(join(folder, 'src/a.txt')), true);
+    const stopped: string[] = [];
+    assert.deepEqual(await endCopy(folder, { of: (copy) => (stopped.push(`of ${copy}`), TWO), stop: async (id) => (stopped.push(id.slice(0, 2)), true) }), { folder, stacks: 2 });
     assert.equal(existsSync(folder), false);
-    assert.deepEqual(asked, [folder, folder], 'stopped from the copy\'s own folder');
+    assert.deepEqual(stopped, [`of ${folder}`, 'aa', 'bb']);
 
     // A folder of the product's own, or any folder a copy was not made in, is never ended this way.
-    await assert.rejects(endCopy(p.project, async () => (asked.push('project'), 0)), /was not made by sz-eyes copy[^:]*: nothing was stopped and nothing removed/);
-    assert.equal(asked.includes('project'), false, 'its stack is not stopped either');
+    await assert.rejects(endCopy(p.project, { of: () => (asked.push('project'), [ID]), stop: async () => (asked.push('project'), true) }), /was not made by sz-eyes copy[^:]*: nothing was stopped and nothing removed/);
+    assert.equal(asked.includes('project'), false, 'its stacks are neither looked up nor stopped');
     assert.equal(existsSync(join(p.project, 'src/a.txt')), true);
-    await assert.rejects(endCopy(join(p.root, 'gone'), async () => 0), /is not there/);
+    await assert.rejects(endCopy(join(p.root, 'gone'), { of: () => [], stop: async () => true }), /is not there/);
 
     // From the command line, a copy of a product with no stack of this kind: the folder goes, and nothing else is asked.
     rmSync(join(p.project, 'supabase'), { recursive: true });
@@ -174,3 +182,40 @@ test('a copy is ended in one step: its stack is stopped from its folder first, a
     p.cleanup();
   }
 });
+
+test('the stacks of a folder are found by what the command line keeps of them, whatever branch they were started on', () => {
+  // (2026-11-19: a verifier ran `git init` in a copy whose stack was up. The command line finds a folder's stack by
+  // the folder and its git branch together, so the stop run from the folder found none, said so, and exited 0:
+  // the copy was reported ended with its stack stopped, and the stack ran on for three hours.)
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'sz-stacks-')));
+  try {
+    const home = join(root, 'home');
+    const copy = join(root, 'copies', 'v1');
+    mkdirSync(copy, { recursive: true });
+    const keep = (id: string, state: unknown): void => {
+      mkdirSync(join(home, '.supabase', 'stacks', id), { recursive: true });
+      writeFileSync(join(home, '.supabase', 'stacks', id, 'state.json'), typeof state === 'string' ? state : JSON.stringify(state));
+    };
+    keep('1'.repeat(64), { id: '1'.repeat(64), identity: { projectRoot: copy, branchContext: null, stackName: 'default' } });
+    keep('2'.repeat(64), { id: '2'.repeat(64), identity: { projectRoot: copy, branchContext: 'refs/heads/main', stackName: 'default' } });
+    keep('3'.repeat(64), { id: '3'.repeat(64), identity: { projectRoot: join(root, 'copies', 'v1b'), branchContext: null, stackName: 'default' } });
+    keep('4'.repeat(64), 'not json');
+    mkdirSync(join(home, '.supabase', 'stacks', '5'.repeat(64)));
+    assert.deepEqual(stacksOf(copy, { HOME: home }), ['1'.repeat(64), '2'.repeat(64)], 'both branches of the one folder, and no neighbour whose name begins the same');
+    // The folder named through a link (as /tmp is on macOS) is the same folder.
+    symlinkSync(join(root, 'copies'), join(root, 'link'));
+    assert.deepEqual(stacksOf(join(root, 'link', 'v1'), { HOME: home }), ['1'.repeat(64), '2'.repeat(64)]);
+    assert.deepEqual(stacksOf(join(root, 'nowhere'), { HOME: home }), []);
+    assert.deepEqual(stacksOf(copy, { HOME: join(root, 'no-home') }), [], 'a machine that never started a stack has none');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+
+  const id = 'a'.repeat(64);
+  assert.equal(saysDown(`{"stopped":["${id}"],"not_running":[],"message":""}\n`, id), true);
+  assert.equal(saysDown(`A new version is available\n{"stopped":[],"not_running":["${id}"],"message":""}\n`, id), true, 'already down is down');
+  assert.equal(saysDown('{"found":false,"message":"No managed stack found for this context."}\n', id), false, 'an answer that names no stack stopped nothing');
+  assert.equal(saysDown(`{"stopped":["${'b'.repeat(64)}"],"not_running":[],"message":""}\n`, id), false);
+  assert.equal(saysDown('', id), false);
+});
+

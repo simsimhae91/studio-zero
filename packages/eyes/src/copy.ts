@@ -99,22 +99,26 @@ export function makeCopy(project: string, folder: string, opts: { at?: string; w
 }
 
 /**
- * Ends a copy: its stack is stopped from its folder, and only then is the folder removed. A stack is known by the
+ * Ends a copy: every stack started in it is stopped, and only then is the folder removed. A stack is known by the
  * folder it was started in, so once the folder is gone nothing stops it by name. (2026-11-19: a verifier stopped
  * its two copies' stacks with a flag the command does not have, threw the refusal away, and removed the folders;
  * the two stacks were found running an hour after the run had ended.)
+ *
+ * The stacks are found by what the command line keeps of them and stopped each by its id, never by a stop run
+ * from the folder: that one finds the stack by the folder and its git branch together, and says "none" with
+ * exit 0 when the copy has since been made a repository. (The same night a copy was ended that way with its
+ * stack up, and was reported stopped.)
  */
-export async function endCopy(folder: string, stopStack: (cwd: string) => Promise<number>): Promise<{ folder: string; stack: boolean }> {
+export async function endCopy(folder: string, stacks: { of: (folder: string) => string[]; stop: (id: string, cwd: string) => Promise<boolean> }): Promise<{ folder: string; stacks: number }> {
   const to = resolve(folder);
   if (!existsSync(to)) throw new EyesError(`${to} is not there`);
   if (!existsSync(join(to, COPY_MARK))) throw new EyesError(`${to} was not made by sz-eyes copy (it has no ${COPY_MARK}): nothing was stopped and nothing removed. Only a copy is ended this way, never a folder of the product's own`);
-  const stack = existsSync(join(to, 'supabase', 'config.toml'));
-  if (stack) {
-    const code = await stopStack(to);
-    if (code !== 0) throw new EyesError(`the stack of ${to} did not stop (sz-eyes supabase stop exited ${code} there; what it said is above), so the folder is kept: a stack is stopped from the folder it was started in. Read what it said, and run this again`);
+  const ids = stacks.of(to);
+  for (const id of ids) {
+    if (!(await stacks.stop(id, to))) throw new EyesError(`the stack ${id.slice(0, 12)} of ${to} did not stop (what the command said is above), so the folder is kept: once it is gone the stack can only be stopped by its id. Stop it (sz-eyes supabase stop --stack-id ${id.slice(0, 12)}), and run this again`);
   }
   rmSync(to, { recursive: true, force: true });
-  return { folder: to, stack };
+  return { folder: to, stacks: ids.length };
 }
 
 /** What the command prints: what was made, how it is used, and the folder alone on the last line. */
@@ -122,7 +126,7 @@ export function copyText(copy: Copy, project: string): string {
   return [
     `a copy of ${resolve(project)} at ${copy.commit.slice(0, 7)}: its committed files${copy.cloned.length > 0 ? '' : ' (no installed dependencies were found to clone: install them there as the map says)'}`,
     ...(copy.cloned.length > 0 ? [`dependencies and built folders cloned: ${copy.cloned.join(', ')}`] : []),
-    ...(copy.stack ? [`its stack is its own: started in that folder (sz-eyes supabase start), it shares no database with the project or with another copy, and it is stopped from that folder, which ending the copy does. supabase/config.toml names it ${copy.stack}`] : []),
+    ...(copy.stack ? [`its stack is its own: started in that folder (sz-eyes supabase start), it shares no database with the project or with another copy, and ending the copy stops it. supabase/config.toml names it ${copy.stack}`] : []),
     `Nothing the product stored was copied. Launch it there the way the map says, on a port of its own (PORT=$(sz-eyes port)), keep the process id. When you are done, end what you started by that id and then end the copy: sz-eyes copy ${copy.folder} --end${copy.stack ? " (it stops the copy's stack and then removes the folder; never remove the folder yourself, since a stack whose folder is gone cannot be stopped from it)" : ' (it removes the folder)'}. It is not a repository: what you write to keep (a flow, a test) goes in the project's folder.`,
     copy.folder,
   ].join('\n');

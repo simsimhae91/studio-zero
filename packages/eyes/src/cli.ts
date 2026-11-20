@@ -26,7 +26,7 @@ import { heldSecrets, ownersVault, parseRun, runWithSecrets, setSecret } from '.
 import { GATE_LINES, lastRelease, releaseContract, releases, renderReleases, type Gate } from './release.ts';
 import { reviewWeb } from './review.ts';
 import { renderStrangers, strangers } from './strangers.ts';
-import { supabaseCommand } from './supabase.ts';
+import { saysDown, stacksOf, supabaseCommand } from './supabase.ts';
 import { Shown, brokenDuring, keptFor, ledgerProblem, recordShown, renderStanding, stampClosed, standing, standingSummary, mendLedger, STANDING_FILE } from './standing.ts';
 import { Felt, TrialFinding, TrialKind, Verdict, addAsk, addFinding, addNote, addPersona, latestTrial, newTrial, readTrial, renderTrial, setVerdict, unfinished, writeTrialPage, setCanary } from './trial.ts';
 import { planScreens, renderSweep, screensFromArgs, sweepWeb, type Screen } from './sweep.ts';
@@ -262,10 +262,11 @@ const USAGE = `sz-eyes: launch what was built, look at it, operate it, and put w
         product stored is copied, and it is not a repository. The folder is the last line printed. Launch it
         there the way the map says, on a port from sz-eyes port
   sz-eyes copy <folder> --end
-        ends a copy when you are done with it: stops its stack from its folder, then removes the folder (a stack
-        is known by the folder it was started in: with the folder gone, nothing stops it by name). It refuses a
-        folder sz-eyes copy did not make, and keeps the folder when the stack did not stop. A server you
-        started there is yours to end first, by its process id
+        ends a copy when you are done with it: stops every stack started in it, each by its id as the command
+        line keeps them for that folder (a stop run from the folder finds none once the copy has been made a
+        repository or its branch has changed), then removes the folder. It refuses a folder sz-eyes copy did not
+        make, and keeps the folder when a stack did not stop. A server you started there is yours to end first,
+        by its process id
 
   sz-eyes refs add --kind "<kind of screen or journey>" --product "<name>" --what "<which screen, one line>" --link <the page it came from>
         (--file <picture on disk> | --image <https address of the picture>) --notes <file.md> [--platform ios|android|web] [--lang ko|en|...] [--for <project>] [--json]
@@ -1023,9 +1024,17 @@ async function main(argv: string[]): Promise<number> {
     if (!folder || a.words.length > 1) throw new EyesError('sz-eyes copy <folder> [--at <commit>] [--with <path>]... [--dir <project>], or sz-eyes copy <folder> --end: one folder, outside the project');
     if (a.has('--end')) {
       const tool = findTool('supabase');
-      // Without the command line there is no stack to stop.
-      const ended = await endCopy(folder, async (cwd) => (tool ? supabaseCommand(['stop'], { tool, env: process.env, cwd, store: ownersVault(), out: (text) => void process.stdout.write(text), err: (text) => void process.stderr.write(text) }) : 0));
-      out(`ended: ${ended.folder} (${ended.stack ? 'its stack stopped, ' : ''}the folder removed). What you started there yourself (a server, a packager) is ended by its process id`);
+      const ended = await endCopy(folder, {
+        of: (copy) => stacksOf(copy),
+        stop: async (id, cwd) => {
+          if (!tool) return false;
+          let said = '';
+          const code = await supabaseCommand(['stop', '--stack-id', id, '--output-format', 'json'], { tool, env: process.env, cwd, store: ownersVault(), capture: true, out: (text) => void (said += text), err: (text) => void process.stderr.write(text) });
+          process.stderr.write(said);
+          return code === 0 && saysDown(said, id);
+        },
+      });
+      out(`ended: ${ended.folder} (${ended.stacks === 0 ? '' : ended.stacks === 1 ? 'its stack is down, ' : `its ${ended.stacks} stacks are down, `}the folder removed). What you started there yourself (a server, a packager) is ended by its process id`);
       return 0;
     }
     const project = resolve(a.one('--dir') ?? '.');

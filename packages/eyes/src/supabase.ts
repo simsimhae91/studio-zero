@@ -1,5 +1,6 @@
 import { spawnSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, realpathSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { engineEnv } from './engine.ts';
 import { writeFileAtomic } from './lock.ts';
@@ -34,6 +35,54 @@ export interface SupabaseDeps {
   out: (text: string) => void;
   err: (text: string) => void;
   now?: () => Date;
+  /** What the command line prints is handed to `out`, not written straight to the terminal: for a caller that reads it. */
+  capture?: boolean;
+}
+
+/**
+ * The stacks the command line keeps for a folder: every one whose state names that folder as its project,
+ * whatever branch it was started on. The command line itself finds "the stack of this folder" by the folder and
+ * the git branch together: a stop run from the folder finds nothing once the branch is another (or the folder
+ * has become a repository), says so, and exits 0. (2026-11-19: a verifier ran `git init` in a copy whose stack
+ * was up. Ending the copy stopped nothing, said the stack was stopped and removed the folder; the stack ran on
+ * for three hours.)
+ */
+export function stacksOf(folder: string, env: NodeJS.ProcessEnv = process.env): string[] {
+  const home = join(env.HOME ?? homedir(), '.supabase', 'stacks');
+  if (!existsSync(home)) return [];
+  const real = (path: string): string => {
+    try {
+      return realpathSync(path);
+    } catch {
+      return resolve(path);
+    }
+  };
+  const want = real(folder);
+  return readdirSync(home)
+    .filter((id) => {
+      try {
+        const root: unknown = JSON.parse(readFileSync(join(home, id, 'state.json'), 'utf8'))?.identity?.projectRoot;
+        return typeof root === 'string' && real(root) === want;
+      } catch {
+        return false;
+      }
+    })
+    .sort();
+}
+
+/** Whether what `stop --stack-id <id> --output-format json` printed says that stack is down: stopped now, or not running. */
+export function saysDown(said: string, id: string): boolean {
+  for (const line of said.split('\n')) {
+    if (!line.trim().startsWith('{')) continue;
+    try {
+      const answer = JSON.parse(line) as { stopped?: unknown; not_running?: unknown };
+      const listed = [...(Array.isArray(answer.stopped) ? answer.stopped : []), ...(Array.isArray(answer.not_running) ? answer.not_running : [])];
+      if (listed.includes(id)) return true;
+    } catch {
+      // Not the answer: a notice that happens to begin with a brace.
+    }
+  }
+  return false;
 }
 
 /** Flags of the command line that take a value, so that the value is not read as the command. */
@@ -78,7 +127,10 @@ export async function supabaseCommand(args: string[], deps: SupabaseDeps): Promi
   if (verb !== 'start' || held === null || help) {
     // A stack wired to the relay names its secrets in its configuration: every call on it is handed them.
     const secrets = held !== null && hasLoginBlock(held) ? loginEnv((await loginKeysOf(deps.store, deps.env)).keys) : {};
-    return call(args, secrets, { capture: 'none' }).status ?? 1;
+    if (!deps.capture) return call(args, secrets, { capture: 'none' }).status ?? 1;
+    const ran = call(args, secrets, { capture: 'out' });
+    if (ran.stdout) deps.out(ran.stdout);
+    return ran.status ?? 1;
   }
 
   const { keys, missing, vaultError } = await loginKeysOf(deps.store, deps.env);
