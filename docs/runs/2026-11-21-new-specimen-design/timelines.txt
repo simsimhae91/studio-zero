@@ -18,3 +18,8 @@ design                 claude-opus-5-5    eff=high   adv=claude-opus-5-5  20:44:
 sweep:design           claude-opus-5-5    eff=low    adv=claude-opus-5-5  20:49:05-20:49:52    0.8m turns=5    out=1271    think=0      fresh_in=40509    cache_read=145827     calls=5    gap=24s  Bash:4 StructuredOutput:1
 
 
+== wf_4084f8e7-f62 in -Users-hosoo--studio-zero-specimens-2026-11-21-toesa-check
+plan                   claude-opus-5-5    eff=xhigh  adv=claude-opus-5-5  21:57:11-21:57:33    0.4m turns=3    out=1335    think=424    fresh_in=45364    cache_read=86077      calls=3    gap=5s  Bash:2 StructuredOutput:1
+design:again           claude-opus-5-5    eff=high   adv=claude-opus-5-5  21:57:34-22:05:52    8.3m turns=36   out=32892   think=11053  fresh_in=158187   cache_read=3819746    calls=47   gap=37s  Bash:29 Read:16 Skill:1 StructuredOutput:1
+sweep:design           claude-opus-5-5    eff=low    adv=claude-opus-5-5  22:05:52-22:06:43    0.9m turns=6    out=1414    think=33     fresh_in=41269    cache_read=186058     calls=6    gap=22s  Bash:5 StructuredOutput:1
+

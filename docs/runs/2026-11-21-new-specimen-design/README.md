@@ -15,8 +15,8 @@ Its folder is `~/.studio-zero/specimens/2026-11-21/toesa-check/` (a git reposito
 |---|---|
 | `request.md` | The owner's idea and ground, word for word, and under its own heading what the one who started the run decided (not the owner's words) |
 | `design-request.txt`, `run-design.sh` | What the headless session was asked and how it was started (both times) |
-| `clock.txt` | When each of the two sessions started and ended |
-| `journals/design-1.jsonl`, `design-2.jsonl` | The workflow's journal of each |
+| `clock.txt` | When each session started and ended |
+| `journals/design-1.jsonl`, `design-2.jsonl`, `design-3.jsonl` | The workflow's journal of each session (the third is the redraw) |
 | `timelines.txt` | Per agent: model, effort, wall-clock, tokens |
 
 ## Two sessions: 45 minutes that measured nothing, then 8 that did
@@ -64,6 +64,26 @@ under a heading that says it is not the owner's.
    lateness added up across months. That is a reading, and the drawing presents it as the law's line. Whether each
    threshold is the law's own words or the product's reading has to be a claim of the first pass, shown against the
    table's text, before anything is built on it.
+
+## The owner's look, and the prototype drawn again (14 minutes)
+
+At 21:5x the owner, in their words: "시안 봤고 좋아보이는데, 너무 단조로워보이는 느낌도 있어요. 한가지색만
+쓰는데 원색이라 쨍한느낌이랄까." It holds both "looks good" and something to change; the one who started the run
+read it as "change it", recorded it on `design/feel` as no in those words, told the owner so, and started the
+workflow again (`design2-request.txt`, `run-design2.sh`, `journals/design-3.jsonl`; plugin at `c8d9f13`).
+
+| Stage | minutes |
+|---|---|
+| plan (finds "again" and the owner's words on the contract) | 0.4 |
+| the designer draws again from those words | 8.3 |
+| measuring: 31 drawings, 31 hold | 0.9 |
+| **session, request to stop** | **14.2** |
+
+The designer changed what was said and nothing else: a second colour (a lemon highlighter, with a job of its
+own: the pen colour marks what the person wrote, the highlighter the lines the law draws), both colours quieter
+(the blue from `#2F4CC4` to `#3B5690`), by tokens and five parts, so every screen made of them changed with them;
+placement, words and screens as they were. The first prototype is kept in the specimen under
+`kept/first-prototype/`. The redrawn one waits for the owner again.
 
 ## What waits
 
