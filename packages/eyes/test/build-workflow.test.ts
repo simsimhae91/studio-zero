@@ -918,6 +918,8 @@ test('a milestone an earlier run looked at whole and left with claims shown fals
   // (2026-11-21: taken up after a fix that nobody had looked at, a fixer ran the checks of three claims that were
   // mended already, 21 of its 27 minutes, and the look after it ran them again.)
   assert.match(ran.calls.find((c) => c.label === 'fix:m1:1')!.prompt, /An earlier run found these and stopped; it, or someone since, may have mended some of them already[^\n]*For each that a commit has mended, say which commit and what it changed, and do not run its check/);
+  // The run that stopped may have handed the claim to a fixer twice already: this run does not know, and the log does.
+  assert.match(ran.calls.find((c) => c.label === 'fix:m1:1')!.prompt, /One that was mended before and shown false again by another case of the same kind \(the log shows each earlier mend\) is not mended by one more patch for the case named: mend the kind/);
   const again = ran.calls.find((c) => c.label === 'verify:m1:again')!.prompt;
   assert.match(again, /These claims of the contract were shown false before: two\. Check each from the start/);
   assert.match(again, /show again this contract's other claims and what stood before/, 'every claim is shown again after the fix, as after any fix');
@@ -957,6 +959,15 @@ test('a claim is handed to a fixer twice at most, and what a later look shows fa
   assert.deepEqual(late.calls.map((c) => c.label), ['plan', 'build:m1', 'verify:m1', 'fix:m1:1', 'verify:m1:again', 'fix:m1:2', 'verify:m1:again', 'fix:m1:3', 'verify:m1:again', 'close:m1']);
   assert.match(late.calls.find((c) => c.label === 'fix:m1:3')!.prompt, /- two: two is not so\n- three: three is not so/);
   assert.equal(late.result.stopped, null);
+  // A claim handed over a second time comes with what was found the first time, and its fixer is told to mend the
+  // kind or say it cannot be made true. (2026-11-22: three looks showed one claim false by three sets of cases of
+  // one kind; two fixers each patched the cases they were shown, and the milestone stayed open.)
+  const moved = await run({ request: 'x' }, { ...three, verify: looks([{ id: 'one', fact: '"박서연"이 기록에 남는다' }], [{ id: 'one', fact: '"김구"가 기록에 남는다' }, f('two')], []) });
+  const second = moved.calls.find((c) => c.label === 'fix:m1:2')!.prompt;
+  assert.ok(second.includes('- one: "김구"가 기록에 남는다\n- two: two is not so'), 'what was found now');
+  assert.ok(second.includes('This one was mended once already and shown false again. What was found the time before:\n- one: "박서연"이 기록에 남는다\nA claim is handed to a fixer twice: this is the last time.'), 'what was found before, for the claim handed over again and not for the new one');
+  assert.match(second, /Mend the kind: change what makes such cases possible, so that none of the kind is left[^.]*, and say under "fixed" why no further case of the kind can come\. If that cannot be done, the claim cannot be made true as it is worded: put it under "notFixed" and say why\./);
+  assert.doesNotMatch(moved.calls.find((c) => c.label === 'fix:m1:1')!.prompt, /mended once already/);
 
   // The same claim false after two fixes: the run stops there, as it always did, though another claim is new.
   const stuck = await run({ request: 'x' }, { ...three, verify: looks([f('one')], [f('one')], [f('one'), f('three')]), close: () => ({ report: 'r.html', closed: false, line: 'l' }) });
