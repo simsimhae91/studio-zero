@@ -866,6 +866,9 @@ test('the frozen checks a builder disputes go to one arbiter in one sitting, and
   const arbiter = readFileSync(fileURLToPath(new URL('../../../plugin/agents/arbiter.md', import.meta.url)), 'utf8');
   assert.match(arbiter, /one or more frozen files/);
   assert.match(arbiter, /\*\*The same fault in other checks\.\*\*[^\n]*passes by chance[^\n]*`sz-eyes contract amend`/);
+  // (2026-11-21: a run that went on from a built milestone was handed, as disputes, four checks an arbiter had
+  // corrected two days before, and an arbiter spent ten minutes finding each of them right.)
+  assert.match(SOURCE, /under "disputes" any frozen check the earlier run reported as wrong about how it checks and nobody has corrected since: one the contract lists as corrected[^.]*is settled, and is not listed again/);
   // (2026-11-19: three corrected flows stayed uncommitted to the end of the run, while every verifier's copy is
   // made from what is committed.)
   assert.match(arbiter, /Then commit the check you corrected, that file and no other[^\n]*a copy made from what is committed/);
@@ -986,7 +989,7 @@ test('what is shown on a simulator goes to as many verifiers as the machine hold
   // (2026-11-19: three flows on a simulator were weighed as three in a browser and went to one verifier, who took
   // 144 minutes, while the other, with two browser flows and a command, took 40. 2026-11-21: shared out one a
   // verifier, three verifiers had four simulators up beside nine stacks on 24 GB; the swap filled, and the look
-  // after a fix took 68 minutes where one verifier had taken 37.)
+  // after a fix took 91 minutes where one verifier had taken 37.)
   const claims = [
     { id: 'ios-path', says: 'eyes의 iOS 시뮬레이터에 깐 Release 빌드를 열면 ON-01이 뜬다', kind: 'flow', ref: 'flows/ios/path.sh' },
     { id: 'ios-steps', says: '걸음 연결하기를 누르면 건강 접근 시트가 걸음 하나만 묻는다', kind: 'flow', ref: 'flows/ios/steps.sh (Maestro flows/ios/steps.yaml)' },

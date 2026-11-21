@@ -55,7 +55,7 @@ test('a simulator whose Safari cannot be reached is still handed over', async ()
 
 test('a simulator is not booted beside as many as the Mac holds: it is said which are up, or waited for', async () => {
   // (2026-11-21: three verifiers took four simulators on a Mac of 24 GB, each 3.8 GB, beside nine stacks. The
-  // swap filled, a boot took four minutes, and the look took over an hour where one verifier had taken 37.)
+  // swap filled, a boot took four minutes, and the look took 91 minutes where one verifier had taken 37.)
   assert.deepEqual([[24, 10], [16, 8], [36, 12], [64, 16], [8, 8], [128, 10]].map(([gb, cores]) => simulatorsHeld(gb! * 2 ** 30, cores!)), [2, 1, 3, 4, 1, 2]);
 
   const devices = [

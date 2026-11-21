@@ -39,7 +39,7 @@ async function listDevices(run: CommandRunner): Promise<SimDevice[]> {
 /**
  * How many simulators a Mac holds at once. A booted simulator of iOS 26.4 with an app under test took 3.8 GB
  * (2026-11-21: four of them and nine stacks on 24 GB and ten cores filled the swap; load 280, four minutes to
- * boot one, and a look after a fix that one verifier had done in 37 minutes took three verifiers over an hour).
+ * boot one, and a look after a fix that one verifier had done in 37 minutes took three verifiers 91).
  * Two had run beside four stacks two days before with nothing of the kind. So: what is left of the memory after
  * 14 GB for the system, the owner's own apps and the stacks, at 4 GB each, and never more than a quarter of the
  * cores; one at least.
