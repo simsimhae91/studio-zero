@@ -16,7 +16,7 @@
  * nothing has asked for twenty minutes, or when its flow or its driver has gone.
  */
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
-import { closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { createServer, type ServerResponse } from 'node:http';
 import { homedir, tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -111,24 +111,53 @@ export function touchHeld(held: Held): void {
  * The holder for a simulator: the one that is up, or one started now and waited for. Null when none could be
  * started in time; the commands then work as they did without one.
  */
-export async function ensureHeld(udid: string, opts: { waitMs?: number; cli?: string } = {}): Promise<Held | null> {
+export async function ensureHeld(udid: string, opts: { waitMs?: number; startMs?: number; cli?: string } = {}, again = true): Promise<Held | null> {
   const now = heldNow(udid);
   if (now) return now;
   const cli = opts.cli ?? fileURLToPath(new URL('./cli.ts', import.meta.url));
   mkdirSync(heldDir(), { recursive: true });
-  const log = openSync(join(heldDir(), `${udid}.log`), 'a');
+  const mark = startingOf(udid);
+  // A mark left by a start that died does not stop the next one: its holder's process is gone, or no holder
+  // ever took it over.
+  const dead = (): boolean => {
+    try {
+      const pid = Number(readFileSync(mark, 'utf8'));
+      if (Number.isInteger(pid) && pid > 0) return !alive(pid);
+      return Date.now() - statSync(mark).mtimeMs > (opts.startMs ?? 20_000);
+    } catch {
+      return false;
+    }
+  };
+  if (dead()) rmSync(mark, { force: true });
+  // The mark is written here, before the holder's process exists, by whoever starts it: a process takes longer
+  // to come up than a caller would wait for a sign of it, and a caller that saw no sign started a driver of its own
+  // beside the one that was coming (two drivers fought over one simulator: "iOS driver not ready in time").
+  let mine = false;
   try {
-    spawn(process.execPath, [...process.execArgv, cli, 'ios', 'hold', udid], { detached: true, stdio: ['ignore', log, log] }).unref();
-  } finally {
-    closeSync(log);
+    writeFileSync(mark, 'starting', { flag: 'wx' });
+    mine = true;
+  } catch {
+    // someone else is starting one: wait for theirs
   }
-  const until = Date.now() + (opts.waitMs ?? 90_000);
-  // A holder that is starting has left its mark; one that gave up has taken it away again.
-  await pause(300);
+  if (mine) {
+    const log = openSync(join(heldDir(), `${udid}.log`), 'a');
+    try {
+      spawn(process.execPath, [...process.execArgv, cli, 'ios', 'hold', udid], { detached: true, stdio: ['ignore', log, log] }).unref();
+    } finally {
+      closeSync(log);
+    }
+  }
+  const until = Date.now() + (opts.waitMs ?? 120_000);
   while (Date.now() < until) {
     const held = heldNow(udid);
     if (held) return held;
-    if (!existsSync(startingOf(udid))) return heldNow(udid);
+    // A holder that gave up has taken the mark away again.
+    if (!existsSync(mark)) return heldNow(udid);
+    if (dead()) {
+      rmSync(mark, { force: true });
+      // Whoever was waiting on another's start that died starts one itself, once.
+      return again && !mine ? ensureHeld(udid, opts, false) : heldNow(udid);
+    }
     await pause(250);
   }
   return null;
@@ -170,16 +199,14 @@ export async function holdDriver(udid: string, opts: { idleMs?: number; checkMs?
   }
   // One holder a simulator: whoever writes the mark first is the one.
   const mark = startingOf(udid);
-  try {
-    writeFileSync(mark, String(process.pid), { flag: 'wx' });
-  } catch {
-    const other = Number(existsSync(mark) ? readFileSync(mark, 'utf8') : '');
-    if (Number.isInteger(other) && other > 0 && alive(other)) {
-      say('another holder is starting');
-      return 0;
-    }
-    writeFileSync(mark, String(process.pid));
+  // The mark may be there already, written by whoever started this process: it is taken over. Only another
+  // holder that is alive is stood back for.
+  const other = Number(existsSync(mark) ? readFileSync(mark, 'utf8') : '');
+  if (Number.isInteger(other) && other > 0 && other !== process.pid && alive(other)) {
+    say('another holder is starting');
+    return 0;
   }
+  writeFileSync(mark, String(process.pid));
 
   const folder = mkdtempSync(join(tmpdir(), 'sz-hold-'));
   let letGo = false;

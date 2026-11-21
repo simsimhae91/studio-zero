@@ -199,3 +199,48 @@ test('a look and a flow on a simulator whose driver is held use that driver, and
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('whoever asks for a holder waits for it to come up, however long its process takes to start', async () => {
+  // 2026-11-21, the first real check with a held driver: the holder's process had not written its mark 300ms after
+  // it was started, the flow that asked took that for "no holder is coming", started a driver of its own on another
+  // port, and the two fought over the simulator's runner: "iOS driver not ready in time", 132 seconds.
+  const { ensureHeld } = await import('../src/ios-hold.ts');
+  const dir = mkdtempSync(join(tmpdir(), 'eyes-hold-wait-'));
+  const before = process.env.SZ_HELD_DIR;
+  process.env.SZ_HELD_DIR = join(dir, 'held');
+  try {
+    // A holder that takes a second to say anything, then holds for a moment.
+    const slow = join(dir, 'slow-holder.mjs');
+    writeFileSync(slow, `import { writeFileSync, rmSync } from 'node:fs';
+const [, , , , udid] = process.argv;
+const dir = process.env.SZ_HELD_DIR;
+await new Promise((done) => setTimeout(done, 1000));
+writeFileSync(dir + '/' + udid + '.json', JSON.stringify({ udid, pid: process.pid, port: 1, door: 1, size: { w: 402, h: 874 }, agrees: true, at: '' }));
+rmSync(dir + '/' + udid + '.starting', { force: true });
+await new Promise((done) => setTimeout(done, 1500));
+rmSync(dir + '/' + udid + '.json', { force: true });
+`);
+    const [first, second] = await Promise.all([ensureHeld('SIM-W', { cli: slow, waitMs: 8_000 }), ensureHeld('SIM-W', { cli: slow, waitMs: 8_000 })]);
+    assert.ok(first && second, 'both waited for the one holder');
+    assert.equal(first.pid, second.pid, 'and one holder was started, not two');
+
+    // A holder whose process never comes up: the wait ends when no holder has taken the mark over, long before
+    // the whole wait is spent, and the mark is cleared so that the next look does not wait for it again.
+    const never = join(dir, 'never.mjs');
+    writeFileSync(never, 'process.exit(1);\n');
+    await new Promise((done) => setTimeout(done, 1700));
+    const started = Date.now();
+    assert.equal(await ensureHeld('SIM-N', { cli: never, waitMs: 30_000, startMs: 600 }), null);
+    assert.ok(Date.now() - started < 5_000, 'it did not wait the whole thirty seconds');
+    assert.equal(existsSync(join(dir, 'held', 'SIM-N.starting')), false);
+    // A mark that names a holder which has died: whoever finds it starts a holder itself.
+    writeFileSync(join(dir, 'held', 'SIM-N.starting'), String(2 ** 22 - 5));
+    const later = await ensureHeld('SIM-N', { cli: slow, waitMs: 8_000 });
+    assert.ok(later, 'a new holder was started over the stale mark');
+  } finally {
+    if (before === undefined) delete process.env.SZ_HELD_DIR;
+    else process.env.SZ_HELD_DIR = before;
+    await new Promise((done) => setTimeout(done, 1700));
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
