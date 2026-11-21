@@ -516,6 +516,29 @@ test('after a fix, the second look decides which earlier notices are still so, a
   assert.equal(skipped.calls.some((c) => c.label === 'build:m7'), false);
 });
 
+test('a case a verifier tried in which the product is wrong refutes the claim it is about, and the fixer and the next look are handed the case', async () => {
+  // 2026-11-22: a first pass closed, 18 proven and none false, while its verifiers had recorded as noticed that the
+  // product answered "looks eligible" at 40 days of the 60 its law asks, counted days after the person had left, and
+  // gave the same answer with a required date empty. Each claim was recorded proven by its own flow, which walks one
+  // case; three looks carried the notices along and nobody mended them.
+  const fact = '8월분을 5일 늦게 받고 9월분만 못 받았는데 40일 / 60일에서 "요건에 맞아 보여요"가 나온다';
+  const first = { proven: ['one'], refuted: [{ id: 'two', fact }], unchecked: [] };
+  const ran = await run({ request: 'x' }, { plan: plan('m1'), build: built, fix: () => ({ fixed: ['two'] }), verify: (_call, nth) => (nth === 0 ? first : { proven: ['two'], refuted: [], unchecked: [] }), close: closed });
+  const look = ran.calls.find((c) => c.label === 'verify:m1')!.prompt;
+  assert.match(look, /when you try another case and the product is wrong about the same thing[^.]*, that claim is `refuted` with your case as the fact, though its own check passes; it is not something noticed, which nobody mends before this work closes/);
+  assert.match(SOURCE, /noticed: \{ type: 'array'[^\n]*a case in which the product is wrong about what a claim is about is that claim under "refuted", never here/);
+  // The claim's frozen check passed all along: whoever mends it and whoever looks again need the case itself.
+  const mend = ran.calls.find((c) => c.label === 'fix:m1:1')!.prompt;
+  assert.match(mend, /Where what was found is a case the claim's own check does not walk[^.]*, the check shows nothing of your fix: bring the product to that case and see it right/);
+  assert.match(mend, /add the case as a test of its own, in a file no contract froze/);
+  assert.match(mend, /Where a claim says something of all of a kind[^.]*: look for the others the way it found that one/);
+  const again = ran.calls.find((c) => c.label === 'verify:m1:again')!.prompt;
+  assert.ok(again.includes(`These claims of the contract were shown false before: two. Check each from the start, on the product as it is now, and record it with \`sz-eyes contract claim\`. What was found then: [two: ${fact}]. Where that is a case the claim's own check does not walk, the check passing shows nothing of the fix: bring the product to that case again.`), 'the next look is handed the case');
+  const rules = readFileSync(fileURLToPath(new URL('../../../plugin/agents/verifier.md', import.meta.url)), 'utf8');
+  assert.match(rules, /\*\*A claim you broke is refuted, though its check passes\.\*\*[^\n]*the claim is `refuted`, with your case and its figure as the fact/);
+  assert.match(rules, /what shows the product wrong about the thing a claim is about is not recorded here but as that claim's verdict/);
+});
+
 test('a milestone whose contract would not close is where the run stops, whatever the agents said', async () => {
   const { result, calls } = await run({ request: 'x' }, { plan: plan('m1', 'm2'), build: built, verify: () => ({ proven: ['one', 'two'], refuted: [], unchecked: [] }), close: () => ({ report: 'r.html', closed: false, why: 'a frozen file changed', line: 'l' }) });
   assert.match(result.stopped, /did not close: a frozen file changed/);
@@ -635,6 +658,8 @@ test('every agent is told from its first line when the session is sandboxed, an 
   const inside = await run({ request: 'x' }, { ...answers, plan: earlier(true) });
   assert.match(inside.calls.find((c) => c.label === 'plan')!.prompt, /run `sz-eyes sandbox` once, as an ordinary command[\s\S]*return under "sandboxed"/);
   for (const label of ['build:m2', 'verify:m2']) assert.match(inside.calls.find((c) => c.label === label)!.prompt, /This session runs its commands inside a sandbox[\s\S]*outside it from the first try/, label);
+  // 2026-11-22: eight times in one run an agent's `kill` or `ps` of a server an earlier command had started was refused inside the sandbox and run again outside.
+  assert.match(inside.calls.find((c) => c.label === 'verify:m2')!.prompt, /So is ending or listing a process that an earlier command started \(`kill`, `ps`\): inside, the sandbox refuses it/);
   const outside = await run({ request: 'x' }, { ...answers, plan: earlier(false) });
   assert.doesNotMatch(outside.calls.find((c) => c.label === 'build:m2')!.prompt, /This session runs its commands inside a sandbox/);
   assert.match(outside.calls.find((c) => c.label === 'build:m2')!.prompt, /If `sz-eyes` says the session's command sandbox stopped it/);
