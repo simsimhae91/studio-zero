@@ -615,6 +615,37 @@ test('a check written by whoever verified is held by the frozen contract from th
   }
 });
 
+test('the eyes say in one line that their copy has no dependencies, and the stop hook does not take that for claims owed', () => {
+  // 2026-11-21: a copy of the plugin without node_modules ended every command with ERR_MODULE_NOT_FOUND and exit 1,
+  // which the stop hook read as "claims are owed" and blocked a session with an empty list.
+  const root = mkdtempSync(join(tmpdir(), 'eyes-bare-'));
+  try {
+    const wrapper = fileURLToPath(new URL('../../../plugin/bin/sz-eyes', import.meta.url));
+    mkdirSync(join(root, 'plugin', 'bin'), { recursive: true });
+    mkdirSync(join(root, 'plugin', 'hooks'), { recursive: true });
+    mkdirSync(join(root, 'packages', 'eyes', 'src'), { recursive: true });
+    writeFileSync(join(root, 'plugin', 'bin', 'sz-eyes'), readFileSync(wrapper, 'utf8'), { mode: 0o755 });
+    writeFileSync(join(root, 'plugin', 'hooks', 'stop-owed.mjs'), readFileSync(fileURLToPath(new URL('../../../plugin/hooks/stop-owed.mjs', import.meta.url)), 'utf8'));
+    writeFileSync(join(root, 'packages', 'eyes', 'src', 'cli.ts'), "console.log('ran'); process.exit(process.argv.includes('status') ? 1 : 0);\n");
+    const bare = spawnSync(join(root, 'plugin', 'bin', 'sz-eyes'), ['port'], { encoding: 'utf8' });
+    assert.equal(bare.status, 127);
+    assert.match(bare.stderr, /^sz-eyes: this copy of the harness has no dependencies installed \(.*packages\/eyes has no node_modules\): run 'pnpm install' in /);
+    assert.equal(bare.stdout, '');
+    const stopped = spawnSync(process.execPath, [join(root, 'plugin', 'hooks', 'stop-owed.mjs')], { encoding: 'utf8', input: JSON.stringify({ cwd: root }) });
+    assert.equal(stopped.status, 0, 'eyes that do not run owe nothing that a session could show');
+    // Installed, the same wrapper runs the command line.
+    mkdirSync(join(root, 'packages', 'eyes', 'node_modules'));
+    const whole = spawnSync(join(root, 'plugin', 'bin', 'sz-eyes'), ['port'], { encoding: 'utf8' });
+    assert.deepEqual([whole.status, whole.stdout.trim()], [0, 'ran']);
+    // Exit 1 with nothing said is not a list of claims either.
+    writeFileSync(join(root, 'packages', 'eyes', 'src', 'cli.ts'), 'process.exit(1);\n');
+    const silent = spawnSync(process.execPath, [join(root, 'plugin', 'hooks', 'stop-owed.mjs')], { encoding: 'utf8', input: JSON.stringify({ cwd: root }) });
+    assert.equal(silent.status, 0);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('what is owed is said once in a session, and again only when it has changed', () => {
   const project = mkdtempSync(join(tmpdir(), 'eyes-owed-'));
   const hook = fileURLToPath(new URL('../../../plugin/hooks/stop-owed.mjs', import.meta.url));

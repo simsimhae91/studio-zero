@@ -1067,3 +1067,18 @@ test('what is shown on a simulator goes to as many verifiers as the machine hold
   assert.doesNotMatch(fix, /An earlier run found these and stopped/, 'a fixer of this run\'s own look is not told of an earlier run');
 });
 
+
+test('a harness whose eyes do not run starts nothing: the plan says so in its first minute and the run stops there', async () => {
+  // 2026-11-21: a copy of the plugin was made without its dependencies. The plan saw sz-eyes fail and ran another
+  // copy's instead; the designer did the same; the measurer would not, three times; a fixer built a shim. Forty
+  // minutes, a drawing nobody had measured, and no contract.
+  const down = await run({ request: '퇴사점검' }, { plan: () => ({ mode: 'new', design: 'needed', summary: 's', milestones: [], eyesDown: "sz-eyes: this copy of the harness has no dependencies installed (/x/packages/eyes has no node_modules): run 'pnpm install' in /x" }) });
+  assert.deepEqual(down.calls.map((c) => c.label), ['plan'], 'nobody plans screens, draws or measures');
+  assert.match(down.result.stopped, /nothing was started: sz-eyes does not run[\s\S]*no dependencies installed[\s\S]*pnpm install/);
+  assert.deepEqual([down.result.milestones, down.result.design], [[], null]);
+  const asked = down.calls[0]!.prompt;
+  assert.match(asked, /If `sz-eyes` itself does not run[\s\S]*"eyesDown"[\s\S]*Do not run another copy of it/);
+  // A plan that says nothing of it goes on as before.
+  const up = await run({ request: '택배 비교' }, { plan: plan('m1'), build: built, verify: () => ({ proven: ['one', 'two'], refuted: [], unchecked: [] }), close: closed });
+  assert.equal(up.result.stopped, null);
+});

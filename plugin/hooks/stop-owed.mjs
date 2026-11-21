@@ -25,6 +25,8 @@ const eyes = join(dirname(fileURLToPath(import.meta.url)), '..', 'bin', 'sz-eyes
 const status = spawnSync(eyes, ['contract', 'status', '--dir', event.cwd ?? process.cwd()], { encoding: 'utf8', timeout: 20_000 });
 if (status.status !== 1) process.exit(0);
 const owes = status.stdout.trim();
+// Exit 1 with nothing listed is the command failing, not claims owed: there is nothing to name to the session.
+if (owes === '') process.exit(0);
 const session = typeof event.session_id === 'string' ? event.session_id.replace(/[^A-Za-z0-9_-]/g, '') : '';
 if (session !== '') {
   const told = join(tmpdir(), `sz-owed-${session}`);

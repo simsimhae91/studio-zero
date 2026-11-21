@@ -1,4 +1,11 @@
 #!/bin/sh
 # The eyes' command line, from this checkout. A plugin's bin/ is on the shell's PATH while the plugin is enabled.
 here="$(cd "$(dirname "$0")/.." && pwd)"
-exec node "$here/../packages/eyes/src/cli.ts" "$@"
+root="$(cd "$here/.." && pwd)"
+# A copy of the harness made without its dependencies cannot run one command. Said in a line, and with an exit
+# code of its own: a module error and exit 1 were read as a product's fault, and as claims owed.
+if [ ! -d "$root/packages/eyes/node_modules" ]; then
+  echo "sz-eyes: this copy of the harness has no dependencies installed ($root/packages/eyes has no node_modules): run 'pnpm install' in $root. Nothing is wrong with the product, and no command of sz-eyes runs until then; another copy's sz-eyes is not this one." >&2
+  exit 127
+fi
+exec node "$root/packages/eyes/src/cli.ts" "$@"

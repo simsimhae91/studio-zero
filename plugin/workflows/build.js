@@ -193,6 +193,7 @@ const PLAN = {
     mode: { type: 'string', enum: ['new', 'continue', 'extend'], description: 'new: there was no spec. continue: an earlier run stopped before finishing what the spec has. extend: the request asks for more than the spec had, and the spec was amended' },
     summary: { type: 'string', description: 'two or three sentences: what the product is, for whom, and the shape you chose (when extending: what is added or changed)' },
     sandboxed: { type: 'boolean', description: 'what `sz-eyes sandbox` said when run as an ordinary command: true when it said "sandboxed"' },
+    eyesDown: { type: 'string', maxLength: 600, description: 'only when `sz-eyes` itself does not run on this machine (the shell does not find it, or it ends at once saying its copy has no dependencies or a module is missing): what it printed, as it stands. The run then starts nothing' },
     simulators: { type: 'integer', description: 'only for a product with a part on a phone: the number on the first line of what `sz-eyes ios room` printed (how many simulators this machine holds at once)' },
     design: { type: 'string', enum: ['none', 'needed', 'waiting', 'again', 'approved'], description: 'where the design of a new product with screens stands, as the top of your instructions says how to find out; "none" for anything else' },
     said: { type: 'string', description: 'only when design is "again": what the owner said about the prototype, in their words, as the claim feel of contract design records them' },
@@ -317,7 +318,7 @@ const OWNER_ANSWERS = asked === 'owner' ? `What the owner answered when asked be
 // shown afterwards, a product was called "an old flash game"; drawn first by one designer from a plan, as one
 // clickable prototype, the same request read as an app, and the owner chose that way.) Where the design stands
 // is found out first, so that a run that only draws, or only waits, costs a minute of planning and not a pass.
-const DESIGN_CHECK = `Before anything else, find out where this product's design stands: it decides whether you plan at all in this run, and finding out takes a minute. First run \`sz-eyes sandbox\` once, as an ordinary command (do not ask for it to run outside any sandbox), and return under "sandboxed" whether it answered "sandboxed": everyone who works after you is told what it said. For a product with a part on a phone, run \`sz-eyes ios room\` as well and return the number on its first line under "simulators": how many simulators this machine holds at once, which is how many verifiers may each have one. Then run \`ls .sz .sz/design\` and \`sz-eyes contract show design\`, and return under "design" the first of these that is so:
+const DESIGN_CHECK = `Before anything else, find out where this product's design stands: it decides whether you plan at all in this run, and finding out takes a minute. First run \`sz-eyes sandbox\` once, as an ordinary command (do not ask for it to run outside any sandbox), and return under "sandboxed" whether it answered "sandboxed": everyone who works after you is told what it said. If \`sz-eyes\` itself does not run (the shell does not find it, or it ends at once saying that its copy has no dependencies or that a module is missing), nothing here can be measured or shown, so nothing is to be planned, drawn or built: return at once what it printed under "eyesDown", with mode "new", what was asked in a sentence as "summary", and no milestones. Do not run another copy of it from elsewhere on the machine in its place, and write nothing. For a product with a part on a phone, run \`sz-eyes ios room\` as well and return the number on its first line under "simulators": how many simulators this machine holds at once, which is how many verifiers may each have one. Then run \`ls .sz .sz/design\` and \`sz-eyes contract show design\`, and return under "design" the first of these that is so:
 - "none": what was asked has no screen a person looks at (a command, a library, a service with no screen of its own); or \`.sz/spec.md\` is there, so the product has been worked on before (unless its first pass has not closed and contract \`design\` marks its claim **feel** [증명됨]: then "approved", and that first pass is still built to the drawing). Go on below as if this paragraph were not here.
 - "again": contract \`design\` marks its claim **feel** [반증됨]: the owner looked at the prototype and said no. Return their words, as the claim's note gives them, under "said", and return at once, as for "needed".
 - "approved": it marks **feel** [증명됨]: the owner said yes. Plan the first pass below, from the screens as planned and drawn.
@@ -571,6 +572,12 @@ const stopNotReal = (stopped) => {
 
 let plan = await planIt('start')
 if (!plan) return { error: 'no plan came back' }
+// Eyes that do not run: every stage after this one would find it out for itself, each in its own way.
+if (typeof plan.eyesDown === 'string' && plan.eyesDown.trim() !== '') {
+  const stopped = `nothing was started: sz-eyes does not run on this machine as the plugin is installed, so nothing could be measured or shown. What it printed: ${plan.eyesDown.trim()} Put that right (for a copy of the harness without its dependencies: pnpm install in that copy), then start the workflow again.`
+  log(stopped)
+  return { mode: null, summary: plan.summary || '', decided: plan.decided || [], spec: '.sz/spec.md', design: null, milestones: [], joins: [], forOwner: [], notBuilt: [], needed: [], stopped }
+}
 learn(plan)
 const DESIGNS = ['none', 'needed', 'waiting', 'again', 'approved']
 let design = DESIGNS.includes(plan.design) ? plan.design : 'none'
