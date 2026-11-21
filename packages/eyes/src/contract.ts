@@ -99,7 +99,9 @@ export const Contract = z.object({
    * What whoever verified noticed that no claim covers: an error the page logged, a control too small to press,
    * a number that does not add up. Nobody asked, and the owner would want to know.
    */
-  noticed: z.array(z.object({ text: z.string().max(600), evidence: z.array(z.string().max(300)).max(6).default([]) })).max(30).default([]),
+  // Not held to a few: a milestone looked at three times by three verifiers passed thirty, and the thirty-first
+  // (an invite that would not close on the phone) could not be recorded (2026-11-21).
+  noticed: z.array(z.object({ text: z.string().max(600), evidence: z.array(z.string().max(300)).max(6).default([]) })).max(300).default([]),
   /**
    * Corrections made to a frozen check after the freeze, each by someone who neither built the work nor judges
    * it: which file, and why the check was wrong about how to check (never about what it checks).

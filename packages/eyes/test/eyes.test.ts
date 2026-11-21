@@ -540,6 +540,12 @@ test('every call to Maestro brings a driver port of its own, so the simulator na
   }
 });
 
+test('what verifiers notice is kept, however much of it there is', () => {
+  // (2026-11-21: a contract held thirty notices after three looks, and the next one was refused.)
+  const many = { ...contract(), noticed: Array.from({ length: 120 }, (_, k) => ({ text: `본 것 ${k + 1}`, evidence: [] })) };
+  assert.equal(Contract.parse(many).noticed.length, 120);
+});
+
 test('a claim found false whose own words are wrong is set aside for the owner: it does not stand, and it does not stop the close', () => {
   const project = mkdtempSync(join(tmpdir(), 'eyes-dispute-'));
   try {
