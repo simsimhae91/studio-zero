@@ -16,6 +16,7 @@ One run: read the figures as showing what happened, not minutes to trust.
 | File | What it is |
 |---|---|
 | `continue-request.txt`, `run-continue.sh` | What the headless session was asked, and how it was started |
+| `finish-request.txt`, `run-finish.sh`, `journals/finish.jsonl` | The same for the session that took the milestone up where it had stopped |
 | `request.md` | The owner's request and ground word for word, and everything the starter added, marked as not the owner's |
 | `clock.txt` | When it started and ended |
 | `journals/continue.jsonl` | The workflow's own journal |
@@ -102,6 +103,41 @@ On the branch `phone-again`:
   come, or put the claim under "notFixed" and say why it cannot be made true as worded. A run that takes up a
   milestone an earlier run left with claims false tells its fixer the same, from the log (it does not know how
   often the earlier run tried).
+
+## The change, tried on the claim that had stayed false
+
+The milestone was taken up where it had stopped, in a third session (`finish-request.txt`, `run-finish.sh`,
+`journals/finish.jsonl`), with the plugin at `61c29b3`: 55 minutes, 11.71 dollars at list prices, and it closed.
+
+| Stage | Minutes |
+|---|---|
+| plan (nothing new to plan; the milestone is taken up at the fix) | 5 |
+| the product started again | 1 |
+| fix 1 | 7 |
+| look (one verifier) | 18 |
+| fix 2 | 6 |
+| look (one verifier) | 15 |
+| close | 1 |
+| **request to the end** | **55**, closed: 6 proven, 0 false, 1 the owner's (`drawn`) |
+
+- The first fixer of this session was told, from the log, that a claim mended before and shown false again by
+  another case of the kind is not mended by one more patch. It wrote: "This kind of leak was patched twice before
+  (8c810b9, a446a9f) and turned up again, so I changed the rule that allows it, not just the two cases found." Its
+  rule still chose what to delete, by kinds of character it knew. The look after it got circled letters and
+  superscript digits through.
+- The second fixer was handed that, what had been found before it, and the line that this was the last time. It
+  wrote: "This mends the whole kind, not just the cases named. […] The rule now chooses what to keep, and what it
+  can keep is a closed set." The look after it tried 27 further forms of a name and a number, straight to the
+  endpoint and as errors on a screen; none was kept.
+
+Two fixers before the change had each taught the rule the forms they were shown; with what was found before in
+hand and told to mend the kind, the second one here turned the rule round. One claim, once: it shows the line is
+read and acted on, not how often it will be.
+
+The request for this session was written in the starter's own voice, with the owner's words named as only those
+marked so in `request.md`. The session passed nothing of it on as the owner's, added a correction to the spec's
+section on the milestone, and reported that the frozen contract still carries the three places where the
+starter's sentences stand as the owner's: a frozen contract is not rewritten.
 
 Not changed, and why:
 
