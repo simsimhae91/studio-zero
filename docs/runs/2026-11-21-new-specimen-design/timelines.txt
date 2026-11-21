@@ -1,0 +1,20 @@
+== wf_1f817b23-7d9 in -Users-hosoo--studio-zero-specimens-2026-11-21-toesa-check
+plan                   claude-opus-5-5    eff=xhigh  adv=claude-opus-5-5  19:57:34-19:58:43    1.1m turns=10   out=4285    think=1814   fresh_in=50431    cache_read=418682     calls=11   gap=7s  Bash:10 StructuredOutput:1
+design                 claude-opus-5-5    eff=high   adv=claude-opus-5-5  19:58:43-20:37:10   38.4m turns=60   out=146369  think=51837  fresh_in=289802   cache_read=9496169    calls=67   gap=270s  Bash:38 Read:14 Write:9 Yield:3 Skill:2 StructuredOutput:1
+refs                   claude-opus-5-5    eff=high   adv=claude-opus-5-5  19:58:43-20:14:11   15.5m turns=33   out=21641   think=4811   fresh_in=127523   cache_read=2631721    calls=40   gap=270s  Bash:26 Read:8 Yield:3 Skill:1 Write:1 StructuredOutput:1
+screens                claude-opus-5-5    eff=xhigh  adv=claude-opus-5-5  19:58:43-20:17:51   19.1m turns=52   out=93785   think=39623  fresh_in=223880   cache_read=6577552    calls=56   gap=154s  Bash:41 WebFetch:6 WebSearch:4 Skill:1 ToolSearch:1 Write:1
+sweep:design           claude-opus-5-5    eff=low    adv=claude-opus-5-5  20:37:10-20:37:30    0.3m turns=4    out=1249    think=135    fresh_in=37381    cache_read=106059     calls=4    gap=4s  Bash:3 StructuredOutput:1
+fix:design:1           claude-opus-5-5    eff=high   adv=claude-opus-5-5  20:37:30-20:38:14    0.7m turns=7    out=3282    think=1322   fresh_in=40778    cache_read=218776     calls=7    gap=7s  Bash:6 StructuredOutput:1
+sweep:design           claude-opus-5-5    eff=low    adv=claude-opus-5-5  20:38:14-20:38:32    0.3m turns=3    out=1374    think=231    fresh_in=4930     cache_read=102188     calls=3    gap=4s  Bash:2 StructuredOutput:1
+fix:design:2           claude-opus-5-5    eff=high   adv=claude-opus-5-5  20:38:32-20:40:12    1.7m turns=13   out=5682    think=1910   fresh_in=53503    cache_read=563130     calls=15   gap=22s  Bash:10 Read:3 Skill:1 StructuredOutput:1
+sweep:design           claude-opus-5-5    eff=low    adv=claude-opus-5-5  20:40:12-20:40:34    0.4m turns=3    out=1536    think=240    fresh_in=4944     cache_read=102188     calls=3    gap=6s  Bash:2 StructuredOutput:1
+
+
+== wf_c6929958-586 in -Users-hosoo--studio-zero-specimens-2026-11-21-toesa-check
+plan                   claude-opus-5-5    eff=xhigh  adv=claude-opus-5-5  20:43:38-20:43:59    0.4m turns=3    out=1340    think=335    fresh_in=44945    cache_read=85550      calls=3    gap=6s  Bash:2 StructuredOutput:1
+refs                   claude-opus-5-5    eff=high   adv=claude-opus-5-5  20:44:00-20:44:22    0.4m turns=4    out=1532    think=124    fresh_in=43122    cache_read=112354     calls=4    gap=7s  Bash:3 StructuredOutput:1
+screens                claude-opus-5-5    eff=xhigh  adv=claude-opus-5-5  20:44:00-20:44:41    0.7m turns=5    out=2844    think=595    fresh_in=54726    cache_read=171608     calls=5    gap=14s  Bash:4 StructuredOutput:1
+design                 claude-opus-5-5    eff=high   adv=claude-opus-5-5  20:44:00-20:49:05    5.1m turns=24   out=12067   think=2924   fresh_in=94776    cache_read=1557813    calls=28   gap=44s  Bash:20 Read:6 Skill:1 StructuredOutput:1
+sweep:design           claude-opus-5-5    eff=low    adv=claude-opus-5-5  20:49:05-20:49:52    0.8m turns=5    out=1271    think=0      fresh_in=40509    cache_read=145827     calls=5    gap=24s  Bash:4 StructuredOutput:1
+
+
