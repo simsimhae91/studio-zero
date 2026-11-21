@@ -982,9 +982,11 @@ test('a plan writes only what the contract can record, and a builder\'s remark i
   assert.match(SOURCE, /blocked: \{ type: 'string', description: '[^']*Anything written here stops the run before anyone verifies: where the milestone stands, leave it empty[^']*in the summary' \}/);
 });
 
-test('a flow shown on a simulator is a verifier\'s whole share, and a fixer searches the checks of earlier work for what it changes', async () => {
+test('what is shown on a simulator goes to as many verifiers as the machine holds simulators, and a fixer searches the checks of earlier work for what it changes', async () => {
   // (2026-11-19: three flows on a simulator were weighed as three in a browser and went to one verifier, who took
-  // 144 minutes, while the other, with two browser flows and a command, took 40.)
+  // 144 minutes, while the other, with two browser flows and a command, took 40. 2026-11-21: shared out one a
+  // verifier, three verifiers had four simulators up beside nine stacks on 24 GB; the swap filled, and the look
+  // after a fix took 68 minutes where one verifier had taken 37.)
   const claims = [
     { id: 'ios-path', says: 'eyes의 iOS 시뮬레이터에 깐 Release 빌드를 열면 ON-01이 뜬다', kind: 'flow', ref: 'flows/ios/path.sh' },
     { id: 'ios-steps', says: '걸음 연결하기를 누르면 건강 접근 시트가 걸음 하나만 묻는다', kind: 'flow', ref: 'flows/ios/steps.sh (Maestro flows/ios/steps.yaml)' },
@@ -996,27 +998,41 @@ test('a flow shown on a simulator is a verifier\'s whole share, and a fixer sear
   ];
   const yours = (c: Call): string[] => (/Yours are these claims: ([^.]*)\./.exec(c.prompt)?.[1] ?? 'all').split(', ');
   const all = claims.filter((c) => c.kind !== 'owner').map((c) => c.id);
-  let looks = 0;
-  const { calls } = await run({ request: 'x' }, {
-    plan: () => ({ mode: 'extend', summary: 's', milestones: [{ id: 'phone', title: '휴대폰에서', builds: 'b', claims }] }),
-    build: built,
-    // Each verifier answers for its own share; at the first look one claim of the web part is shown false.
-    verify: (c) => {
-      const mine = yours(c);
-      const first = !c.label.includes(':again');
-      if (first) looks++;
-      return { proven: mine.filter((id) => all.includes(id) && !(first && id === 'mends-read')), refuted: first && mine.includes('mends-read') ? [{ id: 'mends-read', fact: 'BT-03 writes an ASCII minus' }] : [], unchecked: mine.includes('feel-phone') ? [{ id: 'feel-phone', why: 'the owner judges it' }] : [] };
-    },
-    fix: () => ({ fixed: ['mends-read: mended'] }),
-    close: closed,
-  });
-  const first = calls.filter((c) => /^verify:phone:\dof\d$/.test(c.label));
-  assert.deepEqual(first.map(yours), [['ios-path'], ['ios-steps'], ['ios-fit'], ['mends-play', 'mends-read', 'keeps', 'feel-phone']], 'each flow on a simulator has a verifier of its own, and the browser part stays together');
-  assert.equal(looks, 4);
-  const again = calls.filter((c) => c.label.startsWith('verify:phone:again'));
-  assert.deepEqual(again.map(yours), [['ios-path', 'ios-steps'], ['ios-fit', 'mends-play', 'mends-read', 'keeps', 'feel-phone']], 'the look after a fix, its flows written, is shared by two');
-  // A command that names the device (a bundle searched for keys) is still a command.
-  assert.ok(first.every((c) => !/Yours are these claims: keeps\./.test(c.prompt)));
+  const WEB = ['mends-play', 'mends-read', 'keeps', 'feel-phone'];
+  const looked = (simulators: number | undefined, list = claims) =>
+    run({ request: 'x' }, {
+      plan: () => ({ mode: 'extend', summary: 's', ...(simulators ? { simulators } : {}), milestones: [{ id: 'phone', title: '휴대폰에서', builds: 'b', claims: list }] }),
+      build: built,
+      // Each verifier answers for its own share; at the first look one claim of the browser part is shown false.
+      verify: (c) => {
+        const mine = yours(c)[0] === 'all' ? list.map((x) => x.id) : yours(c);
+        const first = !c.label.includes(':again');
+        return { proven: mine.filter((id) => id !== 'feel-phone' && !(first && id === 'mends-read')), refuted: first && mine.includes('mends-read') ? [{ id: 'mends-read', fact: 'BT-03 writes an ASCII minus' }] : [], unchecked: mine.includes('feel-phone') ? [{ id: 'feel-phone', why: 'the owner judges it' }] : [] };
+      },
+      fix: () => ({ fixed: ['mends-read: mended'] }),
+      close: closed,
+    });
+  const first = (calls: Call[]): Call[] => calls.filter((c) => /^verify:phone:\dof\d$/.test(c.label));
+
+  // A machine that holds two: the browser part first (its verifier also shows again what stood before), then the
+  // simulator's flows between two verifiers, cut by what they cost to write.
+  const { calls } = await looked(2);
+  assert.deepEqual(first(calls).map(yours), [WEB, ['ios-path', 'ios-steps'], ['ios-fit']]);
+  const [web, pathAndSteps, fit] = first(calls).map((c) => c.prompt);
+  assert.match(web!, /None of your claims is shown on a simulator: take none \(this machine holds 2 at once, and they are the other verifiers'\)/);
+  assert.match(web!, /You are also the one who shows again what stood before this work/);
+  assert.match(pathAndSteps!, /for your claims that are shown on a simulator, one simulator of your own \(`sz-eyes ios spare --name sz-phone-2`; rest it when you are done[^)]*\)\. One and no more: this machine holds 2 at once/);
+  assert.match(fit!, /`sz-eyes ios spare --name sz-phone-3`/);
+  // Three: one each. One (or a plan that does not say): all of the simulator's with one verifier.
+  assert.deepEqual(first((await looked(3)).calls).map(yours), [WEB, ['ios-path'], ['ios-steps'], ['ios-fit']]);
+  assert.deepEqual(first((await looked(1)).calls).map(yours), [WEB, ['ios-path', 'ios-steps', 'ios-fit']]);
+  assert.deepEqual(first((await looked(undefined)).calls).map(yours), [WEB, ['ios-path', 'ios-steps', 'ios-fit']]);
+  // Whoever plans reads the number from the eyes, at the start and after the first pass.
+  assert.match(SOURCE, /simulators: \{ type: 'integer', description: '[^']*the number on the first line of what `sz-eyes ios room` printed/);
+  assert.equal(SOURCE.split('return the number on its first line under "simulators"').length - 1, 2);
+  // After a fix the flows are written, and running three on one simulator is one verifier's work.
+  assert.deepEqual(calls.filter((c) => c.label.startsWith('verify:phone:again')).map((c) => c.label), ['verify:phone:again']);
+  assert.ok(all.length === 6);
 
   // Claims shown by one check are one verifier's, and the check is weighed once: the path's three claims name one
   // flow, as do the two of the steps and the two of the fit. (The builder of that night had recorded them so.)
@@ -1026,16 +1042,15 @@ test('a flow shown on a simulator is a verifier\'s whole share, and a fixer sear
     ...['ios-fit', 'ios-fit-2'].map((id) => ({ ...claims[2]!, id })),
     ...claims.slice(3),
   ];
-  const inParts = await run({ request: 'x' }, { plan: () => ({ mode: 'extend', summary: 's', milestones: [{ id: 'phone', title: '휴대폰에서', builds: 'b', claims: parted }] }), build: built, verify: (c) => ({ proven: yours(c).filter((id) => id !== 'feel-phone'), refuted: [], unchecked: [] }), close: closed });
-  assert.deepEqual(inParts.calls.filter((c) => c.label.startsWith('verify:')).map(yours), [['ios-path', 'ios-path-2', 'ios-path-3'], ['ios-steps', 'ios-steps-2'], ['ios-fit', 'ios-fit-2'], ['mends-play', 'mends-read', 'keeps', 'feel-phone']]);
+  assert.deepEqual(first((await looked(2, parted)).calls).map(yours), [WEB, ['ios-path', 'ios-path-2', 'ios-path-3', 'ios-steps', 'ios-steps-2'], ['ios-fit', 'ios-fit-2']]);
 
   // (No field of that app had an id. The flow pressed each by its words, Maestro pressed the label beside it, and
   // what was typed went nowhere in five fields of six.)
   const builder = calls.find((c) => c.label === 'build:phone')!.prompt;
   assert.match(builder, /This milestone is shown on a simulator, by flows that whoever verifies writes: give every field a person types into a `testID`/);
   assert.match(builder, /`sz-eyes ios look <the simulator's id>` on a screen lists its fields and says which have no id/);
-  const web = await run({ request: 'x' }, { plan: plan('m1'), build: built, verify: () => ({ proven: ['one', 'two'], refuted: [], unchecked: [] }), close: closed });
-  assert.doesNotMatch(web.calls.find((c) => c.label === 'build:m1')!.prompt, /testID/, 'a milestone shown in a browser is not told about a simulator');
+  const inBrowser = await run({ request: 'x' }, { plan: plan('m1'), build: built, verify: () => ({ proven: ['one', 'two'], refuted: [], unchecked: [] }), close: closed });
+  assert.doesNotMatch(inBrowser.calls.find((c) => c.label === 'build:m1')!.prompt, /testID/, 'a milestone shown in a browser is not told about a simulator');
 
   // (The same night a fix signed a percent that two frozen flows of the first pass read unsigned. Nobody ran them
   // until the next look: 37 minutes to learn it, a second fix, and a third look.)

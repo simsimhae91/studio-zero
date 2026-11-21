@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 import { freePort } from './port.ts';
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { availableParallelism, tmpdir, totalmem } from 'node:os';
 import { basename, dirname, extname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { stoppedBySandbox } from './web.ts';
@@ -37,13 +37,54 @@ async function listDevices(run: CommandRunner): Promise<SimDevice[]> {
 }
 
 /**
- * The eyes' own simulator, made the first time it is asked for and booted with no window. Returns its id.
- * `type` is a device type as `xcrun simctl list devicetypes` names it ("iPhone 17").
+ * How many simulators a Mac holds at once. A booted simulator of iOS 26.4 with an app under test took 3.8 GB
+ * (2026-11-21: four of them and nine stacks on 24 GB and ten cores filled the swap; load 280, four minutes to
+ * boot one, and a look after a fix that one verifier had done in 37 minutes took three verifiers over an hour).
+ * Two had run beside four stacks two days before with nothing of the kind. So: what is left of the memory after
+ * 14 GB for the system, the owner's own apps and the stacks, at 4 GB each, and never more than a quarter of the
+ * cores; one at least.
  */
-export async function spareSimulator(opts: { name?: string; type?: string; run?: CommandRunner } = {}): Promise<string> {
+export function simulatorsHeld(memoryBytes: number, cores: number): number {
+  return Math.max(1, Math.min(Math.floor((memoryBytes / 2 ** 30 - 14) / 4), Math.floor(cores / 4)));
+}
+
+export interface SimulatorRoom {
+  holds: number;
+  memoryGb: number;
+  cores: number;
+  /** The simulators that are up, whoever booted them; null when the simulator's service could not be asked. */
+  up: { name: string; udid: string }[] | null;
+}
+
+/** What this Mac holds, and what is up on it now. */
+export async function simulatorRoom(opts: { run?: CommandRunner; memoryBytes?: number; cores?: number } = {}): Promise<SimulatorRoom> {
+  const memory = opts.memoryBytes ?? totalmem();
+  const cores = opts.cores ?? availableParallelism();
+  const up = await listDevices(opts.run ?? runCommand).then((devices) => devices.filter((d) => d.state === 'Booted').map((d) => ({ name: d.name, udid: d.udid })), () => null);
+  return { holds: simulatorsHeld(memory, cores), memoryGb: Math.round(memory / 2 ** 30), cores, up };
+}
+
+/**
+ * The eyes' own simulator, made the first time it is asked for and booted with no window. Returns its id.
+ * `type` is a device type as `xcrun simctl list devicetypes` names it ("iPhone 17"). It is not booted beside as
+ * many as the Mac holds: then it is said so, or with `waitMs` waited for until one of them is rested.
+ */
+export async function spareSimulator(opts: { name?: string; type?: string; run?: CommandRunner; holds?: number; waitMs?: number; pauseMs?: number } = {}): Promise<string> {
   const run = opts.run ?? runCommand;
   const name = opts.name ?? SPARE_NAME;
-  let device = (await listDevices(run)).find((d) => d.name === name);
+  const holds = opts.holds ?? simulatorsHeld(totalmem(), availableParallelism());
+  let devices = await listDevices(run);
+  let device = devices.find((d) => d.name === name);
+  if (device?.state !== 'Booted') {
+    const others = (): SimDevice[] => devices.filter((d) => d.state === 'Booted' && d.name !== name);
+    const until = Date.now() + (opts.waitMs ?? 0);
+    while (others().length >= holds && Date.now() < until) {
+      await new Promise((done) => setTimeout(done, opts.pauseMs ?? 15_000));
+      devices = await listDevices(run);
+    }
+    if (others().length >= holds) throw new EyesError(`this Mac holds ${holds} simulator${holds === 1 ? '' : 's'} at once and ${others().length} ${others().length === 1 ? 'is' : 'are'} up: ${others().map((d) => `${d.name} (${d.udid})`).join(', ')}. With one more the Mac swaps, and every simulator crawls, those that are up included. Do what needs no simulator, and take this one when another is rested (sz-eyes ios rest <id>; sz-eyes ios room says which are up), or wait for that here: sz-eyes ios spare --name ${name} --wait 9 (minutes). Never boot one another way`);
+    device = devices.find((d) => d.name === name);
+  }
   if (!device) {
     const udid = (await must(run, `could not make a simulator of type ${opts.type ?? DEFAULT_TYPE}`, 'xcrun', ['simctl', 'create', name, opts.type ?? DEFAULT_TYPE])).trim();
     device = { udid, name, state: 'Shutdown' };

@@ -13,7 +13,7 @@ import { writeEvidencePage } from './evidence.ts';
 import { changedSinceFrozen, fingerprint, fingerprints } from './fingerprint.ts';
 import { Status, addSaid, latestRound, newRound, noteSaid, readRound, renderRound, writeRoundPage } from './feedback.ts';
 import { IMAGE_ASSETS_DIR, ImageError, imageCommand } from './image.ts';
-import { EyesError, installApp, lookAt, lookText, restSimulator, runFlow, spareSimulator } from './ios.ts';
+import { EyesError, installApp, lookAt, lookText, restSimulator, runFlow, simulatorRoom, spareSimulator } from './ios.ts';
 import { downloadsOf, filesOf, leakReport, renderLeaks } from './leaks.ts';
 import { lookAtLive, renderLive } from './live.ts';
 import { RelayError, loginCommand } from './login-relay.ts';
@@ -95,8 +95,13 @@ const USAGE = `sz-eyes: launch what was built, look at it, operate it, and put w
         --days-later <n> starts it believing it is n days from now (its main process and every window): with
         the same --data, that is a person coming back the next morning or a week on
 
-  sz-eyes ios spare [--type "iPhone 17"] [--name <n>]    the eyes' own simulator, made and booted with no window; prints its id.
-        --name gives one of its own to work that is done beside other work (two products on one simulator overwrite each other)
+  sz-eyes ios spare [--type "iPhone 17"] [--name <n>] [--wait <minutes>]
+        the eyes' own simulator, made and booted with no window; prints its id. --name gives one of its own to
+        work that is done beside other work (two products on one simulator overwrite each other). It is not
+        booted beside as many as this Mac holds (sz-eyes ios room): it says which are up, or with --wait waits
+        that long for one of them to be rested
+  sz-eyes ios room [--json]                              how many simulators this Mac holds at once (its first line,
+        the number alone), and which are up now
   sz-eyes ios install <udid> <path.app> --bundle-id <id> [--metro <port>]
         put a built app on it, fresh (a React Native debug build is told which packager to load from)
   sz-eyes ios flow <udid> <flow.yaml> --out <folder> [--video] [-e KEY=VALUE]...
@@ -729,7 +734,13 @@ async function main(argv: string[]): Promise<number> {
   if (area === 'ios') {
     const a = parse(rest, ['--video', '--erase', '--json']);
     if (command === 'spare') {
-      out(await spareSimulator({ ...(a.one('--type') ? { type: a.one('--type')! } : {}), ...(a.one('--name') ? { name: a.one('--name')! } : {}) }));
+      out(await spareSimulator({ ...(a.one('--type') ? { type: a.one('--type')! } : {}), ...(a.one('--name') ? { name: a.one('--name')! } : {}), ...(a.one('--wait') ? { waitMs: Number(a.one('--wait')) * 60_000 } : {}) }));
+      return 0;
+    }
+    if (command === 'room') {
+      const room = await simulatorRoom();
+      // The number alone on the first line: whoever plans reads it there.
+      out(a.has('--json') ? JSON.stringify(room) : `${room.holds}\nthis Mac holds ${room.holds} simulator${room.holds === 1 ? '' : 's'} at once (${room.memoryGb} GB of memory, ${room.cores} cores). ${room.up === null ? 'Which are up could not be asked (inside a command sandbox the simulator\'s service is out of reach)' : room.up.length === 0 ? 'None is up' : `Up now (${room.up.length}): ${room.up.map((d) => `${d.name} (${d.udid})`).join(', ')}`}`);
       return 0;
     }
     const udid = a.words[0];

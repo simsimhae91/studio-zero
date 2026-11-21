@@ -39,6 +39,12 @@ const TOOLS = 'The command `sz-eyes` is on your PATH (the sz plugin\'s). Load th
 const IN_SANDBOX = ' This session runs its commands inside a sandbox, where nothing that opens a browser, a desktop app, a simulator or Docker can start. Run those outside it from the first try (`dangerouslyDisableSandbox: true` on the Bash call): every `sz-eyes web`, `sz-eyes electron`, `sz-eyes ios` and `sz-eyes docker` command, and the project\'s own flows and tests that open a browser. Everything else stays inside. If such a call is refused, do not judge the product by reading its code instead: say in what you return that the sandbox stopped the look.'
 const MAYBE_SANDBOX = ' If `sz-eyes` says the session\'s command sandbox stopped it, run every command that opens a browser, a desktop app, a simulator or Docker outside the sandbox from the first try (`dangerouslyDisableSandbox: true` on the Bash call; the `sz:verify` skill says which). If that call is refused, do not judge the product by reading its code instead: say in what you return that the sandbox stopped the look.'
 let SAND = MAYBE_SANDBOX
+// How many simulators this machine holds at once, as whoever planned read it from the eyes: one until that is known.
+let SIMS = 1
+const learn = (plan) => {
+  if (plan.sandboxed === true) SAND = IN_SANDBOX
+  if (Number.isInteger(plan.simulators) && plan.simulators > 0) SIMS = plan.simulators
+}
 const GROUND = 'You are working in the project\'s folder. Read `.sz/map.md` first (if there is none, load `sz:onboard` and write it), then `.sz/spec.md`, `.sz/owner.md` (what the owner has said they want of this product: it comes before your own taste) and the last lines of `.sz/progress.md` if they exist. Follow the project\'s own rules as the map lists them. Other work of the owner\'s runs on this machine. Never use their simulator, browser profile or dev-server ports: a headless browser, the eyes\' own simulator, and for anything you launch a port taken from the machine (`PORT=$(sz-eyes port)`), never a number you chose. Before you look at what you launched, make sure it is yours that answers (your process is alive and the page is this product). End every server you start, by the process id you kept (`pid=$!` ... `kill $pid`): never by its port and never by its name, because what holds a port you wanted is somebody else\'s.'
 
 // How hard each kind of agent thinks. Most of a milestone's time is its builder thinking: on the same milestone
@@ -187,6 +193,7 @@ const PLAN = {
     mode: { type: 'string', enum: ['new', 'continue', 'extend'], description: 'new: there was no spec. continue: an earlier run stopped before finishing what the spec has. extend: the request asks for more than the spec had, and the spec was amended' },
     summary: { type: 'string', description: 'two or three sentences: what the product is, for whom, and the shape you chose (when extending: what is added or changed)' },
     sandboxed: { type: 'boolean', description: 'what `sz-eyes sandbox` said when run as an ordinary command: true when it said "sandboxed"' },
+    simulators: { type: 'integer', description: 'only for a product with a part on a phone: the number on the first line of what `sz-eyes ios room` printed (how many simulators this machine holds at once)' },
     design: { type: 'string', enum: ['none', 'needed', 'waiting', 'again', 'approved'], description: 'where the design of a new product with screens stands, as the top of your instructions says how to find out; "none" for anything else' },
     said: { type: 'string', description: 'only when design is "again": what the owner said about the prototype, in their words, as the claim feel of contract design records them' },
     decided: { type: 'array', items: { type: 'string' }, description: 'what the request and the answers left open and how you decided it' },
@@ -310,7 +317,7 @@ const OWNER_ANSWERS = asked === 'owner' ? `What the owner answered when asked be
 // shown afterwards, a product was called "an old flash game"; drawn first by one designer from a plan, as one
 // clickable prototype, the same request read as an app, and the owner chose that way.) Where the design stands
 // is found out first, so that a run that only draws, or only waits, costs a minute of planning and not a pass.
-const DESIGN_CHECK = `Before anything else, find out where this product's design stands: it decides whether you plan at all in this run, and finding out takes a minute. First run \`sz-eyes sandbox\` once, as an ordinary command (do not ask for it to run outside any sandbox), and return under "sandboxed" whether it answered "sandboxed": everyone who works after you is told what it said. Then run \`ls .sz .sz/design\` and \`sz-eyes contract show design\`, and return under "design" the first of these that is so:
+const DESIGN_CHECK = `Before anything else, find out where this product's design stands: it decides whether you plan at all in this run, and finding out takes a minute. First run \`sz-eyes sandbox\` once, as an ordinary command (do not ask for it to run outside any sandbox), and return under "sandboxed" whether it answered "sandboxed": everyone who works after you is told what it said. For a product with a part on a phone, run \`sz-eyes ios room\` as well and return the number on its first line under "simulators": how many simulators this machine holds at once, which is how many verifiers may each have one. Then run \`ls .sz .sz/design\` and \`sz-eyes contract show design\`, and return under "design" the first of these that is so:
 - "none": what was asked has no screen a person looks at (a command, a library, a service with no screen of its own); or \`.sz/spec.md\` is there, so the product has been worked on before (unless its first pass has not closed and contract \`design\` marks its claim **feel** [증명됨]: then "approved", and that first pass is still built to the drawing). Go on below as if this paragraph were not here.
 - "again": contract \`design\` marks its claim **feel** [반증됨]: the owner looked at the prototype and said no. Return their words, as the claim's note gives them, under "said", and return at once, as for "needed".
 - "approved": it marks **feel** [증명됨]: the owner said yes. Plan the first pass below, from the screens as planned and drawn.
@@ -336,7 +343,7 @@ If \`.sz/spec.md\` already exists, the product has been worked on before. Read i
   - If \`git worktree list\` shows folders under \`.sz/trees/\`, an earlier run built milestones side by side and stopped before bringing them together: for each such milestone whose contract exists, state "built" (or "closed" if its contract is closed there) and "where": that folder's whole path.
   - "supersedes": the standing claims that will stop being true because what was asked has changed, each with the reason. Be exact: a standing claim you do not list stays a promise, and the milestone must keep it true. Prefer a change that keeps old promises (a new choice whose default is the old behaviour) to one that replaces them.
   - If it changes the shape of what is stored, one claim says that what was saved before the change is still there after it, shown by a test that starts from data in the old shape. The product carries over what exists; nobody is asked to delete their data.
-${stage === 'after' ? 'First, whichever mode it is: run `sz-eyes sandbox` once, as an ordinary command (do not ask for it to run outside any sandbox), and return under "sandboxed" whether it answered "sandboxed". Everyone who works after you is told what it said.\n' : ''}
+${stage === 'after' ? 'First, whichever mode it is: run `sz-eyes sandbox` once, as an ordinary command (do not ask for it to run outside any sandbox), and return under "sandboxed" whether it answered "sandboxed". Everyone who works after you is told what it said. For a product with a part on a phone, run `sz-eyes ios room` as well and return the number on its first line under "simulators": how many simulators this machine holds at once.\n' : ''}
 Write no product code. Add a line to \`.sz/progress.md\` and commit \`.sz/\` if you amended the spec. If there is no spec yet (mode "new"):
 
 Write \`.sz/spec.md\` in the owner's language: what the product is and for whom, the one thing it must do well, every area of it a person will use (a line each), how it is launched and looked at, and what is deliberately not built. A new product is made in three passes, and you plan the first now.
@@ -564,7 +571,7 @@ const stopNotReal = (stopped) => {
 
 let plan = await planIt('start')
 if (!plan) return { error: 'no plan came back' }
-if (plan.sandboxed === true) SAND = IN_SANDBOX
+learn(plan)
 const DESIGNS = ['none', 'needed', 'waiting', 'again', 'approved']
 let design = DESIGNS.includes(plan.design) ? plan.design : 'none'
 if (design === 'needed' || design === 'again') {
@@ -575,7 +582,7 @@ if (design === 'needed' || design === 'again') {
   phase('Plan')
   plan = await planIt('start')
   if (!plan) return { error: 'no plan came back' }
-  if (plan.sandboxed === true) SAND = IN_SANDBOX
+  learn(plan)
   design = DESIGNS.includes(plan.design) ? plan.design : 'none'
 }
 if (design === 'waiting' || design === 'needed' || design === 'again') return stopAtDesign(WAITS)
@@ -627,29 +634,27 @@ const FIRST = `This milestone is the product's first pass: all of it, in one str
 // A milestone shown on a simulator is built so that its flows can be written: a flow presses a field by its id.
 // (2026-11-19: no field of a phone app had one. The verifier's flow pressed each by its words, Maestro pressed
 // the label beside it, and what was typed went nowhere in five fields of six: the claim stayed unchecked.)
-const onDevice = (m) => (m.claims || []).some((c) => ON_A_DEVICE.test(`${c.says || ''} ${c.ref || ''}`))
+const onDevice = (m) => (m.claims || []).some((c) => onASimulator(c))
 const HANDLES = ' This milestone is shown on a simulator, by flows that whoever verifies writes: give every field a person types into a `testID`, and everything a person presses that has no words of its own (an icon, a picture). A flow presses a field by its id; by its words Maestro may press the label beside it, and what is typed goes nowhere. `sz-eyes ios look <the simulator\'s id>` on a screen lists its fields and says which have no id: run it on each screen with a field before you return.'
 // What a claim costs to show, in tests' worth: a flow is written and run against the product, a look is pictures
 // set beside drawings, and one that says something of every screen costs a flow more. One shown on a
-// simulator costs several of a browser's: the app is installed, every step waits on the device, and its flow is
-// written in the device's own driver. It is a verifier's whole share. (2026-11-19: three flows on a simulator were
-// weighed as three in a browser and went to one verifier, who took 144 minutes, 55 to 85 a flow; the other
-// verifier, with two browser flows and a command, took 40.)
+// simulator costs several of a browser's while its flow is still to be written: the app is installed, every step
+// waits on the device, and the flow is written in the device's own driver. Written, it costs its run.
+// (2026-11-19: three flows on a simulator were weighed as three in a browser and went to one verifier, who took
+// 144 minutes, 55 to 85 a flow; the other verifier, with two browser flows and a command, took 40.)
 const EVERY_SCREEN = /every screen|all (the )?screens|each screen|\d+ screens|모든 화면|화면마다|각 화면|화면 \d+개|\d+\s*개 화면|\d+\s*화면/i
 const ON_A_DEVICE = /simulator|emulator|maestro|시뮬레이터|에뮬레이터/i
-const weightOf = (c) => {
+const onASimulator = (c) => (c.kind === 'flow' || c.kind === 'look') && ON_A_DEVICE.test(`${c.says || ''} ${c.ref || ''}`)
+const weightOf = (c, written = false) => {
   if (c.kind === 'owner') return 0
   if (c.kind !== 'flow' && c.kind !== 'look') return 1
-  const one = ON_A_DEVICE.test(`${c.says || ''} ${c.ref || ''}`) ? 10 : 3
+  const one = onASimulator(c) ? (written ? 4 : 10) : 3
   return EVERY_SCREEN.test(String(c.says || '')) ? one + 3 : one
 }
-// The claims in the plan's order, cut where the running cost is nearest to an even share: null when one verifier
-// is enough (about four flows' worth at a first look), five shares at most. A look after a fix takes twice as
-// much a verifier and three at most: the flows are written by then.
 // Claims shown by one check are shared as one: the check is written once, by one verifier, and costs what its
 // heaviest claim does. (2026-11-19: a flow's two claims went to two verifiers at a look after a fix, and both ran
 // it; at a first look both would have been told to write the same file.)
-const unitsOf = (claims) => {
+const unitsOf = (claims, written) => {
   const units = []
   const at = new Map()
   for (const c of claims) {
@@ -658,32 +663,53 @@ const unitsOf = (claims) => {
     if (key !== null && at.has(key)) {
       const unit = units[at.get(key)]
       unit.ids.push(c.id)
-      unit.cost = Math.max(unit.cost, weightOf(c))
+      unit.cost = Math.max(unit.cost, weightOf(c, written))
+      unit.device = unit.device || onASimulator(c)
       continue
     }
     if (key !== null) at.set(key, units.length)
-    units.push({ ids: [c.id], cost: weightOf(c) })
+    units.push({ ids: [c.id], cost: weightOf(c, written), device: onASimulator(c) })
   }
   return units
 }
-const sharesOf = (claims, each = 10, most = 5) => {
-  const units = unitsOf(claims)
-  const cost = units.map((u) => u.cost)
-  const total = cost.reduce((a, b) => a + b, 0)
-  if (total <= each + 2) return null
-  const shares = Math.min(most, Math.ceil(total / each))
+const costOf = (units) => units.reduce((sum, u) => sum + u.cost, 0)
+// Units in their order, cut where the running cost is nearest to an even share.
+const cut = (units, shares) => {
+  const total = costOf(units)
   const parts = []
   let from = 0
   let sum = 0
   for (let k = 1; k < shares && from < units.length; k++) {
     const aim = (total * k) / shares
     let to = from
-    while (to < units.length && (to === from || Math.abs(sum + cost[to] - aim) <= Math.abs(sum - aim))) sum += cost[to++]
-    parts.push(units.slice(from, to).flatMap((u) => u.ids))
+    while (to < units.length && (to === from || Math.abs(sum + units[to].cost - aim) <= Math.abs(sum - aim))) sum += units[to++].cost
+    parts.push(units.slice(from, to))
     from = to
   }
-  if (from < units.length) parts.push(units.slice(from).flatMap((u) => u.ids))
-  return parts.length > 1 ? parts : null
+  if (from < units.length) parts.push(units.slice(from))
+  return parts
+}
+// The claims in the plan's order, shared by what they cost to show: null when one verifier is enough (about four
+// flows' worth at a first look), five shares at most. A look after a fix takes twice as much a verifier and three
+// at most: the flows are written by then. What is shown on a simulator goes to no more verifiers than the machine
+// holds simulators, each of them with one of its own; the rest is shared among the others, who come first (the
+// first verifier also shows again what stood before, in a browser). (2026-11-21: three verifiers with four
+// simulators between them, each 3.8 GB, and nine stacks, on 24 GB: the swap filled, a simulator took four minutes
+// to boot, and the look after a fix took 68 minutes where one verifier had taken 37.)
+const sharesOf = (claims, each = 10, most = 5, written = false) => {
+  const units = unitsOf(claims, written)
+  if (costOf(units) <= each + 2) return null
+  const device = units.filter((u) => u.device)
+  const rest = units.filter((u) => !u.device)
+  let parts
+  if (device.length === 0) parts = cut(units, Math.min(most, Math.ceil(costOf(units) / each)))
+  else {
+    const forDevice = Math.max(1, Math.min(SIMS, most - (rest.length > 0 ? 1 : 0), Math.ceil(costOf(device) / each), device.length))
+    const forRest = rest.length === 0 ? 0 : Math.max(1, Math.min(most - forDevice, Math.ceil(costOf(rest) / each)))
+    parts = [...cut(rest, forRest), ...cut(device, forDevice)]
+  }
+  const ids = parts.map((part) => part.flatMap((u) => u.ids))
+  return ids.length > 1 ? ids : null
 }
 // What an earlier run's look recorded, as whoever started the milestone read it from the contract: taken up only
 // when it covers every claim and leaves something to mend. Anything else is looked at whole.
@@ -802,7 +828,7 @@ ${many ? 'Each' : 'It'} was frozen by that contract or by an earlier one that is
         again
           ? `This is a second look, after a fix. ${again.claims.length > 0 ? `These claims of the contract were shown false before: ${again.claims.join(', ')}. Check each from the start, on the product as it is now, and record it with \`sz-eyes contract claim\`. ` : ''}${again.standing.length > 0 ? `These promises of earlier work were found broken: ${again.standing.join(', ')}. Show each again and record it with ${record}. ` : ''}A fix can break a neighbour: ${share ? `show again your other claims, each by its own flow, test or command${share.k === 0 ? ', and what stood before this work (\`sz-eyes standing\`) with the project\'s quick checks (its type check and its tests of pure rule)' : ''}` : 'show again this contract\'s other claims and what stood before (\`sz-eyes standing\`) by the project\'s whole check command run once where it has one, and a flow, test or command by itself only where that run failed or says nothing of a claim'}; flows that would get in each other's way on one copy (one moves the clock, one restarts the backend, one fills the database to its limits) run each on a copy of the product of its own (\`sz-eyes copy\`), at the same time and not one after another; report whatever fails now (a claim of this contract under "refuted", recorded with \`sz-eyes contract claim\`; a promise of earlier work under "broken", recorded as above). Claims you did not look at again keep their verdict: leave them out. A claim about every screen at the product's limits is judged by its flow, at the limits the spec states: an input the product does not accept shows nothing about it. ${again.noticed === null ? 'Under "noticed" return only what you notice that is new.' : `Before the fix, this was noticed outside the claims: ${again.noticed.length > 0 ? again.noticed.map((n) => `[${n}]`).join(' ') : '(nothing)'}. Under "noticed" return each of those that is still so on the product as it is now (drop one the fix has ended) and whatever you notice that is new.`}`
           : `Give every claim a verdict and record each with \`sz-eyes contract claim\`. Then show again what stood before this work (\`sz-eyes standing\`) and record each with ${record}.`
-      }${share ? ` You are one of ${share.of} verifiers looking at this contract at the same time. Yours are these claims: ${share.part.join(', ')}. Give a verdict to these and to no other. ${share.k === 0 ? 'You are also the one who shows again what stood before this work.' : 'Do not show again what stood before this work: another verifier does.'} Start a copy of the product of your own, on a port of your own and with a place of its own for what it stores (\`sz-eyes copy <a folder outside the project>\` makes one from what is committed: its files, its installed dependencies, a stack name of its own, and \`--with <path>\` what the map says is built and not in git; the map says how it is launched; never the same database file or folder as another copy) and, if it runs on a simulator, a simulator of your own (\`sz-eyes ios spare --name sz-${m.id}-${share.k + 1}\`), and stop what you started when you are done: a server by its process id, then the copy with \`sz-eyes copy <its folder> --end\`, which stops its stack before the folder goes (never remove a copy's folder yourself).` : ''}${again ? '' : WRITE_FLOWS(built.contractId)}${m.first && !again && toDrawing ? AS_DRAWN : ''}${REAL_LOOK(m)} I am telling you nothing about whether any claim is true. Record what you notice that no claim covers with \`sz-eyes contract notice\`, stop any server you start, and return the verdicts: under "broken" every promise of earlier work that does not hold now, under "held" every one you showed again that holds.`,
+      }${share ? ` You are one of ${share.of} verifiers looking at this contract at the same time. Yours are these claims: ${share.part.join(', ')}. Give a verdict to these and to no other. ${share.k === 0 ? 'You are also the one who shows again what stood before this work.' : 'Do not show again what stood before this work: another verifier does.'} Start a copy of the product of your own, on a port of your own and with a place of its own for what it stores (\`sz-eyes copy <a folder outside the project>\` makes one from what is committed: its files, its installed dependencies, a stack name of its own, and \`--with <path>\` what the map says is built and not in git; the map says how it is launched; never the same database file or folder as another copy)${m.claims.some((c) => onASimulator(c)) ? (m.claims.some((c) => share.part.includes(c.id) && onASimulator(c)) ? ` and, for your claims that are shown on a simulator, one simulator of your own (\`sz-eyes ios spare --name sz-${m.id}-${share.k + 1}\`; rest it when you are done, \`sz-eyes ios rest <its id>\`). One and no more: this machine holds ${SIMS} at once, and with more up every one of them crawls` : `. None of your claims is shown on a simulator: take none (this machine holds ${SIMS} at once, and ${SIMS === 1 ? 'it is another verifier\'s' : 'they are the other verifiers\''})`) : ' and, if it runs on a simulator, a simulator of your own (\`sz-eyes ios spare --name sz-' + m.id + '-' + (share.k + 1) + '\`)'}, and stop what you started when you are done: a server by its process id, then the copy with \`sz-eyes copy <its folder> --end\`, which stops its stack before the folder goes (never remove a copy's folder yourself).` : ''}${again ? '' : WRITE_FLOWS(built.contractId)}${m.first && !again && toDrawing ? AS_DRAWN : ''}${REAL_LOOK(m)} I am telling you nothing about whether any claim is true. Record what you notice that no claim covers with \`sz-eyes contract notice\`, stop any server you start, and return the verdicts: under "broken" every promise of earlier work that does not hold now, under "held" every one you showed again that holds.`,
       { label: `verify:${m.id}${again ? ':again' : ''}${share ? `:${share.k + 1}of${share.of}` : ''}`, phase: 'Verify', agentType: 'sz:verifier', schema: VERDICT, ...effort('verify') },
     )
   // A milestone with much to show, its flows still to be written, is looked at by up to five verifiers at once,
@@ -837,7 +863,7 @@ ${many ? 'Each' : 'It'} was frozen by that contract or by an earlier one that is
   // and is handed what was noticed. A claim nobody looked at again keeps its verdict, as with one verifier.
   // (2026-11-18: one verifier took 33 minutes over 17 claims at this look, with the fix waiting behind it.)
   const lookAgain = async (again) => {
-    const parts = sharesOf(m.claims, 20, 3)
+    const parts = sharesOf(m.claims, 20, 3, true)
     if (!parts) return verify(again)
     const looks = await beside(parts.map((part, k) => () => verify({ claims: again.claims.filter((id) => part.includes(id)), standing: k === 0 ? again.standing : [], noticed: k === 0 ? again.noticed : null }, { part, k, of: parts.length })))
     if (looks.every((look) => !look)) return null
@@ -1129,6 +1155,7 @@ while (!stopped) {
     more = false
     phase('Plan')
     const next = await planIt('after')
+    if (next) learn(next)
     const todo = next && Array.isArray(next.milestones) ? next.milestones.filter((m) => m.state !== 'closed' && !done.some((d) => d.id === m.id)) : []
     if (todo.length === 0) {
       stopped = `the first pass is closed, and what comes after it was not planned (${next ? 'the plan came back with nothing to build' : 'nobody answered'}): start again to go on. Still listed: ${later.join(' / ')}`

@@ -60,7 +60,8 @@ A look waits for the page to load and then, for four seconds at most, for it to 
 **iOS** (a simulator build; the map says where the app is and its bundle id):
 
 ```
-sz-eyes ios spare [--name <n>]                      # the eyes' own simulator; prints its id. Never use one of the owner's. --name: one of its own for work done beside other work
+sz-eyes ios spare [--name <n>] [--wait <minutes>]   # the eyes' own simulator; prints its id. Never use one of the owner's. --name: one of its own for work done beside other work
+sz-eyes ios room                                    # how many simulators this Mac holds at once, and which are up
 sz-eyes ios install <udid> <path.app> --bundle-id <id> [--metro <port>]
 sz-eyes ios flow <udid> <flow.yaml> --out <folder> --video      # Maestro; the project's own flow, or one you write for this claim
 sz-eyes ios look <udid> --out <folder> --name <state>           # what is on the screen, and what was measured; --json for a flow
@@ -68,6 +69,8 @@ sz-eyes ios rest <udid> --erase                     # when done: a booted simula
 ```
 
 Check free disk space first (`df -h /System/Volumes/Data`): a simulator's first boot takes about 3 GB. If there is not room, say so and mark the claim `unchecked`.
+
+A booted simulator takes about 4 GB of memory, and a Mac holds only so many (`sz-eyes ios room`: two on 24 GB). `ios spare` does not boot one more than that: it says which are up. Then do what needs no simulator and ask again, or wait with `--wait 9` (minutes, as long as one command may run), and never boot one another way: with one too many the Mac swaps and every simulator crawls, the ones already up included (four up on a Mac that holds two: a boot took four minutes, and a look took twice as long as one verifier alone had needed). One simulator a verifier; a flow that needs a clean one wipes it (`sz-eyes ios rest <id> --erase`, then `ios spare` again) and does not take a second. Rest yours when you are done.
 
 `ios look` gives the screen's size in points, where the status bar ends, the words and ids in the screen's tree, the words read in a picture of it, each field with how a flow presses it, where the keyboard is and which of the app's parts it is in front of, and what was measured: the app's words under the status bar or in the band the home bar is drawn in. The measure is taken on the picture, since the tree also holds what is behind a fixed bar or scrolled out of sight and nothing in it tells that apart. A claim that every screen fits the phone is this look on each screen (open each by its link, `sz-eyes ios look <udid> --out <folder> --name <screen> --json`), failing on what it measured: do not write a reader of pictures or a measure of your own (one verifier did, for 85 minutes, and the claim stayed unchecked).
 
