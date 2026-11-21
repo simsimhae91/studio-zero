@@ -111,7 +111,27 @@ On the branch `phone-again`:
 
 - `dd2e075`: a flow's run is never copied into the next run (finding 1).
 - The verifier's rule on a check that stops one time in several (finding 5).
-- The held driver for `sz-eyes ios look` and `ios flow` (findings 6 and 7): see the commits after this record.
+- The held driver for `sz-eyes ios look` and `ios flow` (findings 6 and 7): the first of them on a simulator
+  starts a holder (`packages/eyes/src/ios-hold.ts`), a look then reads the tree from the driver and makes of it
+  what `maestro hierarchy` prints, by Maestro's own two rules (`ios-driver.ts`; the holder checks once, on the
+  live screen, that the two agree), and a flow runs on the held port. `sz-eyes ios rest` lets the driver go; the
+  holder also goes by itself when the simulator is down, when nothing has asked for twenty minutes, or when its
+  driver has gone.
+
+  Measured on two simulators at once, ten looks and three flows on each, the same loop both ways:
+
+  | | wall-clock | commands that failed |
+  |---|---|---|
+  | a driver started for every command (as it was) | 264 seconds | 4 of 26: "iOS driver not ready in time" after 125 seconds, a launch that failed twice, a screen that could not be read |
+  | the driver held | 41 seconds | 0 of 26 |
+
+  A look: 8.4 to 10 seconds before, 1.0 to 1.2 held; the first on a simulator 12 to 13, which starts the holder
+  and makes the check. The same look printed the same thing both ways.
+
+  Seen while measuring: after every `maestro` command that started a driver, the `xcodebuild` it had started
+  stayed for about a minute and ran `simctl diagnose`, because its test runner had been ended. Fifty commands a
+  check left a standing crowd of those, which is where the 810 seconds of processor time of one fit check went.
+  A held driver is ended once, when it is let go.
 
 Not changed, and why:
 

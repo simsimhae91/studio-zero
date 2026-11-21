@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
 import { freePort } from './port.ts';
+import { driverAnswers, ensureHeld, heldTree, releaseHeld, touchHeld, type Held } from './ios-hold.ts';
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { availableParallelism, tmpdir, totalmem } from 'node:os';
 import { basename, dirname, extname, isAbsolute, join, relative, resolve } from 'node:path';
@@ -143,8 +144,23 @@ export async function screenshot(udid: string, file: string, run: CommandRunner 
  * look at a spare simulator returned the words of the app another session was verifying. So every call brings a
  * port of its own, and the simulator named is the one that answers.
  */
-async function ownDriver(udid: string): Promise<string[]> {
-  return ['--driver-host-port', String(await freePort()), '--device', udid];
+async function ownDriver(udid: string, held: Held | null = null): Promise<string[]> {
+  return ['--driver-host-port', String(held ? held.port : await freePort()), '--device', udid];
+}
+
+/**
+ * The driver held up for a simulator (`ios-hold.ts`), started if none is: a command that runs with the machine's
+ * own runner uses it, and a test's runner never does. Null when none could be had: the command then starts a
+ * driver of its own, as every command did before.
+ */
+async function heldFor(udid: string, opts: { run?: CommandRunner; held?: Held | null }): Promise<Held | null> {
+  if (opts.held !== undefined) return opts.held;
+  if (opts.run !== undefined) return null;
+  const held = await ensureHeld(udid);
+  if (held === null || (await driverAnswers(held))) return held;
+  // Its driver has gone (a command that brought a driver of its own took the simulator's runner): a new holder, once.
+  await releaseHeld(udid);
+  return ensureHeld(udid);
 }
 
 export interface Box {
@@ -343,16 +359,22 @@ export interface PhoneLook {
  * (2026-11-19: with a picture and a list of words to go on, a verifier wrote its own reader of pictures and its
  * own measure of the tree, 85 minutes for the claim that every screen fits, and the claim stayed unchecked.)
  */
-export async function lookAt(udid: string, opts: { shot?: string; run?: CommandRunner } = {}): Promise<PhoneLook> {
+export async function lookAt(udid: string, opts: { shot?: string; run?: CommandRunner; held?: Held | null } = {}): Promise<PhoneLook> {
   const run = opts.run ?? runCommand;
   const kept = opts.shot ?? null;
   const picture = kept ?? join(tmpdir(), `sz-ios-look-${udid}-${process.pid}.png`);
   try {
     await screenshot(udid, picture, run);
-    const res = await sh(run, 'maestro', [...(await ownDriver(udid)), 'hierarchy'], 120_000);
-    const start = res.stdout.indexOf('{');
-    if (res.exitCode !== 0 || start === -1) throw new EyesError(`the screen could not be read: ${(res.stderr || res.stdout).trim().slice(-300)}`);
-    const screen = readTree(JSON.parse(res.stdout.slice(start)));
+    // From the held driver, which answers at once; from Maestro's own command when there is none or it does not answer.
+    const held = await heldFor(udid, opts);
+    let tree: unknown = held ? await heldTree(held) : null;
+    if (tree === null) {
+      const res = await sh(run, 'maestro', [...(await ownDriver(udid, held)), 'hierarchy'], 120_000);
+      const start = res.stdout.indexOf('{');
+      if (res.exitCode !== 0 || start === -1) throw new EyesError(`the screen could not be read: ${(res.stderr || res.stdout).trim().slice(-300)}`);
+      tree = JSON.parse(res.stdout.slice(start));
+    }
+    const screen = readTree(tree);
     let seen: SeenWords[] | null = null;
     let why = '';
     if (screen.size) {
@@ -454,7 +476,7 @@ export interface FlowResult {
  * for this check: Maestro's format, nothing of ours. It runs from a quarantined copy (see `quarantineFlow`),
  * and with `video` the screen is recorded while it runs.
  */
-export async function runFlow(udid: string, flow: string, opts: { out: string; env?: Record<string, string>; video?: boolean; timeoutSec?: number; run?: CommandRunner }): Promise<FlowResult> {
+export async function runFlow(udid: string, flow: string, opts: { out: string; env?: Record<string, string>; video?: boolean; timeoutSec?: number; run?: CommandRunner; held?: Held | null }): Promise<FlowResult> {
   const run = opts.run ?? runCommand;
   if (!existsSync(flow)) throw new EyesError(`${flow}: no such flow`);
   if (!isAbsolute(opts.out)) throw new EyesError('the folder for what is seen must be an absolute path');
@@ -464,7 +486,11 @@ export async function runFlow(udid: string, flow: string, opts: { out: string; e
   const video = opts.video ? join(opts.out, `${name}.mp4`) : null;
   const recorder = video ? spawn('xcrun', ['simctl', 'io', udid, 'recordVideo', '--codec=h264', '--force', video], { stdio: 'ignore' }) : null;
   const started = Date.now();
-  const res = await run('maestro', [...(await ownDriver(udid)), 'test', ...Object.entries(opts.env ?? {}).flatMap(([key, value]) => ['-e', `${key}=${value}`]), copy], { cwd: dirname(copy), timeoutMs: (opts.timeoutSec ?? 600) * 1000, maxOutputBytes: 8 * 1024 * 1024 });
+  // On the held driver's port the flow finds its driver up: it starts none, and waits for none to start.
+  const held = await heldFor(udid, opts);
+  if (held) touchHeld(held);
+  const res = await run('maestro', [...(await ownDriver(udid, held)), 'test', ...(held ? ['--no-reinstall-driver'] : []), ...Object.entries(opts.env ?? {}).flatMap(([key, value]) => ['-e', `${key}=${value}`]), copy], { cwd: dirname(copy), timeoutMs: (opts.timeoutSec ?? 600) * 1000, maxOutputBytes: 8 * 1024 * 1024 });
+  if (held) touchHeld(held);
   if (recorder) {
     // The recorder writes its file when it is interrupted, not when it is killed.
     recorder.kill('SIGINT');
@@ -498,6 +524,8 @@ export async function runFlow(udid: string, flow: string, opts: { out: string; e
 /** Shuts the eyes' simulator down. With `erase` it is also wiped, so the next look starts from a factory state. */
 export async function restSimulator(udid: string, opts: { erase?: boolean; run?: CommandRunner } = {}): Promise<void> {
   const run = opts.run ?? runCommand;
+  // The driver held up for it is let go first, so that nothing of it is left when the simulator is down.
+  if (opts.run === undefined) await releaseHeld(udid);
   await sh(run, 'xcrun', ['simctl', 'shutdown', udid]);
   if (opts.erase) await sh(run, 'xcrun', ['simctl', 'erase', udid]);
 }

@@ -14,6 +14,7 @@ import { changedSinceFrozen, fingerprint, fingerprints } from './fingerprint.ts'
 import { Status, addSaid, latestRound, newRound, noteSaid, readRound, renderRound, writeRoundPage } from './feedback.ts';
 import { IMAGE_ASSETS_DIR, ImageError, imageCommand } from './image.ts';
 import { EyesError, installApp, lookAt, lookText, restSimulator, runFlow, simulatorRoom, spareSimulator } from './ios.ts';
+import { holdDriver } from './ios-hold.ts';
 import { downloadsOf, filesOf, leakReport, renderLeaks } from './leaks.ts';
 import { lookAtLive, renderLive } from './live.ts';
 import { RelayError, loginCommand } from './login-relay.ts';
@@ -747,6 +748,11 @@ async function main(argv: string[]): Promise<number> {
       // The number alone on the first line: whoever plans reads it there.
       out(a.has('--json') ? JSON.stringify(room) : `${room.holds}\nthis Mac holds ${room.holds} simulator${room.holds === 1 ? '' : 's'} at once (${room.memoryGb} GB of memory, ${room.cores} cores). ${room.up === null ? 'Which are up could not be asked (inside a command sandbox the simulator\'s service is out of reach)' : room.up.length === 0 ? 'None is up' : `Up now (${room.up.length}): ${room.up.map((d) => `${d.name} (${d.udid})`).join(', ')}`}`);
       return 0;
+    }
+    if (command === 'hold') {
+      // Not for a person to type: the look and the flow start it when a simulator has no driver held up.
+      if (!a.words[0]) throw new EyesError('sz-eyes ios hold <udid>');
+      return holdDriver(a.words[0], { say: out });
     }
     const udid = a.words[0];
     if (!udid) throw new EyesError('which simulator: give the id sz-eyes ios spare printed');
