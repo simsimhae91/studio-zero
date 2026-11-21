@@ -7,7 +7,7 @@ import { BACKLOG_FILE, addToBacklog, doneInBacklog, leftBy, openBacklog } from '
 import { CONTRACTS_DIR, EVIDENCE_DIR, ClaimStatus, Contract, Lane, ShownBy, localDay, notLookedAt, openContracts, owed, readContract, renderContract, updateContract, writeContract, type Claim } from './contract.ts';
 import { ElectronError, renderAppLook, renderAppWalk, walkElectron } from './electron.ts';
 import { CiteError, seeQuote } from './cite.ts';
-import { Basis, LineId, LineStatus, Objection, Other, addAsk as addWorthAsk, addCite, addObjection, allCases, answerObjection, caseFolder, hearAsk, newCase, readCase, renderCase, renderCases, setCall, setLine, setOther, setOwner, setRow, standingOf, unanswered, weighCite, writeCasePage, writeCasesPage } from './worth.ts';
+import { Basis, LineId, LineStatus, Objection, Other, addAsk as addWorthAsk, addCite, addObjection, allCases, answerObjection, caseFolder, hearAsk, newCase, readCase, removeOther, renderCase, renderCases, setCall, setLine, setOther, setOwner, setRow, standingOf, unanswered, weighCite, withdrawCite, writeCasePage, writeCasesPage } from './worth.ts';
 import { engineEnv, findTool, hostedSupabaseCall } from './engine.ts';
 import { writeEvidencePage } from './evidence.ts';
 import { changedSinceFrozen, fingerprint, fingerprints } from './fingerprint.ts';
@@ -168,9 +168,14 @@ const USAGE = `sz-eyes: launch what was built, look at it, operate it, and put w
         start the case for a service: the same lines for every service, each shown or not. Kept in .sz/worth/<id>/
   sz-eyes worth cite <id> <line|others> --url <a public page> --quote "<the words as they stand there>" --shows "<what they show>" [--against] [--by scout|skeptic|lead]
         file words from a page under a line. The page is fetched again here and the words looked for on it:
-        a quotation that is not found counts for nothing, and is kept as such. Lines: who, now, pays, gap, reach, edge, price, runs, does, returns, paid
+        a quotation that is not found counts for nothing, and is kept as such. Lines: who, now, pays, gap, reach, edge, price, runs, does, returns, paid.
+        Filed again with the same page, words and line, it replaces the earlier one (to correct --shows or --against)
+  sz-eyes worth withdraw <id> <cN> --why "<what was wrong with it>"
+        whoever filed a quotation takes it back: it stays where the owner reads it and counts for nothing, for or against
   sz-eyes worth other <id> <other-id> --name "<name>" --kind product|workaround [--url <u>] [--price "<what it costs>"] [--sign "<the sign people buy or use it>"] [--cite <cN>]...
         what a person would use for the job instead: the service is judged against these, never against nothing
+  sz-eyes worth other <id> <other-id> --remove
+        take one out that was named by mistake (never write another thing over its id)
   sz-eyes worth line <id> <line> [--says "<the claim>"] [--status shown|refuted|waived|open] [--basis world|owner|product|stand-in|real] [--note "<text>"]
         what a line claims and where it stands. A line about the world is shown only when enough quotations
         were found on their pages; the owner's own ground is their words in --note; paid is shown by real money only
@@ -896,7 +901,7 @@ async function main(argv: string[]): Promise<number> {
     }
   }
   if (area === 'worth') {
-    const a = parse(rest, ['--against', '--concede']);
+    const a = parse(rest, ['--against', '--concede', '--remove']);
     const project = resolve(a.one('--dir') ?? '.');
     const now = new Date().toISOString();
     const id = a.words[0] ?? '';
@@ -931,6 +936,16 @@ async function main(argv: string[]): Promise<number> {
         const made = addCite(folder, { line, url, quote, shows, against: a.has('--against'), by: (a.one('--by') as 'scout' | 'skeptic' | 'lead' | undefined) ?? 'scout' }, { seen: found.seen ? { ...found.seen, shot: found.seen.shot ? `cites/${baseName(found.seen.shot)}` : null } : null, why: found.why });
         out(made.seen ? `${made.id}: seen on ${made.host} (${made.seen.by}): ${made.seen.excerpt.slice(0, 200)}` : `${made.id}: NOT SEEN, so it counts for nothing: ${made.failed}`);
         return made.seen ? 0 : 1;
+      }
+      if (command === 'withdraw') {
+        const cite = withdrawCite(folder, a.words[1] ?? '', a.one('--why') ?? '', now);
+        out(`${cite.id}: taken back, it counts for nothing`);
+        return 0;
+      }
+      if (command === 'other' && a.has('--remove')) {
+        removeOther(folder, a.words[1] ?? '');
+        out(`no longer instead: ${a.words[1]}`);
+        return 0;
       }
       if (command === 'other') {
         setOther(folder, Other.parse({ id: a.words[1] ?? '', name: a.one('--name') ?? '', url: a.one('--url') ?? '', kind: a.one('--kind'), price: a.one('--price') ?? '', sign: a.one('--sign') ?? '', cites: a.all('--cite') }));

@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { CiteError, findQuote, publicUrl } from '../src/cite.ts';
-import { addAsk, addCite, addObjection, allCases, answerObjection, casePage, casesPage, depthOf, hearAsk, newCase, readCase, renderCase, setCall, setLine, setOther, setRow, standingOf, unanswered, weighCite } from '../src/worth.ts';
+import { addAsk, addCite, addObjection, allCases, answerObjection, casePage, casesPage, depthOf, hearAsk, newCase, readCase, renderCase, setCall, removeOther, setLine, setOther, setRow, standingOf, unanswered, weighCite, withdrawCite } from '../src/worth.ts';
 
 const AT = '2026-11-16T03:00:00.000Z';
 const seen = (excerpt: string) => ({ seen: { at: AT, by: 'fetch' as const, excerpt, title: 'a page', shot: null }, why: null });
@@ -62,6 +62,52 @@ test('a line about the world is shown by quotations that were found on their pag
     assert.equal(setLine(folder, 'reach', { status: 'shown', basis: 'owner', note: '주인: "결혼 준비 카페 운영진임, 공지 가능"' }, AT).status, 'shown');
     assert.throws(() => setLine(folder, 'who', { status: 'waived', note: '몰라' }, AT), /waived with a reason the owner reads/);
     assert.throws(() => setLine(folder, 'edge', { says: '이름을 치면 바로 나온다', status: 'shown' }, AT), /say what edge stands on/);
+  } finally {
+    rmSync(project, { recursive: true, force: true });
+  }
+});
+
+test('a quotation its filer takes back counts for nothing, for a line or against it, and stays where the owner reads it', () => {
+  // 2026-11-21, a hunt: scouts filed a quotation under the wrong side or with a wrong count, saw it afterwards,
+  // and could only file another beside it. The wrong one went on counting.
+  const project = mkdtempSync(join(tmpdir(), 'eyes-worth-'));
+  try {
+    const folder = newCase(project, 'typing', '학원 강사가 시험지 사진을 수식이 살아 있는 한글 파일로 바꿀 때', '탐색', AT);
+    for (const n of [1, 2, 3]) addCite(folder, { line: 'pays', url: `https://kmong.example/gig/${n}`, quote: `5,000원부터 | ${n}00건 판매`, shows: '판매 건수', against: false, by: 'scout' }, seen('…'));
+    const slip = addCite(folder, { line: 'pays', url: 'https://tool.example/price', quote: '문제당 425원', shows: '손으로 치는 것보다 비싸다', against: true, by: 'scout' }, seen('…'));
+    assert.throws(() => withdrawCite(folder, 'c99', '없는 것', AT), /no quotation c99/);
+    assert.throws(() => withdrawCite(folder, slip.id, '', AT), /say what was wrong with it/);
+    // An against quotation is ground enough to call a line refuted; one taken back is not.
+    withdrawCite(folder, slip.id, '반대 증거가 아니다: 값을 보일 뿐이다', AT);
+    assert.throws(() => setLine(folder, 'pays', { status: 'refuted' }, AT), /say what refutes it/);
+    assert.equal(setLine(folder, 'pays', { says: '손으로 치는 일이 팔린다', status: 'shown' }, AT).status, 'shown');
+    // One that counted for the line stops counting, and the line says so.
+    withdrawCite(folder, 'c3', '다른 일을 파는 페이지였다', AT);
+    assert.match(unanswered(readCase(folder)).join('\n'), /pays was called shown and its ground no longer carries it:[\s\S]*2 quotation\(s\) from 1 site\(s\); 1 taken back by whoever filed them/);
+    assert.match(renderCase(readCase(folder), folder), /c3 seen TAKEN BACK \(다른 일을 파는 페이지였다\)/);
+    assert.match(casePage(readCase(folder), folder), /낸 쪽이 거두어들임: 세지 않음<\/b> \(다른 일을 파는 페이지였다\)/);
+    // Filed again as it should have been, it is a quotation again.
+    addCite(folder, { line: 'pays', url: 'https://kmong.example/gig/3', quote: '5,000원부터 | 300건 판매', shows: '판매 건수', against: false, by: 'scout' }, seen('…'));
+    assert.equal(readCase(folder).cites.find((c) => c.id === 'c3')!.withdrawn, null);
+  } finally {
+    rmSync(project, { recursive: true, force: true });
+  }
+});
+
+test('a crowded job has more than twelve things people use instead, and one named by mistake can be taken out', () => {
+  // 2026-11-21: twelve converters were named, the thirteenth was refused, and a scout wrote it over another's id.
+  const project = mkdtempSync(join(tmpdir(), 'eyes-worth-'));
+  try {
+    const folder = newCase(project, 'typing', '학원 강사가 시험지 사진을 수식이 살아 있는 한글 파일로 바꿀 때', '탐색', AT);
+    for (let n = 1; n <= 20; n++) setOther(folder, { id: `tool-${n}`, name: `변환기 ${n}`, url: '', kind: 'product', price: '문제당 200원', sign: '', cites: [] });
+    assert.equal(readCase(folder).others.length, 20);
+    setOther(folder, { id: 'by-hand', name: '조교가 직접 친다', url: '', kind: 'workaround', price: '', sign: '', cites: [] });
+    setRow(folder, { id: 'equations', where: '하기', need: '수식이 한글 수식으로 들어간다', kind: 'stake', has: { 'tool-1': 'yes', 'tool-2': 'yes', 'by-hand': 'yes' } }, () => false);
+    assert.throws(() => removeOther(folder, 'tool-99'), /no such thing in the reference class: "tool-99"/);
+    removeOther(folder, 'tool-2');
+    const after = readCase(folder);
+    assert.equal(after.others.some((o) => o.id === 'tool-2'), false);
+    assert.deepEqual(Object.keys(after.rows[0]!.has).sort(), ['by-hand', 'tool-1'], 'a row no longer names what was taken out');
   } finally {
     rmSync(project, { recursive: true, force: true });
   }

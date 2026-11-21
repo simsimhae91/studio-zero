@@ -83,6 +83,11 @@ export const Cite = z.object({
    * where it stands and says whether it supports its line; one that does not counts for nothing either.
    */
   weighed: z.object({ supports: z.boolean(), why: z.string().max(400), at: z.string() }).nullable().default(null),
+  /**
+   * Whoever filed it took it back: it was filed under the wrong line or the wrong side, or it says something else
+   * than was written beside it. It stays where the owner can read it and counts for nothing, for or against.
+   */
+  withdrawn: z.object({ why: z.string().max(400), at: z.string() }).nullable().default(null),
 });
 export type Cite = z.infer<typeof Cite>;
 
@@ -143,7 +148,7 @@ export const Case = z.object({
   seed: z.string().max(900).default(''),
   lines: z.record(LineId, Line),
   cites: z.array(Cite).max(300).default([]),
-  others: z.array(Other).max(12).default([]),
+  others: z.array(Other).max(40).default([]),
   rows: z.array(Row).max(80).default([]),
   objections: z.array(Objection).max(40).default([]),
   /** What only real people can answer, each with the cheapest way to ask and what answer means what. */
@@ -226,8 +231,22 @@ export function weighCite(folder: string, id: string, supports: boolean, why: st
   return next;
 }
 
-/** The quotations that count for a line: found on their page, and speaking for it. */
-export const groundsOf = (value: Case, line: Cite['line']): Cite[] => value.cites.filter((c) => c.line === line && c.seen !== null && !c.against && c.weighed?.supports !== false);
+/**
+ * Takes a quotation back, by whoever filed it. Filing the same words from the same page under the same line
+ * again makes it a quotation again, as it is then written.
+ */
+export function withdrawCite(folder: string, id: string, why: string, at: string): Cite {
+  const value = readCase(folder);
+  const cite = value.cites.find((c) => c.id === id);
+  if (!cite) throw new Error(`no quotation ${id} in this case. They are: ${value.cites.map((c) => c.id).join(', ') || '(none)'}`);
+  if (why.trim().length < 8) throw new Error('say what was wrong with it: --why "<the wrong side, the wrong line, a count that does not hold, ...>"');
+  const next = { ...cite, withdrawn: { why: why.trim(), at } };
+  writeCase(folder, { ...value, cites: value.cites.map((c) => (c.id === id ? next : c)) });
+  return next;
+}
+
+/** The quotations that count for a line: found on their page, speaking for it, and not taken back. */
+export const groundsOf = (value: Case, line: Cite['line']): Cite[] => value.cites.filter((c) => c.line === line && c.seen !== null && !c.against && c.withdrawn === null && c.weighed?.supports !== false);
 
 /**
  * What the world has to show before a line about it is called shown: how many quotations that were found on
@@ -255,7 +274,8 @@ export function shortOf(value: Case, id: LineId): string | null {
   const lost = value.cites.filter((c) => c.line === id && !c.against);
   const unseen = lost.filter((c) => c.seen === null).length;
   const refused = lost.filter((c) => c.weighed?.supports === false).length;
-  return `it needs ${need.what}. Counting so far: ${grounds.length} quotation(s) from ${hosts} site(s)${unseen > 0 ? `; ${unseen} not found on their page do not count` : ''}${refused > 0 ? `; ${refused} were read and judged not to support it` : ''}`;
+  const back = lost.filter((c) => c.withdrawn !== null).length;
+  return `it needs ${need.what}. Counting so far: ${grounds.length} quotation(s) from ${hosts} site(s)${unseen > 0 ? `; ${unseen} not found on their page do not count` : ''}${refused > 0 ? `; ${refused} were read and judged not to support it` : ''}${back > 0 ? `; ${back} taken back by whoever filed them` : ''}`;
 }
 
 /** Sets what a line claims and where it stands. Refuses a standing the ground does not carry. */
@@ -280,7 +300,7 @@ export function setLine(folder: string, id: LineId, change: { says?: string; sta
       } else if (note.length < 8) throw new Error(basis === 'owner' ? 'the owner\'s ground is their own words: --note "<what they said>"' : `say what shows it: --note "<the standing claim, the trial, or the figure and where it was read>"`);
       Object.assign(next, { status: 'shown', basis, at });
     } else if (change.status === 'refuted') {
-      if (note.length < 12 && !value.cites.some((c) => c.line === id && c.against && c.seen)) throw new Error('say what refutes it: --note "<what was found>", or a quotation filed against it (worth cite ... --against)');
+      if (note.length < 12 && !value.cites.some((c) => c.line === id && c.against && c.seen && c.withdrawn === null)) throw new Error('say what refutes it: --note "<what was found>", or a quotation filed against it (worth cite ... --against)');
       Object.assign(next, { status: 'refuted', basis: change.basis ?? null, at });
     } else if (change.status === 'waived') {
       if (note.length < 12) throw new Error('a line is waived with a reason the owner reads: --note "<why it does not apply, or who decided to go on without it>"');
@@ -295,6 +315,13 @@ export function setOther(folder: string, other: Other): void {
   const value = readCase(folder);
   for (const id of other.cites) if (!value.cites.some((c) => c.id === id)) throw new Error(`no quotation ${id} in this case`);
   writeCase(folder, { ...value, others: [...value.others.filter((o) => o.id !== other.id), Other.parse(other)] });
+}
+
+/** Takes one out of the things people use instead, and out of every row that named it. */
+export function removeOther(folder: string, id: string): void {
+  const value = readCase(folder);
+  if (!value.others.some((o) => o.id === id)) throw new Error(`no such thing in the reference class: "${id}". They are: ${value.others.map((o) => o.id).join(', ') || '(none)'}`);
+  writeCase(folder, { ...value, others: value.others.filter((o) => o.id !== id), rows: value.rows.map((row) => ({ ...row, has: Object.fromEntries(Object.entries(row.has).filter(([other]) => other !== id)) })) });
 }
 
 /** Sets a row of the whole job. Refuses what would let a product be called deep on its builder's word. */
@@ -444,7 +471,7 @@ export function renderCase(value: Case, folder: string): string {
     const line = value.lines[id];
     const cites = value.cites.filter((c) => c.line === id);
     lines.push('', `${id} [${line.status}${line.basis ? `, ${line.basis}` : ''}] ${ASKS[id]}`, ...(line.says ? [`  says: ${line.says}`] : []), ...(line.note ? [`  note: ${line.note}`] : []));
-    for (const c of cites) lines.push(`  ${c.id} ${c.seen ? 'seen' : 'NOT SEEN'}${c.against ? ' AGAINST' : ''}${c.weighed ? (c.weighed.supports ? ' read:supports' : ` read:DOES NOT SUPPORT (${c.weighed.why})`) : ''} (${c.by}) ${c.host}: "${c.quote.slice(0, 160)}" → ${c.shows}${c.seen ? '' : ` [${c.failed}]`}\n      ${c.url}`);
+    for (const c of cites) lines.push(`  ${c.id} ${c.seen ? 'seen' : 'NOT SEEN'}${c.withdrawn ? ` TAKEN BACK (${c.withdrawn.why})` : ''}${c.against ? ' AGAINST' : ''}${c.weighed ? (c.weighed.supports ? ' read:supports' : ` read:DOES NOT SUPPORT (${c.weighed.why})`) : ''} (${c.by}) ${c.host}: "${c.quote.slice(0, 160)}" → ${c.shows}${c.seen ? '' : ` [${c.failed}]`}\n      ${c.url}`);
   }
   if (value.others.length > 0) lines.push('', 'instead of it, a person uses:', ...value.others.map((o) => `  ${o.id} (${o.kind}) ${o.name}${o.price ? `, ${o.price}` : ''}${o.sign ? `, ${o.sign}` : ''}${o.url ? `  ${o.url}` : ''}`));
   if (value.rows.length > 0) {
@@ -490,8 +517,8 @@ blockquote.against { border-left-color: var(--bad) } blockquote.unseen { opacity
 `;
 
 function quote(c: Cite, folder: string): string {
-  return `<blockquote class="${c.against ? 'against' : ''} ${c.seen ? '' : 'unseen'}">"${esc(c.quote)}"</blockquote>
-<p class="src">${c.against ? '<b>반대 증거</b> · ' : ''}${esc(c.shows)} · <a href="${esc(c.url)}">${esc(c.host)}</a> · ${c.seen ? `${day(c.seen.at)}에 그 페이지에서 확인 (${c.seen.by === 'chrome' ? '브라우저로' : '받은 그대로'})` : `<b>그 페이지에서 찾지 못함: 근거로 세지 않음</b> (${esc(c.failed ?? '')})`}${c.weighed ? (c.weighed.supports ? ' · 쓴 쪽이 아닌 이가 읽음: 이 줄을 받친다' : ` · <b>쓴 쪽이 아닌 이가 읽음: 이 줄을 받치지 않는다, 세지 않음</b> (${esc(c.weighed.why)})`) : ''}</p>${c.seen?.shot ? inlinePicture(folder, c.seen.shot) : ''}`;
+  return `<blockquote class="${c.against ? 'against' : ''} ${c.seen && !c.withdrawn ? '' : 'unseen'}">"${esc(c.quote)}"</blockquote>
+<p class="src">${c.against ? '<b>반대 증거</b> · ' : ''}${esc(c.shows)} · <a href="${esc(c.url)}">${esc(c.host)}</a> · ${c.seen ? `${day(c.seen.at)}에 그 페이지에서 확인 (${c.seen.by === 'chrome' ? '브라우저로' : '받은 그대로'})` : `<b>그 페이지에서 찾지 못함: 근거로 세지 않음</b> (${esc(c.failed ?? '')})`}${c.weighed ? (c.weighed.supports ? ' · 쓴 쪽이 아닌 이가 읽음: 이 줄을 받친다' : ` · <b>쓴 쪽이 아닌 이가 읽음: 이 줄을 받치지 않는다, 세지 않음</b> (${esc(c.weighed.why)})`) : ''}${c.withdrawn ? ` · <b>낸 쪽이 거두어들임: 세지 않음</b> (${esc(c.withdrawn.why)})` : ''}</p>${c.seen?.shot ? inlinePicture(folder, c.seen.shot) : ''}`;
 }
 
 function lineCard(value: Case, id: LineId, folder: string): string {

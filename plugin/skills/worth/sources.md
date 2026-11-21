@@ -29,7 +29,7 @@ For tools small businesses pay for, the vendors are mostly private and in no cha
 
 | Where | What it shows | How to reach it |
 |---|---|---|
-| App Store reviews | 50 dated, starred reviews a page; the low ones first | `https://itunes.apple.com/kr/rss/customerreviews/page=1/id=<id>/sortby=mostrecent/json` (pages 1 to 10) |
+| App Store reviews | 50 dated, starred reviews a page; the low ones first. Some days the feed answers with no reviews for any app (2026-11-21, a whole day): then nothing read from it can be filed, the app's own page shows about ten reviews, mostly high, and Google Play's page shows a few. Say so in what you report; a count of low ratings that was read and could not be filed is not evidence | `https://itunes.apple.com/kr/rss/customerreviews/page=1/id=<id>/sortby=mostrecent/json` (pages 1 to 10) |
 | 네이버 카페, the search tab | titles, snippets and replies of posts where people ask each other | `https://search.naver.com/search.naver?ssc=tab.cafe.all&query=...`; an article opens only by the link the search gives (its `art=` part), and not for long: quote from the search page when the article will not open |
 | 클리앙 | posts with their replies; good for "I moved from X to Y" | `https://www.clien.net/service/search?q=...` |
 | 블라인드 | a post, its views and all replies | `https://www.teamblind.com/kr/search/<words>` |
