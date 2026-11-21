@@ -24,9 +24,12 @@ test('a screen\'s tree gives its size, where the status bar ends, the keyboard, 
   assert.equal(typing.statusBar, 54, 'the status bar\'s own frame, as the tree has it');
   assert.equal(typing.homeBar, 34, 'a phone with no home button');
   assert.deepEqual(typing.keyboard, { x1: 0, y1: 566, x2: 402, y2: 874 });
-  assert.ok(typing.texts.includes('저장') && typing.texts.includes('체중(kg)'));
-  for (const notTheApps of ['1', 'Delete', 'Dictate', '오전 6:48', '배터리 전원 100%', '감량배틀', 'Horizontal scroll bar, 1 page']) assert.equal(typing.texts.includes(notTheApps), false, `${notTheApps} is the keyboard's, the status bar's, the window's name or a scroll bar`);
-  assert.deepEqual(typing.ids, [], 'the status bar\'s own ids are not the app\'s');
+  const named = typing.parts.map((p) => p.text);
+  assert.ok(named.includes('저장') && named.includes('체중(kg)'));
+  for (const notTheApps of ['1', 'Delete', 'Dictate', '오전 6:48', '배터리 전원 100%', '감량배틀', 'Horizontal scroll bar, 1 page']) assert.equal(named.includes(notTheApps), false, `${notTheApps} is the keyboard's, the status bar's, the window's name or a scroll bar`);
+  // The list of every word and id is as it always was, whoever's they are: flows already written read it.
+  for (const listed of ['감량배틀', '뒤로', '저장', '1', 'Delete', '오전 6:48']) assert.ok(typing.texts.includes(listed), listed);
+  assert.deepEqual(typing.ids, ['inputView', 'UIKeyboardLayoutStar Preview', 'dictation', '총 3개의 Wi‑Fi 막대 중 3개']);
   assert.deepEqual(typing.fields.map((f) => [f.text, f.value, f.hint, f.id, f.box]), [['체중(kg)', '76.6', '00.0', '', { x1: 108, y1: 288, x2: 258, y2: 353 }]]);
   assert.deepEqual(typing.behindKeyboard, [], 'the button a person presses next is above it');
   assert.equal(typing.parts.find((p) => p.text === '저장')!.box.y2 <= typing.keyboard!.y1, true);
@@ -108,8 +111,10 @@ test('a look takes a picture, reads the tree and the picture, and says what it m
     assert.equal(look.seen!.some((row) => row.text === '6:50'), false, 'only the app\'s rows are kept');
     const said = lookText(look);
     assert.match(said, new RegExp(`^screenshot: ${shot}\\nscreen: 402 by 874 points, the status bar ends at 54, the home bar's band is the last 34\\n`));
-    assert.match(said, /words in its tree \(28; what is behind a fixed bar or scrolled out of sight is among them\): "뒤로"/);
-    assert.match(said, /words read in the picture, the app's \(\d+ rows\): "<" "민지와 배틀"/);
+    // Flows already written and frozen read these two lines by their heads: they keep their shape.
+    assert.match(said, /^words on it \(\d+\): "감량배틀" "뒤로" "점수 셈법" "민지와 배틀"/m);
+    assert.match(said, /^ids on it \(\d+\): /m);
+    assert.match(said, /^words read in the picture, the app's \(\d+ rows; the words above are the screen's tree, which also holds what is behind a fixed bar or scrolled out of sight\): "<" "민지와 배틀"/m);
     assert.match(said, /measured \(1\):\n  in the home bar's band/);
 
     // No picture asked for: one is taken to measure on, and not left behind.
@@ -124,6 +129,7 @@ test('a look takes a picture, reads the tree and the picture, and says what it m
     assert.equal(blind.seen, null);
     assert.deepEqual(blind.findings, ['the picture could not be read (xcrun: error: unable to find utility "swift"): what shows under the status bar and in the home bar\'s band was not measured']);
     assert.equal(blind.screen.texts.includes('인증 올리기'), true);
+    assert.equal(blind.screen.parts.some((p) => p.text === '인증 올리기'), true);
   } finally {
     rmSync(folder, { recursive: true, force: true });
   }

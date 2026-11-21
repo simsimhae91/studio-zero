@@ -171,7 +171,7 @@ export interface SeenWords {
 }
 
 export interface PhoneScreen {
-  /** The words of the app's parts, in the tree's order: no key of the keyboard, nothing of the status bar. */
+  /** Every word and id in the tree, in its order, the keyboard's and the status bar's among them: as this look has always listed them. */
   texts: string[];
   ids: string[];
   /** In points; null when the tree does not say. */
@@ -182,6 +182,7 @@ export interface PhoneScreen {
   homeBar: number;
   /** Where the keyboard is while it is up. */
   keyboard: Box | null;
+  /** The app's own parts that have a place: no key of the keyboard, nothing of the status bar, no frame of the whole screen. */
   parts: ScreenPart[];
   /** The parts a person types into, as far as the tree tells: it knows a field by the hint it shows while empty. */
   fields: ScreenPart[];
@@ -234,18 +235,22 @@ export function readTree(tree: unknown): PhoneScreen {
     }
     const text = (a.accessibilityText || a.text || a.title || a.value || a.hintText || '').trim();
     const id = (a['resource-id'] ?? '').trim();
-    // The frame of the whole screen carries the app's name, and a scroll bar its own: neither is the app's words.
-    if (!(box && whole(box)) && !SCROLL_BAR.test(text) && (text !== '' || id !== '')) {
-      for (const word of [a.text, a.accessibilityText, a.hintText]) if (word && word.trim() !== '' && !texts.includes(word.trim())) texts.push(word.trim());
-      if (id !== '' && !ids.includes(id)) ids.push(id);
-      // A part is one with a place: it can be pressed there, and measured.
-      if (box && box.x2 > box.x1 && box.y2 > box.y1) {
-        const part = { text, id, hint: (a.hintText ?? '').trim(), value: (a.value ?? '').trim(), box };
-        if (!parts.some((p) => p.text === part.text && p.id === part.id && p.box.x1 === box.x1 && p.box.y1 === box.y1 && p.box.x2 === box.x2 && p.box.y2 === box.y2)) parts.push(part);
-      }
+    // The frame of the whole screen carries the app's name, and a scroll bar its own: neither is a part of the
+    // app's. A part is one with a place: it can be pressed there, and measured.
+    if (box && box.x2 > box.x1 && box.y2 > box.y1 && !whole(box) && !SCROLL_BAR.test(text) && (text !== '' || id !== '')) {
+      const part = { text, id, hint: (a.hintText ?? '').trim(), value: (a.value ?? '').trim(), box };
+      if (!parts.some((p) => p.text === part.text && p.id === part.id && p.box.x1 === box.x1 && p.box.y1 === box.y1 && p.box.x2 === box.x2 && p.box.y2 === box.y2)) parts.push(part);
     }
     for (const child of node.children ?? []) take(child, skip);
   };
+  // Every word and id, whoever's: the list this look has always given, which flows already written read.
+  const list = (node: TreeNode): void => {
+    const a = node.attributes ?? {};
+    for (const word of [a.text, a.accessibilityText, a.hintText]) if (word && word.trim() !== '' && !texts.includes(word.trim())) texts.push(word.trim());
+    if (a['resource-id'] && !ids.includes(a['resource-id'])) ids.push(a['resource-id']);
+    for (const child of node.children ?? []) list(child);
+  };
+  list(root);
 
   // The app's windows: its own first, then one for whatever is in front of it. The keyboard's is not the app's.
   const windows = app?.children ?? [];
@@ -276,8 +281,6 @@ export function readTree(tree: unknown): PhoneScreen {
   for (const other of rest) outside(other);
 
   for (const window of own) take(window);
-  // A tree that is not laid out as windows of one app is read as it stands.
-  if (windows.length === 0) take(app ?? root);
   // What the system puts in front of the app (a sheet that asks for access) has words a flow presses too; what
   // the status bar shows is not listed.
   for (const other of rest) take(other, (box) => box !== null && box.y2 <= statusBar + 2);
@@ -371,8 +374,11 @@ export function lookText(look: PhoneLook): string {
   const lines: string[] = [];
   if (look.shot) lines.push(`screenshot: ${look.shot}`);
   if (screen.size) lines.push(`screen: ${screen.size.w} by ${screen.size.h} points${screen.statusBar > 0 ? `, the status bar ends at ${screen.statusBar}` : ''}${screen.homeBar > 0 ? `, the home bar's band is the last ${screen.homeBar}` : ''}${screen.keyboard ? `, the keyboard is up from ${screen.keyboard.y1}` : ''}`);
-  lines.push(`words in its tree (${screen.texts.length}; what is behind a fixed bar or scrolled out of sight is among them): ${quoted(screen.texts)}`);
-  if (seen) lines.push(`words read in the picture, the app's (${seen.length} rows): ${quoted(seen.map((row) => row.text))}`);
+  // This line and the one of ids are read by flows that are frozen (`sed -n 's/^words on it ([0-9]*): //p'`): their
+  // shape stays. (2026-11-21: the line's head was reworded, and two frozen flows of a product failed on screens
+  // that were right; their verifier put a script of its own in front of the eyes to get them through.)
+  lines.push(`words on it (${screen.texts.length}): ${quoted(screen.texts)}`);
+  if (seen) lines.push(`words read in the picture, the app's (${seen.length} rows; the words above are the screen's tree, which also holds what is behind a fixed bar or scrolled out of sight): ${quoted(seen.map((row) => row.text))}`);
   lines.push(`ids on it (${screen.ids.length}): ${screen.ids.slice(0, 80).join(', ')}`);
   if (screen.fields.length > 0) {
     lines.push(`fields (${screen.fields.length}), as far as the tree knows one (by the hint it shows while empty):`);

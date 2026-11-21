@@ -532,7 +532,7 @@ test('every call to Maestro brings a driver port of its own, so the simulator na
   };
   const first = await lookAt('AAAA-1111', { run: run as never });
   await lookAt('BBBB-2222', { run: run as never });
-  assert.deepEqual([first.screen.texts, first.screen.ids], [['코드 받기'], ['send']], 'a tree with no places is still read for its words');
+  assert.deepEqual([first.screen.texts, first.screen.ids], [['로그인', '코드 받기'], ['send']], 'every word and id in the tree, as this look has always listed them');
   for (const [k, udid] of [[0, 'AAAA-1111'], [1, 'BBBB-2222']] as const) {
     const [command, flag, port, device, named, verb] = seen[k]!;
     assert.deepEqual([command, flag, device, named, verb], ['maestro', '--driver-host-port', '--device', udid, 'hierarchy']);
