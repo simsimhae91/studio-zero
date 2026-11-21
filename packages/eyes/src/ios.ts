@@ -389,23 +389,36 @@ export function lookText(look: PhoneLook): string {
   return lines.join('\n');
 }
 
+/** The file that marks a folder as written by a run of a flow. */
+const FLOW_OUTPUT_MARK = '.sz-flow-out';
+
 /**
  * A copy of a flow's folder in which nothing a flow writes can land outside `out`: a project's own flows may
  * name absolute paths for their screenshots, and running them as they are would write into the owner's
  * checkout (it did, once: 2026-11-15, eight screenshots overwritten in a project's scratch folder). Returns
  * where the copy of `flow` is.
+ *
+ * What a run leaves is never copied into the next run: `out` may lie inside the flow's own folder (flows in
+ * `.cache/m`, `--out .cache/m/out-ping`), and then each run would copy every earlier run's copy and its own,
+ * the copies doubling run after run (2026-11-21: 18GB, a full disk, the container runtime stopped). So every
+ * folder a run writes carries a mark, and a marked folder is passed over.
  */
 export function quarantineFlow(flow: string, out: string): string {
   const from = dirname(resolve(flow));
   const to = join(out, 'flows');
   const shots = join(out, 'shots');
   mkdirSync(shots, { recursive: true });
+  mkdirSync(to, { recursive: true });
+  // `out` itself is marked too unless the flow's folder is `out` or lies inside it: the flows there are not a run's.
+  const within = relative(resolve(out), from);
+  const holdsTheFlows = within === '' || (!within.startsWith('..') && !isAbsolute(within));
+  for (const written of holdsTheFlows ? [to, shots] : [out, to, shots]) writeFileSync(join(written, FLOW_OUTPUT_MARK), 'what a run of sz-eyes ios flow wrote; never copied into another run\n');
   const copy = (dir: string): void => {
     for (const entry of readdirSync(dir)) {
       const path = join(dir, entry);
       const target = join(to, relative(from, path));
       if (statSync(path).isDirectory()) {
-        if (entry !== 'node_modules' && !entry.startsWith('.')) copy(path);
+        if (entry !== 'node_modules' && !entry.startsWith('.') && !existsSync(join(path, FLOW_OUTPUT_MARK))) copy(path);
       } else if (['.yaml', '.yml'].includes(extname(entry))) {
         mkdirSync(dirname(target), { recursive: true });
         // Any absolute path a step writes to (a screenshot, a recording) is moved under `out`, by its file name.

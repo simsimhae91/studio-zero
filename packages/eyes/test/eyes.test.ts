@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { dirname, join, relative } from 'node:path';
 import { test } from 'node:test';
 import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, readdirSync } from 'node:fs';
@@ -113,6 +113,31 @@ test('a flow is run from a copy in which nothing it writes can land outside the 
     assert.equal(readFileSync(join(out, 'flows', 'tap.yaml'), 'utf8').includes('${ID}'), true, 'the flows it calls come along');
     assert.ok(readFileSync(join(out, 'flows', 'sub', 'deep.yml'), 'utf8').includes(`path: ${join(out, 'shots', 'deep')}`));
     assert.throws(() => readFileSync(join(out, 'flows', 'run-ios.sh')), 'scripts beside the flows are not copied');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a flow whose output folder lies inside its own folder is not copied into itself, run after run', () => {
+  // 2026-11-21: a builder kept its flows in .cache/m and gave --out .cache/m/out-<name>. Each run copied every
+  // earlier run's copy into the new one, the copies doubled, and 18GB later the disk was full: the container
+  // runtime stopped, and with it the owner's own containers.
+  const root = mkdtempSync(join(tmpdir(), 'eyes-flows-'));
+  try {
+    const flows = join(root, 'm');
+    mkdirSync(flows, { recursive: true });
+    writeFileSync(join(flows, 'ping.yaml'), 'appId: com.example.app\n---\n- launchApp\n');
+    writeFileSync(join(flows, 'tap.yaml'), 'appId: com.example.app\n---\n- tapOn: "열기"\n');
+    const filesUnder = (dir: string): string[] => readdirSync(dir, { recursive: true, withFileTypes: true }).filter((entry) => entry.isFile() && !entry.name.startsWith('.')).map((entry) => relative(dir, join(entry.parentPath, entry.name))).sort();
+    for (const name of ['out-ping', 'out-ping2', 'out-tap', 'out-tap2', 'out-ping3']) {
+      const out = join(flows, name);
+      quarantineFlow(join(flows, name.includes('tap') ? 'tap.yaml' : 'ping.yaml'), out);
+      assert.deepEqual(filesUnder(join(out, 'flows')), ['ping.yaml', 'tap.yaml'], `${name} holds the two flows and no copy of a run's output`);
+    }
+    // The same when the output folder is the flow's own folder's child named like the copy itself.
+    const nested = join(flows, 'flows');
+    quarantineFlow(join(flows, 'ping.yaml'), flows);
+    assert.deepEqual(filesUnder(nested), ['ping.yaml', 'tap.yaml']);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
