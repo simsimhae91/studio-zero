@@ -189,6 +189,15 @@ test('a case stands as "go" only when the world is shown, the design is said, so
     const page = casesPage(allCases(project));
     assert.match(page, /지을 근거가 있는 것 0개, 버린 것 1개[\s\S]*근거가 모자란다[\s\S]*물을 덜 마시는[\s\S]*짓지 않는다[\s\S]*경조사를 챙기는/);
     assert.match(casePage(after, folder), /짓지 않는다[\s\S]*그 페이지에서 확인[\s\S]*쓴 쪽이 아닌 이가 읽음: 이 줄을 받친다[\s\S]*치명적[\s\S]*받아들임[\s\S]*가장 싸게 묻는 법[\s\S]*300명 이상에게 물어 3.8% 이상이면 간다/);
+    // A dropped case shows what killed it and what was seen, whichever line that was: half of what a hunt is for.
+    // (2026-11-21: 36 dropped cases side by side, most killed on a design line, each showing six times "아직".)
+    const dead = newCase(project, 'baby', '두 부모가 서로 다른 휴대폰에서 수유를 같이 적는 앱', '앱스토어 터', AT);
+    setLine(dead, 'edge', { status: 'refuted', note: '거의 공짜인 앱이 이미 다른 기종 사이 공유를 한다. 돈은 움직인다: 평생 28,000원' }, AT);
+    setCall(dead, { call: 'no', why: '돈 내는 앱이 못 하는 것을 공짜 앱이 이미 한다', at: AT });
+    const side = casesPage(allCases(project));
+    assert.match(side, /두 부모가[\s\S]*돈 내는 앱이 못 하는 것을 공짜 앱이 이미 한다[\s\S]*<b>걸린 줄: 더 잘하는 한 가지<\/b> 거의 공짜인 앱이 이미 다른 기종 사이 공유를 한다. 돈은 움직인다: 평생 28,000원[\s\S]*앱스토어 터/);
+    assert.match(side, /누가: 아직 · 지금 쓰는 것: 아직 · 돈: 아직 · 실망: 아직 · 갈아탐: 아직 · 만남: 아직/, 'each line by a short name of its own, none cut in the middle of a word');
+    assert.match(side, /경조사를 챙기는[\s\S]*<b>걸린 줄: 만남<\/b> 반박을 받아들임: 카페는 홍보 글을 지운다/);
 
     // What real people did is read by what was written before they were asked, and by nothing kinder.
     const folder2 = newCase(project, 'asked', '값을 본 사람이 연락처를 남기는지 묻는 시험', '', AT);

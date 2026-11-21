@@ -462,6 +462,8 @@ export function standingOf(value: Case): 'no' | 'thin' | 'case' {
 
 const STANDING: Record<ReturnType<typeof standingOf>, string> = { no: '짓지 않는다', thin: '근거가 모자란다', case: '지을 근거가 있다' };
 const STATUS: Record<LineStatus, string> = { open: '아직', shown: '보임', refuted: '아님', waived: '넘어감' };
+/** A line's name where many cases stand side by side. */
+const SHORT: Record<LineId, string> = { who: '누가', now: '지금 쓰는 것', pays: '돈', gap: '실망', switch: '갈아탐', reach: '만남', edge: '더 잘하는 한 가지', price: '값', runs: '혼자 굴리기', does: '얻는가', returns: '다시 오는가', paid: '낸 돈' };
 export const standingWord = (value: Case): string => STANDING[standingOf(value)];
 
 export function renderCase(value: Case, folder: string): string {
@@ -590,15 +592,21 @@ export function casePage(value: Case, folder: string): string {
 /** Every case of a project on one page: what there is ground to build first, what was dropped and why. */
 export function casesPage(cases: { folder: string; case: Case }[]): string {
   const order = { case: 0, thin: 1, no: 2 } as const;
-  const sorted = [...cases].sort((a, b) => order[standingOf(a.case)] - order[standingOf(b.case)]);
+  // Within a standing, the cases that were looked into furthest come first.
+  const looked = (value: Case): number => value.cites.filter((c) => c.seen !== null && c.withdrawn === null).length;
+  const sorted = [...cases].sort((a, b) => order[standingOf(a.case)] - order[standingOf(b.case)] || looked(b.case) - looked(a.case));
   const card = ({ case: value }: { folder: string; case: Case }): string => {
     const stand = standingOf(value);
     const depth = depthOf(value);
+    const seen = value.cites.filter((c) => c.seen !== null && c.withdrawn === null).length;
     const why = value.call?.why ?? (stand === 'no' ? (value.objections.find((o) => o.weight === 'fatal' && o.conceded)?.text ?? [...WORLD_LINES, ...DESIGN_LINES].map((id) => value.lines[id]).find((line) => line.status === 'refuted')?.note ?? '') : (unanswered(value)[0] ?? ''));
     return `<section class="claim ${stand === 'case' ? 'proven' : stand === 'no' ? 'refuted' : ''}">
   <header><span class="mark">${STANDING[stand]}${value.owner ? ` · 주인: "${esc(value.owner.said)}"` : ''}</span><h2><a href="${esc(value.id)}/page.html">${esc(value.service)}</a></h2></header>
   ${why ? `<p class="note">${esc(why)}</p>` : ''}
-  <p class="how">${WORLD_LINES.map((id) => `${esc(ASKS[id]).split(',')[0]!.slice(0, 14)}: ${STATUS[value.lines[id].status]}`).join(' · ')}${depth.stakes > 0 ? ` · 기본기 ${depth.stakes}개` : ''}</p>
+  ${[...WORLD_LINES, ...DESIGN_LINES].filter((id) => value.lines[id].status === 'refuted' && (value.lines[id].note || value.lines[id].says)).map((id) => `<p class="how"><b>걸린 줄: ${SHORT[id]}</b> ${esc(value.lines[id].note || value.lines[id].says)}</p>`).join('\n  ')}
+  ${[...WORLD_LINES, ...DESIGN_LINES].filter((id) => value.lines[id].status === 'shown' && value.lines[id].says).map((id) => `<p class="how"><b>보인 줄: ${SHORT[id]}</b> ${esc(value.lines[id].says)}</p>`).join('\n  ')}
+  <p class="how">${WORLD_LINES.map((id) => `${SHORT[id]}: ${STATUS[value.lines[id].status]}`).join(' · ')}${depth.stakes > 0 ? ` · 기본기 ${depth.stakes}개` : ''}</p>
+  ${value.seed || seen > 0 ? `<p class="how">${esc(value.seed)}${seen > 0 ? `${value.seed ? ' · ' : ''}그 페이지에서 확인한 인용 ${seen}개` : ''}</p>` : ''}
 </section>`;
   };
   return `<title>무엇을 지을까</title>

@@ -45,7 +45,7 @@ Ask the owner first only what they alone know, three questions at most: the job 
 
 ## 2. A hunt: start where money already moves
 
-Do not think of ideas, and do not start from pains: pains are everywhere and paid jobs are rare. Look where people already pay, and let the candidates come from there. `sources.md` beside this file lists the grounds that could be read without an account when it was written and what each can show; read it before the first search.
+Do not think of ideas, and do not start from pains: pains are everywhere and paid jobs are rare. Look where people already pay, and let the candidates come from there. `sources.md` beside this file lists the grounds that could be read without an account when it was written and what each can show; read it before the first search. `hunt.md` beside it is a hunt step by step as one was run whole: the folder, the grounds, what every scout is told, and the order in which candidates are killed.
 
 Send `sz:scout` agents side by side, one for each ground (what earns in the field and its low ratings; work people sell to each other for this job, with its count of sales; templates and spreadsheets sold for a job; tools small businesses pay for and complain about). Each comes back with jobs for which money already moves and a gap in people's own words.
 
