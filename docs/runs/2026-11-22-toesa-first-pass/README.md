@@ -26,6 +26,7 @@ One run: read the figures as showing where the minutes are, not minutes to trust
 | `clock.txt` | When it started and ended |
 | `journals/build.jsonl` | The workflow's own journal |
 | `timelines.txt` | Per agent: model, effort, wall-clock, tokens; model minutes against command minutes; the slowest commands |
+| `rule-test/` | The first verifier's look run again on two copies after the change: its prompt, how it was started, what each returned, each copy's contract afterwards |
 
 ## The run: 193 minutes, closed
 
@@ -135,6 +136,40 @@ On the branch `phone-again`:
   one place (finding 3).
 - **Ending or listing a process an earlier command started is run outside the sandbox from the first try**
   (finding 6).
+
+## The change, tried on the same look
+
+The first verifier of the first look (claims `rules`, `s1`, `kinds`, `short`) had recorded all four proven and
+four faults as noticed. The same look was run again after the change: two copies of the specimen as it stood built
+and unverified (`e7e8e59`), one `sz:verifier` each from the plugin at `6392988`, handed the prompt that verifier
+had been given with only the lines changed since (`rule-test/`: the prompt, how it was started, what each
+returned, and each copy's contract afterwards). Headless Opus 5.5, session effort xhigh, 21 and 26 minutes, about
+five dollars each at list prices.
+
+| | proven | shown false | noticed |
+|---|---|---|---|
+| the run (before the change) | 4 | 0 | 4 faults |
+| copy a (after) | 0 | 4, each with the case that broke it | 2 |
+| copy b (after) | 0 | 4, each with the case that broke it | 1 |
+
+Each wrote its claims' flows to walk the claim's own case and then a case that breaks it (in copy b each flow
+stops at that step): the fix has something to be proven against. Two verifiers on one look is not a measurement
+of how often; it shows the rule is read and acted on.
+
+**What both found that eleven verifier sessions of the run had not.** Each of the two, on its own, wrote down
+that the main walk's expected answer does not follow the source the product cites for it. The claim, the plan,
+the frozen test and the prototype's hero screen all say that late or unpaid periods of 38, 35 and 4 days add up
+to 77 of the 60 required, "요건에 맞아 보여요". The ministry's public answer that the plan names (read again on
+2026-11-22) adds up periods only where the whole wage was unpaid or late (38 + 4 = 42 days), and for a wage three
+tenths or more unpaid asks that "그 기간이 2개월 이상 단절없이 연속", saying in so many words that periods added
+up to two months do not count. The figures on the screen had been checked against their sources at every look
+(`criteria`: 31 of 31); the rule that joins them had been checked only against the plan's own summary of the
+source (`rules`: "계획 9절대로 답한다", shown by a test the builder wrote from that summary). The rule the plan
+already has, "a claim does not state as true a fact about the world that nobody has read from its source", was
+met in form: the planner had read the source and summarised it wrongly, and everything after took the summary.
+With the verifier's rule changed, a verifier trying another case went back to the source's own sentences. Not
+changed further: the path for it exists (a claim whose own words are wrong is set aside for the owner by an
+arbiter who reads the source), and the next run on this specimen is where it is seen to be taken or not.
 
 Not changed, and why:
 
