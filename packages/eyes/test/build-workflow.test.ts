@@ -890,6 +890,9 @@ test('a milestone an earlier run looked at whole and left with claims shown fals
   assert.deepEqual(ran.calls.map((c) => c.label), ['plan', 'start:m1', 'fix:m1:1', 'verify:m1:again', 'close:m1'], 'nobody looks at all of it again before the fix');
   assert.match(ran.calls.find((c) => c.label === 'start:m1')!.prompt, /Say what the contract records of an earlier look[\s\S]*\[아직\] nobody has looked[\s\S]*If any claim is still \[아직\], leave "looked" out\. You only read them/);
   assert.match(ran.calls.find((c) => c.label === 'fix:m1:1')!.prompt, /found these claims false:\n- two: 2주 탭이 0\.0kg으로 나옴/);
+  // (2026-11-21: taken up after a fix that nobody had looked at, a fixer ran the checks of three claims that were
+  // mended already, 21 of its 27 minutes, and the look after it ran them again.)
+  assert.match(ran.calls.find((c) => c.label === 'fix:m1:1')!.prompt, /An earlier run found these and stopped; it, or someone since, may have mended some of them already[^\n]*For each that a commit has mended, say which commit and what it changed, and do not run its check/);
   const again = ran.calls.find((c) => c.label === 'verify:m1:again')!.prompt;
   assert.match(again, /These claims of the contract were shown false before: two\. Check each from the start/);
   assert.match(again, /show again this contract's other claims and what stood before/, 'every claim is shown again after the fix, as after any fix');
@@ -1061,5 +1064,6 @@ test('what is shown on a simulator goes to as many verifiers as the machine hold
   assert.match(fix, /before you commit, search the flows and tests of this contract and of earlier work for the words, figures and names your fix changes on a screen or in an answer \(the old form, as it stood\)/);
   assert.match(fix, /Run each one that does, by itself, and keep what it reads as it was unless the claim you were handed says otherwise/);
   assert.match(fix, /Do not run the other flows, of this contract or of earlier work/, 'the other flows are still left to whoever looks again');
+  assert.doesNotMatch(fix, /An earlier run found these and stopped/, 'a fixer of this run\'s own look is not told of an earlier run');
 });
 
