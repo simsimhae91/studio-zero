@@ -1,0 +1,9 @@
+(the design front of 2026-11-17 is reused: 18:40:25 to 19:25:59, 45.5 minutes)
+2026-11-18 22:59:46 build start
+2026-11-19 02:40:42 build end (exit 0)
+2026-11-19 02:54:35 continue start
+2026-11-19 08:03:52 continue stopped by the owner's word (they had to leave with the Mac); phone milestone in its third look
+2026-11-21 08:15:19 finish start
+2026-11-21 10:50:37 finish stopped by whoever commissioned the run, as its third look began: the plugin it ran on shared a look after a fix among three verifiers with a simulator each, more than this Mac holds; taken up again on the plugin as mended
+2026-11-21 10:51:18 finish2 start
+2026-11-21 13:10:23 finish2 end (exit 0)

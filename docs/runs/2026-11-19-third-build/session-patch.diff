@@ -1,0 +1,40 @@
+725a726,732
+>   }
+>   // 2026-11-19: the phone milestone's builder built, committed and started it, recorded `contract built`, and put
+>   // a note on how it had recorded its claims (in parts, under the record tool's length cap) under "blocked"; the
+>   // run stopped there with nothing verified. That note says nothing stopped the build, so it is not a stop.
+>   if (built && !resumed && /^The record tool caps a claim at \d+ characters/.test(String(built.blocked || '').trim())) {
+>     log(`${m.title}: the builder's note under "blocked" is how it recorded the claims, not a stop: ${built.blocked}`)
+>     built.blocked = ''
+754a762,764
+>   // A claim too long for the record tool is recorded in the contract in parts (<id>, <id>-2, <id>-3), all shown by
+>   // one check: a part belongs wherever its claim does.
+>   const partOf = (ids, id) => ids.has(id) || ids.has(String(id).replace(/-\d+$/, ''))
+763c773
+<       }${share ? ` You are one of ${share.of} verifiers looking at this contract at the same time. Yours are these claims: ${share.part.join(', ')}. Give a verdict to these and to no other. ${share.k === 0 ? 'You are also the one who shows again what stood before this work.' : 'Do not show again what stood before this work: another verifier does.'} Start a copy of the product of your own, on a port of your own and with a place of its own for what it stores (\`sz-eyes copy <a folder outside the project>\` makes one from what is committed: its files, its installed dependencies, a stack name of its own, and \`--with <path>\` what the map says is built and not in git; the map says how it is launched; never the same database file or folder as another copy) and, if it runs on a simulator, a simulator of your own (\`sz-eyes ios spare --name sz-${m.id}-${share.k + 1}\`), and stop what you started when you are done: a server by its process id, then the copy with \`sz-eyes copy <its folder> --end\`, which stops its stack before the folder goes (never remove a copy's folder yourself).` : ''}${again ? '' : WRITE_FLOWS(built.contractId)}${m.first && !again && toDrawing ? AS_DRAWN : ''}${REAL_LOOK(m)} I am telling you nothing about whether any claim is true. Record what you notice that no claim covers with \`sz-eyes contract notice\`, stop any server you start, and return the verdicts: under "broken" every promise of earlier work that does not hold now, under "held" every one you showed again that holds.`,
+---
+>       }${share ? ` You are one of ${share.of} verifiers looking at this contract at the same time. Yours are these claims: ${share.part.join(', ')}. Give a verdict to these and to no other.${resumed ? '' : ' A claim the contract records in parts (<id>, <id>-2, <id>-3: one claim too long for one record, all shown by the same check) is yours whole: give each of its parts its verdict.'} ${share.k === 0 ? 'You are also the one who shows again what stood before this work.' : 'Do not show again what stood before this work: another verifier does.'} Start a copy of the product of your own, on a port of your own and with a place of its own for what it stores (\`sz-eyes copy <a folder outside the project>\` makes one from what is committed: its files, its installed dependencies, a stack name of its own, and \`--with <path>\` what the map says is built and not in git; the map says how it is launched; never the same database file or folder as another copy) and, if it runs on a simulator, a simulator of your own (\`sz-eyes ios spare --name sz-${m.id}-${share.k + 1}\`), and stop what you started when you are done: a server by its process id, then the copy with \`sz-eyes copy <its folder> --end\`, which stops its stack before the folder goes (never remove a copy's folder yourself).` : ''}${again ? '' : WRITE_FLOWS(built.contractId)}${m.first && !again && toDrawing ? AS_DRAWN : ''}${REAL_LOOK(m)} I am telling you nothing about whether any claim is true. Record what you notice that no claim covers with \`sz-eyes contract notice\`, stop any server you start, and return the verdicts: under "broken" every promise of earlier work that does not hold now, under "held" every one you showed again that holds.`,
+780,782c790,792
+<       all.proven.push(...look.proven.filter((id) => mine.has(id)))
+<       all.refuted.push(...look.refuted.filter((r) => mine.has(r.id)))
+<       all.unchecked.push(...look.unchecked.filter((u) => mine.has(u.id)))
+---
+>       all.proven.push(...look.proven.filter((id) => partOf(mine, id)))
+>       all.refuted.push(...look.refuted.filter((r) => partOf(mine, r.id)))
+>       all.unchecked.push(...look.unchecked.filter((u) => partOf(mine, u.id)))
+800c810
+<     const looks = await beside(parts.map((part, k) => () => verify({ claims: again.claims.filter((id) => part.includes(id)), standing: k === 0 ? again.standing : [], noticed: k === 0 ? again.noticed : null }, { part, k, of: parts.length })))
+---
+>     const looks = await beside(parts.map((part, k) => () => verify({ claims: again.claims.filter((id) => partOf(new Set(part), id)), standing: k === 0 ? again.standing : [], noticed: k === 0 ? again.noticed : null }, { part, k, of: parts.length })))
+806,808c816,818
+<       all.proven.push(...look.proven.filter((id) => mine.has(id)))
+<       all.refuted.push(...look.refuted.filter((r) => mine.has(r.id)))
+<       all.unchecked.push(...look.unchecked.filter((u) => mine.has(u.id)))
+---
+>       all.proven.push(...look.proven.filter((id) => partOf(mine, id)))
+>       all.refuted.push(...look.refuted.filter((r) => partOf(mine, r.id)))
+>       all.unchecked.push(...look.unchecked.filter((u) => partOf(mine, u.id)))
+893c903
+<     const proven = new Set(again.proven.filter((id) => claimIds.has(id)))
+---
+>     const proven = new Set(again.proven.filter((id) => partOf(claimIds, id)))
