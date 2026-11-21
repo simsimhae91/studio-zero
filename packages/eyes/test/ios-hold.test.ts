@@ -78,13 +78,13 @@ const untilHeld = async (udid: string): Promise<NonNullable<ReturnType<typeof he
 test('a driver is held up, answers the screen as Maestro prints it, and nothing is left when it is let go', async () => {
   await withStandIn({}, async () => {
     const said: string[] = [];
-    const holding = holdDriver('SIM-1', { say: (line) => said.push(line), up: () => true });
+    const holding = holdDriver('SIM-1', { logs: null, say: (line) => said.push(line), up: () => true });
     const held = await untilHeld('SIM-1');
     assert.deepEqual([held.udid, held.pid, held.size, held.agrees], ['SIM-1', process.pid, { w: 402, h: 874 }, true]);
     assert.ok(await driverAnswers(held));
     assert.deepEqual(await heldTree(held), treeOfDriver(JSON.parse(readFileSync(join(fixtures, 'app-on01.driver.json'), 'utf8')), { w: 402, h: 874 }));
     // A second holder for the same simulator stands back.
-    assert.equal(await holdDriver('SIM-1', { say: (line) => said.push(line), up: () => true }), 0);
+    assert.equal(await holdDriver('SIM-1', { logs: null, say: (line) => said.push(line), up: () => true }), 0);
     assert.ok(said.includes('already held'));
     assert.equal(await releaseHeld('SIM-1', 100), true);
     assert.equal(await holding, 0);
@@ -98,7 +98,7 @@ test('a driver is held up, answers the screen as Maestro prints it, and nothing 
 
 test('a holder whose reading does not agree with Maestro says so, and the look then asks Maestro itself', async () => {
   await withStandIn({ STAND_IN_DISAGREES: '1' }, async () => {
-    const holding = holdDriver('SIM-2', { up: () => true });
+    const holding = holdDriver('SIM-2', { logs: null, up: () => true });
     const held = await untilHeld('SIM-2');
     assert.equal(held.agrees, false);
     assert.equal(await heldTree(held), null);
@@ -109,14 +109,14 @@ test('a holder whose reading does not agree with Maestro says so, and the look t
 
 test('a holder ends by itself: when nothing has asked for a while, when its simulator is down, when its driver has gone', async () => {
   await withStandIn({}, async () => {
-    const idle = holdDriver('SIM-3', { idleMs: 600, up: () => true });
+    const idle = holdDriver('SIM-3', { logs: null, idleMs: 600, up: () => true });
     await untilHeld('SIM-3');
     assert.equal(await idle, 0);
     assert.equal(heldNow('SIM-3'), null);
   });
   await withStandIn({ STAND_IN_DIES_AFTER_MS: '1500' }, async () => {
     // Its driver stops answering while the flow still waits: the holder notices at its next check.
-    const gone = holdDriver('SIM-4', { up: () => true, checkMs: 400 });
+    const gone = holdDriver('SIM-4', { logs: null, up: () => true, checkMs: 400 });
     const held = await untilHeld('SIM-4');
     assert.equal(await gone, 0);
     assert.equal(await driverAnswers(held), false);
@@ -124,7 +124,7 @@ test('a holder ends by itself: when nothing has asked for a while, when its simu
   });
   await withStandIn({}, async () => {
     let up = true;
-    const down = holdDriver('SIM-5', { up: () => up, checkMs: 300 });
+    const down = holdDriver('SIM-5', { logs: null, up: () => up, checkMs: 300 });
     await untilHeld('SIM-5');
     up = false;
     assert.equal(await down, 0);
@@ -143,7 +143,7 @@ test('a record whose holder has gone is cleared away, and a holder that cannot s
     const path = process.env.PATH;
     process.env.PATH = '/nonexistent';
     try {
-      assert.equal(await holdDriver('SIM-7', { up: () => true }), 1);
+      assert.equal(await holdDriver('SIM-7', { logs: null, up: () => true }), 1);
     } finally {
       process.env.PATH = path;
     }
@@ -242,5 +242,40 @@ rmSync(dir + '/' + udid + '.json', { force: true });
     else process.env.SZ_HELD_DIR = before;
     await new Promise((done) => setTimeout(done, 1700));
     rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a running flow's log folder that another Maestro deleted is put back, and a finished one is left alone", async () => {
+  // Maestro (2.6.0, DebugLogStore) keeps the six newest entries of its log folder when it starts and deletes the
+  // rest, the folders of flows still running among them; such a flow then dies at its end, zipping a folder that
+  // is gone (2026-11-21: "NoSuchFileException ... Logs/maestro/<run>", a flow lost and a wait of 600 seconds).
+  const { guardMaestroLogs } = await import('../src/ios-hold.ts');
+  const { mkdirSync } = await import('node:fs');
+  const logs = mkdtempSync(join(tmpdir(), 'eyes-maestro-logs-'));
+  const dead = 2 ** 22 - 7;
+  try {
+    const running = join(logs, `2026-11-21_181847_${process.pid}`);
+    const finished = join(logs, `2026-11-21_181900_${process.pid}`);
+    const crashed = join(logs, `2026-11-21_181910_${dead}`);
+    for (const folder of [running, finished, crashed]) mkdirSync(folder);
+    const stop = guardMaestroLogs(logs, 50);
+    await pause(150);
+    // Another Maestro starts and clears the folder; one flow had ended in the ordinary way just before.
+    writeFileSync(`${finished}.zip`, '');
+    for (const folder of [running, finished, crashed]) rmSync(folder, { recursive: true });
+    await pause(300);
+    assert.equal(existsSync(running), true, 'the folder of a flow whose process is alive is there again');
+    assert.equal(existsSync(finished), false, 'a flow that zipped its log and removed the folder itself is not undone');
+    assert.equal(existsSync(crashed), false, 'nor is the folder of a process that is gone');
+    // Deleted again, put back again; and after the guard is stopped, no more.
+    rmSync(running, { recursive: true });
+    await pause(300);
+    assert.equal(existsSync(running), true);
+    stop();
+    rmSync(running, { recursive: true });
+    await pause(300);
+    assert.equal(existsSync(running), false);
+  } finally {
+    rmSync(logs, { recursive: true, force: true });
   }
 });

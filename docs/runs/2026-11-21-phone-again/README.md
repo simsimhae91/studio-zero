@@ -146,6 +146,16 @@ On the branch `phone-again`:
   the one who starts a holder writes the mark first and waits for the holder to take it over; the 596 seconds above
   are with that.
 
+  **Why a flow that passed every step was lost, or waited 600 seconds (finding 7), read in Maestro's own
+  source.** Every Maestro that starts keeps the six newest entries of `~/Library/Logs/maestro` and deletes the
+  rest (2.6.0, `DebugLogStore.removeOldLogs`), the log folders of Maestros still running among them. Such a flow
+  ends by zipping a folder that is gone: `NoSuchFileException`, and the process does not exit. Shown on a
+  simulator: a flow of three steps with a 35-second wait, eight other Maestros started while it ran. Alone, all
+  its steps completed, then the exception, and the process was still there ten minutes later. Through `sz-eyes`
+  with a holder up: passed in 42 seconds. The holder puts back the log folder of any living Maestro that another
+  has deleted, for as long as it holds (`guardMaestroLogs`). With looks no longer Maestro processes, far fewer
+  start at all.
+
   Seen while measuring: after every `maestro` command that started a driver, the `xcodebuild` it had started
   stayed for about a minute and ran `simctl diagnose`, because its test runner had been ended. Fifty commands a
   check left a standing crowd of those, which is where the 810 seconds of processor time of one fit check went.

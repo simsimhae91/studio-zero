@@ -16,7 +16,7 @@
  * nothing has asked for twenty minutes, or when its flow or its driver has gone.
  */
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
-import { closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { createServer, type ServerResponse } from 'node:http';
 import { homedir, tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -173,6 +173,48 @@ export async function releaseHeld(udid: string, waitMs = 20_000): Promise<boolea
   return true;
 }
 
+/** Where Maestro keeps the log of each of its runs, a folder a run until the run ends and zips it. */
+export const maestroLogs = (): string => join(homedir(), 'Library', 'Logs', 'maestro');
+
+/**
+ * Puts back the log folder of a Maestro that is still running when another Maestro has deleted it. Every Maestro
+ * that starts keeps the six newest entries there and deletes the rest (2.6.0, `DebugLogStore.removeOldLogs`),
+ * whoever they belong to; a flow whose folder went dies at its end, zipping what is not there, and its result is
+ * lost. While a simulator's driver is held, its holder keeps the folders of living runs in place. A folder is
+ * named `<time>_<process id>`: it is put back only while that process lives and has left no zip of its own.
+ * Returns what stops the guard.
+ */
+export function guardMaestroLogs(dir: string = maestroLogs(), everyMs = 400): () => void {
+  const seen = new Set<string>();
+  const look = (): void => {
+    let names: string[];
+    try {
+      names = readdirSync(dir);
+    } catch {
+      return;
+    }
+    const here = new Set(names);
+    for (const name of names) if (/_\d+$/.test(name)) seen.add(name);
+    for (const name of seen) {
+      if (here.has(name)) continue;
+      const pid = Number(name.slice(name.lastIndexOf('_') + 1));
+      if (here.has(`${name}.zip`) || !alive(pid)) {
+        seen.delete(name);
+        continue;
+      }
+      try {
+        mkdirSync(join(dir, name));
+      } catch {
+        // put back by another guard, or the folder itself is gone
+      }
+    }
+  };
+  look();
+  const timer = setInterval(look, everyMs);
+  timer.unref();
+  return () => clearInterval(timer);
+}
+
 const booted = (udid: string): boolean => {
   const res = spawnSync('xcrun', ['simctl', 'list', 'devices', 'booted'], { encoding: 'utf8', timeout: 20_000 });
   // When the question cannot be asked, the simulator is taken to be up: the other ends still apply.
@@ -189,7 +231,7 @@ const childrenOf = (pid: number): number[] => {
  * Holds a driver up for a simulator until it is let go. This is the whole life of the process `sz-eyes ios hold`
  * starts: it returns when the holder has ended, 0 when it held, 1 when it never could.
  */
-export async function holdDriver(udid: string, opts: { idleMs?: number; checkMs?: number; say?: (line: string) => void; up?: (udid: string) => boolean } = {}): Promise<number> {
+export async function holdDriver(udid: string, opts: { idleMs?: number; checkMs?: number; say?: (line: string) => void; up?: (udid: string) => boolean; logs?: string | null } = {}): Promise<number> {
   const say = opts.say ?? (() => undefined);
   const idleMs = opts.idleMs ?? (process.env.SZ_HELD_IDLE_S ? Number(process.env.SZ_HELD_IDLE_S) * 1000 : 20 * 60_000);
   mkdirSync(heldDir(), { recursive: true });
@@ -249,6 +291,8 @@ export async function holdDriver(udid: string, opts: { idleMs?: number; checkMs?
     ended = true;
   });
 
+  // For as long as its own Maestro lives: that one's log folder, and every running flow's.
+  const unguard = opts.logs === null ? (): void => undefined : guardMaestroLogs(opts.logs ?? maestroLogs());
   const finish = async (code: number): Promise<number> => {
     letGo = true;
     answerAll();
@@ -266,6 +310,7 @@ export async function holdDriver(udid: string, opts: { idleMs?: number; checkMs?
       }
     }
     maestro = null;
+    unguard();
     server.close();
     rmSync(folder, { recursive: true, force: true });
     return code;
