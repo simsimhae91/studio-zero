@@ -1,0 +1,141 @@
+== wf_fa99bf46-e95 in -Users-hosoo--studio-zero-specimens-2026-11-21-toesa-check
+plan                   claude-opus-5-5    eff=xhigh  adv=claude-opus-5-5  00:05:16-00:16:22   11.1m turns=23   out=67485   think=34630  fresh_in=197450   cache_read=2618117    calls=27   gap=118s  Bash:16 Skill:5 Read:2 Write:2 StructuredOutput:2
+build:first-pass       claude-opus-5-5    eff=high   adv=claude-opus-5-5  00:16:24-01:11:24   55.0m turns=161  out=221543  think=60836  fresh_in=546359   cache_read=61438868   calls=171  gap=147s  Bash:132 Read:22 Write:11 Skill:3 ToolSearch:1 WebSearch:1
+verify:first-pass:1of5 claude-opus-5-5    eff=xhigh  adv=claude-opus-5-5  01:11:24-01:31:36   20.2m turns=72   out=56181   think=22929  fresh_in=194194   cache_read=8927824    calls=75   gap=111s  Bash:71 Read:2 Skill:1 StructuredOutput:1
+verify:first-pass:3of5 claude-opus-5-5    eff=xhigh  adv=claude-opus-5-5  01:11:25-01:34:27   23.0m turns=92   out=79464   think=31852  fresh_in=234619   cache_read=14829253   calls=99   gap=121s  Bash:85 Read:11 Skill:1 Grep:1 StructuredOutput:1
+verify:first-pass:2of5 claude-opus-5-5    eff=xhigh  adv=claude-opus-5-5  01:11:25-01:43:02   31.6m turns=137  out=112360  think=44812  fresh_in=301260   cache_read=25564350   calls=141  gap=90s  Bash:132 Read:7 Skill:1 StructuredOutput:1
+verify:first-pass:5of5 claude-opus-5-5    eff=xhigh  adv=claude-opus-5-5  01:11:25-01:33:10   21.8m turns=89   out=80301   think=39445  fresh_in=238869   cache_read=13199182   calls=92   gap=108s  Bash:83 Read:7 Skill:1 StructuredOutput:1
+verify:first-pass:4of5 claude-opus-5-5    eff=xhigh  adv=claude-opus-5-5  01:11:25-01:34:32   23.1m turns=99   out=75822   think=29293  fresh_in=210777   cache_read=13750555   calls=102  gap=113s  Bash:95 Read:5 Skill:1 StructuredOutput:1
+fix:first-pass:1       claude-opus-5-5    eff=high   adv=claude-opus-5-5  01:43:02-02:09:47   26.7m turns=112  out=62621   think=29161  fresh_in=541740   cache_read=21355567   calls=119  gap=376s  Bash:104 Read:12 Skill:2 StructuredOutput:1
+rule:first-pass        claude-opus-5-5    eff=xhigh  adv=claude-opus-5-5  02:09:47-02:22:00   12.2m turns=48   out=45195   think=30441  fresh_in=146629   cache_read=4635995    calls=48   gap=121s  Bash:46 Skill:1 StructuredOutput:1
+verify:first-pass:again:1of3 claude-opus-5-5    eff=xhigh  adv=claude-opus-5-5  02:22:00-02:40:34   18.6m turns=111  out=80988   think=34059  fresh_in=247467   cache_read=17448990   calls=115  gap=42s  Bash:107 Read:6 Skill:1 StructuredOutput:1
+verify:first-pass:again:2of3 claude-opus-5-5    eff=xhigh  adv=claude-opus-5-5  02:22:02-02:29:18    7.3m turns=43   out=18836   think=6642   fresh_in=104082   cache_read=3438102    calls=46   gap=163s  Bash:40 Read:4 Skill:1 StructuredOutput:1
+verify:first-pass:again:3of3 claude-opus-5-5    eff=xhigh  adv=claude-opus-5-5  02:22:02-02:37:08   15.1m turns=71   out=47896   think=23017  fresh_in=178103   cache_read=8929263    calls=77   gap=103s  Bash:70 Read:5 Skill:1 StructuredOutput:1
+fix:first-pass:2       claude-opus-5-5    eff=high   adv=claude-opus-5-5  02:40:34-02:46:30    5.9m turns=36   out=16366   think=4874   fresh_in=105547   cache_read=2829097    calls=36   gap=59s  Bash:33 Read:2 StructuredOutput:1
+verify:first-pass:again:1of3 claude-opus-5-5    eff=xhigh  adv=claude-opus-5-5  02:46:30-03:14:02   27.5m turns=120  out=97806   think=36109  fresh_in=285732   cache_read=21190920   calls=124  gap=99s  Bash:121 Skill:1 Read:1 StructuredOutput:1
+verify:first-pass:again:2of3 claude-opus-5-5    eff=xhigh  adv=claude-opus-5-5  02:46:32-02:54:32    8.0m turns=35   out=19165   think=7936   fresh_in=112118   cache_read=3026704    calls=37   gap=160s  Bash:34 Skill:1 Read:1 StructuredOutput:1
+verify:first-pass:again:3of3 claude-opus-5-5    eff=xhigh  adv=claude-opus-5-5  02:46:32-02:55:07    8.6m turns=56   out=32143   think=14105  fresh_in=132022   cache_read=5452440    calls=58   gap=54s  Bash:52 Read:4 Skill:1 StructuredOutput:1
+close:first-pass       claude-opus-5-5    eff=low    adv=claude-opus-5-5  03:14:02-03:14:44    0.7m turns=5    out=1828    think=110    fresh_in=45979    cache_read=158323     calls=5    gap=15s  Bash:4 StructuredOutput:1
+
+
+== wf_fa99bf46-e95 in -Users-hosoo--studio-zero-specimens-2026-11-21-toesa-check
+plan                     00:05-00:16 wall=  11.1m model=  10.8m tools=   0.3m | 
+        0.0m contract      sz-eyes sandbox
+        0.0m contract      ls .sz .sz/design && sz-eyes contract show design
+        0.0m contract      node -v; npm -v; sz-eyes arm list 2>&1 | head -20; sz-eyes standing 2>&1 | head; sz-eyes contract status 2>&1 | head; git worktree list; sz-eyes backl
+        0.0m git           cat > .sz/progress.md <<'EOF' # 진행 - 2026-11-22 지도를 씀(`.sz/map.md`). 제품 코드는 아직 없음. 모르는 것: wrangler·Vite·Preact 설치 시간, iPhone Safari의 PDF 저장·tel:·오래 안 
+        0.0m other command sz-eyes worth show toesa-check 2>&1 | head -300
+        0.0m skill         sz:work
+build:first-pass         00:16-01:11 wall=  55.0m model=  33.4m tools=  21.6m | other command:11.3 flows:4.3 look:3.0 wait:1.5 tests:0.6 install:0.5
+        2.2m look          P=$(cat /tmp/claude-501/port); U=http://127.0.0.1:$P; mkdir -p /tmp/claude-501/empty; for S in ST-01 DC-01 DC-02 DC-04 DC-05 DC-06 CR-01 HP-01 NX-01 R
+        2.0m other command bash /tmp/claude-501/limits.sh 2>&1 | tail -60
+        1.6m other command bash /tmp/claude-501/limits.sh 2>&1 | tail -80
+        1.4m other command sed -i '' 's/"sources": "node --experimental-strip-types scripts\/sources.ts"/"sources": "node scripts\/sources.ts"/' package.json && npm run sources 
+        1.4m other command U=http://127.0.0.1:$(cat /tmp/claude-501/port)/; /tmp/claude-501/walk-s1.sh "$U" docs \ --step "tap:할 일 순서 보기" --step "tap:요청서 채우기" --step "see:2/6 채움
+        0.9m wait          P=$(cat /tmp/claude-501/port); U=http://127.0.0.1:$P; curl -s $U/healthz; echo; /tmp/claude-501/walk-s1.sh "$U/" final \ --step "tap:할 일 순서 보기" --step
+verify:first-pass:1of5   01:11-01:31 wall=  20.2m model=   8.8m tools=  11.4m | other command:6.7 flows:2.8 contract:0.7 tests:0.6 git:0.5
+        1.9m other command rm -rf .sz/evidence/first-pass/kinds && SZ_URL=http://127.0.0.1:54909 SZ_OUT="$PWD/.sz/evidence/first-pass/kinds" sh e2e/kinds.sh > $TMPDIR/kinds-run.
+        1.8m other command rm -rf .sz/evidence/first-pass/kinds/kinds-* && SZ_URL=http://127.0.0.1:54909 SZ_OUT="$PWD/.sz/evidence/first-pass/kinds" sh e2e/kinds.sh > $TMPDIR/ki
+        0.8m other command rm -rf .sz/evidence/first-pass/short && SZ_URL=http://127.0.0.1:54909 SZ_OUT="$PWD/.sz/evidence/first-pass/short" sh e2e/short.sh > $TMPDIR/short-run.
+        0.8m other command mkdir -p $TMPDIR/s1-self && time sh e2e/s1-wage.sh > $TMPDIR/s1-self/run.txt 2>&1; echo "exit=$?"; head -2 $TMPDIR/s1-self/run.txt; grep "STOP\|WALKED
+        0.7m flows         mkdir -p .sz/evidence/first-pass/s1/break && sz-eyes web do "http://127.0.0.1:54909/?now=2026-11-22T14:00" --size phone \ --step "tap:3분 점검 시작" --step
+        0.6m other command rm -rf .sz/evidence/first-pass/s1/flow && SZ_URL=http://127.0.0.1:54909 SZ_OUT="$PWD/.sz/evidence/first-pass/s1/flow" sh e2e/s1-wage.sh > .sz/evidence
+verify:first-pass:3of5   01:11-01:34 wall=  23.0m model=  12.3m tools=  10.7m | other command:7.7 flows:2.1 contract:0.9
+        2.0m other command sed -i '' 's/GROUPS=/GRP=/; s/\$GROUPS/$GRP/g' e2e/proof.sh && grep -c 'GRP' e2e/proof.sh && PORT=$(cat /tmp/claude-501/toesa-v-docs.port); SZ_URL=htt
+        1.1m other command cp /Users/hosoo/.studio-zero/specimens/2026-11-21/toesa-check/e2e/export.sh /Users/hosoo/.studio-zero/specimens/2026-11-21/toesa-check/e2e/export-prin
+        1.1m other command python3 - <<'EOF' p='e2e/export-print.mjs' s=open(p).read() old="""process.stdout.write(JSON.stringify(result) + '\\n'); process.exit(result.error ? 1
+        1.0m flows         cat > /Users/hosoo/.studio-zero/specimens/2026-11-21/toesa-check/e2e/export.sh <<'EOF' #!/bin/sh # export: 서류 셋을 손에 들 수 있다 (계약 first-pass). # S1로 점검하고
+        0.9m other command python3 - <<'EOF' p='e2e/statement.sh' s=open(p).read() old=''' --step "see:어떤 일을 했나요? 하루가 어땠나요?" --step "see:언제부터 무슨 일이 있었나요? 날짜 순서로 써요." \\ --step "
+        0.8m other command mkdir -p /tmp/claude-501/toesa-v-docs/e2e && cp /Users/hosoo/.studio-zero/specimens/2026-11-21/toesa-check/e2e/request-form.sh /tmp/claude-501/toesa-v
+verify:first-pass:2of5   01:11-01:43 wall=  31.6m model=  18.1m tools=  13.6m | flows:6.4 other command:5.1 look:1.2
+        1.5m other command python3 - <<'EOF' p='e2e/cite.sh' s=open(p,encoding='utf-8').read() old=""" const lh = label.match(/제(\\d+(?:의\\d+)?)호/), la = label.match(/(제\\d+조(?:
+        1.2m flows         cat > /Users/hosoo/.studio-zero/specimens/2026-11-21/toesa-check/e2e/steps.sh <<'EOF' #!/bin/sh # steps: 할 일 순서가 내 날짜로 나온다 (계약 first-pass). # S1(이직일 2
+        1.1m flows         cat > /Users/hosoo/.studio-zero/specimens/2026-11-21/toesa-check/e2e/return.sh <<'EOF' #!/bin/sh # return: 다시 와도 그대로다 (계약 first-pass). # S1(임금체불, 이직일 
+        0.9m other command O=$PWD/.sz/evidence/first-pass/criteria/mutation && mkdir -p $O && sh .sz/evidence/first-pass/criteria/mutation-scan.sh http://127.0.0.1:62744 $O; for
+        0.8m flows         O=$PWD/.sz/evidence/first-pass/criteria/mutation && rm -f $O/mut-s1* && python3 -c " p='.sz/evidence/first-pass/criteria/mutation-scan.sh' s=open(p,en
+        0.8m flows         E=$PWD/.sz/evidence/first-pass/return && sz-eyes web do "http://127.0.0.1:54860/?now=2026-11-22T14:00" --size phone --out $E --name return-break \ --s
+verify:first-pass:5of5   01:11-01:33 wall=  21.8m model=  13.2m tools=   8.6m | other command:7.2
+        1.8m other command C=/Volumes/DEV-SSD/sz-scratch.noindex/toesa-v5-limits; mkdir -p $C/e2e && cp /Users/hosoo/.studio-zero/specimens/2026-11-21/toesa-check/e2e/limits.sh 
+        1.6m other command python3 - <<'EOF' p='e2e/limits.sh' s=open(p,encoding='utf-8').read() old=s[s.index("function webdo("):s.index("const seedStep")] new='''function webd
+        1.2m other command cat > /tmp/claude-501/sz/run_proto.py <<'EOF' import json, subprocess, sys, os, concurrent.futures as cf proto = sys.argv[1]; out = sys.argv[2] ids = 
+        0.6m other command time python3 -I /tmp/claude-501/sz/run_built.py http://127.0.0.1:54942 $PWD/.sz/evidence/first-pass/as-drawn/built /tmp/claude-501/sz/fixtures.json 2>
+        0.3m flows         R="read:w900=JSON.stringify([...document.querySelectorAll('body *')].filter(e=>e.offsetParent!==null&&getComputedStyle(e).fontWeight==='900'&&[...e.ch
+        0.2m other command python3 - <<'EOF' import json j=json.load(open('.sz/evidence/first-pass/limits/00-fill.json')) L=json.loads(j['reads']['state']) nospace=lambda seed,n
+verify:first-pass:4of5   01:11-01:34 wall=  23.1m model=  12.1m tools=  11.0m | other command:5.6 flows:2.6 wait:2.2 contract:0.6
+        1.9m wait          F=/private/tmp/claude-501/-Users-hosoo--studio-zero-specimens-2026-11-21-toesa-check/028688c2-e243-4d18-ac78-01cfd47ba3d7/tasks/bdpf2e1vc.output; unti
+        1.1m other command C=/Volumes/DEV-SSD/sz-scratch.noindex/toesa-first-pass-v4; SZ_URL=http://127.0.0.1:54868 SZ_OUT=$PWD/.sz/evidence/first-pass/device SZ_SERVER_LOG=$C/.
+        1.1m other command python3 - <<'EOF' p='e2e/device-only.sh' s=open(p).read() old='''const hits=(text)=>marks.filter(m=>text.includes(m)||text.includes(JSON.stringify(m).
+        0.7m other command SZ_URL=http://127.0.0.1:54868 SZ_DIR=/Volumes/DEV-SSD/sz-scratch.noindex/toesa-first-pass-v4 SZ_COMMIT=e7e8e59a02a34b4d9b68c10344dea302df8b250c SZ_OUT
+        0.6m flows         S1='--step "tap:3분 점검 시작"' ; sz-eyes web do "http://127.0.0.1:54868/?now=2026-11-21T10:00" --size phone \ --step "tap:3분 점검 시작" --step "wait:회사가 지금 어떻
+        0.6m other command SZ_URL=http://127.0.0.1:54868 SZ_OUT=$PWD/.sz/evidence/first-pass/help sh e2e/help.sh > .sz/evidence/first-pass/help/run.txt 2>&1; echo "exit=$?"; gre
+fix:first-pass:1         01:43-02:09 wall=  26.7m model=  11.6m tools=  15.1m | wait:7.5 other command:5.6 contract:1.6 tests:1.3
+        6.3m wait          until [ -f /tmp/claude-501/fx/flows2/summary.txt ] && [ $(grep -c exit= /tmp/claude-501/fx/flows2/summary.txt) -ge 4 ]; do sleep 15; done; cat /tmp/cl
+        1.8m other command python3 /tmp/claude-501/fx/ad/retake.py "$PWD" $(cat /tmp/claude-501/fx/port) 2>&1 | grep -v True; echo done; cd .sz/evidence/first-pass/as-drawn && p
+        1.8m other command python3 /tmp/claude-501/fx/ad/retake.py "$PWD" $(cat /tmp/claude-501/fx/port) 2>&1 | tail -30
+        1.5m contract      F=$TMPDIR/fx; PORT=$(sz-eyes port); echo $PORT > $F/port; nohup sh -c 'set -m; PORT='$PORT' npm run dev & echo $! > '$F'/pid; wait' > $F/server.log 2>
+        1.2m tests         npm run sources -- criteria 2>&1 | tail -8; npm test 2>&1 | tail -4; npm run typecheck 2>&1 | tail -1
+        1.2m other command mkdir -p /tmp/claude-501/fx/export && SZ_OUT=/tmp/claude-501/fx/export sh e2e/export.sh 2>&1 | tail -12
+rule:first-pass          02:09-02:22 wall=  12.2m model=   7.8m tools=   4.4m | wait:2.1 flows:1.8
+        2.0m wait          for i in $(seq 1 60); do curl -sf http://127.0.0.1:50513/healthz && break; sleep 2; done; echo; tail -5 "$TMPDIR/dev.log"; git -C /Users/hosoo/.studio
+        0.8m flows         OUT=$PWD/.sz/evidence/first-pass/as-drawn/ruling && sz-eyes web do "http://127.0.0.1:50513/?now=2026-11-21T10:00" --size phone --out $OUT --name docs 
+        0.7m flows         OUT=$PWD/.sz/evidence/first-pass/as-drawn/ruling && mkdir -p $OUT && sz-eyes web do "http://127.0.0.1:50513/?now=2026-11-21T10:00" --size phone --out 
+        0.3m flows         ls .sz/evidence/first-pass/as-drawn/ruling/ | grep docs | tail -5; sz-eyes web do "http://127.0.0.1:50513/?now=2026-11-21T10:00" --size phone --out $P
+        0.1m wait          ps -o pid,ppid,command -p 95214 | cut -c1-200; kill -TERM 95316; sleep 3; curl -s -m 3 http://127.0.0.1:50513/healthz || echo "stopped"; ps -o pid,com
+        0.1m contract      PORT=$(sz-eyes port); echo $PORT > "$TMPDIR/port.txt"; (PORT=$PORT nohup npm run dev > "$TMPDIR/dev.log" 2>&1 & echo $! > "$TMPDIR/dev.pid"); sleep 1;
+verify:first-pass:again:1of3 02:22-02:40 wall=  18.6m model=  14.3m tools=   4.3m | other command:2.0 flows:1.3 wait:0.6
+        0.7m other command E=$PWD/.sz/evidence/first-pass/v5/criteria-mut && URL=http://127.0.0.1:$(cat /tmp/claude-501/fp1-mut.port) && python3 -I - "$URL" "$E" <<'EOF' import 
+        0.4m flows         E=$PWD/.sz/evidence/first-pass/v5/noticed && URL=http://127.0.0.1:$(cat /tmp/claude-501/fp1-main.port) && sz-eyes web do "$URL/?now=2026-11-22T14:00" 
+        0.4m flows         E=$PWD/.sz/evidence/first-pass/v5/criteria-mut && URL=http://127.0.0.1:$(cat /tmp/claude-501/fp1-mut.port) && R="read:r=(()=>{const b=[...document.que
+        0.3m other command cd $TMPDIR/sz-fp1-mut && python3 -I - <<'EOF' import json p='src/criteria.json'; c=json.load(open(p,encoding='utf-8')) M={'wageMonths':3,'wageMonthDay
+        0.3m flows         E=$PWD/.sz/evidence/first-pass/v5/noticed && URL=http://127.0.0.1:$(cat /tmp/claude-501/fp1-main.port) && sz-eyes web do "$URL/?now=2026-11-22T14:00" 
+        0.2m flows         E=$PWD/.sz/evidence/first-pass/v5/noticed && URL=http://127.0.0.1:$(cat /tmp/claude-501/fp1-main.port) && (cd /tmp/claude-501/sz-fp1-main && npm run r
+verify:first-pass:again:2of3 02:22-02:29 wall=   7.3m model=   3.7m tools=   3.6m | other command:3.2
+        2.7m other command E=$PWD/.sz/evidence/first-pass/look2; mkdir -p $E; for f in export return request-form proof statement correction; do mkdir -p $E/$f; (SZ_URL=http://1
+        0.1m other command B=.sz/evidence/first-pass/look2/export-break && python3 - <<'EOF' import json p='.sz/evidence/first-pass/look2/export-break/state-max.json' s=json.loa
+        0.1m wait          kill 99777 99796 197 198; sleep 3; ps -o pid,command -p 99777,99796,197,198,223,224,225,226 | cut -c1-120; curl -s -m 2 http://127.0.0.1:51285/healthz
+        0.1m other command time sz-eyes copy $TMPDIR/toesa-fp-v2b 2>&1 | tail -20
+        0.0m git           git show 7b2f1a1 -- src/screens/docs.tsx src/sheets.tsx src/styles.css src/screens/more.tsx
+        0.0m wait          for i in $(seq 1 40); do curl -sf http://127.0.0.1:51285/healthz && break; sleep 1; done; echo; tail -5 $TMPDIR/fp-v2b.server.log; curl -s http://127.
+verify:first-pass:again:3of3 02:22-02:37 wall=  15.1m model=   8.6m tools=   6.5m | other command:3.6 flows:1.5 look:1.1
+        1.7m other command cd /Users/hosoo/.studio-zero/specimens/2026-11-21/toesa-check/.sz/evidence/first-pass/look2-c/as-drawn && ls ../../as-drawn/built/*.json | xargs -n1 b
+        1.1m look          D=$PWD/.sz/evidence/first-pass/look2-c/as-drawn/drawn; for n in $(ls .sz/evidence/first-pass/look2-c/as-drawn/built/*.json | xargs -n1 basename | sed 
+        0.7m flows         P=53221; E=/Users/hosoo/.studio-zero/specimens/2026-11-21/toesa-check/.sz/evidence/first-pass/look2-c/help-break; mkdir -p $E; sz-eyes web do "http://
+        0.4m other command for n in device limits help; do sz-eyes copy /Volumes/DEV-SSD/sz-scratch.noindex/toesa-v3-$n 2>&1 | tail -1; done; ls /Volumes/DEV-SSD/sz-scratch.noin
+        0.3m flows         cd /Users/hosoo/.studio-zero/specimens/2026-11-21/toesa-check/.sz/evidence/first-pass/look2-c && SEED="$(python3 -I -c "import json;print(json.load(op
+        0.3m flows         cd /Users/hosoo/.studio-zero/specimens/2026-11-21/toesa-check/.sz/evidence/first-pass/look2-c && SEED="$(python3 -I -c "import json;print(json.load(op
+fix:first-pass:2         02:40-02:46 wall=   5.9m model=   3.2m tools=   2.7m | other command:1.7 flows:0.9
+        1.0m other command cd /Users/hosoo/.studio-zero/specimens/2026-11-21/toesa-check/.sz/evidence/first-pass/v5/criteria-mut && P=$(cat /tmp/claude-501/toesa-mut/port.txt) &
+        0.7m flows         cd /Users/hosoo/.studio-zero/specimens/2026-11-21/toesa-check/.sz/evidence/first-pass/v5/criteria-mut && P=$(cat /tmp/claude-501/toesa-mut/port.txt) &
+        0.4m other command npm run sources -- criteria --check 2>&1 | grep -c "그 한 줄이: 있음"; npm run sources -- criteria --check 2>&1 | grep "그 한 줄이:" | grep -vc "있음"; grep -rn "
+        0.2m flows         P=$(cat /tmp/claude-501/toesa-mut/port.txt) && curl -s http://127.0.0.1:$P/healthz && OUT=.sz/evidence/first-pass/v5/criteria-mut && sz-eyes web do "h
+        0.2m other command npm run sources -- criteria 2>&1 | tail -6; npm run sources -- criteria --check 2>&1 | tail -6
+        0.0m wait          M=/tmp/claude-501/toesa-mut; pid=$(cat $M/pid.txt); P=$(cat $M/port.txt); kids=$(pgrep -P $pid); gk=$(for k in $kids; do pgrep -P $k; done); ggk=$(for
+verify:first-pass:again:1of3 02:46-03:14 wall=  27.5m model=  17.1m tools=  10.4m | other command:5.2 wait:3.1 flows:1.8
+        1.6m wait          cd /Users/hosoo/.studio-zero/specimens/2026-11-21/toesa-check/.sz/evidence/first-pass/v6/criteria-mut && rm -rf A B O; mkdir -p A B O; (sh scan.sh htt
+        1.4m other command mkdir -p /Users/hosoo/.studio-zero/specimens/2026-11-21/toesa-check/.sz/evidence/first-pass/v6/noticed && cat > /Users/hosoo/.studio-zero/specimens/20
+        1.1m wait          cd /Users/hosoo/.studio-zero/specimens/2026-11-21/toesa-check/.sz/evidence/first-pass/v6/criteria-mut && (sh scan.sh http://127.0.0.1:57564 $PWD/A A &
+        1.1m other command cd /Users/hosoo/.studio-zero/specimens/2026-11-21/toesa-check/.sz/evidence/first-pass/v6/criteria-mut && python3 -I - <<'EOF' s=open('scan.sh').read()
+        0.7m other command cd /tmp/claude-501/fp1-main && E=/Users/hosoo/.studio-zero/specimens/2026-11-21/toesa-check/.sz/evidence/first-pass/v6; (npm run sources -- criteria -
+        0.6m other command cd /Users/hosoo/.studio-zero/specimens/2026-11-21/toesa-check/.sz/evidence/first-pass/v6/criteria-mut && python3 -I - <<'EOF' s=open('extra.sh').read(
+verify:first-pass:again:2of3 02:46-02:54 wall=   8.0m model=   3.7m tools=   4.3m | other command:3.1
+        2.7m other command E=.sz/evidence/first-pass/v6-docs; mkdir -p $E; URL=http://127.0.0.1:56569; for f in return request-form export proof statement correction; do mkdir -
+        0.4m wait          cd /Users/hosoo/.studio-zero/specimens/2026-11-21/toesa-check/.sz/evidence/first-pass/v6-docs/again && for i in $(seq 1 30); do tail -1 proof/run.txt 
+        0.3m flows         B=$PWD/.sz/evidence/first-pass/v6-docs/break; mkdir -p $B; ST=$(python3 -c " import json;s=json.load(open('.sz/evidence/first-pass/v6-docs/export/expo
+        0.3m contract      cd /Volumes/DEV-SSD/sz-scratch.noindex/toesa-fp2-docs && PORT=$(sz-eyes port); echo $PORT > .sz-port; COMMIT=7fb33f05eda4bff57e5518e2a430585d4969e0b6 
+        0.2m other command time sz-eyes copy /Volumes/DEV-SSD/sz-scratch.noindex/toesa-fp2-docs 2>&1 | tail -20
+        0.1m other command B=.sz/evidence/first-pass/v6-docs/export-break; mkdir -p $B && python3 - "$B" <<'EOF' import json,sys b=sys.argv[1] s=json.load(open('.sz/evidence/fir
+verify:first-pass:again:3of3 02:46-02:55 wall=   8.6m model=   6.1m tools=   2.5m | other command:1.8
+        0.9m other command D=/Users/hosoo/.studio-zero/specimens/2026-11-21/toesa-check/.sz/evidence/first-pass/v6-3/as-drawn; cd $D && time python3 retake.py 56872 > retake.txt
+        0.2m other command cd /Users/hosoo/.studio-zero/specimens/2026-11-21/toesa-check/.sz/evidence/first-pass && python3 - <<'PY' from PIL import Image, ImageChops import os 
+        0.2m other command for n in device ops look; do ( time sz-eyes copy /Volumes/DEV-SSD/sz-scratch.noindex/toesa-v3-$n ) 2>&1 | tail -6 & done; wait
+        0.2m wait          for i in $(seq 1 60); do curl -sf http://127.0.0.1:56872/healthz && break; sleep 1; done; echo; curl -s http://127.0.0.1:56872/ | head -c 300; echo; E
+        0.1m flows         E=/Users/hosoo/.studio-zero/specimens/2026-11-21/toesa-check/.sz/evidence/first-pass/v6-3; EMPTY="(async()=>{const idb=indexedDB.databases?(await inde
+        0.1m wait          E=/Users/hosoo/.studio-zero/specimens/2026-11-21/toesa-check/.sz/evidence/first-pass/v6-3; sleep 5; tail -5 $E/device/run.txt $E/ops/run.txt; ls $E/de
+close:first-pass         03:14-03:14 wall=   0.7m model=   0.4m tools=   0.3m | 
+        0.3m git           echo "- 2026-11-22 첫 판(\`first-pass\`)을 닫음: 주장 20개 중 18개 증명, 거짓 0, 확인 못 함 2. 이전 약속은 없어 다시 본 것 0(깨짐 0, 바뀜 0). 주인이 정할 것: as-drawn — 그림(prototype.html)과 
+        0.0m contract      sz-eyes evidence first-pass 2>&1 | tail -5 && sz-eyes contract close first-pass 2>&1 | tail -30
+        0.0m contract      sz-eyes worth show 2>&1 | head -5; sz-eyes backlog 2>&1 | head -60; tail -3 .sz/progress.md; grep -o '"id": *"[^"]*"\|"status": *"[^"]*"\|"heldFor[^,]
+        0.0m other command sz-eyes worth show 2>&1 | sed -n 1,60p
+        0.0m other tool    
+   all agents, minutes: (model):185 other command:70 flows:27 wait:20 contract:7 look:6 tests:3 git:1
+
