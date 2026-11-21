@@ -37,8 +37,9 @@ under a heading that says it is not the owner's.
 
 1. **Eyes that did not run cost forty minutes and were worked round four different ways.** The copy of the plugin
    made for the run (a new git worktree) had no dependencies installed; every `sz-eyes` command ended with a module
-   error and exit 1. The plan noticed in its first minute and ran another checkout's `sz-eyes` in its place. The
-   designer did the same and measured its 31 drawings with it. The measurer refused to (three times: "not
+   error and exit 1. The plan noticed in its first minute and ran another checkout's `sz-eyes` in its place, telling
+   whoever came next to do the same. The designer measured its 31 drawings and mended six findings (its return does
+   not say with which copy). The measurer refused to (three times: "not
    measured, so none counts as holding"), which was right. One fixer wrote a module-loader shim to run the broken
    copy's code against the other copy's packages. A measurer deleted the pictures already taken before a sweep that
    then did not run. And the stop hook read the command's exit 1 as claims owed and held the session back with an
