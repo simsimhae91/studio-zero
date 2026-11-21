@@ -128,6 +128,24 @@ On the branch `phone-again`:
   A look: 8.4 to 10 seconds before, 1.0 to 1.2 held; the first on a simulator 12 to 13, which starts the holder
   and makes the check. The same look printed the same thing both ways.
 
+  The same on a real check, the diet app's every-screen fit check (24 screens looked at, six fields typed into
+  with the keyboard up), one simulator, the Mac otherwise quiet, the same app and the same commit:
+
+  | | wall-clock | result |
+  |---|---|---|
+  | a driver started for every command (as it was) | 980 seconds | 24 screens, 0 findings |
+  | the driver held | 596 seconds | 24 screens, 0 findings |
+
+  Less than the loop's sixfold: the check has waits of its own (the app's launches, the links it opens, the people
+  it puts into the database), and a flow still starts a Java process each time, 8.6 seconds against 11.5. At the
+  third look of the run the same check took 1,591 seconds beside another simulator.
+
+  The first time it ran held, its first flow was lost to "iOS driver not ready in time" after 132 seconds. The
+  cause was in the new code: whoever asked for a holder started its process, looked 300ms later for the mark the
+  holder writes, saw none yet, and started a driver of its own beside the one that was coming. Mended (`9aa5bea`):
+  the one who starts a holder writes the mark first and waits for the holder to take it over; the 596 seconds above
+  are with that.
+
   Seen while measuring: after every `maestro` command that started a driver, the `xcodebuild` it had started
   stayed for about a minute and ran `simctl diagnose`, because its test runner had been ended. Fifty commands a
   check left a standing crowd of those, which is where the 810 seconds of processor time of one fit check went.
