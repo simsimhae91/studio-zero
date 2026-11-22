@@ -65,6 +65,7 @@ sz-eyes ios room                                    # how many simulators this M
 sz-eyes room                                        # gigabytes free on the disk the project is on (first line); ask before a build that writes many
 sz-eyes ios install <udid> <path.app> --bundle-id <id> [--metro <port>]
 sz-eyes ios flow <udid> <flow.yaml> --out <folder> --video      # Maestro; the project's own flow, or one you write for this claim. The film stays out of git (the folder ignores *.mp4); the strip of frames beside it, <name>-film.png, is what a claim's evidence names
+                                                                # exit 4 with "not the product's": Maestro asked for the screen before the app it had just started was up, after the flow had pressed or typed. Put the product back where the flow starts and run it again (a flow that had only started, stopped and read is run again by itself)
 sz-eyes ios look <udid> --out <folder> --name <state>           # what is on the screen, and what was measured; --json for a flow
 sz-eyes ios rest <udid> --erase                     # when done: a booted simulator holds gigabytes
 ```

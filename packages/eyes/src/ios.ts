@@ -481,6 +481,40 @@ export interface FlowResult {
   /** Frames of the video side by side, when one was made and ffmpeg is here. */
   filmstrip: string | null;
   log: string;
+  /**
+   * Set when a run stopped because Maestro asked for the screen before the app it had just started was up, and the
+   * app was running a moment later: the step it stopped at, whether the flow was then run again from its start,
+   * and whether that second run stopped the same way (a machine too busy for the app to start in time).
+   */
+  early?: { step: string; again: boolean; both?: boolean };
+}
+
+/** Maestro's words for an app that was not running when it asked for its screen: a crash, or an app still starting. */
+const NOT_RUNNING = /App crashed or stopped while executing flow/;
+/** Steps that change nothing in the product: after only these, a flow can be run again from its start as it is. */
+const ONLY_READS = /^(?:Launch app|Stop |Assert |Take screenshot|Wait for animation)/;
+
+/**
+ * Maestro starts an app and asks for its screen without waiting for the app to be up; when the app answers late
+ * the driver says "Application ... is not running" and Maestro ends the flow as a crash. (Before a simulator's
+ * driver was held this stopped 3 runs of 4 of a flow that starts its app again. With it held: none of 20 flows
+ * on one simulator, 1 of 20 on two simulators at once, 2026-11-22; that app was running, and left no crash.)
+ * A stop of that kind is told apart from a real one by asking the simulator: an app that is running a moment
+ * later had not crashed.
+ */
+async function askedTooEarly(udid: string, flow: string, result: FlowResult, run: CommandRunner): Promise<{ step: string; onlyRead: boolean } | null> {
+  if (result.passed || !NOT_RUNNING.test(result.log)) return null;
+  const appId = /^appId:\s*["']?([A-Za-z0-9._-]+)["']?\s*$/m.exec(readFileSync(flow, 'utf8'))?.[1];
+  const at = result.steps.findIndex((step) => step.state === 'failed');
+  if (!appId || at === -1) return null;
+  for (let tries = 0; tries < 5; tries++) {
+    const listed = await run('xcrun', ['simctl', 'spawn', udid, 'launchctl', 'list'], { timeoutMs: 20_000 }).catch(() => null);
+    // "<pid> <status> UIKitApplication:<bundle id>[...]": a dash for the pid when it is not running.
+    const line = listed?.stdout.split('\n').find((text) => text.includes(`UIKitApplication:${appId}[`));
+    if (line && /^\s*\d+\s/.test(line)) return { step: result.steps[at]!.step, onlyRead: result.steps.slice(0, at).every((step) => ONLY_READS.test(step.step)) };
+    await new Promise((done) => setTimeout(done, 400));
+  }
+  return null;
 }
 
 /**
@@ -489,6 +523,29 @@ export interface FlowResult {
  * and with `video` the screen is recorded while it runs.
  */
 export async function runFlow(udid: string, flow: string, opts: { out: string; env?: Record<string, string>; video?: boolean; timeoutSec?: number; run?: CommandRunner; held?: Held | null }): Promise<FlowResult> {
+  const first = await flowOnce(udid, flow, opts);
+  const early = await askedTooEarly(udid, flow, first, opts.run ?? runCommand);
+  if (!early) return first;
+  // A flow that had only started, stopped and read is run again as it is. One that had pressed or typed has left
+  // the product somewhere its start does not expect: that is said, and whoever runs it puts the product back.
+  if (!early.onlyRead) return { ...first, early: { step: early.step, again: false } };
+  const second = await flowOnce(udid, flow, opts);
+  // The second run is the result. Stopped the same way again, it is still not the product's; stopped for a reason
+  // of its own, it is a stop like any other, and only the fact that there were two runs is kept.
+  const sameAgain = second.passed ? null : await askedTooEarly(udid, flow, second, opts.run ?? runCommand);
+  return { ...second, seconds: first.seconds + second.seconds, early: { step: early.step, again: true, ...(sameAgain ? { both: true } : {}) } };
+}
+
+/**
+ * What Maestro keeps of a run for looking into it afterwards (its log, the steps as it read them, a picture of the
+ * screen where it stopped) goes into the run's own folder. Left to itself Maestro makes a new folder for every run
+ * under the home folder and never removes one: 2,470 folders, 735 MB, on this harness's first machine by
+ * 2026-11-22. In the run's folder it is evidence like the rest, and goes with what nothing names when the
+ * milestone closes.
+ */
+const DEBUG_HERE = (out: string): string[] => ['--debug-output', join(out, 'maestro'), '--flatten-debug-output'];
+
+async function flowOnce(udid: string, flow: string, opts: { out: string; env?: Record<string, string>; video?: boolean; timeoutSec?: number; run?: CommandRunner; held?: Held | null }): Promise<FlowResult> {
   const run = opts.run ?? runCommand;
   if (!existsSync(flow)) throw new EyesError(`${flow}: no such flow`);
   if (!isAbsolute(opts.out)) throw new EyesError('the folder for what is seen must be an absolute path');
@@ -502,7 +559,7 @@ export async function runFlow(udid: string, flow: string, opts: { out: string; e
   // On the held driver's port the flow finds its driver up: it starts none, and waits for none to start.
   const held = await heldFor(udid, opts);
   if (held) touchHeld(held);
-  const res = await run('maestro', [...(await ownDriver(udid, held)), 'test', ...(held ? ['--no-reinstall-driver'] : []), ...Object.entries(opts.env ?? {}).flatMap(([key, value]) => ['-e', `${key}=${value}`]), copy], { cwd: dirname(copy), timeoutMs: (opts.timeoutSec ?? 600) * 1000, maxOutputBytes: 8 * 1024 * 1024 });
+  const res = await run('maestro', [...(await ownDriver(udid, held)), 'test', ...(held ? ['--no-reinstall-driver'] : []), ...Object.entries(opts.env ?? {}).flatMap(([key, value]) => ['-e', `${key}=${value}`]), ...DEBUG_HERE(opts.out), copy], { cwd: dirname(copy), timeoutMs: (opts.timeoutSec ?? 600) * 1000, maxOutputBytes: 8 * 1024 * 1024 });
   if (held) touchHeld(held);
   if (recorder) {
     // The recorder writes its file when it is interrupted, not when it is killed.

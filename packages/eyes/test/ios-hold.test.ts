@@ -182,6 +182,8 @@ test('a look and a flow on a simulator whose driver is held use that driver, and
     const flow = calls.find((call) => call[0] === 'maestro')!;
     assert.deepEqual(flow.slice(0, 7), ['maestro', '--driver-host-port', String(port), '--device', 'SIM-9', 'test', '--no-reinstall-driver']);
     assert.deepEqual(flow.slice(7, 9), ['-e', 'WHO=me']);
+    // What Maestro keeps of the run goes into the run's folder, not into a new folder under the home folder each time.
+    assert.deepEqual(flow.slice(9, 12), ['--debug-output', join(dir, 'out', 'maestro'), '--flatten-debug-output']);
     assert.equal(result.passed, true);
 
     // A driver that does not answer: the look asks Maestro itself, on the held port, as it did before there was a holder.
@@ -277,5 +279,81 @@ test("a running flow's log folder that another Maestro deleted is put back, and 
     assert.equal(existsSync(running), false);
   } finally {
     rmSync(logs, { recursive: true, force: true });
+  }
+});
+
+test('a flow stopped because Maestro asked for the screen before the app was up is told apart from a crash, and run again only when it had changed nothing', async () => {
+  // 2026-11-22, two simulators at once, 20 flows that start their app again: one stopped at the first step after
+  // `launchApp` with the driver's "Application ... is not running", which Maestro ends as a crash. The app was
+  // running and had left no crash. Before a simulator's driver was held, 3 runs of 4 stopped so.
+  const { runFlow } = await import('../src/ios.ts');
+  const dir = mkdtempSync(join(tmpdir(), 'eyes-early-'));
+  const held = { udid: 'SIM-9', pid: process.pid, port: 1, door: 1, size: { w: 402, h: 874 }, agrees: true, at: '' };
+  const crashed = 'App crashed or stopped while executing flow, please check diagnostic logs: ~/Library/Logs/DiagnosticReports directory\n';
+  const read = 'Launch app "a.b"... COMPLETED\nAssert that "홈" is visible... COMPLETED\nStop a.b... COMPLETED\nLaunch app "a.b"... COMPLETED\n';
+  const up = '4821\t0\tUIKitApplication:a.b[1a2b][rb-legacy]\n-\t0\tUIKitApplication:c.d[9f][rb-legacy]\n';
+  const down = '-\t0\tUIKitApplication:a.b[1a2b][rb-legacy]\n';
+  /** A `maestro` that answers each run with the next of `runs`, and a simulator whose list of apps is `apps`. */
+  const machine = (runs: { code: number; out: string }[], apps: string) => {
+    const calls: string[][] = [];
+    let nth = 0;
+    const run = (async (file: string, args: string[]) => {
+      calls.push([file, ...args]);
+      if (file === 'maestro') { const now = runs[Math.min(nth++, runs.length - 1)]!; return { exitCode: now.code, stdout: now.out, stderr: '', timedOut: false }; }
+      return { exitCode: 0, stdout: args.includes('launchctl') ? apps : '', stderr: '', timedOut: false };
+    }) as never;
+    return { run, flows: () => calls.filter((call) => call[0] === 'maestro').length, asked: () => calls.filter((call) => call.includes('launchctl')).length };
+  };
+  try {
+    writeFileSync(join(dir, 'again.yaml'), 'appId: a.b\n---\n- launchApp\n');
+    const flow = join(dir, 'again.yaml');
+    const early = { code: 1, out: `${read}Assert that "홈" is visible... FAILED\n\n${crashed}` };
+    const passes = { code: 0, out: `${read}Assert that "홈" is visible... COMPLETED\n` };
+
+    // It had only started, stopped and read, and the app is running: the flow is run again as it is, and says so.
+    const one = machine([early, passes], up);
+    const again = await runFlow('SIM-9', flow, { out: join(dir, 'out-1'), run: one.run, held });
+    assert.equal(again.passed, true);
+    assert.deepEqual(again.early, { step: 'Assert that "홈" is visible', again: true });
+    assert.equal(one.flows(), 2);
+
+    // Run again, it stops the same way (a machine kept busy: 3 of 5 such stops, 2026-11-22, with ten idle loops
+    // beside two simulators): still not the product's. Run again, it stops for a reason of its own: a stop like
+    // any other, with the fact that there were two runs.
+    const busy = machine([early, early], up);
+    const both = await runFlow('SIM-9', flow, { out: join(dir, 'out-1b'), run: busy.run, held });
+    assert.equal(both.passed, false);
+    assert.deepEqual(both.early, { step: 'Assert that "홈" is visible', again: true, both: true });
+    assert.equal(busy.flows(), 2, 'twice and no more');
+    const own = machine([early, { code: 1, out: `${read}Assert that "홈" is visible... FAILED\n\nAssertion is false: "홈" is visible\n` }], up);
+    const second = await runFlow('SIM-9', flow, { out: join(dir, 'out-1c'), run: own.run, held });
+    assert.equal(second.passed, false);
+    assert.deepEqual(second.early, { step: 'Assert that "홈" is visible', again: true });
+    assert.match(second.failed!, /Assertion is false/);
+
+    // It had pressed something before: it is not run again here, and the result says whose stop it was.
+    const pressed = { code: 1, out: `Launch app "a.b"... COMPLETED\nTap on "저장"... COMPLETED\nStop a.b... COMPLETED\nLaunch app "a.b"... COMPLETED\nAssert that "홈" is visible... FAILED\n\n${crashed}` };
+    const two = machine([pressed, passes], up);
+    const said = await runFlow('SIM-9', flow, { out: join(dir, 'out-2'), run: two.run, held });
+    assert.equal(said.passed, false);
+    assert.deepEqual(said.early, { step: 'Assert that "홈" is visible', again: false });
+    assert.equal(two.flows(), 1);
+
+    // The app is not running a moment later: it stopped, and that is the product's. Nothing is run again.
+    const three = machine([early, passes], down);
+    const real = await runFlow('SIM-9', flow, { out: join(dir, 'out-3'), run: three.run, held });
+    assert.equal(real.passed, false);
+    assert.equal(real.early, undefined);
+    assert.equal(three.flows(), 1);
+    assert.equal(three.asked(), 5, 'the simulator is asked for two seconds before the stop is taken for real');
+
+    // A stop of another kind is nobody's question to the simulator.
+    const four = machine([{ code: 1, out: 'Launch app "a.b"... COMPLETED\nTap on "저장"... FAILED\n\nElement not found: Text matching regex: 저장\n' }], up);
+    const other = await runFlow('SIM-9', flow, { out: join(dir, 'out-4'), run: four.run, held });
+    assert.equal(other.passed, false);
+    assert.equal(other.early, undefined);
+    assert.equal(four.asked(), 0);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
   }
 });

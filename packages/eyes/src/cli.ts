@@ -109,6 +109,11 @@ const USAGE = `sz-eyes: launch what was built, look at it, operate it, and put w
         put a built app on it, fresh (a React Native debug build is told which packager to load from)
   sz-eyes ios flow <udid> <flow.yaml> --out <folder> [--video] [-e KEY=VALUE]...
         run a Maestro flow from a copy that cannot write outside <folder>; says each step, keeps screenshots and a film
+        (the film stays out of git; the strip of frames beside it is what a claim names). A stop where Maestro
+        asked for the screen before the app it had just started was up (the app is running a moment later) is
+        told apart from a crash: a flow that had only started, stopped and read is run again by itself, and one
+        that had pressed or typed exits 4 and says so: put the product back where the flow starts, run it again
+        (exit 4 also when the second run stopped the same way: the machine is too busy, run it again later)
   sz-eyes ios look <udid> [--out <folder>] [--name <n>] [--json]
         what is on its screen: the words and ids in the screen's tree; the words read in a picture of it (what a
         person sees: the tree also holds what is behind a fixed bar or scrolled out of sight); the fields, with
@@ -778,11 +783,18 @@ async function main(argv: string[]): Promise<number> {
       const result = await runFlow(udid, resolve(a.words[1]), { out: resolve(a.one('--out')!), env, video: a.has('--video') });
       out(`${result.passed ? 'PASSED' : 'FAILED'} ${basename(result.flow)} in ${result.seconds}s, ${result.steps.filter((s) => s.state === 'completed').length} of ${result.steps.length} steps completed`);
       if (result.failed) out(`stopped at: ${result.failed}`);
+      // Whose stop it was, in a line: a verifier is not to find it out again from Maestro's log.
+      const twice = result.early?.again ? `the first run stopped at "${result.early.step}" because Maestro asked for the screen before the app it had just started was up (the app was running a moment later: no crash). The flow had only started, stopped and read, so it was run again from its start` : '';
+      if (twice && result.passed) out(`run twice: ${twice}; what is above is the second run.`);
+      if (twice && !result.passed && !result.early!.both) out(`run twice: ${twice}; the second run, above, stopped for a reason of its own.`);
+      if (twice && result.early!.both) out(`not the product's: ${twice}, and the second run stopped the same way. The machine is too busy for the app to start before Maestro asks: run the flow again when less is running beside it. (exit 4)`);
+      if (result.early && !result.early.again) out(`not the product's: Maestro asked for the screen before the app it had just started was up (the app was running a moment later: no crash). The flow had already pressed or typed before that, so it was not run again here: put the product back where the flow starts and run it again. (exit 4)`);
       if (result.screenshots.length > 0) out(`screenshots:\n${result.screenshots.map((file) => `  ${file}`).join('\n')}`);
       if (result.filmstrip) out(`film: ${result.filmstrip}`);
       if (result.video) out(`video: ${result.video}`);
       if (!result.passed) out(`\nthe end of Maestro's own words:\n${result.log.split('\n').slice(-25).join('\n')}`);
-      return result.passed ? 0 : 1;
+      // 4: the stop was Maestro's, not the product's, and the flow is to be run again by whoever ran it.
+      return result.passed ? 0 : result.early && (!result.early.again || result.early.both) ? 4 : 1;
     }
     if (command === 'look') {
       const folder = a.one('--out') ? resolve(a.one('--out')!) : null;
