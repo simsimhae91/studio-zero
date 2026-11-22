@@ -439,14 +439,23 @@ test('a prototype the owner said yes to is what the first pass is planned from, 
   const planned = prompt('plan');
   assert.match(planned, /the screens are planned \(`\.sz\/plan\/frame\.md` and one file a screen under `\.sz\/plan\/screens\/`\) and drawn \(`\.sz\/design\/prototype\.html`; `\.sz\/design\/direction\.md` ends with what the builder needs: tokens, parts, each screen's parts and address\)/);
   assert.match(planned, /The spec is cut from them and does not decide again what they decided/);
-  assert.match(planned, /every screen of the plan built as drawn, one claim shown by a look \(each built screen beside its picture under `\.sz\/design\/shots\/`: the same content in the same order, made of the same parts, in the same tokens\), and the claim about every screen at its limits/);
+  assert.match(planned, /every screen of the plan built as drawn, one claim shown by a look \(each built screen beside its picture under `\.sz\/design\/shots\/`: the same content in the same order, made of the same parts, in the same tokens\)/);
+  // 2026-11-22: worded without its exception, the claim was shown false in three first passes of one product, could
+  // not be made true by a fixer, and was set aside for the owner by a ruling; what no claim required stayed unlike.
+  assert.match(planned, /in the same tokens\), worded with its one exception, "except where another claim of this contract requires otherwise": said of every screen and nothing more, it cannot be true beside a claim that asks for what the drawing does not have \(the words of a form the law gives, a figure its source gives\); and the claim about every screen at its limits/);
   const builder = prompt('build:m1');
   assert.match(builder, /The look first, and it is settled[\s\S]*do not settle it again/);
   assert.match(builder, /`\.sz\/design\/direction\.md` ends with what you need \(빌더에게: the tokens, the parts, each screen's parts and its address in the prototype\)/, 'the first builder is handed the design\'s direction');
   assert.match(builder, /Carry the prototype's tokens and parts: for a web product its markup and CSS as they are; for a phone app the tokens, the parts and each screen's order, written again in the toolkit/);
   assert.match(builder, /`sz:taste` is for what the design leaves open/);
   assert.doesNotMatch(builder, /The look first \(load `sz:taste`/);
-  assert.match(prompt('verify:m1'), /take a picture of each built screen the way `sz-eyes web sweep` does[\s\S]*set it beside its drawing[\s\S]*A difference in content, order, parts or tokens is that claim shown false, with the screen named/);
+  const look = prompt('verify:m1');
+  assert.match(look, /take a picture of each built screen the way `sz-eyes web sweep` does[\s\S]*set it beside its drawing/);
+  // What another claim requires stands, and is listed for the owner, who said yes to the drawing.
+  assert.match(look, /For every difference in content, order, parts or tokens, read the contract's other claims\. Where one of them requires what the built screen has[\s\S]*the difference stands: write each, with its screen and the claim that requires it, into a file under the contract's evidence folder and name that file as this claim's evidence/);
+  // What no claim requires is the claim shown false, every one of them named: that list is what gets mended.
+  assert.match(look, /A difference that no claim requires is this claim shown false: name every one with its screen, not the first, because whoever mends them is handed the whole list/);
+  assert.doesNotMatch(look, /A difference in content, order, parts or tokens is that claim shown false, with the screen named/);
 
   // A plan with no word on the design is built as before: no drawing to carry, and none to be held to.
   const plain = await run({ request: 'x' }, { plan: () => ({ mode: 'new', summary: 's', milestones: [firstPass] }), build: built, verify: allProven, close: closed });
