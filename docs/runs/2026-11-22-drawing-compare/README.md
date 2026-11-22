@@ -175,12 +175,76 @@ Also seen: the two planners differed. The control's took the wage rule from its 
 drawing's example to 63 days; the compared run's kept the drawing's 77. Both products were then shown wrong
 about the rule in other cases.
 
+## A confirming run on everything, and it did not close either
+
+On the owner's word ("지금 돌리면 7시 전에 끝나니까. 합시다! 하고 문제없으면 병합 푸시 합시다.") the first pass was
+built once more from the same commit with the branch as it stood after everything above (`710dce3`), to its end
+(`run-arm-c.sh`, `c-confirming/`).
+
+| Stage | Minutes | What it returned |
+|---|---|---|
+| plan | 13.2 | 20 claims; the as-drawn claim ends "이 계약의 다른 주장이 달리 요구하는 곳만 빼고" |
+| build | 73.5 | all screens; 13 places left unlike the drawing, each with a claim; one frozen check disputed |
+| ruling on that check | 3.8 | the command that runs the rule test corrected |
+| first look (five: 34, 36, 37, 38, 42) | 42.1 | 6 proven, 13 false, 1 the owner's |
+| fix 1 | 30.1 | 13 mends listed; `criteria` and `as-drawn` cannot be |
+| ruling | 18.0 | both set aside for the owner |
+| second look (three) | 18.6 | 7 false |
+| fix 2 | 30.2 | 8 mends listed |
+| third look (three) | 20.0 | 1 false (`export`) |
+| fix 3 | 16.9 | 1 mended |
+| fourth look (three) | 21.3 | 3 false |
+| ruling, close | 4.6, 0.7 | the product is wrong in all three; the contract stays open |
+| **request to the end** | **297** | 14 proven, 3 false, 2 set aside, 1 the owner's; 117.50 dollars at list prices |
+
+Twenty-three agents, 1.50 million output tokens, 1,687 tool calls.
+
+**Each piece changed today did what it was changed to do**, now inside a whole run:
+
+- The plan worded the as-drawn claim with its exception.
+- The builder set its screens beside the drawing and returned thirteen places.
+- The verifier of the as-drawn claim found 7 of 27 screens the same, listed eleven differences that no claim
+  requires, and wrote those a claim requires into a file, with the claim (`c-confirming/as-drawn-differences-first-look.txt`).
+  The fixer mended five of the eleven.
+- A fixer said of a frozen flow that it presses words the source refuses ("30일 넘게" where 별표 2 says
+  "30일 이상") and changed nothing for it; the ruling set that claim aside.
+- The close at low effort did its steps in 0.7 minutes.
+
+**And the pass stayed open, for reasons none of them touch.**
+
+1. *Every look hunts on every claim, so a pass closes only when a look finds nothing new anywhere.* The third
+   look had one claim false. The fourth found three: a new case of the wage rule, which the third look had
+   proven (a payday on the 14th puts a month outside the calendar the screen offers); a new case of the export
+   (four paragraphs in each box of the statement print on two pages); and a fault the third fix had put in (a
+   transparent underline that measures as unreadable). All three are real. With twenty claims each tried anew by
+   a verifier told to break them, the look that finds nothing may not come within four fixes. The first run
+   closed because such cases were written down as noticed. Whether a claim proven at one look is hunted again
+   at the next, or shown again by its own check only, is the choice that decides this, and it trades faults
+   found for a pass that closes: the owner's.
+2. *The as-drawn claim was set aside again, by a new cause.* Five differences were mended; four of the six left
+   are held by flows that other verifiers wrote during the same first look, on the product as built, and froze
+   (a flow asks for a `.cite` part in every step, taps "증빙 목록", types into "답을 받을 날", reads "요청한 날,
+   이직일"). Mending the screen to the drawing would stop those flows. One more is the source's (1350 is a paid
+   line, the drawing says free), and one was no difference.
+3. *A frozen flow that only presses the old words was set aside, where correcting the press would have done.*
+   The arbiter's own rules let it correct how a check presses or reads; the prompt of the ruling after a fix
+   forbids changing any flow, so it had only "set aside" to choose. Today's new option made that the outcome
+   for `criteria`: one word, for the owner to judge.
+
+Not changed. 2 and 3 are one mend: at the ruling after a fix, let the arbiter correct how a frozen flow presses
+or reads when a mend by a source or by the drawing changed the words, as its rules already allow before a look.
+It needs to be tried on a run's state before it is taken, and 1 needs the owner's word.
+
+Also: the third fixer started the product at 03:09 and left it running; it was found after the run and ended.
+A run does not look for what its agents left.
+
 ## What ran in a whole run for the first time
 
 - The close at low effort with the finishing text (`038cbbe`): all its steps, 0.9 minutes, the disk's room
   returned. Nothing to compare it with: no closer had left a step out before either.
 - The disk was asked at the plan and at the close (1,763 GB on the external disk: the gate had nothing to do).
-- Evidence was not pruned: the contract did not close, and an open contract keeps everything (839 MB).
+- Evidence was not pruned in either whole run: neither contract closed, and an open contract keeps everything
+  (839 MB and 1.7 GB).
 - The audit's corrections (`ed9867b`): no fault traced to them in either run.
 
 ## Not shown
@@ -192,8 +256,8 @@ about the rule in other cases.
 
 ## Left on the machine
 
-`/Volumes/DEV-SSD/sz-scratch.noindex/drawing-compare/` (3.2 GB): the two copies (`arm-a` stopped after its first
-look, `arm-b` as its run left it, contract open), the evidence kept at the builder's return and at the end of
+`/Volumes/DEV-SSD/sz-scratch.noindex/drawing-compare/`: the three copies (`arm-a` stopped after its first
+look, `arm-b` and `arm-c` as their runs left them, contracts open), the evidence kept at the builder's return and at the end of
 each first look (`snap-a`, `snap-b`), the looks the word comparison was made from, the two copies of the
 one-verifier test, and the session records of the four headless sessions (`sessions.tar.gz`). The owner may
 delete the folder; everything this record cites is copied here. Nothing of it is running.

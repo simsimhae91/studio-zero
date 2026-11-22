@@ -1,0 +1,52 @@
+== wf_43f83111-ac1 in -Volumes-DEV-SSD-sz-scratch-noindex-drawing-compare-arm-c
+plan                   claude-opus-5-5    eff=xhigh  adv=claude-opus-5-5  22:54:54-23:08:05   13.2m turns=35   out=70257   think=37747  fresh_in=223541   cache_read=4678049    calls=37   gap=118s  Bash:27 Skill:4 Read:2 Write:2 Edit:1 StructuredOutput:1
+build:first-pass       claude-opus-5-5    eff=high   adv=claude-opus-5-5  23:08:06-00:21:38   73.5m turns=179  out=251648  think=73234  fresh_in=567973   cache_read=67798316   calls=184  gap=227s  Bash:151 Read:30 Skill:2 StructuredOutput:1
+arbiter:first-pass     claude-opus-5-5    eff=xhigh  adv=claude-opus-5-5  00:21:38-00:25:28    3.8m turns=15   out=6623    think=2611   fresh_in=50209    cache_read=583771     calls=15   gap=121s  Bash:13 Edit:1 StructuredOutput:1
+verify:first-pass:1of5 claude-opus-5-5    eff=xhigh  adv=claude-opus-5-5  00:25:28-01:01:39   36.2m turns=82   out=91404   think=48336  fresh_in=271089   cache_read=14592403   calls=84   gap=203s  Bash:74 Read:8 Skill:1 StructuredOutput:1
+verify:first-pass:2of5 claude-opus-5-5    eff=xhigh  adv=claude-opus-5-5  00:25:32-01:07:37   42.1m turns=65   out=91954   think=46912  fresh_in=260248   cache_read=11672337   calls=71   gap=205s  Bash:56 Read:13 Skill:1 StructuredOutput:1
+verify:first-pass:5of5 claude-opus-5-5    eff=xhigh  adv=claude-opus-5-5  00:25:32-01:03:08   37.6m turns=105  out=86647   think=46550  fresh_in=426404   cache_read=18969701   calls=111  gap=449s  Bash:94 Read:15 Skill:1 StructuredOutput:1
+verify:first-pass:4of5 claude-opus-5-5    eff=xhigh  adv=claude-opus-5-5  00:25:32-01:02:43   37.2m turns=100  out=104705  think=50549  fresh_in=293652   cache_read=18368070   calls=113  gap=216s  Bash:91 Read:20 Skill:1 StructuredOutput:1
+verify:first-pass:3of5 claude-opus-5-5    eff=xhigh  adv=claude-opus-5-5  00:25:32-00:59:05   33.6m turns=93   out=103425  think=41925  fresh_in=261727   cache_read=15281835   calls=98   gap=167s  Bash:87 Read:9 Skill:1 StructuredOutput:1
+fix:first-pass:1       claude-opus-5-5    eff=high   adv=claude-opus-5-5  01:07:37-01:37:41   30.1m turns=98   out=66941   think=27414  fresh_in=327379   cache_read=21838120   calls=107  gap=228s  Bash:93 Read:11 Skill:1 Write:1 StructuredOutput:1
+rule:first-pass        claude-opus-5-5    eff=xhigh  adv=claude-opus-5-5  01:37:41-01:55:40   18.0m turns=51   out=42462   think=27072  fresh_in=178856   cache_read=6372308    calls=53   gap=213s  Bash:48 Read:3 Skill:1 StructuredOutput:1
+verify:first-pass:again:1of3 claude-opus-5-5    eff=xhigh  adv=claude-opus-5-5  01:55:40-02:13:52   18.2m turns=93   out=72518   think=41848  fresh_in=221643   cache_read=13788488   calls=97   gap=75s  Bash:92 Read:3 Skill:1 StructuredOutput:1
+verify:first-pass:again:3of3 claude-opus-5-5    eff=xhigh  adv=claude-opus-5-5  01:55:41-02:14:14   18.6m turns=78   out=51865   think=22154  fresh_in=190428   cache_read=10764339   calls=86   gap=197s  Bash:73 Read:11 Skill:1 StructuredOutput:1
+verify:first-pass:again:2of3 claude-opus-5-5    eff=xhigh  adv=claude-opus-5-5  01:55:41-02:11:03   15.4m turns=74   out=48807   think=21399  fresh_in=189118   cache_read=9961639    calls=77   gap=63s  Bash:69 Read:6 Skill:1 StructuredOutput:1
+fix:first-pass:2       claude-opus-5-5    eff=high   adv=claude-opus-5-5  02:14:14-02:44:24   30.2m turns=77   out=61550   think=29095  fresh_in=484900   cache_read=13929117   calls=78   gap=601s  Bash:72 Read:3 Write:1 ToolSearch:1 StructuredOutput:1
+verify:first-pass:again:1of3 claude-opus-5-5    eff=xhigh  adv=claude-opus-5-5  02:44:24-03:04:27   20.0m turns=67   out=53865   think=21846  fresh_in=193593   cache_read=8842979    calls=70   gap=260s  Bash:65 Read:3 Skill:1 StructuredOutput:1
+verify:first-pass:again:3of3 claude-opus-5-5    eff=xhigh  adv=claude-opus-5-5  02:44:28-03:02:28   18.0m turns=66   out=48710   think=19686  fresh_in=195074   cache_read=9105849    calls=70   gap=120s  Bash:64 Read:4 Skill:1 StructuredOutput:1
+verify:first-pass:again:2of3 claude-opus-5-5    eff=xhigh  adv=claude-opus-5-5  02:44:28-02:58:00   13.5m turns=72   out=47064   think=21682  fresh_in=180959   cache_read=9322195    calls=76   gap=83s  Bash:69 Read:5 Skill:1 StructuredOutput:1
+fix:first-pass:3       claude-opus-5-5    eff=high   adv=claude-opus-5-5  03:04:27-03:21:21   16.9m turns=33   out=27834   think=13240  fresh_in=239049   cache_read=2689625    calls=34   gap=410s  Bash:30 Read:3 StructuredOutput:1
+verify:first-pass:again:1of3 claude-opus-5-5    eff=xhigh  adv=claude-opus-5-5  03:21:21-03:42:42   21.3m turns=59   out=69482   think=35506  fresh_in=207618   cache_read=7491830    calls=64   gap=207s  Bash:59 Read:3 Skill:1 StructuredOutput:1
+verify:first-pass:again:2of3 claude-opus-5-5    eff=xhigh  adv=claude-opus-5-5  03:21:22-03:31:53   10.5m turns=57   out=40418   think=15820  fresh_in=151546   cache_read=6377475    calls=60   gap=42s  Bash:53 Read:5 Skill:1 StructuredOutput:1
+verify:first-pass:again:3of3 claude-opus-5-5    eff=xhigh  adv=claude-opus-5-5  03:21:22-03:32:59   11.6m turns=54   out=39256   think=18331  fresh_in=153953   cache_read=6134522    calls=61   gap=108s  Bash:57 Read:2 Skill:1 StructuredOutput:1
+rule:first-pass:last   claude-opus-5-5    eff=xhigh  adv=claude-opus-5-5  03:42:42-03:47:19    4.6m turns=35   out=19253   think=10459  fresh_in=107419   cache_read=2731468    calls=37   gap=44s  Bash:33 Read:2 Skill:1 StructuredOutput:1
+close:first-pass       claude-opus-5-5    eff=low    adv=claude-opus-5-5  03:47:19-03:48:00    0.7m turns=4    out=1550    think=71     fresh_in=40560    cache_read=111844     calls=4    gap=24s  Bash:3 StructuredOutput:1
+
+
+== wf_43f83111-ac1 in -Volumes-DEV-SSD-sz-scratch-noindex-drawing-compare-arm-c
+plan                     22:54-23:08 wall=  13.2m model=  12.7m tools=   0.5m | 
+build:first-pass         23:08-00:21 wall=  73.5m model=  40.5m tools=  33.0m | other command:23.2 flows:8.3 tests:0.8
+arbiter:first-pass       00:21-00:25 wall=   3.8m model=   1.6m tools=   2.2m | tests:2.2
+verify:first-pass:1of5   00:25-01:01 wall=  36.2m model=  16.2m tools=  20.0m | flows:19.0
+verify:first-pass:2of5   00:25-01:07 wall=  42.1m model=  14.6m tools=  27.4m | flows:23.4 other command:3.8
+verify:first-pass:5of5   00:25-01:03 wall=  37.6m model=  16.6m tools=  21.0m | wait:10.3 flows:9.0 other command:1.4
+verify:first-pass:4of5   00:25-01:02 wall=  37.2m model=  18.2m tools=  18.9m | flows:11.5 other command:6.5
+verify:first-pass:3of5   00:25-00:59 wall=  33.6m model=  17.5m tools=  16.1m | flows:11.3 wait:3.0 other command:1.7
+fix:first-pass:1         01:07-01:37 wall=  30.1m model=  13.2m tools=  16.9m | other command:13.8 flows:2.5
+rule:first-pass          01:37-01:55 wall=  18.0m model=   7.4m tools=  10.5m | flows:6.7 other command:3.7
+verify:first-pass:again:1of3 01:55-02:13 wall=  18.2m model=  13.5m tools=   4.7m | flows:3.8 other command:0.7
+verify:first-pass:again:3of3 01:55-02:14 wall=  18.6m model=   9.4m tools=   9.1m | other command:6.8 flows:2.0
+verify:first-pass:again:2of3 01:55-02:11 wall=  15.4m model=   8.8m tools=   6.6m | flows:4.8 contract:1.1 other command:0.5
+fix:first-pass:2         02:14-02:44 wall=  30.2m model=  11.3m tools=  18.9m | other command:15.1 wait:3.2
+verify:first-pass:again:1of3 02:44-03:04 wall=  20.0m model=  10.1m tools=  10.0m | other command:8.3 flows:1.1
+verify:first-pass:again:3of3 02:44-03:02 wall=  18.0m model=   9.5m tools=   8.5m | other command:4.5 wait:2.4 flows:1.4
+verify:first-pass:again:2of3 02:44-02:58 wall=  13.5m model=   9.0m tools=   4.5m | flows:3.4 wait:0.6
+fix:first-pass:3         03:04-03:21 wall=  16.9m model=   4.6m tools=  12.3m | tests:6.8 flows:5.3
+verify:first-pass:again:1of3 03:21-03:42 wall=  21.3m model=  10.7m tools=  10.6m | other command:6.2 flows:4.2
+verify:first-pass:again:2of3 03:21-03:31 wall=  10.5m model=   6.8m tools=   3.8m | other command:3.3
+verify:first-pass:again:3of3 03:21-03:32 wall=  11.6m model=   6.5m tools=   5.1m | other command:4.4 flows:0.6
+rule:first-pass:last     03:42-03:47 wall=   4.6m model=   3.4m tools=   1.2m | flows:0.5 other command:0.5
+close:first-pass         03:47-03:48 wall=   0.7m model=   0.3m tools=   0.4m | 
+   all agents, minutes: (model):262 flows:119 other command:106 wait:22 tests:10 contract:4 git:2 read:1
+
