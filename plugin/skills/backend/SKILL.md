@@ -39,7 +39,7 @@ Everything is started on a port from the machine and ended by the id you kept (`
 
 An arm is a service a product's server calls with a key of the owner's: public data (`public-data`), a model reading a picture or a document into fields (`read`), signing in with Kakao and Google (`login-kakao`, `login-google`). Each has a file in `arms/` beside this one: when a product takes it, how the server calls it, its limits, what users are told, how it is proven, and the owner's steps. `sz-eyes arm list` names them.
 
-- The plan names the arms the product takes. Before the build, `sz-eyes arm need <names>`; when it exits 1, put what it prints to the owner, and build nothing that needs the key until it exits 0. A missing key is never worked around with an example.
+- The plan names the arms the product takes. Before the build, `sz-eyes arm need <names>`; when it exits 1, put what it prints to the owner, and build nothing that needs the key until it exits 0 or the owner has said, in their own words, that it may be an example for now (the plan's list of what is not real quotes them). On your own decision a missing key is never worked around with an example.
 - The key lives on the server: `sz-eyes secret run <NAME>=<vault id> -- <launch command>` while developing, the host's secrets when shipped; never in a file, never in what a browser or an app bundle receives.
 
 ## 5. Accounts

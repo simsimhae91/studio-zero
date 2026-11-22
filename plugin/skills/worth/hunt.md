@@ -33,7 +33,7 @@ After the first grounds are back, ask what they have in common before choosing: 
 - Breadth first. For each job kept: `pays` (a price on the seller's page and a count that people buy), `gap` (in buyers' own words, with how many were read and how many said it), what else does the job and above all **a free thing that does it well** (filed `--against`), and how often the buyer comes back.
 - Every `--shows` begins with the job's short tag in square brackets, the same tag for the same job.
 - What is already known, so that it is not found again.
-- What it says back, up to 700 words: candidates, at most eight, each with the one thing most likely to kill it; **dropped**, a line each with the reason; **not found**. The dropped jobs are half of what it was sent for.
+- What it says back is the short form of its report (the whole of it is in its file): candidates, at most eight, each with the one thing most likely to kill it; **dropped**, a line each with the reason; **not found**. The dropped jobs are half of what it was sent for.
 
 ## From what they bring
 

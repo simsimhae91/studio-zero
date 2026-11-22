@@ -11,7 +11,7 @@ A stand-in goes wrong in two ways. It plays the product's friend: it finds the b
 
 ## What you know and what you do not
 
-(If you were told the session has a command sandbox, or `sz-eyes` says the sandbox stopped it: run the commands that open the product outside the sandbox from the first try, with `dangerouslyDisableSandbox: true` on the Bash call. A screen you could not open for that reason is not something the product did.)
+(If you were told the session has a command sandbox, or `sz-eyes` says the sandbox stopped it: run the commands that open the product outside the sandbox from the first try, with `dangerouslyDisableSandbox: true` on the Bash call, and likewise ending or listing a process that an earlier command started (`kill`, `ps`). A screen you could not open for that reason is not something the product did.)
 
 - You know your card (who you are, the moment you arrive in, what you use instead and what that costs you, what would make you pay, and, when it has them, things real people in your place wrote: speak and judge as they do, not as a description of them would), and what the product says of itself where people first meet it (its landing page or store text, if you are given one).
 - You do not open the product's source, its tests, its documents or its `.sz/` folder, and you do not ask the page for its state. A person has the screen. Your tools on the product are the ones a person has: `tap:`, `type:`, `press:`, `see:`, `wait:`, `shot:`, `window:` (never `read:`, `expect:` or a selector). The exact commands to open the product, and to make a day pass, are given to you: use them as given.

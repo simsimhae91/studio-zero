@@ -328,7 +328,7 @@ export function removeOther(folder: string, id: string): void {
 export function setRow(folder: string, row: Partial<Row> & { id: string }, standing: (key: string) => boolean): Row {
   const value = readCase(folder);
   const before = value.rows.find((r) => r.id === row.id);
-  if (!before && (!row.where || !row.need || !row.kind)) throw new Error('a new row says where along the job it is, what a person needs there, and its kind: --where "<...>" --need "<...>" --kind stake|edge|more');
+  if (!before && (!row.where || !row.need || !row.kind)) throw new Error('a new row says where along the job it is, what a person needs there, and its kind: --where "<...>" --need "<...>" --kind stake|must|edge|more');
   const next = Row.parse({ ...before, ...row, has: { ...before?.has, ...row.has } });
   for (const other of Object.keys(next.has)) if (!value.others.some((o) => o.id === other)) throw new Error(`no such thing in the reference class: "${other}". They are: ${value.others.map((o) => o.id).join(', ') || '(none yet: sz-eyes worth other ...)'}`);
   for (const id of next.cites) if (!value.cites.some((c) => c.id === id)) throw new Error(`no quotation ${id} in this case`);

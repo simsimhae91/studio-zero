@@ -664,6 +664,8 @@ test('every agent is told from its first line when the session is sandboxed, an 
   const outside = await run({ request: 'x' }, { ...answers, plan: earlier(false) });
   assert.doesNotMatch(outside.calls.find((c) => c.label === 'build:m2')!.prompt, /This session runs its commands inside a sandbox/);
   assert.match(outside.calls.find((c) => c.label === 'build:m2')!.prompt, /If `sz-eyes` says the session's command sandbox stopped it/);
+  // Where nobody could say whether the session is sandboxed, the line names the same commands as where it is known.
+  assert.match(outside.calls.find((c) => c.label === 'build:m2')!.prompt, /a simulator or Docker outside the sandbox from the first try[\s\S]*and likewise ending or listing a process that an earlier command started \(`kill`, `ps`\)/);
   // The first milestone was closed by an earlier run; one of its claims is the owner's to judge and still open.
   // What this run knows of it is that it is closed, and where its verdicts are: it does not call its claims proven.
   assert.deepEqual(inside.result.milestones[0], { id: 'm1', title: 'title m1', contractId: 'm1', earlier: true, verdicts: 'closed in an earlier run: sz-eyes contract show m1', proven: [], refuted: [], unchecked: [], noticed: [], report: null });

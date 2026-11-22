@@ -7,7 +7,7 @@ description: Use only when the owner asks for it, by the command /sz:tend or in 
 
 The first version is the smaller part of a product's life. After it, things break as the world moves (a dependency, a platform rule, a browser), people use it in ways nobody tried, and what would make it worth more shows only in use. Tending is the regular look that turns all of that into the next pieces of work. It finds and ranks. `sz:work` builds. `sz:feedback` is how the owner steers.
 
-Read `.sz/map.md`, `.sz/spec.md`, `.sz/owner.md`, the last lines of `.sz/progress.md` and `sz-eyes backlog` first. Work from a clone or worktree, on a port taken from the machine (`PORT=$(sz-eyes port)`), and on a copy of the data, never on what people are using. End what you launched by the id you kept, nothing else.
+Read `.sz/map.md`, `.sz/spec.md`, `.sz/owner.md`, the last lines of `.sz/progress.md` and `sz-eyes backlog` first. Work from a clone or worktree, on a port taken from the machine (`PORT=$(sz-eyes port)`), and on a copy of the data. On what people are using, only the live lines of the last release are run, by the `sz:verifier` agent (step 0), and nothing else. End what you launched by the id you kept, nothing else.
 
 ## The look, most certain harm first
 
@@ -19,7 +19,7 @@ Read `.sz/map.md`, `.sz/spec.md`, `.sz/owner.md`, the last lines of `.sz/progres
 5. **The first minute.** Walk it as someone who has never seen it, at phone size, operating it (`sz-eyes web do`, `sz-eyes ios flow`): arriving, doing the one thing, coming back the second time, when there is nothing yet, a wrong input, a request that fails. Read every word. Count the presses to the one thing. Take what `look` measures. Hold what you see against `sz:taste` and against `.sz/owner.md`.
 6. **What it stands on.** Known vulnerabilities and end of life in its dependencies and runtime (the stack's own audit command), platform deadlines (store rules, SDK versions), keys and certificates that run out, and backups: is there one, and has getting the data back from it been tried.
 7. **What slows change.** The check that is slowest or fails at random; the file every change touches; lines of the map that are no longer true.
-   When the question is whether people would pay, or the product is about to ask for money, this step is a trial (`sz:trial`): stand-ins for the people it is for use it the whole way, over several days.
+   When the question is whether people would pay, or the product is about to ask for money, say in one line of the report that `/sz:trial` would have stand-ins for the people it is for use it the whole way, over several days: a trial starts only when the owner asks for one.
 8. **What would make it worth more.** Three proposals at most, each grown from something found above or from the one thing the spec says it must do well, not from a list of features products usually have: what, for whom, what would be true when it is done, why now, and its size.
 
 Keep pictures and logs under `.sz/evidence/tend-<date>/`.

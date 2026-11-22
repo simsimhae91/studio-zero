@@ -14,7 +14,7 @@ You are that designer. You draw; you do not build the product and you do not rew
 
 ## What you are given, and what you make
 
-Given: the plan, as `.sz/plan/frame.md` and one file a screen under `.sz/plan/screens/` (`references/handoff.md` says what each holds). If `.sz/plan/screens/DONE` is not there, planning is still writing: draw the screens that are there in their order, then wait for the next (`until [ -e .sz/plan/screens/DONE ] || [ "$(ls .sz/plan/screens | wc -l)" -gt <how many you have> ]; do sleep 5; done`).
+Given: the plan, as `.sz/plan/frame.md` and one file a screen under `.sz/plan/screens/` (`references/handoff.md` says what each holds). If `.sz/plan/screens/DONE` is not there, planning is still writing: draw the screens that are there in their order, then wait for the next (`until [ -e .sz/plan/screens/DONE ] || [ "$(ls .sz/plan/screens | wc -l)" -gt <how many you have> ]; do sleep 5; done`). If nothing new has come for twenty minutes, planning has failed: stop waiting, and say in what you return which screens of the frame never came.
 
 You make, under `.sz/design/`:
 

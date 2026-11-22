@@ -31,7 +31,7 @@ If you cannot tell which screen or state they mean, do not ask in the abstract. 
 
 ## 3. Make it concrete and say what you think, in one reply
 
-For each thing they said, six lines at most:
+For each thing they said, these, a line each:
 
 - **들은 말**: their words.
 - **이렇게 이해함**: what can be seen: which screen, what is there now with its figure, what will be there.

@@ -57,7 +57,7 @@ for (const { name, contract } of contracts) {
     refuse(
       contract.closedAt
         ? `Contract ${contract.id} is closed: it is the record of what was agreed and shown, and is not edited. A claim of it that should no longer be true is replaced by a new contract (\`sz-eyes contract new ... --supersedes "${contract.id}/<claim>|<why>"\`).`
-        : `Contract ${contract.id} is frozen: it is not edited by hand. A verdict is recorded with \`sz-eyes contract claim\`, by whoever verified it. If a check it names is wrong about how it checks, the sz:arbiter agent settles that; if a claim is wrong about what was asked, stop and tell the owner.`,
+        : `Contract ${contract.id} is frozen: it is not edited by hand. A verdict is recorded with \`sz-eyes contract claim\`, by whoever verified it. If a check it names is wrong about how it checks, the sz:arbiter agent settles that. If a claim states a fact about the world that its source gives otherwise, the sz:arbiter agent sets it aside for the owner and the rest of the work goes on; a claim wrong about what was asked in any other way is the owner's: stop and tell them.`,
     );
   }
   const frozen = (contract.frozen ?? []).filter(under);

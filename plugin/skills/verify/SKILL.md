@@ -10,7 +10,7 @@ A claim is unproven until something shows it. "The code looks right" shows nothi
 
 ## When the session has a command sandbox
 
-The owner may run their sessions with Claude Code's command sandbox on. Nothing that opens a browser, a desktop app, a simulator or Docker can start inside it, and no setting of the sandbox changes that (it was tried). `sz-eyes` says so when that is what stopped it (and exits 3). From then on, in this session and in every agent you start, run these outside the sandbox **from the first try** (`dangerouslyDisableSandbox: true` on the Bash call): every `sz-eyes web`, `sz-eyes electron`, `sz-eyes ios` and `sz-eyes docker` command, `sz-eyes worth cite`, and the project's own flows and tests that open a browser. Starting the product itself, unit tests and everything else stay inside; ending or listing a server that an earlier command started (`kill`, `ps`) does not: inside, the sandbox refuses it. Tell an agent you start that this session is sandboxed, so that it does not lose a try finding out.
+The owner may run their sessions with Claude Code's command sandbox on. Nothing that opens a browser, a desktop app, a simulator or Docker can start inside it, and no setting of the sandbox changes that (it was tried). `sz-eyes` says so when that is what stopped it (and exits 3). From then on, in this session and in every agent you start, run these outside the sandbox **from the first try** (`dangerouslyDisableSandbox: true` on the Bash call): every `sz-eyes web`, `sz-eyes electron`, `sz-eyes ios`, `sz-eyes docker` and `sz-eyes supabase` command, `sz-eyes login relay start`, `sz-eyes worth cite`, `sz-eyes image make` (codex keeps what it makes in `~/.codex`), `sz-eyes image use` with `--size`, and the project's own flows and tests that open a browser. Starting the product itself, unit tests and everything else stay inside; ending or listing a server that an earlier command started (`kill`, `ps`) does not: inside, the sandbox refuses it. Tell an agent you start that this session is sandboxed, so that it does not lose a try finding out.
 
 If the call outside the sandbox is refused, nobody was there to approve it. Stop and tell the owner exactly that, and that looking at the product needs one of three things from them: sessions in auto mode (the unsandboxed call is then reviewed and let through without them), their approval when asked, or the sandbox turned off for this project (`/sandbox`). Do not go on to judge by reading the code instead.
 
@@ -36,7 +36,7 @@ PORT=$(sz-eyes port) <the map's launch command> & pid=$!
 kill $pid
 ```
 
-If the product cannot be told its port, say so as a finding and use the port the map names only when nothing is listening there (`lsof -nP -iTCP:<port> -sTCP:LISTEN` prints nothing). Never end what holds it. Before the first look, make sure it is this product that answers (its own words on the page), not another server on the same number.
+If the product cannot be told its port, say so as a finding and use the port the map names only when nothing is listening there (`lsof -nP -iTCP:<port> -sTCP:LISTEN` prints nothing; in a session with a command sandbox run it outside the sandbox, because inside it sees only what that one command started and prints nothing for another project's server). Never end what holds it. Before the first look, make sure it is this product that answers (its own words on the page), not another server on the same number.
 
 ```
 sz-eyes web look <url> [--size phone|tablet|desktop] [--dark] [--wait "<words>"] --out <folder> --name <state>
@@ -62,7 +62,7 @@ A look waits for the page to load and then, for four seconds at most, for it to 
 ```
 sz-eyes ios spare [--name <n>] [--wait <minutes>]   # the eyes' own simulator; prints its id. Never use one of the owner's. --name: one of its own for work done beside other work
 sz-eyes ios room                                    # how many simulators this Mac holds at once, and which are up
-sz-eyes room                                        # gigabytes free on the disk the project is on (first line); ask before a build that writes many
+sz-eyes room                                        # gigabytes free on the disk the project is on (first line); run it before a build that writes many
 sz-eyes ios install <udid> <path.app> --bundle-id <id> [--metro <port>]
 sz-eyes ios flow <udid> <flow.yaml> --out <folder> --video      # Maestro; the project's own flow, or one you write for this claim. The film stays out of git (the folder ignores *.mp4); the strip of frames beside it, <name>-film.png, is what a claim's evidence names
                                                                 # exit 4 with "not the product's": Maestro asked for the screen before the app it had just started was up, after the flow had pressed or typed. Put the product back where the flow starts and run it again (a flow that had only started, stopped and read is run again by itself)

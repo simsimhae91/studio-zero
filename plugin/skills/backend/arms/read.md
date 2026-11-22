@@ -45,7 +45,7 @@ const ASK = 'Read the estimate in the picture into the schema, amounts in won. A
 ```ts
 import Anthropic from '@anthropic-ai/sdk'; // in an edge function: 'npm:@anthropic-ai/sdk'
 const res = await new Anthropic({ apiKey: env.ANTHROPIC_API_KEY }).messages.create({
-  model: 'claude-sonnet-5-5', max_tokens: 4000,
+  model: 'claude-sonnet-5-5', max_tokens: 16000, // the model's thinking counts toward this: a low ceiling cuts a long estimate off before its answer
   output_config: { effort: 'low', format: { type: 'json_schema', schema: ESTIMATE } },
   messages: [{ role: 'user', content: [{ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: photo } }, { type: 'text', text: ASK }] }],
 });

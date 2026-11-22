@@ -29,10 +29,10 @@ if (!which) process.exit(0);
 
 process.stderr.write(`This would end ${which}: things this work did not start. Other work of the owner's runs on this machine (other projects' servers, their simulators and containers), and a server answering on a port you wanted is theirs, not a leftover of yours.
 End only what you started, by the id you kept:
-  PORT=$(sz-eyes port) <the command that starts it> & pid=$!     # a port from the machine, never a number you chose
+  PORT=$(sz-eyes port) <the command that starts it> & pid=$!     # a port from the machine, never a number you chose (a product that cannot be told a port: sz:verify)
   ...
   kill $pid
-A container or a simulator you started is ended by its own name or id. If a port you expected is taken, take another; do not free it. If something of yours is left over from before and you no longer have its id, find the one process (\`lsof -nP -iTCP:<port> -sTCP:LISTEN\`, \`ps -o pid,lstart,command -p <pid>\`), make sure from its command and folder that it is yours, and end that id.
+A container or a simulator you started is ended by its own name or id. If a port you expected is taken, take another; do not free it. If something of yours is left over from before and you no longer have its id, find the one process (\`lsof -nP -iTCP:<port> -sTCP:LISTEN\`, \`ps -o pid,lstart,command -p <pid>\`; both outside the session's command sandbox if it has one, because inside they do not see what an earlier command started), make sure from its command and folder that it is yours, and end that id.
 If the owner asked for exactly this command, show it to them: they run it themselves.
 `);
 process.exit(2);

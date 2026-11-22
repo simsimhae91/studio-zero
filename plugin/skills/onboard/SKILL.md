@@ -33,4 +33,4 @@ Then add one line to `.sz/progress.md` (create it): the date, "지도를 씀", a
 
 ## Report
 
-Ten lines at most: what the project is, its targets, the checks it already has, and what is unknown. Then stop: onboarding starts no work.
+Short enough to read at a glance: what the project is, its targets, the checks it already has, and what is unknown. Onboarding itself starts no work and changes no product code. If it was loaded on the way to a request to build, change or fix something, go on to that request with `sz:work`; if the owner asked only for the map, stop here.

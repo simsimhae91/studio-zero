@@ -181,7 +181,7 @@ const USAGE = `sz-eyes: launch what was built, look at it, operate it, and put w
         start the case for a service: the same lines for every service, each shown or not. Kept in .sz/worth/<id>/
   sz-eyes worth cite <id> <line|others> --url <a public page> --quote "<the words as they stand there>" --shows "<what they show>" [--against] [--by scout|skeptic|lead]
         file words from a page under a line. The page is fetched again here and the words looked for on it:
-        a quotation that is not found counts for nothing, and is kept as such. Lines: who, now, pays, gap, reach, edge, price, runs, does, returns, paid.
+        a quotation that is not found counts for nothing, and is kept as such. Lines: who, now, pays, gap, switch, reach, edge, price, runs, does, returns, paid.
         Filed again with the same page, words and line, it replaces the earlier one (to correct --shows or --against)
   sz-eyes worth withdraw <id> <cN> --why "<what was wrong with it>"
         whoever filed a quotation takes it back: it stays where the owner reads it and counts for nothing, for or against
@@ -192,9 +192,10 @@ const USAGE = `sz-eyes: launch what was built, look at it, operate it, and put w
   sz-eyes worth line <id> <line> [--says "<the claim>"] [--status shown|refuted|waived|open] [--basis world|owner|product|stand-in|real] [--note "<text>"]
         what a line claims and where it stands. A line about the world is shown only when enough quotations
         were found on their pages; the owner's own ground is their words in --note; paid is shown by real money only
-  sz-eyes worth row <id> <row-id> [--where "<where along the job>"] [--need "<what a person needs there>"] [--kind stake|edge|more] [--has <other-id>=yes|no|?]... [--cite <cN>]... [--ours have|lack|not-doing|planned|unknown] [--by "<the standing claim or picture / why not / which milestone>"]
+  sz-eyes worth row <id> <row-id> [--where "<where along the job>"] [--need "<what a person needs there>"] [--kind stake|must|edge|more] [--has <other-id>=yes|no|?]... [--cite <cN>]... [--ours have|thin|lack|not-doing|planned|unknown] [--by "<the standing claim or picture / what it lacks / why not / which milestone>"]
         one row of the whole job: who gives it already and whether this product does. A stake is what two or
-        more of the others have; "have" is shown by a standing claim or a picture, never said
+        more of the others have, a must what has to be there whoever else has it; "have" is shown by a standing
+        claim or a picture, never said; "thin" (there on one screen and no further) says in --by what it lacks
   sz-eyes worth object <id> "<why the case is wrong>" --about <line|whole> --weight fatal|serious|minor [--cite <cN>]...
   sz-eyes worth answer <id> <n> "<what is wrong with the objection, or what was changed>"   |   sz-eyes worth answer <id> <n> --concede
         the skeptic's objections and what became of each. A fatal one that is granted refutes its line
@@ -239,7 +240,7 @@ const USAGE = `sz-eyes: launch what was built, look at it, operate it, and put w
         run a command with the owner's keys in its environment, by their names in the vault (the macOS Keychain).
         A key is in no argument, no file and no line of the session: if the command prints it, it is taken out
   sz-eyes secret has <vault id>...                       which of these the vault holds (names only), and for a missing one the line the owner stores it with; exits 1 when one is missing
-  sz-eyes secret set <vault id>                          the owner's: puts what comes on stdin in the vault (pbpaste | sz-eyes secret set host/cloudflare/api-token)
+  sz-eyes secret set <vault id>                          the owner's: puts what comes on stdin in the vault (! pbpaste | sz-eyes secret set host/cloudflare/api-token, typed at this session's prompt: sz-eyes is not on the PATH of their own terminal)
 
   sz-eyes arm list [--json]
         the arms a product's server can take: services it calls with a key of the owner's (public data, a model
@@ -249,7 +250,7 @@ const USAGE = `sz-eyes: launch what was built, look at it, operate it, and put w
         the step before building on arms: for each key of theirs the vault does not hold, the owner's steps from the
         arm's file, the line that stores it (! pbpaste | sz-eyes secret set <id>) and what to run next. Exits 1 while
         a key is missing, so that a workflow stops on it, and 0, in one line, when none is. What it prints goes to
-        the owner as it stands; a missing key is never worked around with an example. An arm not in the catalogue
+        the owner as it stands; only their own words make a missing key an example for now. An arm not in the catalogue
         is named, with the arms there are
   sz-eyes arm check <name> [--json]
         prove the arm's key works: the smallest real call the service allows, made here with the key read from the
@@ -283,7 +284,8 @@ const USAGE = `sz-eyes: launch what was built, look at it, operate it, and put w
 
   sz-eyes port                                           a port nothing listens on, from the machine: start what you
         launch on it (PORT=$(sz-eyes port)), keep its process id ($!), and end it by that id. Never choose a
-        number, and never end whatever holds a port: other work of the owner's runs on this machine
+        number (a product that cannot be told a port is started on the one its map names, only when nothing
+        listens there), and never end whatever holds a port: other work of the owner's runs on this machine
   sz-eyes copy <folder> [--at <commit>] [--with <path>]... [--dir <project>]
         a copy of the product to run beside it, in a folder outside the project: the files as committed (HEAD, or
         --at), the dependencies as installed (node_modules, cloned), --with what the map says is built and not in
