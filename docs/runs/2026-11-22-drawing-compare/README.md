@@ -7,6 +7,8 @@ what it showed about the change, and what it showed that nobody had asked.
 
 One run each way. Read the figures as showing direction and cost, not as rates.
 
+The branch called `phone-again` here was renamed `honest-verdicts` on 2026-11-23, on the owner's word.
+
 ## What was run
 
 The first pass of 퇴사점검 was built again from the commit it started from on 2026-11-22 00:03 (`06e90ad`: the
