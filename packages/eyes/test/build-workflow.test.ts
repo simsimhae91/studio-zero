@@ -122,6 +122,11 @@ test('a claim whose own words are wrong is set aside for the owner, and the run 
   assert.doesNotMatch(ruling, /two: 합계가 0/, 'a claim that was mended is not handed to whoever rules');
   assert.match(ruling, /The other claims shown false at that look were mended and are looked at again after you/);
   assert.match(ran.calls.find((c) => c.label === 'fix:m1:1')!.prompt, /each line of "notFixed" starts with the id of its claim and a colon/);
+  // 2026-11-22: a rule test frozen with its contract expected an answer the cited source refuses. Two fixers kept it
+  // passing, each look found the product wrong by the source in another case, and the milestone stayed open after
+  // 304 minutes with nobody having ruled on the test. Whoever fixes says so instead, and whoever rules settles it.
+  assert.match(ran.calls.find((c) => c.label === 'fix:m1:1')!.prompt, /Where the claim's own figure, or a frozen test or flow it is shown by, asks for an answer that the claim's source refuses[\s\S]*no fix makes both true: do not bend the product to the figure or the check against its source, and do not leave it wrong by the source to keep a check passing[\s\S]*put it under "notFixed": the file and the case, what is expected there, and the source's sentence with its address/);
+  assert.match(ruling, /Or the claim's own figure, or a frozen test or flow it is shown by, asks for an answer its source refuses and the product gives that answer: then no product is right by both, and which reading holds is the owner's to say\. Record it the same way, with the file and the case beside the source's sentence/);
   // A line that names no claim leaves every claim shown false to be ruled on, as before.
   const unnamed = await run(
     { request: 'x' },
