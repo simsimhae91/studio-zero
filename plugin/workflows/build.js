@@ -268,6 +268,11 @@ const BUILT = {
       description: 'empty unless you found that something cannot be made real with what is at hand: then each, and you stopped there',
       items: { type: 'object', properties: { what: { type: 'string' }, tried: { type: 'string', description: 'where you looked and what it said' }, needs: { type: 'string', description: 'what it needs to be real, and from whom' }, vault: { type: 'string', description: 'for a key: the vault id it is to be kept under' } }, required: ['what', 'tried', 'needs'] },
     },
+    unlike: {
+      type: 'array',
+      description: 'only for a first pass built to a drawing: each screen you left unlike its drawing because another claim requires it. A difference you mended is not listed. Empty when there is none.',
+      items: { type: 'object', properties: { screen: { type: 'string', description: 'the screen or state, by the drawing\'s id' }, differs: { type: 'string', description: 'what the built screen has and what the drawing has, in a line' }, claim: { type: 'string', description: 'the id of the claim that requires it' } }, required: ['screen', 'differs', 'claim'] },
+    },
   },
   required: ['contractId', 'summary', 'launch'],
 }
@@ -660,7 +665,20 @@ const FIRST_STEPS = (m, replaces) => `2. Write first only the tests of what is p
 // and its first look sets each built screen beside its drawing.
 const DRAWN_BUILD = `, and it is settled: every screen was drawn before this build (\`.sz/design/prototype.html\`), and that drawing is what is built, so do not settle it again. \`.sz/design/direction.md\` ends with what you need (빌더에게: the tokens, the parts, each screen's parts and its address in the prototype). Carry the prototype's tokens and parts: for a web product its markup and CSS as they are; for a phone app the tokens, the parts and each screen's order, written again in the toolkit. Each screen is built as drawn: the same content in the same order, made of the same parts, in the same tokens. \`sz:taste\` is for what the design leaves open.`
 const AS_DRAWN = ` Every screen of this product was drawn before it was built (\`.sz/design/prototype.html\`, a picture of each under \`.sz/design/shots/\`), and the first pass was built to that drawing. For the claim that every screen is built as drawn, where it is yours: take a picture of each built screen the way \`sz-eyes web sweep\` does (one browser, every screen at phone size, \`--out\` a folder under the contract's evidence folder) and set it beside its drawing. For every difference in content, order, parts or tokens, read the contract's other claims. Where one of them requires what the built screen has (the words of a form the law gives, a figure its source gives, a control the claim names), the difference stands: write each, with its screen and the claim that requires it, into a file under the contract's evidence folder and name that file as this claim's evidence, because the owner said yes to the drawing and is told where the product leaves it and why. A difference that no claim requires is this claim shown false: name every one with its screen, not the first, because whoever mends them is handed the whole list.`
-const FIRST = `This milestone is the product's first pass: all of it, in one stretch, by you. Work in this order. The look first${toDrawing ? DRAWN_BUILD : ' (load `sz:taste`: colour, type and spacing settled once, as names every screen uses).'} The frame: how a person gets from one area to another, and the shapes of everything that will be stored. Then the one thing the product is for, to the quality it will be used at. When that path works: start the product, write the command that starts it into \`.sz/map.md\`, put a picture of each of its screens at phone size into the contract's evidence folder under \`early/\`, and commit with a message that begins \"look:\". The owner may open it from then on, before anything else exists. Then every other area, each to its claims. Work down the claims, and run each flow as you finish what it shows. Before you return, fill every field with the longest value the spec allows and look at every screen at phone size (\`sz-eyes web look <address> --size phone\` says what is cut off, what scrolls sideways and what is too small to press): mend it wherever the same thing is shown, not on the one screen where you saw it. Do not stop to report in between: you are done when every claim's own check passes and the product has run in front of you.
+// A builder sets what it built beside the drawing once before it returns. (2026-11-22: one product's first pass
+// was built three times from the same drawing. Twice without this: by one comparison of the words on 27 screen
+// states, 79 and 75% of the drawing's lines stood on the built screens in order, and in the second of the two a
+// verifier found differences no claim required on 19 of the 27 (dates as 1995-03-08 where 1995년 3월 8일 was
+// drawn, a letter's values as input boxes, a step and three buttons nobody drew). Once with it: 82%, and such
+// differences on 10. That builder took 70 minutes where the others took 55 and 58. One of the builders without
+// it had put its pictures beside the drawings unasked, and named three differences: looking is not what does
+// it, writing down every difference and mending each is.) Once, because whoever verifies sets every screen
+// beside its drawing anyway. The pictures are taken at the end: the ones under early/ are of the one path, from
+// before the rest existed. What another claim requires is not mended toward the drawing (mending the words of a
+// statutory form to the drawing's would have been the fault) and is returned under "unlike", which the run logs
+// and returns; whether a claim does require it is judged by whoever verifies, not on the builder's word.
+const BESIDE_DRAWING = ` Then, once, set what you built beside its drawing. Take a picture of every state the drawing has (\`.sz/design/sweep.txt\` lists them, a picture of each is under \`.sz/design/shots/\`; a sheet of the drawing's own parts is not a screen of the product) on the product as it now stands, at phone size, into the contract's evidence folder under \`built/\`, and read each beside its drawing. Write down every difference in content, order, parts or tokens, with its screen. A difference that comes from a part or a token is mended at the part, so that it is right on every screen made of it. A difference that another claim requires (the words of a form the law gives, a figure a rule works out) is not mended toward the drawing: it stays, and you return it under "unlike" with the claim that requires it, because the drawing is the owner's and so is the choice between the two. Mend the rest and take those pictures again. Do not set them beside the drawing a second time: whoever verifies does, and this look is to hand them fewer differences, not to prove the claim.`
+const FIRST = `This milestone is the product's first pass: all of it, in one stretch, by you. Work in this order. The look first${toDrawing ? DRAWN_BUILD : ' (load `sz:taste`: colour, type and spacing settled once, as names every screen uses).'} The frame: how a person gets from one area to another, and the shapes of everything that will be stored. Then the one thing the product is for, to the quality it will be used at. When that path works: start the product, write the command that starts it into \`.sz/map.md\`, put a picture of each of its screens at phone size into the contract's evidence folder under \`early/\`, and commit with a message that begins \"look:\". The owner may open it from then on, before anything else exists. Then every other area, each to its claims. Work down the claims, and run each flow as you finish what it shows. Before you return, fill every field with the longest value the spec allows and look at every screen at phone size (\`sz-eyes web look <address> --size phone\` says what is cut off, what scrolls sideways and what is too small to press): mend it wherever the same thing is shown, not on the one screen where you saw it.${toDrawing ? BESIDE_DRAWING : ''} Do not stop to report in between: you are done when every claim's own check passes and the product has run in front of you.
 `
 // A milestone shown on a simulator is built so that its flows can be written: a flow presses a field by its id.
 // (2026-11-19: no field of a phone app had one. The verifier's flow pressed each by its words, Maestro pressed
@@ -848,6 +866,12 @@ Do not judge your own claims and do not record verdicts: someone who did not bui
 
   // It stands: the owner can look while it is verified. (A first pass stood at 21:07 and closed at 00:39.)
   if (!resumed) log(`BUILT: "${m.title}" stands and is being verified. It can be looked at now: ${built.launch}`)
+  // What a builder left unlike the drawing because another claim requires it is the owner's to choose between:
+  // it is said when the milestone stands, and again in what the run returns.
+  const line = (text) => String(text || '').replace(/\s+/g, ' ').trim()
+  const unlike = !resumed && Array.isArray(built.unlike) ? built.unlike.filter((u) => u && line(u.screen) !== '' && line(u.claim) !== '') : []
+  if (unlike.length > 0) log(`${unlike.length} screen(s) left unlike the drawing because another claim requires it: ${unlike.map((u) => `[${line(u.screen)} (${line(u.claim)}): ${line(u.differs)}]`).join(' ')}`)
+  const left = unlike.length > 0 ? { unlike } : {}
 
   // A frozen check the builder says is itself wrong goes to someone who neither built nor judges: the arbiter
   // corrects how it checks, never what it checks, and writes the correction into the contract. (The first real
@@ -1035,12 +1059,12 @@ ${round === 1 && earlier ? 'An earlier run found these and stopped; it, or someo
   if (verdict && (verdict.sandbox || '').trim() !== '') {
     stopped = `milestone "${m.title}" was built and could not be looked at: the session's command sandbox stopped the browser and the call outside it was refused (${verdict.sandbox.trim().slice(0, 200)}). Nothing is known to be wrong with the product. The owner chooses one: run sessions in auto mode, approve the unsandboxed command when asked, or turn the sandbox off for this project (/sandbox); then ask to continue.`
     log(stopped)
-    return { entry: { id: m.id, title: m.title, contractId: built.contractId, proven: verdict.proven, refuted: verdict.refuted, unchecked: m.claims.filter((c) => !verdict.proven.includes(c.id)).map((c) => ({ id: c.id, why: 'the command sandbox stopped the look' })), noticed: verdict.noticed || [], report: null }, stopped }
+    return { entry: { id: m.id, title: m.title, contractId: built.contractId, proven: verdict.proven, refuted: verdict.refuted, unchecked: m.claims.filter((c) => !verdict.proven.includes(c.id)).map((c) => ({ id: c.id, why: 'the command sandbox stopped the look' })), noticed: verdict.noticed || [], report: null, ...left }, stopped }
   }
   if (!verdict) {
     stopped = `milestone "${m.title}" was built and could not be verified (the verifier did not answer)`
     log(stopped)
-    return { entry: { id: m.id, title: m.title, contractId: built.contractId, proven: [], refuted: [], unchecked: m.claims.map((c) => ({ id: c.id, why: 'the verifier did not answer' })), noticed: [], report: null }, stopped }
+    return { entry: { id: m.id, title: m.title, contractId: built.contractId, proven: [], refuted: [], unchecked: m.claims.map((c) => ({ id: c.id, why: 'the verifier did not answer' })), noticed: [], report: null, ...left }, stopped }
   }
 
   const closed = await agent(
@@ -1057,7 +1081,7 @@ Change no product code.${FINISH}`,
   )
   if (closed && typeof closed.room === 'number' && closed.room >= 0) ROOM = closed.room
   const broken = verdict.broken || []
-  const entry = { id: m.id, title: m.title, contractId: built.contractId, launch: built.launch, setAside, proven: verdict.proven.filter((id) => !setAside.some((d) => d.id === id)), refuted: verdict.refuted, unchecked: verdict.unchecked, broken, stood: verdict.stood === undefined ? null : verdict.stood, replaced: m.supersedes || [], noticed: verdict.noticed || [], report: closed ? closed.report : null, corrections: (closed && closed.corrections) || [] }
+  const entry = { id: m.id, title: m.title, contractId: built.contractId, launch: built.launch, setAside, proven: verdict.proven.filter((id) => !setAside.some((d) => d.id === id)), refuted: verdict.refuted, unchecked: verdict.unchecked, broken, stood: verdict.stood === undefined ? null : verdict.stood, replaced: m.supersedes || [], noticed: verdict.noticed || [], report: closed ? closed.report : null, corrections: (closed && closed.corrections) || [], ...left }
   log(`${m.title}: ${verdict.proven.length} proven, ${verdict.refuted.length} refuted, ${verdict.unchecked.length} unchecked${verdict.stood === undefined ? '' : `; of what stood before, ${verdict.stood} hold and ${broken.length} broke`}`)
 
   // Nothing is built on a milestone that is known to be broken: the owner is told where it stands instead. The

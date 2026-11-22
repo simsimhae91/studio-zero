@@ -464,6 +464,34 @@ test('a prototype the owner said yes to is what the first pass is planned from, 
   assert.doesNotMatch(plain.calls.find((c) => c.label === 'verify:m1')!.prompt, /beside its drawing/);
 });
 
+test('a first pass built to a drawing is set beside it once by its builder, and what another claim requires stays and is said', async () => {
+  const drawn = { plan: () => ({ mode: 'new', summary: 's', design: 'approved', milestones: [firstPass] }), verify: allProven, close: closed };
+  const ran = await run({ request: '퇴사 점검' }, { ...drawn, build: built });
+  const builder = ran.calls.find((c) => c.label === 'build:m1')!.prompt;
+  // The pictures compared are taken at the end, of every state the drawing has: the early ones show the one path only.
+  assert.match(builder, /Then, once, set what you built beside its drawing[\s\S]*every state the drawing has \(`\.sz\/design\/sweep\.txt` lists them, a picture of each is under `\.sz\/design\/shots\/`; a sheet of the drawing's own parts is not a screen of the product\) on the product as it now stands, at phone size[\s\S]*under `built\/`/);
+  assert.match(builder, /Write down every difference in content, order, parts or tokens, with its screen/);
+  assert.match(builder, /mended at the part, so that it is right on every screen made of it/);
+  // The drawing is not followed against another claim: the screen stays as the claim needs it, and the owner is told.
+  assert.match(builder, /A difference that another claim requires[\s\S]*is not mended toward the drawing: it stays, and you return it under "unlike"/);
+  assert.match(builder, /Do not set them beside the drawing a second time: whoever verifies does[\s\S]*not to prove the claim/);
+  assert.ok(builder.indexOf('Then, once, set what you built beside its drawing') > builder.indexOf('fill every field with the longest value'), 'after the look at the product\'s limits');
+  assert.ok(builder.indexOf('Then, once, set what you built beside its drawing') < builder.indexOf('Do not stop to report in between'), 'and before the builder is told when it is done');
+  assert.equal(ran.result.milestones[0].unlike, undefined, 'nothing is said of it when the builder returned none');
+
+  // What the builder left unlike its drawing reaches the log and the run's result, for the owner.
+  const left = [{ screen: 'DC-02', differs: 'the form has 12 fields; the drawing has 9', claim: 'form' }, { screen: '', differs: 'x', claim: 'y' }];
+  const said = await run({ request: '퇴사 점검' }, { ...drawn, build: (c: Call) => ({ ...built(c), unlike: left }) });
+  assert.ok(said.logs.some((l) => /1 screen\(s\) left unlike the drawing because another claim requires it: \[DC-02 \(form\): the form has 12 fields; the drawing has 9\]/.test(l)), said.logs.join('\n'));
+  assert.deepEqual(said.result.milestones[0].unlike, [left[0]]);
+
+  // Nothing was drawn: nothing to set beside. And a later milestone is not a first pass.
+  const plain = await run({ request: 'x' }, { plan: () => ({ mode: 'new', summary: 's', milestones: [firstPass] }), build: built, verify: allProven, close: closed });
+  assert.doesNotMatch(plain.calls.find((c) => c.label === 'build:m1')!.prompt, /beside its drawing/);
+  const later = await run({ request: 'x' }, { plan: () => ({ mode: 'extend', summary: 's', design: 'approved', milestones: [{ ...firstPass, id: 'm2' }] }), build: built, verify: allProven, close: closed });
+  assert.doesNotMatch(later.calls.find((c) => c.label === 'build:m2')!.prompt, /set what you built beside its drawing/);
+});
+
 test('a prototype the owner said no to is drawn again from their words alone, measured, and put before them again', async () => {
   const said = '너무 어두워요. 홈에서 내 점수가 제일 크게 보였으면 해요';
   const ran = await run({ request: 'x' }, { plan: () => ({ mode: 'new', summary: 's', design: 'again', said, milestones: [] }), design: () => ({ changed: ['색'] }), sweep: holding });
