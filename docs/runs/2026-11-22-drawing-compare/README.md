@@ -175,8 +175,14 @@ about the rule in other cases.
 
 ## Left on the machine
 
-`/Volumes/DEV-SSD/sz-scratch.noindex/drawing-compare/`: the two copies (`arm-a` stopped after its first look,
-`arm-b` as its run left it, contract open), the evidence kept at the builder's return and at the end of each
-first look (`snap-a`, `snap-b`), the copies the comparison and the test were run on, and the session records of
-the four headless sessions (`sessions.tar.gz`). The owner may delete the folder; everything this record cites
-is copied here. Nothing of it is running.
+`/Volumes/DEV-SSD/sz-scratch.noindex/drawing-compare/` (3.2 GB): the two copies (`arm-a` stopped after its first
+look, `arm-b` as its run left it, contract open), the evidence kept at the builder's return and at the end of
+each first look (`snap-a`, `snap-b`), the looks the word comparison was made from, the two copies of the
+one-verifier test, and the session records of the four headless sessions (`sessions.tar.gz`). The owner may
+delete the folder; everything this record cites is copied here. Nothing of it is running.
+
+One thing was left running and found two hours later. The control's session had made a copy of the product for
+the owner when its builder returned and started it (the work skill says to: the owner looks while the run
+verifies). Ending the run by its process tree does not end that copy's server, which is started apart from it.
+It was ended by its ids and the copy removed with `sz-eyes copy <folder> --end`. Whoever stops a run from
+outside has to look for its show copy; a run that ends by itself takes its own away.
