@@ -62,6 +62,16 @@ const GROUND = 'You are working in the project\'s folder. Read `.sz/map.md` firs
 // ("session" for as hard as the session).
 const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max']
 const DEFAULT_EFFORT = { build: 'high', close: 'low', join: 'low' }
+// The four stages that run at low effort (the prototype's sweep, the close, bringing milestones together, making
+// their folders) each do a list of steps with nobody watching, and a step left out of a close is a milestone that
+// stands uncommitted under the next one. Claude Fable 5.2, the model of the owner's sessions, ends a turn before
+// the work is done more often at low effort (a list of what remains, a stop at an ordinary obstacle), and
+// Anthropic's guidance for it is to say this in the prompt of agentic work at low or medium effort; its figure is
+// about 30% more output tokens, here on stages of a minute. This rests on that guidance, not on a measurement:
+// no run record shows a closer leaving a step out, and all of them were on Opus. Whoever builds or mends runs at
+// high and is not given it: a builder that returns early costs a fix round, not a wrong close, and its own steps
+// say when to stop waiting on what will not arrive.
+const FINISH = ' Do every step you were given before you return: nobody is watching to say "go on", and a step left out is found later by someone else, or not at all. An ordinary obstacle (a command that times out, a file that is locked, an answer that comes back empty) is looked into and worked through: wait and try again, mend the call, or take another way. What was decided as a stop is not worked past (a command the plugin refuses, a call outside the sandbox that is refused, a merge that conflicts, a contract that will not close): say what you found in what you return. This lifts none of the limits above on what you may change or run.'
 const effort = (stage) => {
   const said = args && args.effort
   const word = typeof said === 'string' ? (stage === 'build' ? said : undefined) : said && typeof said === 'object' ? said[stage] : undefined
@@ -453,7 +463,7 @@ const sweepDesign = (again) =>
 Then \`sz-eyes contract claim design screens --status proven|refuted --note "<the sweep's summary line>"\`: proven only when every screen of the plan is there and holds. Leave **feel** to the owner.`
     }
 
-Change nothing in the prototype or the plan. Return how many screens the plan has, how many of them hold, how many drawings the sweep measured (its summary line counts every drawing, a screen's states and limits too, and calls each a screen), and every screen that does not hold (a drawing at its limits too) with what was found.`,
+Change nothing in the prototype or the plan. Return how many screens the plan has, how many of them hold, how many drawings the sweep measured (its summary line counts every drawing, a screen's states and limits too, and calls each a screen), and every screen that does not hold (a drawing at its limits too) with what was found.${FINISH}`,
     { label: 'sweep:design', phase: 'Design', schema: SWEPT, ...effort('close') },
   )
 const holds = (swept) => Number(swept.screens) > 0 && Number(swept.hold) >= Number(swept.screens) && (swept.findings || []).length === 0
@@ -1034,7 +1044,7 @@ ${round === 1 && earlier ? 'An earlier run found these and stopped; it, or someo
 5. Add one line to \`.sz/progress.md\` in the owner's language: the date, the milestone, how many claims are proven, refuted and unchecked, and each claim set aside for the owner with what they have to decide, how many promises of earlier work were shown again and whether any broke or was replaced, anything the verifier noticed that the owner should know, and what comes next. The figures are these, as the verifier returned them: ${verdict.proven.length} proven, ${verdict.refuted.length} refuted, ${verdict.unchecked.length} unchecked${verdict.stood === undefined ? '' : `; of what stood before this milestone, ${verdict.stood} hold`}, ${(verdict.broken || []).length} broken, ${(m.supersedes || []).length} replaced. Use them in the line and in the commit message; do not count again from \`sz-eyes standing\`, which after closing also counts this milestone's own claims.
 6. Commit \`.sz/\` (the contract, the evidence, the standing record, the backlog, the progress line)${where ? ', on this folder\'s own branch' : ''}.
 7. Run \`sz-eyes room\` and return the number on its first line under "room".
-Change no product code.`,
+Change no product code.${FINISH}`,
     { label: `close:${m.id}`, phase: 'Close', schema: CLOSED, ...effort('close') },
   )
   if (closed && typeof closed.room === 'number' && closed.room >= 0) ROOM = closed.room
@@ -1113,7 +1123,7 @@ For each, in this order:
 Then, if any merged:
 3. ${corrections.length > 0 ? `Correct \`.sz/map.md\` and \`.sz/spec.md\`: each of these is a line a milestone made false and what it should say now. ${corrections.map((c) => `[${c}]`).join(' ')} Commit.` : 'Nothing in the map or the spec was reported as made false.'}
 4. If what the product depends on changed (its lock file), put the dependencies in place again as the map says.
-Run nothing else and judge nothing.`,
+Run nothing else and judge nothing.${FINISH}`,
       { label: `join:${some.map((m) => m.id).join('+')}${again ? ':again' : ''}`, phase: 'Verify', schema: JOINED, ...effort('join') },
     )
   let joined = await join(group, false)
@@ -1256,7 +1266,7 @@ The milestone ids: ${group.map((m) => m.id).join(', ')}
 4. For each id: \`git worktree add .sz/trees/<id> -b sz/<id>\`. If a folder or a branch of that name is left from an earlier run, make nothing and say so under "problem".
 5. In each folder, put the product's dependencies in place as \`.sz/map.md\` says they are installed. Where the project's own folder already has them, copying is quicker than installing (on macOS \`cp -cR node_modules .sz/trees/<id>/node_modules\`). Whatever the map says must exist before the product starts and is not in git (a settings file, a built folder) is copied likewise. Never copy what the product stored (a database, what people entered): each folder starts with its own. For a native app, what a first build downloads and compiles is large and slow to get again (for React Native on iOS, the \`ios/Pods\` folder with its prebuilt archives): copy it too where the project's own folder has it.
 6. In each folder run the project's quick check once (the map's check command), to see that it passes there before anything is changed.
-Return each id with the whole path of its folder (\`pwd\` inside it).`,
+Return each id with the whole path of its folder (\`pwd\` inside it).${FINISH}`,
     { label: `stage:${group.map((m) => m.id).join('+')}`, phase: 'Build', schema: STAGED, ...effort('join') },
   )
   const whereOf = new Map(((staged && staged.folders) || []).map((f) => [f.id, f.where]))

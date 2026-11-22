@@ -653,6 +653,26 @@ test('what does not merge is brought up to date by a builder and then shown agai
   assert.match(sand.result.stopped, /brought together and could not be looked at: the session's command sandbox/);
 });
 
+test('the stages that run at low effort are told to do every step before they return, and the others are not', async () => {
+  const ran = await run({ request: 'x' }, { plan: plan('m1'), build: built, verify: () => ({ proven: ['one', 'two'], refuted: [], unchecked: [] }), close: closed });
+  const closer = ran.calls.find((c) => c.label === 'close:m1')!;
+  assert.equal(closer.effort, 'low');
+  assert.match(closer.prompt, /Change no product code\. Do every step you were given before you return: nobody is watching to say "go on"/);
+  // An ordinary obstacle is worked through; what was decided as a stop is not.
+  assert.match(closer.prompt, /An ordinary obstacle \(a command that times out, a file that is locked, an answer that comes back empty\) is looked into and worked through/);
+  assert.match(closer.prompt, /What was decided as a stop is not worked past \(a command the plugin refuses, a call outside the sandbox that is refused, a merge that conflicts, a contract that will not close\): say what you found in what you return/);
+  assert.match(closer.prompt, /This lifts none of the limits above on what you may change or run\.$/);
+  // Whoever plans, builds and verifies runs at high or as the session, and is not told so: a builder that returns
+  // early costs a fix round, and its own steps say when to stop waiting.
+  for (const label of ['plan', 'build:m1', 'verify:m1']) assert.doesNotMatch(ran.calls.find((c) => c.label === label)!.prompt, /Do every step you were given before you return/, label);
+  // Every agent the script runs at low effort ends on it, and no other: the prototype's sweep, the close, bringing
+  // milestones together, and making their folders.
+  const low = [...SOURCE.matchAll(/\$\{FINISH\}`,\n\s*\{ label: [`']([a-z]+)[:`'][^\n]*effort\('(?:close|join)'\)/g)].map((m) => m[1]!);
+  assert.deepEqual(low.sort(), ['close', 'join', 'stage', 'sweep']);
+  assert.equal([...SOURCE.matchAll(/\$\{FINISH\}/g)].length, 4);
+  assert.equal([...SOURCE.matchAll(/effort\('(?:close|join)'\)/g)].length, 4);
+});
+
 test('every agent is told from its first line when the session is sandboxed, an earlier milestone\'s verdicts are not made up, and how hard each stage thinks can be said', async () => {
   const answers = { build: built, verify: proven, close: closed };
   const earlier = (sandboxed: boolean) => () => ({ mode: 'continue', summary: 's', sandboxed, milestones: [{ id: 'm1', title: 'title m1', builds: 'b', claims: [claim('one'), claim('owner')], state: 'closed', contractId: 'm1' }, { id: 'm2', title: 'title m2', builds: 'b', claims: [claim('one'), claim('two')] }] });
