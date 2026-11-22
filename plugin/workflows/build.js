@@ -41,9 +41,13 @@ const MAYBE_SANDBOX = ' If `sz-eyes` says the session\'s command sandbox stopped
 let SAND = MAYBE_SANDBOX
 // How many simulators this machine holds at once, as whoever planned read it from the eyes: one until that is known.
 let SIMS = 1
+// How many whole gigabytes are free on the disk the project is on, as whoever planned, or closed the milestone
+// before, read it from the eyes. Not known until one of them says, and then nothing is judged by it.
+let ROOM = null
 const learn = (plan) => {
   if (plan.sandboxed === true) SAND = IN_SANDBOX
   if (Number.isInteger(plan.simulators) && plan.simulators > 0) SIMS = plan.simulators
+  if (typeof plan.room === 'number' && plan.room >= 0) ROOM = plan.room
 }
 const GROUND = 'You are working in the project\'s folder. Read `.sz/map.md` first (if there is none, load `sz:onboard` and write it), then `.sz/spec.md`, `.sz/owner.md` (what the owner has said they want of this product: it comes before your own taste) and the last lines of `.sz/progress.md` if they exist. Follow the project\'s own rules as the map lists them. Other work of the owner\'s runs on this machine. Never use their simulator, browser profile or dev-server ports: a headless browser, the eyes\' own simulator, and for anything you launch a port taken from the machine (`PORT=$(sz-eyes port)`), never a number you chose. Before you look at what you launched, make sure it is yours that answers (your process is alive and the page is this product). End every server you start, by the process id you kept (`pid=$!` ... `kill $pid`): never by its port and never by its name, because what holds a port you wanted is somebody else\'s.'
 
@@ -195,6 +199,7 @@ const PLAN = {
     sandboxed: { type: 'boolean', description: 'what `sz-eyes sandbox` said when run as an ordinary command: true when it said "sandboxed"' },
     eyesDown: { type: 'string', maxLength: 600, description: 'only when `sz-eyes` itself does not run on this machine (the shell does not find it, or it ends at once saying its copy has no dependencies or a module is missing): what it printed, as it stands. The run then starts nothing' },
     simulators: { type: 'integer', description: 'only for a product with a part on a phone: the number on the first line of what `sz-eyes ios room` printed (how many simulators this machine holds at once)' },
+    room: { type: 'number', description: 'the number on the first line of what `sz-eyes room` printed: whole gigabytes free on the disk the project is on' },
     design: { type: 'string', enum: ['none', 'needed', 'waiting', 'again', 'approved'], description: 'where the design of a new product with screens stands, as the top of your instructions says how to find out; "none" for anything else' },
     said: { type: 'string', description: 'only when design is "again": what the owner said about the prototype, in their words, as the claim feel of contract design records them' },
     decided: { type: 'array', items: { type: 'string' }, description: 'what the request and the answers left open and how you decided it' },
@@ -299,6 +304,7 @@ const CLOSED = {
     why: { type: 'string', description: 'when not closed: what the command said' },
     commit: { type: 'string' },
     line: { type: 'string', description: 'the line added to .sz/progress.md' },
+    room: { type: 'number', description: 'the number on the first line of what `sz-eyes room` printed after the commit: whole gigabytes free on the disk the project is on' },
     corrections: { type: 'array', items: { type: 'string' }, description: 'only when told not to edit .sz/map.md and .sz/spec.md here: each line of them this milestone made false, and what it should say now' },
   },
   required: ['report', 'closed', 'line'],
@@ -318,7 +324,7 @@ const OWNER_ANSWERS = asked === 'owner' ? `What the owner answered when asked be
 // shown afterwards, a product was called "an old flash game"; drawn first by one designer from a plan, as one
 // clickable prototype, the same request read as an app, and the owner chose that way.) Where the design stands
 // is found out first, so that a run that only draws, or only waits, costs a minute of planning and not a pass.
-const DESIGN_CHECK = `Before anything else, find out where this product's design stands: it decides whether you plan at all in this run, and finding out takes a minute. First run \`sz-eyes sandbox\` once, as an ordinary command (do not ask for it to run outside any sandbox), and return under "sandboxed" whether it answered "sandboxed": everyone who works after you is told what it said. If \`sz-eyes\` itself does not run (the shell does not find it, or it ends at once saying that its copy has no dependencies or that a module is missing), nothing here can be measured or shown, so nothing is to be planned, drawn or built: return at once what it printed under "eyesDown", with mode "new", what was asked in a sentence as "summary", and no milestones. Do not run another copy of it from elsewhere on the machine in its place, and write nothing. For a product with a part on a phone, run \`sz-eyes ios room\` as well and return the number on its first line under "simulators": how many simulators this machine holds at once, which is how many verifiers may each have one. Then run \`ls .sz .sz/design\` and \`sz-eyes contract show design\`, and return under "design" the first of these that is so:
+const DESIGN_CHECK = `Before anything else, find out where this product's design stands: it decides whether you plan at all in this run, and finding out takes a minute. First run \`sz-eyes sandbox\` once, as an ordinary command (do not ask for it to run outside any sandbox), and return under "sandboxed" whether it answered "sandboxed": everyone who works after you is told what it said. Run \`sz-eyes room\` as well and return the number on its first line under "room": the gigabytes free on the disk this project is on, by which the run judges whether a milestone fits before it builds one. If \`sz-eyes\` itself does not run (the shell does not find it, or it ends at once saying that its copy has no dependencies or that a module is missing), nothing here can be measured or shown, so nothing is to be planned, drawn or built: return at once what it printed under "eyesDown", with mode "new", what was asked in a sentence as "summary", and no milestones. Do not run another copy of it from elsewhere on the machine in its place, and write nothing. For a product with a part on a phone, run \`sz-eyes ios room\` as well and return the number on its first line under "simulators": how many simulators this machine holds at once, which is how many verifiers may each have one. Then run \`ls .sz .sz/design\` and \`sz-eyes contract show design\`, and return under "design" the first of these that is so:
 - "none": what was asked has no screen a person looks at (a command, a library, a service with no screen of its own); or \`.sz/spec.md\` is there, so the product has been worked on before (unless its first pass has not closed and contract \`design\` marks its claim **feel** [증명됨]: then "approved", and that first pass is still built to the drawing). Go on below as if this paragraph were not here.
 - "again": contract \`design\` marks its claim **feel** [반증됨]: the owner looked at the prototype and said no. Return their words, as the claim's note gives them, under "said", and return at once, as for "needed".
 - "approved": it marks **feel** [증명됨]: the owner said yes. Plan the first pass below, from the screens as planned and drawn.
@@ -344,7 +350,7 @@ If \`.sz/spec.md\` already exists, the product has been worked on before. Read i
   - If \`git worktree list\` shows folders under \`.sz/trees/\`, an earlier run built milestones side by side and stopped before bringing them together: for each such milestone whose contract exists, state "built" (or "closed" if its contract is closed there) and "where": that folder's whole path.
   - "supersedes": the standing claims that will stop being true because what was asked has changed, each with the reason. Be exact: a standing claim you do not list stays a promise, and the milestone must keep it true. Prefer a change that keeps old promises (a new choice whose default is the old behaviour) to one that replaces them.
   - If it changes the shape of what is stored, one claim says that what was saved before the change is still there after it, shown by a test that starts from data in the old shape. The product carries over what exists; nobody is asked to delete their data.
-${stage === 'after' ? 'First, whichever mode it is: run `sz-eyes sandbox` once, as an ordinary command (do not ask for it to run outside any sandbox), and return under "sandboxed" whether it answered "sandboxed". Everyone who works after you is told what it said. For a product with a part on a phone, run `sz-eyes ios room` as well and return the number on its first line under "simulators": how many simulators this machine holds at once.\n' : ''}
+${stage === 'after' ? 'First, whichever mode it is: run `sz-eyes sandbox` once, as an ordinary command (do not ask for it to run outside any sandbox), and return under "sandboxed" whether it answered "sandboxed". Everyone who works after you is told what it said. Run `sz-eyes room` as well and return the number on its first line under "room": the gigabytes free on the disk this project is on. For a product with a part on a phone, run `sz-eyes ios room` as well and return the number on its first line under "simulators": how many simulators this machine holds at once.\n' : ''}
 Write no product code. Add a line to \`.sz/progress.md\` and commit \`.sz/\` if you amended the spec. If there is no spec yet (mode "new"):
 
 Write \`.sz/spec.md\` in the owner's language: what the product is and for whom, the one thing it must do well, every area of it a person will use (a line each), how it is launched and looked at, and what is deliberately not built. A new product is made in three passes, and you plan the first now.
@@ -642,6 +648,14 @@ const FIRST = `This milestone is the product's first pass: all of it, in one str
 // (2026-11-19: no field of a phone app had one. The verifier's flow pressed each by its words, Maestro pressed
 // the label beside it, and what was typed went nowhere in five fields of six: the claim stayed unchecked.)
 const onDevice = (m) => (m.claims || []).some((c) => onASimulator(c))
+// What a milestone has taken on the disk, measured, in gigabytes: about 16 where an app is built for a phone
+// (2026-11-21: what the build wrote 7.1, installed dependencies 1.9, an Android build 0.9, evidence 2.5, its
+// repository 2.1), about 3 where none is (2026-11-22: 6 over two milestones of a web product and a fix), about 1
+// for one an earlier run built that is only started and looked at. With less than that free nothing is started:
+// a disk that fills stops everything on the machine, the owner's other work with it. (2026-11-21: 145 MB were
+// left an hour into a build, and the machine's containers stopped, the owner's seven among them.) With less than
+// twice that, the milestone is started and whoever builds is told to ask the disk before a step that writes much.
+const TAKES = (m, resumed) => (resumed ? 1 : onDevice(m) ? 16 : 3)
 const HANDLES = ' This milestone is shown on a simulator, by flows that whoever verifies writes: give every field a person types into a `testID`, and everything a person presses that has no words of its own (an icon, a picture). A flow presses a field by its id; by its words Maestro may press the label beside it, and what is typed goes nowhere. `sz-eyes ios look <the simulator\'s id>` on a screen lists its fields and says which have no id: run it on each screen with a field before you return.'
 // What a claim costs to show, in tests' worth: a flow is written and run against the product, a look is pictures
 // set beside drawings, and one that says something of every screen costs a flow more. One shown on a
@@ -747,10 +761,19 @@ async function milestone(m, n, before, where) {
   // code that had never run: the app's first build was still to be made, the verifier waited on a download for 36
   // minutes, and what kept the app from opening was found later by nobody whose work it was.)
   const resumed = Boolean(m.state === 'built' && m.contractId && m.launch)
+  // Nothing is started on a disk it would not fit on.
+  const takes = TAKES(m, resumed)
+  if (ROOM !== null && ROOM < takes) {
+    stopped = `nothing of milestone "${m.title}" was started: the disk the project is on has ${ROOM} GB free, and a milestone ${resumed ? 'that is built and still to be looked at' : onDevice(m) ? 'that builds an app for a phone' : 'like this one'} has taken about ${takes} GB (what it builds, what it installs, its evidence). A disk that fills stops everything else on this machine too. Free room and ask to continue: \`sz-eyes evidence prune <a closed contract>\` removes what no verdict of a closed milestone names, and what a product no longer worked on has built or installed can be made again.`
+    log(stopped)
+    return { entry: null, stopped }
+  }
+  const TIGHT = ROOM !== null && ROOM < 2 * takes ? ` The disk this project is on had ${ROOM} GB free when this run last asked, and a milestone like this one has taken about ${takes}. Before a step that writes gigabytes (a build for a phone, an install of dependencies), run \`sz-eyes room\`; if the step would not fit, do not start it: say so under "blocked", with both figures.` : ''
+  if (TIGHT) log(`${m.title}: the disk has ${ROOM} GB free and a milestone like this one has taken about ${takes}: it is started, and whoever builds is told to ask before a step that writes gigabytes`)
   const started = !resumed
     ? null
     : await agent(
-        `A milestone of this product was built by an earlier run and has not been verified to the end. Before anyone looks at it, start it. ${GROUND}${SAND} ${TOOLS}${PLACE}
+        `A milestone of this product was built by an earlier run and has not been verified to the end. Before anyone looks at it, start it. ${GROUND}${SAND} ${TOOLS}${PLACE}${TIGHT}
 
 Milestone "${m.title}" (${m.id}), contract \`${m.contractId}\` (read it: \`sz-eyes contract show ${m.contractId}\`). It is said to be launched like this: ${m.launch}
 
@@ -764,7 +787,7 @@ Stop what you started, and return the exact command that starts it now.`,
         { label: `start:${m.id}`, phase: 'Build', schema: STARTED, ...effort('build'), ...model('build') },
       )
   const built = resumed ? (started ? { contractId: m.contractId, summary: started.summary || 'built in an earlier run', launch: started.launch || m.launch, blocked: started.blocked || '', disputes: m.disputes || [] } : null) : await agent(
-    `You are building milestone ${n} of ${milestones.length} of a product, with nobody watching. ${GROUND}${SAND} ${TOOLS}${PLACE}
+    `You are building milestone ${n} of ${milestones.length} of a product, with nobody watching. ${GROUND}${SAND} ${TOOLS}${PLACE}${TIGHT}
 
 Milestone "${m.title}" (${m.id}): ${m.builds}
 ${m.first ? FIRST : ''}Milestones before it:
@@ -1005,14 +1028,16 @@ ${round === 1 && earlier ? 'An earlier run found these and stopped; it, or someo
   const closed = await agent(
     `Close milestone "${m.title}" of the project in ${here}. ${TOOLS}${PLACE}
 1. \`sz-eyes evidence ${built.contractId}\` writes the evidence page; note its path.
-2. ${verdict.refuted.length + (verdict.broken || []).length === 0 ? `\`sz-eyes contract close ${built.contractId}\` (it also writes what the verifier noticed and what could not be checked to \`.sz/backlog.md\`). It refuses when most of the claims were not looked at: then do not pass \`--accepted\` (that is the owner's to say), leave the contract open, and return "closed": false with what it said under "why".` : 'Leave the contract open: it has claims shown false, or broke what stood before it.'}
+2. ${verdict.refuted.length + (verdict.broken || []).length === 0 ? `\`sz-eyes contract close ${built.contractId}\` (it also writes what the verifier noticed and what could not be checked to \`.sz/backlog.md\`). It refuses when most of the claims were not looked at: then do not pass \`--accepted\` (that is the owner's to say), leave the contract open, and return "closed": false with what it said under "why". When it said closed, run \`sz-eyes evidence prune ${built.contractId}\` before anything is committed: every look took its pictures again, and this removes from the milestone's evidence folder those that no verdict, notice or record names (the page and what they name stay).` : 'Leave the contract open: it has claims shown false, or broke what stood before it. Its evidence stays as it is: it is what the fix is worked from.'}
 3. ${where ? 'If this milestone made a line of \`.sz/map.md\` or \`.sz/spec.md\` false (how it is launched, where it keeps things, what it does), do not edit them here: return under "corrections" each such line and what it should say now.' : 'If this milestone made a line of \`.sz/map.md\` or \`.sz/spec.md\` false (how it is launched, where it keeps things, what it does), correct that line.'} If the project has a case (\`sz-eyes worth show\`) and the contract is closed, mark each row of the whole job that a claim proven here covers: \`sz-eyes worth row <case> <row> --ours have --by ${built.contractId}/<claim>\`. Only rows a proven claim shows; the rest stay as they are.
 4. Read \`sz-eyes backlog\`. For each open line that this milestone has ended (the thing it names is built or fixed now, and a claim proven here or a commit of this milestone shows it), run \`sz-eyes backlog done "<some words of the line>" --by "${built.contractId}/<claim>, or the commit"\`. Tick only what is shown to be ended; a line that is half done stays open.
 5. Add one line to \`.sz/progress.md\` in the owner's language: the date, the milestone, how many claims are proven, refuted and unchecked, and each claim set aside for the owner with what they have to decide, how many promises of earlier work were shown again and whether any broke or was replaced, anything the verifier noticed that the owner should know, and what comes next. The figures are these, as the verifier returned them: ${verdict.proven.length} proven, ${verdict.refuted.length} refuted, ${verdict.unchecked.length} unchecked${verdict.stood === undefined ? '' : `; of what stood before this milestone, ${verdict.stood} hold`}, ${(verdict.broken || []).length} broken, ${(m.supersedes || []).length} replaced. Use them in the line and in the commit message; do not count again from \`sz-eyes standing\`, which after closing also counts this milestone's own claims.
 6. Commit \`.sz/\` (the contract, the evidence, the standing record, the backlog, the progress line)${where ? ', on this folder\'s own branch' : ''}.
+7. Run \`sz-eyes room\` and return the number on its first line under "room".
 Change no product code.`,
     { label: `close:${m.id}`, phase: 'Close', schema: CLOSED, ...effort('close') },
   )
+  if (closed && typeof closed.room === 'number' && closed.room >= 0) ROOM = closed.room
   const broken = verdict.broken || []
   const entry = { id: m.id, title: m.title, contractId: built.contractId, launch: built.launch, setAside, proven: verdict.proven.filter((id) => !setAside.some((d) => d.id === id)), refuted: verdict.refuted, unchecked: verdict.unchecked, broken, stood: verdict.stood === undefined ? null : verdict.stood, replaced: m.supersedes || [], noticed: verdict.noticed || [], report: closed ? closed.report : null, corrections: (closed && closed.corrections) || [] }
   log(`${m.title}: ${verdict.proven.length} proven, ${verdict.refuted.length} refuted, ${verdict.unchecked.length} unchecked${verdict.stood === undefined ? '' : `; of what stood before, ${verdict.stood} hold and ${broken.length} broke`}`)

@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { TAKES } from '../src/room.ts';
 import { Claim, Contract } from '../src/contract.ts';
 
 type Call = { prompt: string; label: string; effort?: string; model?: string };
@@ -1117,4 +1118,52 @@ test('a harness whose eyes do not run starts nothing: the plan says so in its fi
   // A plan that says nothing of it goes on as before.
   const up = await run({ request: '택배 비교' }, { plan: plan('m1'), build: built, verify: () => ({ proven: ['one', 'two'], refuted: [], unchecked: [] }), close: closed });
   assert.equal(up.result.stopped, null);
+});
+
+test('nothing is built on a disk a milestone would not fit on; on a tight one the builder is told to ask first; a closed milestone is pruned before it is committed', async () => {
+  // 2026-11-21: a build left 145 MB of 460 GB free an hour in, and the machine's containers stopped, the owner's own
+  // among them. 2026-11-22: three runs on a web product took the disk from 14 GB free to 7.9, most of it pictures
+  // that every look had taken again and no verdict pointed at.
+  const one = { id: 'm1', title: 'title m1', builds: 'b', claims: [claim('one'), claim('two')] };
+  const asked = (room: number | undefined, ...milestones: unknown[]) => () => ({ mode: 'extend', summary: 's', ...(room === undefined ? {} : { room }), milestones });
+  const goes = { build: built, verify: allProven, close: closed };
+
+  const short = await run({ request: 'x' }, { ...goes, plan: asked(2, one) });
+  assert.match(short.result.stopped, /^nothing of milestone "title m1" was started: the disk the project is on has 2 GB free, and a milestone like this one has taken about 3 GB[^.]*\. A disk that fills stops everything else on this machine too\. Free room and ask to continue: `sz-eyes evidence prune <a closed contract>`/);
+  assert.deepEqual(labels(short.calls), ['plan'], 'nothing is started');
+
+  const tight = await run({ request: 'x' }, { ...goes, plan: asked(5, one) });
+  assert.equal(tight.result.stopped, null);
+  assert.match(tight.calls.find((c) => c.label === 'build:m1')!.prompt, /The disk this project is on had 5 GB free when this run last asked, and a milestone like this one has taken about 3\. Before a step that writes gigabytes[^.]*, run `sz-eyes room`; if the step would not fit, do not start it: say so under "blocked", with both figures\./);
+  assert.ok(tight.logs.some((line) => /title m1: the disk has 5 GB free and a milestone like this one has taken about 3: it is started/.test(line)));
+
+  // With room to spare, and when nobody said how much there is, nothing is said of it.
+  for (const plan of [asked(20, one), asked(undefined, one)]) {
+    const ran = await run({ request: 'x' }, { ...goes, plan });
+    assert.equal(ran.result.stopped, null);
+    assert.doesNotMatch(ran.calls.find((c) => c.label === 'build:m1')!.prompt, /The disk this project is on had/);
+  }
+
+  // An app built for a phone takes far more: what fits a web milestone four times over does not fit it.
+  const phone = { id: 'm1', title: 'title m1', builds: 'b', claims: [{ id: 'one', says: 'the weigh-in is saved on the simulator', kind: 'flow', ref: 'flows/ios/weigh.yaml (maestro)' }, claim('two')] };
+  const tooBig = await run({ request: 'x' }, { ...goes, plan: asked(12, phone) });
+  assert.match(tooBig.result.stopped, /the disk the project is on has 12 GB free, and a milestone that builds an app for a phone has taken about 16 GB/);
+  assert.deepEqual(labels(tooBig.calls), ['plan']);
+  // The figures are the ones `sz-eyes room` prints.
+  assert.match(SOURCE, new RegExp(`const TAKES = \\(m, resumed\\) => \\(resumed \\? 1 : onDevice\\(m\\) \\? ${TAKES.phone} : ${TAKES.other}\\)`));
+
+  // The disk is asked again when a milestone closes: the next one is judged by what is left then.
+  const two = await run({ request: 'x' }, { ...goes, plan: asked(20, one, { ...one, id: 'm2', title: 'title m2' }), close: () => ({ report: 'r.html', closed: true, line: 'l', room: 2 }) });
+  assert.deepEqual(labels(two.calls), ['plan', 'build:m1', 'verify:m1', 'close:m1']);
+  assert.match(two.result.stopped, /^nothing of milestone "title m2" was started: the disk the project is on has 2 GB free/);
+
+  assert.match(short.calls[0]!.prompt, /Run `sz-eyes room` as well and return the number on its first line under "room": the gigabytes free on the disk this project is on, by which the run judges whether a milestone fits before it builds one/);
+  const closing = tight.calls.find((c) => c.label === 'close:m1')!.prompt;
+  assert.match(closing, /When it said closed, run `sz-eyes evidence prune m1` before anything is committed: every look took its pictures again, and this removes from the milestone's evidence folder those that no verdict, notice or record names \(the page and what they name stay\)\./);
+  assert.match(closing, /7\. Run `sz-eyes room` and return the number on its first line under "room"\./);
+  // A milestone left with a claim shown false keeps all of its evidence: nobody is told to prune it.
+  const wrong = await run({ request: 'x' }, { ...goes, plan: asked(20, one), fix: () => ({ fixed: [] }), verify: () => ({ proven: ['one'], refuted: [{ id: 'two', fact: 'two is not so' }], unchecked: [] }), close: () => ({ report: 'r.html', closed: false, line: 'l' }) });
+  const left = wrong.calls.find((c) => c.label === 'close:m1')!.prompt;
+  assert.doesNotMatch(left, /sz-eyes evidence prune/);
+  assert.match(left, /Its evidence stays as it is: it is what the fix is worked from\./);
 });

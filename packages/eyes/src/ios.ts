@@ -163,6 +163,18 @@ async function heldFor(udid: string, opts: { run?: CommandRunner; held?: Held | 
   return ensureHeld(udid);
 }
 
+/**
+ * A film is for whoever looks into the folder, not for the project's history: the strip of frames made beside it
+ * is what git keeps. (2026-11-21: a look's films were 30 to 50 MB each, every look took them again and each was
+ * committed; one milestone's 27 films put a gigabyte into the repository, where removing the files later frees
+ * nothing.)
+ */
+export function filmsStayOutOfGit(folder: string): void {
+  const file = join(folder, '.gitignore');
+  const had = existsSync(file) ? readFileSync(file, 'utf8') : '';
+  if (!/^\*\.mp4$/m.test(had)) writeFileSync(file, `${had}${had === '' || had.endsWith('\n') ? '' : '\n'}*.mp4\n`);
+}
+
 export interface Box {
   x1: number;
   y1: number;
@@ -484,6 +496,7 @@ export async function runFlow(udid: string, flow: string, opts: { out: string; e
   const name = basename(flow).replace(/\.ya?ml$/, '');
   const copy = quarantineFlow(flow, opts.out);
   const video = opts.video ? join(opts.out, `${name}.mp4`) : null;
+  if (video) filmsStayOutOfGit(opts.out);
   const recorder = video ? spawn('xcrun', ['simctl', 'io', udid, 'recordVideo', '--codec=h264', '--force', video], { stdio: 'ignore' }) : null;
   const started = Date.now();
   // On the held driver's port the flow finds its driver up: it starts none, and waits for none to start.

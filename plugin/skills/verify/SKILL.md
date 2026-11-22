@@ -62,8 +62,9 @@ A look waits for the page to load and then, for four seconds at most, for it to 
 ```
 sz-eyes ios spare [--name <n>] [--wait <minutes>]   # the eyes' own simulator; prints its id. Never use one of the owner's. --name: one of its own for work done beside other work
 sz-eyes ios room                                    # how many simulators this Mac holds at once, and which are up
+sz-eyes room                                        # gigabytes free on the disk the project is on (first line); ask before a build that writes many
 sz-eyes ios install <udid> <path.app> --bundle-id <id> [--metro <port>]
-sz-eyes ios flow <udid> <flow.yaml> --out <folder> --video      # Maestro; the project's own flow, or one you write for this claim
+sz-eyes ios flow <udid> <flow.yaml> --out <folder> --video      # Maestro; the project's own flow, or one you write for this claim. The film stays out of git (the folder ignores *.mp4); the strip of frames beside it, <name>-film.png, is what a claim's evidence names
 sz-eyes ios look <udid> --out <folder> --name <state>           # what is on the screen, and what was measured; --json for a flow
 sz-eyes ios rest <udid> --erase                     # when done: a booted simulator holds gigabytes
 ```

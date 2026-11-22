@@ -5,6 +5,8 @@ import { basename, dirname, join, resolve } from 'node:path';
 import { ArmError, armCommand, heldLines } from './arms.ts';
 import { BACKLOG_FILE, addToBacklog, doneInBacklog, leftBy, openBacklog } from './backlog.ts';
 import { CONTRACTS_DIR, EVIDENCE_DIR, ClaimStatus, Contract, Lane, ShownBy, localDay, notLookedAt, openContracts, owed, readContract, renderContract, updateContract, writeContract, type Claim } from './contract.ts';
+import { keepsAll, pruneEvidence, prunedText } from './prune.ts';
+import { diskRoom, roomText } from './room.ts';
 import { ElectronError, renderAppLook, renderAppWalk, walkElectron } from './electron.ts';
 import { CiteError, seeQuote } from './cite.ts';
 import { Basis, LineId, LineStatus, Objection, Other, addAsk as addWorthAsk, addCite, addObjection, allCases, answerObjection, caseFolder, hearAsk, newCase, readCase, removeOther, renderCase, renderCases, setCall, setLine, setOther, setOwner, setRow, standingOf, unanswered, weighCite, withdrawCite, writeCasePage, writeCasesPage } from './worth.ts';
@@ -141,6 +143,11 @@ const USAGE = `sz-eyes: launch what was built, look at it, operate it, and put w
   sz-eyes contract close <id> [--accepted "<the owner's words>"] [--dir <project>]   # refuses when most claims were not looked at
   sz-eyes evidence <id> [--summary <text>] [--took <text>] [--dir <project>]   writes ${EVIDENCE_DIR}/<id>/report.html
 
+  sz-eyes evidence prune <id> [--dry-run] [--dir <project>]
+        removes from a closed contract's evidence folder the pictures and films that nothing names: not a claim's
+        or a notice's evidence, and not named (the file, a folder above it) in any contract, the standing record,
+        the backlog, the progress file, the spec or the map. The page stays. An open contract, or one with a
+        claim shown false, keeps everything. --dry-run only says what would go
   sz-eyes standing [--summary|--json] [--dir <project>]
         every claim earlier work proved and the product still has to keep true, with how each is shown, when it
         was last shown to hold, and which of its check files changed since; exits 1 when one is recorded broken
@@ -198,6 +205,8 @@ const USAGE = `sz-eyes: launch what was built, look at it, operate it, and put w
   sz-eyes worth show [<id>] [--dir <project>]            one case as it stands, or a line for each case
   sz-eyes worth page [<id>] [--dir <project>]            the page the owner reads: one case, or every case side by side (.sz/worth/index.html)
 
+  sz-eyes room [--json] [--dir <project>]                whole gigabytes free on the disk the project is on (its first line,
+        the number alone), and what a milestone has taken there: asked by whoever plans, before anything is built
   sz-eyes sandbox                                        says "sandboxed" when run inside a session's command sandbox (where no browser starts), "open" when not
   sz-eyes backlog [--dir <project>]                      what is written down as known and not done (${BACKLOG_FILE})
   sz-eyes backlog add "<one line, in the owner's language>" [--from "<where it came from>"] [--dir <project>]
@@ -1048,6 +1057,12 @@ async function main(argv: string[]): Promise<number> {
     }
     return 0;
   }
+  if (area === 'room') {
+    const a = parse(argv.slice(1), ['--json']);
+    const room = diskRoom(resolve(a.one('--dir') ?? '.'));
+    out(a.has('--json') ? JSON.stringify(room) : roomText(room));
+    return 0;
+  }
   if (area === 'port') {
     out(String(await freePort()));
     return 0;
@@ -1097,8 +1112,10 @@ async function main(argv: string[]): Promise<number> {
     return 0;
   }
   if (area === 'contract' || area === 'evidence') {
-    const a = parse(area === 'evidence' ? [command ?? '', ...rest] : rest, []);
+    const a = parse(area === 'evidence' ? [command ?? '', ...rest] : rest, area === 'evidence' ? ['--dry-run'] : []);
     const project = resolve(a.one('--dir') ?? '.');
+    // `sz-eyes evidence prune <id>`: the one word after `evidence` that is not a contract's id.
+    const pruning = area === 'evidence' && a.words[0] === 'prune';
     if (area === 'contract' && command === 'status') {
       const open = openContracts(project).map(({ contract }) => ({ contract, owes: [...owed(contract), ...alsoOwed(project, contract)] })).filter((c) => c.owes.length > 0);
       const problem = ledgerProblem(project);
@@ -1120,7 +1137,7 @@ async function main(argv: string[]): Promise<number> {
       for (const { contract } of waiting) out(`${contract.id}\t${contract.built!.launch}`);
       return 0;
     }
-    const id = a.words[0];
+    const id = pruning ? a.words[1] : a.words[0];
     if (!id) throw new EyesError('which contract: give its id');
     const file = contractFile(project, id);
     if (area === 'contract' && command === 'new') {
@@ -1140,6 +1157,15 @@ async function main(argv: string[]): Promise<number> {
       return 0;
     }
     const contract = readContract(file);
+    if (pruning) {
+      const why = keepsAll(contract);
+      if (why) {
+        out(`${id}: nothing removed, because ${why}: its evidence is what the work goes on from.`);
+        return 0;
+      }
+      out(prunedText(contract, pruneEvidence(project, contract, { dry: a.has('--dry-run') }), a.has('--dry-run')));
+      return 0;
+    }
     if (area === 'evidence') {
       const folder = evidenceFolder(project, id);
       mkdirSync(folder, { recursive: true });
