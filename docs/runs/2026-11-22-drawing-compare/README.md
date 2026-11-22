@@ -149,10 +149,27 @@ Why the wage rule did not converge in two fixes: the builder's own test of the r
 asks for an answer the source the screen cites refuses (two months of partial arrears that are not in a row).
 Each fixer may not touch a frozen test, kept it passing, and said so in a line of what it returned; each look
 then found the product wrong by the source in another case; the last ruling found the product wrong. Nobody
-ruled on the test. A fixer has no place to say "this frozen check asks for what the claim's source refuses":
+ruled on the test. A fixer had no place to say "this frozen check asks for what the claim's source refuses":
 the builder has one ("disputes"), the fixer only "cannot be made true", which it did not use because it could
-make the check pass. **Not changed.** The mend is a line in the fixer's instructions and a ruling that follows
-it, and it needs a run to be tried; it is the next thing I would do to the workflow.
+make the check pass.
+
+**Changed** (`63e80fa`): whoever fixes is told that where a claim's own figure, or a frozen test or flow it is
+shown by, asks for an answer the claim's source refuses, no fix makes both true: it changes nothing for that
+claim and puts it under "notFixed" with the file, the case and the source's sentence. Whoever rules may then set
+the claim aside for the owner, as it does a claim whose own words are wrong: which reading of a law holds is
+theirs to say. The arbiter still may not change what a check expects.
+
+**Tried** on the run's own state as it stood when its first fixer began (`fix-test/`: the commit after the first
+look, with that look's verdicts and evidence; the prompts are the run's, cut to the two wage claims, with the new
+lines).
+
+| | In the run | In the test |
+|---|---|---|
+| The fixer | bent the rule to keep the frozen test passing, twice (56.8 and 28.3 min, among other claims) | mended what the source does not touch (a missing hire date, election days) and put both claims under "notFixed" with the test's case and the ministry's two sentences: 12.7 min, 3.32 dollars |
+| The ruling | was never asked about them until the end, and then found the product wrong | opened the source, set both aside for the owner, named the frozen test's lines 61 to 80 and 127 to 139 and a place where the plan's own frame contradicts itself: 8.5 min, 2.25 dollars |
+
+Not shown: the same inside a whole run, and a fixer that says so of a check that is in fact right (the ruling
+is what guards against that: it takes nobody's word and opens the source).
 
 Also seen: the two planners differed. The control's took the wage rule from its source and recounted the
 drawing's example to 63 days; the compared run's kept the drawing's 77. Both products were then shown wrong
