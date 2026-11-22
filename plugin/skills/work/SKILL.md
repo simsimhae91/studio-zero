@@ -37,7 +37,7 @@ In this order, because a picture of "before" cannot be taken afterwards:
 3. Run the type check and the project's checks: all of them when the map says they are quick. A small change is where an old promise breaks unnoticed.
 4. Look again in the same state, same size, `--name after`, into the same folder. Read the state off the look (the words, the figure), not off the picture.
 
-Report in a few lines: the cause, what changed, what was run and what it said (the figures before and after), where the two pictures are, what was not checked, and anything you decided that the owner might have decided otherwise. What you noticed and did not do goes to the backlog (`sz-eyes backlog add "<it>" --from "<this change>"`), and a line of the backlog that this change ended is ticked (`sz-eyes backlog done "<some of its words>" --by "<the commit>"`). Add a line to `.sz/progress.md`. Done: no contract, no verifier.
+Report in a few lines: the cause, what changed, what was run and what it said (the figures before and after), where the two pictures are, what was not checked, and anything you decided that the owner might have decided otherwise. The owner saw none of your commands: plain words, and no name or abbreviation you made up while working. What you noticed and did not do goes to the backlog (`sz-eyes backlog add "<it>" --from "<this change>"`), and a line of the backlog that this change ended is ticked (`sz-eyes backlog done "<some of its words>" --by "<the commit>"`). Add a line to `.sz/progress.md`. Done: no contract, no verifier.
 
 ## 3. M: contract, build, proof
 
