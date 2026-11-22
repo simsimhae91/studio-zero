@@ -1,0 +1,2 @@
+PASSED again.yaml in 53s, 8 of 8 steps completed
+run twice: the first run stopped at "Assert that "감량률로 1:1 배틀해요" is visible" because Maestro asked for the screen before the app it had just started was up (the app was running a moment later: no crash). The flow had only started, stopped and read, so it was run again from its start; what is above is the second run.

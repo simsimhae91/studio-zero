@@ -1,0 +1,25 @@
+FAILED again.yaml in 12s, 4 of 5 steps completed
+stopped at: Assert that "감량률로 1:1 배틀해요" is visible
+
+the end of Maestro's own words:
+Running on sz-race - iOS 26.4 - E658B0C0-2F5D-4BF0-846D-058FA24F2211
+ > Flow again
+Launch app "kr.studiozero.gamryangbattle"... COMPLETED
+Assert that "감량률로 1:1 배틀해요" is visible... COMPLETED
+Stop kr.studiozero.gamryangbattle... COMPLETED
+Launch app "kr.studiozero.gamryangbattle"... COMPLETED
+Assert that "감량률로 1:1 배틀해요" is visible... FAILED
+
+App crashed or stopped while executing flow, please check diagnostic logs: ~/Library/Logs/DiagnosticReports directory
+
+==== Debug output (logs & screenshots) ====
+
+/Users/hosoo/.maestro/tests/2026-11-22_095611
+╭────────────────────────────────────────────────────────────────────────────────────────────────╮
+│                                                                                                │
+│   Debug tests faster by easy access to test recordings, maestro logs, screenshots, and more.   │
+│                                                                                                │
+│   Run your flows on Maestro Cloud:                                                             │
+│   maestro cloud app_file flows_folder/                                                         │
+│                                                                                                │
+╰────────────────────────────────────────────────────────────────────────────────────────────────╯

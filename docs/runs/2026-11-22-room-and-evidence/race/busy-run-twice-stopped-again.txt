@@ -1,0 +1,21 @@
+FAILED again.yaml in 83s, 7 of 8 steps completed
+stopped at: Assert that "감량률로 1:1 배틀해요" is visible
+run twice: the first run stopped at "Assert that "감량률로 1:1 배틀해요" is visible" because Maestro asked for the screen before the app it had just started was up (the app was running a moment later: no crash). The flow had only started, stopped and read, so it was run again from its start; what is above is the second run.
+
+the end of Maestro's own words:
+Running on sz-race2 - iOS 26.4 - DF94BFDC-AEB9-4642-BCF0-465D4114F5B1
+ > Flow again
+Launch app "kr.studiozero.gamryangbattle"... COMPLETED
+Assert that "감량률로 1:1 배틀해요" is visible... COMPLETED
+Stop kr.studiozero.gamryangbattle... COMPLETED
+Launch app "kr.studiozero.gamryangbattle"... COMPLETED
+Assert that "감량률로 1:1 배틀해요" is visible... COMPLETED
+Stop kr.studiozero.gamryangbattle... COMPLETED
+Launch app "kr.studiozero.gamryangbattle"... COMPLETED
+Assert that "감량률로 1:1 배틀해요" is visible... FAILED
+
+App crashed or stopped while executing flow, please check diagnostic logs: ~/Library/Logs/DiagnosticReports directory
+
+==== Debug output (logs & screenshots) ====
+
+/Users/hosoo/.maestro/tests/2026-11-22_103445
