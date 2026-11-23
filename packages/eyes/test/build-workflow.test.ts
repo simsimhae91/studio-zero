@@ -470,7 +470,7 @@ test('a prototype the owner said yes to is what the first pass is planned from, 
   // The look after a fix judges the drawing the same way: the claim is mended and looked at again now, not set aside
   // with the flows that held four screens away from it (2026-11-23), and whoever looks again needs the two kinds.
   let n = 0;
-  const mended = await run({ request: 'x' }, { plan: () => ({ mode: 'new', summary: 's', design: 'approved', milestones: [firstPass] }), build: built, verify: () => (n++ === 0 ? { proven: [], refuted: [{ id: firstPass.claims[0].id, fact: '네 화면이 그림과 다름' }], unchecked: [] } : allProven()), fix: () => ({ fixed: [firstPass.claims[0].id] }), close: closed });
+  const mended = await run({ request: 'x' }, { plan: () => ({ mode: 'new', summary: 's', design: 'approved', milestones: [firstPass] }), build: built, verify: () => (n++ === 0 ? { proven: [], refuted: [{ id: 'one', fact: '네 화면이 그림과 다름' }], unchecked: [] } : allProven()), fix: () => ({ fixed: ['one'] }), close: closed });
   assert.match(mended.calls.find((c) => c.label === 'verify:m1:again')!.prompt, /For the claim that every screen is built as drawn, where it is yours[\s\S]*A difference that no claim requires is this claim shown false: name every one with its screen/);
 
   // A plan with no word on the design is built as before: no drawing to carry, and none to be held to.
