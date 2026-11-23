@@ -1,0 +1,188 @@
+0303139 first-pass: build NX-01, the commute and care fields, DC-06, RS-01 with three reasons, CR-01 and PV-01 as drawn, and take their pictures again
+
+diff --git a/app/js/check.js b/app/js/check.js
+index bfcf7da..99f4c77 100644
+--- a/app/js/check.js
++++ b/app/js/check.js
+@@ -255,7 +255,7 @@ const KIND = {
+         <div class="field"><span class="lab">무엇이 바뀌었나요?</span>
+           <div class="chips">${M.COMMUTE_CAUSES.map(([v, t]) => `<button class="chip${x.cause === v ? ' on' : ''}" data-act="cm-cause" data-arg="${v}" aria-pressed="${x.cause === v}">${t}</button>`).join('')}</div></div>
+         ${U.field({ label: '바뀐 날', id: 'cm-changed', body: U.dateInput({ id: 'cm-changed', k: `check.inputs.${r.id}.changed`, value: x.changed, label: '바뀐 날', aside: x.changed && quit ? (x.changed <= quit ? '이직일보다 앞' : '이직일보다 뒤') : '' }) })}
+-        ${U.field({ label: '바뀐 뒤 왕복 시간', opt: '분으로', id: 'cm-min', body: U.numInput({ id: 'cm-min', k: `check.inputs.${r.id}.minutes`, value: x.minutes, max: 600, placeholder: '예: 220', label: '바뀐 뒤 왕복 시간(분)', ic: 'bus', unit: '분', aside: min ? hm(min) : '' }),
++        ${U.field({ label: '바뀐 뒤 왕복 시간', id: 'cm-min', body: U.numShown({ id: 'cm-min', k: `check.inputs.${r.id}.minutes`, value: x.minutes, max: 600, shown: hm(min), aside: min >= 60 ? `${min}분` : '', placeholder: '분으로 넣어요 · 예: 220분', label: '바뀐 뒤 왕복 시간(분)', ic: 'bus' }),
+           help: '<span class="help">지도 앱의 대중교통 길찾기 화면을 저장해 두면 증빙이 돼요.</span>' })}
+       </div>
+       ${U.note('plain', 'info', '판정은 고용센터가 해요.', '')}`;
+@@ -269,7 +269,7 @@ const KIND = {
+       ${U.cite(`별표 2 제7호 · ${C('care.need-days')}일 이상 간호`, 'b2:7')}
+       ${heroFig({ eyebrow: '간호가 필요한 기간', fig: `${c.days}일`, of: `${c.need}일`, say: ev.say, badgeText: ev.say === 'short' ? `${c.short}일 모자라요` : SAYTXT[ev.say],
+         gauge: U.gauge({ max, at: c.need, val: c.days, mark: `기준 ${c.need}일`, scale: ['0일', `${max}일`] }), line2 })}
+-      <div style="margin-top:20px">${U.field({ label: '간호가 필요한 기간', id: 'care-days', body: U.numInput({ id: 'care-days', k: `check.inputs.${r.id}.days`, value: x.days, max: 365, placeholder: '예: 45', label: '간호가 필요한 기간(일)', ic: 'cal', unit: '일', aside: '이직 전 기간' }) })}</div>
++      <div style="margin-top:20px">${U.field({ label: '간호가 필요한 기간', id: 'care-days', body: U.numShown({ id: 'care-days', k: `check.inputs.${r.id}.days`, value: x.days, max: 365, shown: `${x.days}일`, aside: '이직 전 기간', placeholder: '일로 넣어요 · 예: 45일', label: '간호가 필요한 기간(일)', ic: 'cal' }) })}</div>
+       <div class="rows">
+         ${U.choice({ act: `data-act="flag" data-arg="${r.id}.asked"`, on: x.asked, text: '회사에 휴가나 휴직을 요청했어요' })}
+         ${U.choice({ act: `data-act="flag" data-arg="${r.id}.refused"`, on: x.refused, text: '회사가 안 된다고 했어요' })}
+@@ -481,11 +481,11 @@ export function RS01(ctx) {
+     ${multi ? mine : ''}
+     <div class="section" style="margin-top:${multi ? 20 : 16}px">${multi ? '' : '<h3>회사가 올린 코드와 견주면</h3>'}${compare}</div>
+     ${multi ? '' : mine}
+-    <div class="section" style="margin-top:24px"><h3>이어서 할 것</h3>
++    ${multi ? '' : `<div class="section" style="margin-top:24px"><h3>이어서 할 것</h3>
+       <div class="rows">
+         <button class="row" data-go="DC-04"><span class="tile s4">${icon('list')}</span><div class="txt"><span class="name">증빙 목록</span><span class="meta">고용센터에 가져갈 자료 ${M.evidenceCount(st).total}가지</span></div>${icon('chev', 'chev')}</button>
+         <button class="row" data-go="HP-01"><span class="tile s1">${icon('phone')}</span><div class="txt"><span class="name">사람에게 묻기</span><span class="meta">상담 ${C('ask.1350')} · AI 노동법 상담</span></div>${icon('chev', 'chev')}</button>
+-      </div></div>
++      </div></div>`}
+   </main>
+   ${U.dock(U.btn('할 일 순서 보기', 'data-go="NX-01"'))}`;
+ }
+diff --git a/app/js/main.js b/app/js/main.js
+index 17ff005..dfe6079 100644
+--- a/app/js/main.js
++++ b/app/js/main.js
+@@ -127,7 +127,7 @@ app.addEventListener('input', (e) => {
+   if (el.dataset.type === 'int' || el.dataset.type === 'date') render({ keepScroll: true }); else patchLive();
+ });
+ app.addEventListener('compositionend', () => patchLive());
+-app.addEventListener('click', (e) => { const d = e.target.closest('.input.date input'); if (d && d.showPicker) try { d.showPicker(); } catch {} });
++app.addEventListener('click', (e) => { const d = e.target.closest('.input.date input, .date-inline input'); if (d && d.showPicker) try { d.showPicker(); } catch {} });
+ 
+ // ── 누르기 ──
+ function finish() {
+diff --git a/app/js/more.js b/app/js/more.js
+index 353abbc..1c306bb 100644
+--- a/app/js/more.js
++++ b/app/js/more.js
+@@ -13,17 +13,20 @@ const ok = (s) => s === 'ok';
+ function steps(ctx, dl) {
+   const st = ctx.state; const n = st.next; const ev = M.evidenceCount(st); const sf = M.statementFilled(st);
+   const sent = !!n.request;
++  // 걸음마다 근거 조문은 그림처럼 걸음 줄의 글 끝에 ' · 조문'으로
++  const meta = (text, law) => `<span class="meta">${text} · ${law}</span>`;
+   const one = sent
+-    ? `<div class="row top" data-act="req-date" role="button" tabindex="0"><span class="stepno done">${icon('check', 'sm')}</span><div class="txt"><span class="name">발급요청서 냈어요</span><span class="meta">${md(n.request)}${st.docs.requestSaved ? ' · PDF로 저장함' : ''}</span>${U.cite('시행규칙 제82조의2제2항', 'rule82-2-2')}</div>${icon('chev', 'chev')}</div>`
+-    : `<div class="row top" data-go="DC-02" role="button" tabindex="0"><span class="stepno next">1</span><div class="txt"><span class="name">회사에 이직확인서 발급요청서 내기</span><span class="meta">회사는 받은 날부터 ${C('deadline.company-days')}일 안에 내줘야 해요</span>${U.cite('시행규칙 제82조의2제2항', 'rule82-2-2')}</div>${icon('chev', 'chev')}</div>`;
+-  const two = `<a class="row top" href="https://www.work24.go.kr" target="_blank" rel="noopener"><span class="stepno${sent && !(dl && dl.passed) ? ' next' : ''}">2</span><div class="txt"><span class="name">고용24에서 처리됐는지 보기</span><span class="meta">${sent && dl ? `${md(dl.deadline)} 전에 한 번 열어 봐요` : '회사가 냈는지 고용24에서 보여요'}</span><span class="cite"><span class="law">${icon('scale')}고용보험법 제42조제3항</span></span></div>${icon('out', 'chev')}</a>`;
+-  const three = `<div class="row top"><span class="stepno${dl && dl.passed ? ' next' : ''}">3</span><div class="txt"><span class="name">${dl && dl.passed ? '이직확인서 없이 고용센터에 신청하기' : sent && dl ? `${md(dl.deadline)}까지 못 받으면, 없이 신청하기` : `${C('deadline.company-days')}일 안에 못 받으면, 없이 신청하기`}</span><span class="meta">고용센터가 회사에 직접 요청해요</span>${U.cite('같은 조 제3항~제5항', 'rule82-2-3')}${dl && dl.passed ? `<div style="display:flex;gap:8px;margin-top:8px"><a class="btn quiet sm" href="https://www.work24.go.kr" target="_blank" rel="noopener">${icon('out', 'sm')}고용24에서 신청하기</a></div>` : ''}</div></div>`;
+-  const four = `<div class="row top"><span class="stepno">4</span><div class="txt"><span class="name">고용센터에 진술서와 증빙 내기</span><span class="meta">${st.check.finished ? `증빙 ${ev.done}/${ev.total} · 진술서 ${sf}/5칸 · ` : ''}회사가 적은 사유를 고용센터가 스스로 확인해요</span>${U.cite('같은 조 제6항', 'rule82-2-6')}
++    ? `<div class="row top" data-act="req-date" role="button" tabindex="0"><span class="stepno done">${icon('check', 'sm')}</span><div class="txt"><span class="name">발급요청서 냈어요</span>${meta(`${md(n.request)}${st.docs.requestSaved ? ' · PDF로 저장함' : ''}`, '시행규칙 제82조의2제2항')}</div>${icon('chev', 'chev')}</div>`
++    : `<div class="row top" data-go="DC-02" role="button" tabindex="0"><span class="stepno next">1</span><div class="txt"><span class="name">회사에 이직확인서 발급요청서 내기</span>${meta(`회사는 받은 날부터 ${C('deadline.company-days')}일 안에 내줘야 해요`, '시행규칙 제82조의2제2항')}</div>${icon('chev', 'chev')}</div>`;
++  const two = `<a class="row top" href="https://www.work24.go.kr" target="_blank" rel="noopener"><span class="stepno${sent && !(dl && dl.passed) ? ' next' : ''}">2</span><div class="txt"><span class="name">고용24에서 처리됐는지 보기</span>${meta(sent && dl ? `${md(dl.deadline)} 전에 한 번 열어 봐요` : '회사가 냈는지 고용24에서 보여요', '고용보험법 제42조제3항')}</div>${icon('out', 'chev')}</a>`;
++  const three = `<div class="row top"><span class="stepno${dl && dl.passed ? ' next' : ''}">3</span><div class="txt"><span class="name">${dl && dl.passed ? '이직확인서 없이 고용센터에 신청하기' : sent && dl ? `${md(dl.deadline)}까지 못 받으면, 없이 신청하기` : `${C('deadline.company-days')}일 안에 못 받으면, 없이 신청하기`}</span>${meta('고용센터가 회사에 직접 요청해요', '같은 조 제3항~제5항')}${dl && dl.passed ? `<div style="display:flex;gap:8px;margin-top:8px"><a class="btn quiet sm" href="https://www.work24.go.kr" target="_blank" rel="noopener">${icon('out', 'sm')}고용24에서 신청하기</a></div>` : ''}</div></div>`;
++  // 요청 전에는 무엇을 내는지, 요청한 뒤에는 챙긴 만큼(그림의 두 상태)
++  const four = `<div class="row top"><span class="stepno">4</span><div class="txt"><span class="name">고용센터에 진술서와 증빙 내기</span>${meta(sent && st.check.finished ? `증빙 ${ev.done}/${ev.total} · 진술서 ${sf}/5칸` : '회사가 적은 사유를 고용센터가 스스로 확인해요', '같은 조 제6항')}
+       <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">${sent ? '' : '<button class="btn quiet sm" data-go="DC-04">증빙 챙기기</button>'}<button class="btn quiet sm" data-go="DC-05">진술서 쓰기</button></div></div></div>`;
+-  const five = `<div class="row top"><span class="stepno">5</span><div class="txt"><span class="name">회사가 사유를 안 고쳐 주면</span><span class="meta">정정 요청서를 보내고, 그래도 안 되면 근로복지공단에 피보험자격확인 청구(처리 ${C('confirm.days')}일)</span>${U.cite('별지 제20호서식', 'f20')}
+-      <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap"><button class="btn quiet sm" data-go="DC-06">정정 요청서 쓰기</button><button class="btn quiet sm" data-act="not-fixed" aria-expanded="${n.notFixed}">${icon(n.notFixed ? 'check' : 'down', 'sm')}회사가 안 고쳐 줬어요</button></div>
++  const five = `<div class="row top"><span class="stepno">5</span><div class="txt"><span class="name">회사가 사유를 안 고쳐 주면</span>${meta(sent ? '정정 요청서 → 근로복지공단 확인 청구' : `정정 요청서를 보내고, 그래도 안 되면 근로복지공단에 피보험자격확인 청구(${C('confirm.days')}일)`, '별지 제20호서식')}
++      <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap"><button class="btn quiet sm" data-act="not-fixed" aria-expanded="${n.notFixed}">${icon(n.notFixed ? 'check' : 'down', 'sm')}회사가 안 고쳐 줬어요</button></div>
+       ${n.notFixed ? `<div class="note" style="margin-top:10px;display:block"><b>근로복지공단에 피보험자격확인 청구서를 내요</b><br>별지 제20호서식 · 처리기간 ${C('confirm.days')}일. 첨부: 근로계약서, 급여통장사본, 소득금액증명, 급여명세서 등 고용관계를 확인할 수 있는 자료 1부. 서식에는 주민등록번호를 적어야 해서 여기서 채우지 않아요.<br><a class="link" href="${F20_URL}" target="_blank" rel="noopener">${icon('out', 'sm')}별지 제20호서식 받기</a></div>` : ''}</div></div>`;
+-  const six = `<div class="row top"><span class="stepno">6</span><div class="txt"><span class="name">불인정 통지를 받으면</span><span class="meta">안 날부터 ${C('appeal.days')}일 안에 심사청구</span>${U.cite('법 제87조제2항', 'act87')}</div></div>`;
++  const six = `<div class="row top"><span class="stepno">6</span><div class="txt"><span class="name">불인정 통지를 받으면</span>${meta(`안 날부터 ${C('appeal.days')}일 안에 심사청구`, '법 제87조제2항')}</div></div>`;
+   const list = dl && dl.passed ? [three, one, two, four, five, six] : [one, two, three, four, five, six];
+   return list.join('');
+ }
+@@ -77,8 +80,8 @@ function nxShell(ctx, hero, rows, end, next, dl) {
+     ${hero}
+     <h2 class="screen-title" style="font-size:20px;margin-top:22px">이 순서로 하면 돼요</h2>
+     <div class="rows" style="margin-top:8px">${rows}</div>
+-    ${end ? U.note('plain', 'hour', `실업급여는 이직일 다음 날부터 ${C('benefit.months')}개월 안에만 받아요 · <b>${ko(end)}까지</b>`, 'margin-top:12px') : ''}
+-    ${U.note('', 'info', '이직확인서를 안 내주면 회사에 과태료가 있어요(고용보험법 제118조). 회사에 알려 줄 수 있는 사실이에요.', 'margin-top:6px')}
++    ${!end ? '' : dl ? U.note('plain', 'hour', `실업급여는 <b>${ko(end)}까지</b> 받을 수 있는 기간이에요.`, 'margin-top:12px') : U.note('plain', 'hour', `실업급여는 이직일 다음 날부터 ${C('benefit.months')}개월 안에만 받아요 · <b>${ko(end)}까지</b>`, 'margin-top:12px')}
++    ${!dl || dl.passed ? U.note('', 'info', '이직확인서를 안 내주면 회사에 과태료가 있어요(고용보험법 제118조). 회사에 알려 줄 수 있는 사실이에요.', 'margin-top:6px') : ''}
+   </main>
+   ${U.float(float)}
+   ${U.tabbar('check', ctx.home)}
+@@ -149,13 +152,12 @@ export function eraseSheet(ctx, open) {
+   const st = ctx.state;
+   const ev = Object.values(st.docs.evidence).filter(Boolean).length;
+   const docs = [st.docs.request.name || st.docs.request.company ? '발급요청서' : '', M.statementFilled(st) ? '진술서' : '', st.docs.fix.text ? '정정 요청서' : ''].filter(Boolean);
+-  const dates = [st.next.request ? '요청한 날' : '', st.check.quit ? '이직일' : ''].filter(Boolean);
+   return U.layer('erase', `<h3>이 휴대폰에서 모두 지울까요?</h3>
+     <p class="sub">넣은 것은 처음부터 이 휴대폰에만 있었어요. 지우면 여기서도 모두 없어져요.</p>
+     <div class="rows plain" style="box-shadow:none;background:var(--bg)">
+       <div class="row"><span class="tile s6">${icon('clip')}</span><div class="txt"><span class="name">점검 답${st.check.finishedAt ? ' · ' + ko(st.check.finishedAt) : ''}</span><span class="meta">날짜, 고른 사정, 내 숫자</span></div></div>
+       <div class="row"><span class="tile s6">${icon('file')}</span><div class="txt"><span class="name">서류 ${docs.length}개</span><span class="meta">${docs.length ? docs.join(', ') : '발급요청서, 진술서, 정정 요청서'}</span></div></div>
+-      <div class="row"><span class="tile s6">${icon('list')}</span><div class="txt"><span class="name">증빙 체크 ${ev}개와 할 일 날짜</span>${dates.length ? `<span class="meta">${dates.join(', ')}</span>` : ''}</div></div>
++      <div class="row"><span class="tile s6">${icon('list')}</span><div class="txt"><span class="name">증빙 체크 ${ev}개와 할 일 날짜</span></div></div>
+     </div>
+     <p class="small muted" style="margin-top:12px">넣은 내용은 처음부터 서버에 보내지 않았어요. 저장해 둔 PDF는 휴대폰의 파일에 따로 남아요.</p>
+     <p class="small bold" style="margin-top:4px">지우면 되돌릴 수 없어요.</p>
+@@ -314,8 +316,9 @@ function fixValues(ctx) {
+   const target = top && top.code;
+   const ink = (s) => `<b class="ink">${esc(s)}</b>`;
+   const lead = `저는 ${st.check.quit ? `<b class="ink num">${ko(st.check.quit)}</b>` : '<span class="blank"></span>'}에 퇴사했습니다. 회사는 상실 사유를 ${ink(code + ' ' + (codeName(code) || ''))}로 신고했습니다. 실제로 있었던 일은 아래와 같습니다.`;
+-  const tail = `이 사정은 고용보험법 시행규칙 별표 2 ${top ? ink(top.name) : '<span class="blank"></span>'}에 해당한다고 생각합니다. 상실신고와 이직확인서의 사유를 ${target ? `<b class="ink num">${target}</b>으로` : '바르게'} 정정해 주시기를 요청합니다.${fx.replyBy ? ` <b class="ink num">${ko(fx.replyBy)}</b>까지 답을 주세요.` : ''}`;
+-  return { to: fx.to || (q.company ? q.company + ' 인사팀' : ''), from: fx.from || q.name, text: fx.text, lead, tail, top, target };
++  const ask = `이 사정은 고용보험법 시행규칙 별표 2 ${top ? ink(top.name) : '<span class="blank"></span>'}에 해당한다고 생각합니다. 상실신고와 이직확인서의 사유를 ${target ? `<b class="ink num">${target}</b>으로` : '바르게'} 정정해 주시기를 요청합니다.`;
++  const tail = `${ask}${fx.replyBy ? ` <b class="ink num">${ko(fx.replyBy)}</b>까지 답을 주세요.` : ''}`;
++  return { to: fx.to || (q.company ? q.company + ' 인사팀' : ''), from: fx.from || q.name, text: fx.text, lead, ask, tail, top, target };
+ }
+ 
+ export function DC03(ctx) {
+@@ -442,8 +445,7 @@ export function DC06(ctx) {
+       <p>${f.lead}</p>
+       <div class="field" style="margin:12px 0"><label for="fix-text">실제로 있었던 일 · 내 말${U.count('fix-text', fx.text.length, 600)}</label>
+         ${U.textArea({ id: 'fix-text', k: 'docs.fix.text', value: fx.text, max: 600, placeholder: '언제 누가 무엇을 했는지 내 말로 적어요.', label: '실제로 있었던 일', style: 'font-size:15px;min-height:96px' })}</div>
+-      <p data-live="fix-tail">${f.tail}</p>
+-      <div class="field" style="margin:12px 0 0"><label for="fix-reply">답을 받을 날 <span class="opt">원할 때만</span></label>${U.dateInput({ id: 'fix-reply', k: 'docs.fix.replyBy', value: fx.replyBy, label: '답을 받을 날' })}</div>
++      <p data-live="fix-tail">${f.ask} <span class="date-inline${fx.replyBy ? '' : ' is-empty'}"><b class="ink num shown">${fx.replyBy ? ko(fx.replyBy) : '날짜 고르기'}</b><input id="fix-reply" data-k="docs.fix.replyBy" data-type="date" type="date" value="${esc(fx.replyBy)}" aria-label="답을 받을 날" min="1940-01-01" max="2099-12-31"></span>까지 답을 주세요.${fx.replyBy ? '' : ' <span class="small muted">원할 때만</span>'}</p>
+     </div>
+     ${U.note('plain', 'info', '상실신고와 이직확인서는 같은 사유여야 해서, 회사가 고치면 둘 다 고쳐요.', 'margin-top:10px')}
+     ${U.note('danger', 'alert', '<b>있었던 일을 그대로 써요.</b> 사실과 다르게 써서 받으면 부정수급이에요(고용보험법 제116조).', 'margin-top:6px')}
+@@ -473,7 +475,6 @@ export function CR01(ctx) {
+       <div style="flex:1"><div class="bold" style="font-size:18px">${esc(h13.title)}</div><p class="small muted" style="margin-top:2px">${esc(fillC(h13.gist))}</p>${none ? '<span style="display:flex;gap:6px;margin-top:6px"><span class="badge brand">내 점검</span><span class="badge no">목록에 없는 사정</span></span>' : ''}</div>
+       ${icon('chev', 'chev muted')}
+     </button>
+-    <p class="small muted" style="margin:12px 4px 0">원문: 국가법령정보센터 별표 2 PDF · ${CRITERIA[0].read} 읽음</p>
+   </main>
+   ${st.check.finished ? '' : U.float('<button class="btn primary" data-act="start">3분 점검 시작</button>')}
+   ${U.tabbar('law', ctx.home)}`;
+diff --git a/app/js/ui.js b/app/js/ui.js
+index 4ccc933..cb847da 100644
+--- a/app/js/ui.js
++++ b/app/js/ui.js
+@@ -66,6 +66,11 @@ export function textInput({ id, k, value, max, placeholder = '', mode = '', asid
+ export function numInput({ id, k, value, max, placeholder = '', aside = '', ic = '', label = '', unit = '' }) {
+   return `<div class="input">${ic ? icon(ic) : ''}<input id="${id}" data-k="${k}" data-type="int" data-max="${max}" type="text" inputmode="numeric" value="${esc(value)}" placeholder="${esc(placeholder)}" aria-label="${esc(label)}" autocomplete="off"><span class="aside">${esc(unit)}${unit && aside ? ' · ' : ''}${aside}</span></div>`;
+ }
++// 숫자를 넣고 사람 말로 보이는 칸(그림: 칸에 '3시간 40분', 곁에 '220분'). 날짜 칸처럼 보이는 글 위에 투명한 입력이 덮인다.
++export function numShown({ id, k, value, max, shown, aside = '', placeholder = '', ic = '', label = '' }) {
++  const has = value !== '' && value != null;
++  return `<div class="input num-shown${has ? '' : ' is-empty'}">${ic ? icon(ic) : ''}<span class="num shown">${esc(has ? shown : placeholder)}</span>${has && aside ? `<span class="aside">${esc(aside)}</span>` : ''}<input id="${id}" data-k="${k}" data-type="int" data-max="${max}" type="text" inputmode="numeric" value="${esc(value)}" aria-label="${esc(label)}" autocomplete="off"></div>`;
++}
+ export function dateInput({ id, k, value, aside = '', label = '', placeholder = '날짜를 골라요', readonly = false, noIcon = false }) {
+   return `<div class="input date${value ? '' : ' is-empty'}">${noIcon ? '' : icon('cal')}<span class="num shown" data-live="shown-${id}">${value ? ko(value) : esc(placeholder)}</span>${readonly ? '' : `<input id="${id}" data-k="${k}" data-type="date" type="date" value="${esc(value)}" aria-label="${esc(label)}" min="1940-01-01" max="2099-12-31">`}${aside ? `<span class="aside">${aside}</span>` : ''}</div>`;
+ }
+diff --git a/app/styles.css b/app/styles.css
+index eece011..59560a2 100644
+--- a/app/styles.css
++++ b/app/styles.css
+@@ -343,7 +343,7 @@ button.row:active,a.row:active,.row[data-go]:active{background:var(--sunken)}
+ @media (max-width:520px){body{background:var(--bg)}}
+ h1.say{font-weight:800}
+ /* 칸: 프로토타입의 .input 면 안에 진짜 입력 */
+-.input:has(> input:not([type=date])){padding-top:4px;padding-bottom:4px}
++.input:not(.num-shown):has(> input:not([type=date])){padding-top:4px;padding-bottom:4px}
+ .input input:not([type=date]){min-height:44px}
+ .months-cap{align-items:center}
+ .input input,.input textarea{flex:1;min-width:0;width:100%;border:0;background:transparent;font:inherit;color:inherit;font-weight:inherit;outline:none;padding:0;margin:0;letter-spacing:inherit}
+@@ -356,6 +356,18 @@ h1.say{font-weight:800}
+ .input.date input::-webkit-calendar-picker-indicator{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer}
+ .input .unit{font-weight:400;color:var(--fg-2)}
+ .input.is-empty .shown{font-weight:400;color:var(--fg-2)}
++/* 숫자 칸: 그림처럼 사람 말로 보이고, 그 위에 투명한 입력 */
++.input.num-shown{position:relative;cursor:text}
++.input.num-shown input{position:absolute;inset:0;opacity:0;width:100%;height:100%;min-height:0;padding:0 14px;cursor:text}
++/* 편지의 칸: 그림처럼 밑줄 없이 볼펜 글자, 비었거나 쓰는 동안만 밑줄 */
++.letter .inline-input textarea{border-bottom-color:transparent}
++.letter .inline-input textarea:placeholder-shown{border-bottom-color:var(--brand-line)}
++.letter .inline-input textarea:focus{border-bottom-color:var(--brand)}
++/* 편지 글 안의 날짜: 보이는 글 위에 투명한 날짜 입력(누르는 면은 44px) */
++.date-inline{position:relative;display:inline-block;cursor:pointer}
++.date-inline input{position:absolute;left:0;right:0;top:50%;height:44px;transform:translateY(-50%);width:100%;opacity:0;cursor:pointer;margin:0;padding:0;border:0}
++.date-inline input::-webkit-calendar-picker-indicator{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer}
++.date-inline.is-empty .shown{font-weight:400;color:var(--fg-2);border-bottom:1.5px dashed var(--brand-line)}
+ .count.full{color:var(--danger)}
+ .inline-input{display:block}
+ .inline-input input{width:100%;min-height:44px;border:0;border-bottom:1.5px solid var(--brand-line);background:transparent;font:inherit;font-weight:700;color:var(--brand-ink);outline:none;padding:4px 0}

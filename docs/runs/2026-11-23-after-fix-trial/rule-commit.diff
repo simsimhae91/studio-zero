@@ -1,0 +1,15 @@
+2f91081 criteria flow: press the CK-03 care choice by the words the product now has
+
+diff --git a/flows/criteria.sh b/flows/criteria.sh
+index 6d3d098..2994570 100755
+--- a/flows/criteria.sh
++++ b/flows/criteria.sh
+@@ -93,7 +93,7 @@ sz-eyes web do "$SZ_URL/" --size phone --out "$OUT" --name criteria \
+   "${AFTER1[@]}" \
+   --step "go:/?again=1" --step "wait:다음 한 걸음" --step "tap:다시 점검하기" --step "wait:회사가 지금 어떻게 했나요?" \
+   --step "tap:다음" --step "tap:다음" \
+-  --step "tap:가족과 함께 살려고 이사해서 통근이 어려워졌어요" --step "tap:가족을 30일 넘게 간호해야 했어요" --step "tap:다음" \
++  --step "tap:가족과 함께 살려고 이사해서 통근이 어려워졌어요" --step "tap:가족을 30일 이상 간호해야 했어요" --step "tap:다음" \
+   --step "tap:다음 사정 · 통근" --step "type:바뀐 날=2026-03-02" --step "type:바뀐 뒤 왕복 시간(분)=220" \
+   --step "tap:다음 사정 · 가족 간호" --step "type:간호가 필요한 기간(일)=45" \
+   --step "tap:가능성 보기" --step "wait:할 일 순서 보기" \

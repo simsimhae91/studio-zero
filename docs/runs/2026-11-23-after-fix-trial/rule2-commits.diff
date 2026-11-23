@@ -1,0 +1,41 @@
+cc8be52 next-steps flow: read each step's article from the step's text, where the drawing puts it
+
+diff --git a/flows/next-steps.sh b/flows/next-steps.sh
+index debd44d..c6ee32b 100755
+--- a/flows/next-steps.sh
++++ b/flows/next-steps.sh
+@@ -41,6 +41,8 @@ S1=(
+ ROWS='[...document.querySelectorAll("main .rows > .row.top")]'
+ SIX='["회사에 이직확인서 발급요청서 내기","고용24에서 처리됐는지 보기","10일 안에 못 받으면, 없이 신청하기","고용센터에 진술서와 증빙 내기","회사가 사유를 안 고쳐 주면","불인정 통지를 받으면"]'
+ HERO='document.querySelector("main .hero")'
++# 걸음의 근거 조문: 그림(.sz/design/prototype.html NX-01)대로 걸음 줄의 글(.meta) 끝 ' · ' 뒤에 있다.
++LAW='((x)=>{const m=x.querySelector(".meta");const t=m?m.innerText.trim():"";const i=t.lastIndexOf(" · ");return i<0?"":t.slice(i+3).trim()})'
+ END_NOTE='(y)=>{const r=document.querySelector("main .rows");const n=[...document.querySelectorAll("main .note")].find(x=>x.innerText.includes(y));return !!n && !!(r.compareDocumentPosition(n)&Node.DOCUMENT_POSITION_FOLLOWING)}'
+ DANGER='(el)=>{const t=document.createElement("i");t.style.color="var(--danger-soft)";document.body.appendChild(t);const c=getComputedStyle(t).color;t.remove();return getComputedStyle(el).color===c}'
+ if [ "$LEFT" -ge 0 ]; then
+@@ -50,8 +52,8 @@ else
+ fi
+ 
+ sz-eyes web do "$SZ_URL/" --size phone --out "$OUT" --name next-steps "${S1[@]}" \
+-  --step "expect:(()=>{const r=${ROWS};const w=${SIX};return r.length===6 && r.every((x,i)=>x.querySelector(\".name\").innerText.trim()===w[i] && x.querySelector(\".stepno\").innerText.trim()===String(i+1) && !!x.querySelector(\".cite .law\") && x.querySelector(\".cite .law\").innerText.trim().length>0)})()" \
+-  --step "read:steps=${ROWS}.map(x=>x.querySelector(\".stepno\").innerText.trim()+\" \"+x.querySelector(\".name\").innerText.trim()+\" — \"+x.querySelector(\".cite .law\").innerText.trim()).join(\" | \")" \
++  --step "expect:(()=>{const r=${ROWS};const w=${SIX};return r.length===6 && r.every((x,i)=>x.querySelector(\".name\").innerText.trim()===w[i] && x.querySelector(\".stepno\").innerText.trim()===String(i+1) && /제\\d/.test(${LAW}(x)))})()" \
++  --step "read:steps=${ROWS}.map(x=>x.querySelector(\".stepno\").innerText.trim()+\" \"+x.querySelector(\".name\").innerText.trim()+\" — \"+${LAW}(x)).join(\" | \")" \
+   --step "shot:nx-before" \
+   --step "tap:요청한 날 넣기" --step "type:요청한 날=2026-11-21" --step "tap:이 날로 정하기" --step "wait:요청한 날 11월 21일" \
+   --step "expect:document.querySelector(\"main\").firstElementChild===${HERO}" \
+81992f2 erase flow: wait for the drawn PV-01 words, not the removed '요청한 날, 이직일' line
+
+diff --git a/flows/erase.sh b/flows/erase.sh
+index fce4190..b5c0a26 100755
+--- a/flows/erase.sh
++++ b/flows/erase.sh
+@@ -38,7 +38,7 @@ STEPS=(
+   --step "read:before=$KEY"
+   --step "tap:지우기"
+   --step "see:이 휴대폰에서 모두 지울까요?" --step "see:점검 답" --step "see:서류 2개" --step "see:발급요청서, 진술서"
+-  --step "see:증빙 체크 2개와 할 일 날짜" --step "see:요청한 날, 이직일"
++  --step "see:증빙 체크 2개와 할 일 날짜" --step "see:날짜, 고른 사정, 내 숫자"
+   --step "read:pv01=document.querySelector('#app').innerText"
+   --step "shot:PV-01"
+   --step "tap:취소"

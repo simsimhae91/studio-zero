@@ -237,6 +237,9 @@ Not changed. 2 and 3 are one mend: at the ruling after a fix, let the arbiter co
 or reads when a mend by a source or by the drawing changed the words, as its rules already allow before a look.
 It needs to be tried on a run's state before it is taken, and 1 needs the owner's word.
 
+(2026-11-23: both were taken and tried on this run's state, with the fixer's half that 2 also needed. The
+record is `../2026-11-23-after-fix-trial/` and `docs/decisions/2026-11-23-after-a-fix.md`.)
+
 Also: the third fixer started the product at 03:09 and left it running; it was found after the run and ended.
 A run does not look for what its agents left.
 
