@@ -270,6 +270,10 @@ test('a new product is planned twice: its first pass alone, and what comes after
   assert.deepEqual(big.calls.filter((c) => c.label.startsWith('verify')).map((c) => c.label), ['verify:m1:1of3', 'verify:m1:2of3', 'verify:m1:3of3', 'verify:m1:again:1of2', 'verify:m1:again:2of2']);
   const [againFirst, againSecond] = ['verify:m1:again:1of2', 'verify:m1:again:2of2'].map((label) => big.calls.find((c) => c.label === label)!.prompt);
   assert.match(againSecond!, /This is a second look, after a fix\. These claims of the contract were shown false before: c7\. Check each from the start/);
+  // Where new cases are tried is said to both; a verifier whose share holds nothing shown false is not pointed at claims "named above".
+  assert.match(againSecond!, /only where the fix reached: on the claims named above as shown false before, and on any other claim of yours whose screens or rules the fix changed/);
+  assert.match(againFirst!, /only where the fix reached: on any claim of yours whose screens or rules the fix changed/);
+  assert.doesNotMatch(againFirst!, /named above as shown false before/);
   assert.match(againSecond!, /You are one of 2 verifiers[\s\S]*Yours are these claims: c6, c7, c8, c9, c10\. Give a verdict to these and to no other\. Do not show again what stood before this work/);
   assert.match(againSecond!, /show again your other claims, each by its own flow, test or command; flows that would get in each other's way/);
   assert.doesNotMatch(againSecond!, /whole check command|noticed outside the claims/, 'the whole check and what was noticed before are the first verifier\'s');
@@ -789,6 +793,7 @@ test('a look after a fix tries new cases only where the fix reached, and a froze
   assert.doesNotMatch(only, /- one: 합계가 0/, 'the claim that was mended is not handed to whoever rules');
   assert.match(only, /None of the claims shown false is yours to decide this time: what follows is about frozen checks that now press or read an old form/);
   assert.match(only, /two: flows\/two\.sh:12 reads the old label/);
+
 });
 
 test('every agent is told from its first line when the session is sandboxed, an earlier milestone\'s verdicts are not made up, and how hard each stage thinks can be said', async () => {
