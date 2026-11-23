@@ -4,6 +4,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 import { ArmError, armCommand, heldLines } from './arms.ts';
 import { BACKLOG_FILE, addToBacklog, doneInBacklog, leftBy, openBacklog } from './backlog.ts';
+import { heldByBuildRun } from './build-run.ts';
 import { CONTRACTS_DIR, EVIDENCE_DIR, ClaimStatus, Contract, Lane, ShownBy, localDay, notLookedAt, openContracts, owed, readContract, renderContract, updateContract, writeContract, type Claim } from './contract.ts';
 import { keepsAll, pruneEvidence, prunedText } from './prune.ts';
 import { diskRoom, roomText } from './room.ts';
@@ -439,6 +440,12 @@ function needLedger(project: string): void {
   if (problem) throw new EyesError(problem);
 }
 
+/** Nothing is recorded beside a build run, or after it stopped, except by its own workers (build-run.ts says why). */
+function needNoBuildRun(project: string): void {
+  const held = heldByBuildRun(project);
+  if (held) throw new EyesError(`not recorded: ${held}`);
+}
+
 async function main(argv: string[]): Promise<number> {
   const [area, command, ...rest] = argv;
   if (!area || area === 'help' || area === '--help') {
@@ -813,6 +820,7 @@ async function main(argv: string[]): Promise<number> {
   if (area === 'standing') {
     const a = parse(command === 'record' || command === 'mend' ? rest : argv.slice(1), ['--summary', '--json']);
     const project = resolve(a.one('--dir') ?? '.');
+    if (command === 'record' || command === 'mend') needNoBuildRun(project);
     if (command === 'mend') {
       try {
         out(`${STANDING_FILE}: the looks of both sides kept, ${mendLedger(project)} claim(s). Add it and conclude the merge; then show the claims again on the merged product`);
@@ -1154,6 +1162,8 @@ async function main(argv: string[]): Promise<number> {
     const id = pruning ? a.words[1] : a.words[0];
     if (!id) throw new EyesError('which contract: give its id');
     const file = contractFile(project, id);
+    // Reading a contract is anyone's; the owner's own verdict on a drawing is theirs to record at any time.
+    if (area === 'evidence' || !['show', 'frozen', 'judged'].includes(command ?? '')) needNoBuildRun(project);
     if (area === 'contract' && command === 'new') {
       if (existsSync(file)) throw new EyesError(`${file} is already there`);
       const claims = a.all('--claim').map((text) => {

@@ -3,7 +3,7 @@ import { existsSync, lstatSync, mkdtempSync, readFileSync, realpathSync, rmSync,
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { createRequire } from 'node:module';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { mobbinOptions } from './mobbin.mjs';
 
@@ -66,33 +66,33 @@ function uncommittedProduct(cwd) {
   return changes;
 }
 
-export async function runBuild(args, project = process.cwd()) {
-  const source = readFileSync(join(plugin, 'workflows/build.js'), 'utf8').replace('export const meta', 'const meta');
-  const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor;
-  const workflow = new AsyncFunction('args', 'agent', 'milestoneAgent', 'phase', 'log', 'hostSandbox', source);
-  const root = realpathSync(project);
-  if (!args || typeof args !== 'object' || Array.isArray(args))
-    throw new Error('Expected one build request JSON object.');
-  const model = args.model ?? 'gpt-6.2-astra';
-  if (typeof model !== 'string' || !model.trim()) throw new Error('model must be a Codex model ID');
-  const z = createRequire(resolve(plugin, '../packages/eyes/package.json'))('zod');
-  const active = new Set();
-  let interrupted = false;
-  const abort = () => {
-    interrupted = true;
-    for (const child of active) child.kill('SIGTERM');
-  };
-  process.once('SIGINT', abort);
-  process.once('SIGTERM', abort);
-  const log = (message) => console.error(message);
+const leftSince = (cwd, before) => [...uncommittedProduct(cwd)].filter(([file, state]) => before.get(file) !== state).map(([file]) => file);
+
+// A worker that leaves product files uncommitted is handed them back once, by a short worker of the same role:
+// commit what belongs to the work, remove what running something left. (2026-11-23: a fixer left one helper
+// flow uncommitted, and the whole build of 76 minutes ended on it.)
+const LEFT = {
+  type: 'object',
+  properties: {
+    committed: { type: 'array', items: { type: 'string' }, description: 'the paths committed, as part of the work' },
+    removed: { type: 'array', items: { type: 'string' }, description: 'the paths removed, as leftovers of running something' },
+  },
+  required: ['committed', 'removed'],
+};
+const leftPrompt = (label, files) =>
+  `The worker before you (${label}) finished and left these files of the product changed and not committed: ${files.join(', ')}. Look at each (\`git status\`, \`git diff\`, the file itself). Commit, by exact path, each one that is part of that work (a check it wrote, a file it changed), in one commit whose message says what they are. Remove each that is only a leftover of running something (an output, a log, a copy). Change nothing else, and run nothing else: the work itself is done. Return the paths under "committed" and "removed".`;
+
+// One stage of the build: a fresh `codex exec` in the project, with the sz tools of its role.
+export function codexWorker({ root, model, z, log, active, holdProject, interrupted }) {
   const worker = async (where, contract, prompt, options) => {
-    if (interrupted) throw new Error('build interrupted');
+    if (interrupted()) throw new Error('build interrupted');
     const cwd = where ? realpathSync(resolve(root, where)) : root;
     if (where && !cwd.startsWith(join(root, '.sz/trees') + '/')) throw new Error('invalid milestone worktree: ' + cwd);
     const { label, agentType, schema } = options;
     const effort = options.effort ?? (agentType ? 'xhigh' : 'high');
     const role = agentType?.split(':')[1] ?? label.split(':')[0];
     if (contract && !/^[a-z0-9][a-z0-9-]{2,60}$/.test(contract)) throw new Error('invalid contract id: ' + contract);
+    const runToken = holdProject();
     const scratch = realpathSync(mkdtempSync(join(tmpdir(), 'sz-worker-')));
     const schemaFile = join(scratch, 'output.schema.json');
     const output = join(scratch, 'result.json');
@@ -137,7 +137,7 @@ export async function runBuild(args, project = process.cwd()) {
         '-c',
         'mcp_servers.sz.command=' + JSON.stringify(process.execPath),
         '-c',
-        'mcp_servers.sz.args=' + JSON.stringify([join(plugin, 'codex/tools.mjs'), cwd, role, contract || '', label]),
+        'mcp_servers.sz.args=' + JSON.stringify([join(plugin, 'codex/tools.mjs'), cwd, role, contract || '', label, runToken]),
         '-c',
         'mcp_servers.sz.required=true',
         '-c',
@@ -170,9 +170,14 @@ export async function runBuild(args, project = process.cwd()) {
       const result = JSON.parse(readFileSync(output, 'utf8'), (_key, v) => (v === null ? undefined : v));
       z.fromJSONSchema(schema).parse(result);
       if (before && !result.blocked) {
-        const left = [...uncommittedProduct(cwd)].filter(([file, state]) => before.get(file) !== state);
+        let left = leftSince(cwd, before);
+        if (left.length && !label.endsWith(':left')) {
+          log(`[${label}] left ${left.join(', ')} uncommitted: handed back once`);
+          await worker(where, contract, leftPrompt(label, left), { label: label + ':left', schema: LEFT, effort: 'low', phase: options.phase });
+          left = leftSince(cwd, before);
+        }
         if (left.length)
-          throw new Error(label + ': product changes still need a commit: ' + left.map(([file]) => file).join(', '));
+          throw new Error(label + ': product changes still need a commit, after they were handed back: ' + left.join(', '));
       }
       if (role === 'build' && !result.blocked) {
         if (result.contractId !== contract || !json(join(cwd, '.sz/contracts', contract + '.json')).built)
@@ -192,13 +197,46 @@ export async function runBuild(args, project = process.cwd()) {
       rmSync(scratch, { recursive: true, force: true });
     }
   };
+  return worker;
+}
+
+export async function runBuild(args, project = process.cwd()) {
+  const source = readFileSync(join(plugin, 'workflows/build.js'), 'utf8').replace('export const meta', 'const meta');
+  const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor;
+  const workflow = new AsyncFunction('args', 'agent', 'milestoneAgent', 'phase', 'log', 'hostSandbox', source);
+  const root = realpathSync(project);
+  if (!args || typeof args !== 'object' || Array.isArray(args))
+    throw new Error('Expected one build request JSON object.');
+  const model = args.model ?? 'gpt-6.2-astra';
+  if (typeof model !== 'string' || !model.trim()) throw new Error('model must be a Codex model ID');
+  const z = createRequire(resolve(plugin, '../packages/eyes/package.json'))('zod');
+  const runs = await import(pathToFileURL(resolve(plugin, '../packages/eyes/src/build-run.ts')).href);
+  // The run holds the project from its first worker on: a request turned away before any model works holds nothing.
+  let token = null;
+  const holdProject = () => (token ??= runs.startBuildRun(root, typeof args.request === 'string' ? args.request : ''));
+  const active = new Set();
+  let interrupted = false;
+  const abort = () => {
+    interrupted = true;
+    for (const child of active) child.kill('SIGTERM');
+  };
+  process.once('SIGINT', abort);
+  process.once('SIGTERM', abort);
+  const log = (message) => console.error(message);
+  const worker = codexWorker({ root, model, z, log, active, holdProject, interrupted: () => interrupted });
   try {
     // Claude model aliases belong to its adapter. The Codex model was resolved above.
-    return await workflow({ ...args, model: undefined }, (p, o) => worker(null, null, p, o), worker, log, log, {
+    const result = await workflow({ ...args, model: undefined }, (p, o) => worker(null, null, p, o), worker, log, log, {
       instructions:
         ' Use the Codex project shell and the sz electron tool for Electron observations. If their permissions stop a required observation, return the actual refusal under sandbox. Keep that observation unchecked.',
       stop: 'Resume from the same project when that observation can run with the required permissions.',
     });
+    if (token !== null) runs.endBuildRun(root);
+    return result;
+  } catch (error) {
+    // The record stays, saying why: the ledger takes nothing more until a run starts again and resumes.
+    if (token !== null) runs.stopBuildRun(root, error instanceof Error ? error.message : String(error));
+    throw error;
   } finally {
     process.off('SIGINT', abort);
     process.off('SIGTERM', abort);
@@ -214,7 +252,15 @@ export async function main() {
   }
   let input = '';
   for await (const chunk of process.stdin) input += chunk;
-  const result = await runBuild(JSON.parse(input));
+  let result;
+  try {
+    result = await runBuild(JSON.parse(input));
+  } catch (error) {
+    const runs = await import(pathToFileURL(resolve(plugin, '../packages/eyes/src/build-run.ts')).href);
+    if (runs.readBuildRun(process.cwd())?.stoppedAt)
+      error.message += `\n\nThe build stopped there. Nothing is lost: run sz-codex-build again from this project with the same JSON, and it resumes from .sz (contracts, verdicts and commits stay). Do not carry the build on by hand or with agents you start: sz-eyes records nothing of its contracts until it runs again, because every verdict comes from a worker of the run that did not build.`;
+    throw error;
+  }
   console.log(JSON.stringify(result, null, 2));
   if (result.error || result.stopped) process.exitCode = 1;
 }

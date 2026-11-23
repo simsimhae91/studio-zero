@@ -6,6 +6,8 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
+import { startBuildRun } from '../src/build-run.ts';
+
 const bridge = fileURLToPath(new URL('../../../plugin/codex/tools.mjs', import.meta.url));
 const build = fileURLToPath(new URL('../../../plugin/bin/sz-codex-build', import.meta.url));
 type ToolCall = { name: 'shell' | 'record' | 'electron'; arguments: { command?: string; args?: string[] } };
@@ -13,7 +15,12 @@ const shell = (command: string): ToolCall => ({ name: 'shell', arguments: { comm
 const record = (...args: string[]): ToolCall => ({ name: 'record', arguments: { args } });
 
 function calls(root: string, role: string, ...tools: ToolCall[]) {
-  const result = spawnSync(process.execPath, [bridge, root, role, 'triple', role + ':triple'], {
+  return callsOfRun('', root, role, ...tools);
+}
+
+/** The same, from a worker of a build run, which is handed the run's token. */
+function callsOfRun(token: string, root: string, role: string, ...tools: ToolCall[]) {
+  const result = spawnSync(process.execPath, [bridge, root, role, 'triple', role + ':triple', ...(token ? [token] : [])], {
     input:
       tools.map((params, id) => JSON.stringify({ jsonrpc: '2.0', id, method: 'tools/call', params })).join('\n') + '\n',
     encoding: 'utf8',
@@ -129,6 +136,34 @@ test(
       ),
     );
     assert.equal(side.isError, false, side.content[0].text);
+  },
+);
+
+test(
+  'real Codex sandbox hands a worker of a build run its token, and the ledger refuses one without it',
+  {
+    skip:
+      !process.env.SZ_TEST_CODEX_SANDBOX && 'set SZ_TEST_CODEX_SANDBOX=1 in a terminal that can create a Codex sandbox',
+  },
+  (t) => {
+    const root = realpathSync(mkdtempSync(join(tmpdir(), 'sz-run-token-test-')));
+    t.after(() => rmSync(root, { recursive: true, force: true }));
+    writeFileSync(join(root, 'check.sh'), 'true\n');
+    const git = spawnSync('sh', ['-c', 'git init -q && git add check.sh && git -c user.name=Test -c user.email=test@localhost commit -qm initial'], { cwd: root });
+    assert.equal(git.status, 0);
+    const token = startBuildRun(root, 'triple four');
+    const ofRun = (role: string, tool: ToolCall) => callsOfRun(token, root, role, tool)[0];
+    for (const [role, tool] of [
+      ['build', record('contract', 'new', 'triple', '--request', 'Triple four', '--claim', 'four|Four triples to twelve|test:check.sh')],
+      ['build', record('contract', 'freeze', 'triple', '--frozen', 'check.sh')],
+      ['verifier', record('contract', 'claim', 'triple', 'four', '--status', 'proven', '--note', 'check.sh passed')],
+    ] as const) {
+      const answer = ofRun(role, tool);
+      assert.equal(answer.isError, false, answer.content[0].text);
+    }
+    const [outside] = calls(root, 'verifier', record('contract', 'claim', 'triple', 'four', '--status', 'refuted', '--note', 'a session beside the run'));
+    assert.equal(outside.isError, true);
+    assert.match(outside.content[0].text, /not recorded: a build run/);
   },
 );
 

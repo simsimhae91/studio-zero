@@ -219,6 +219,9 @@ function sandbox(cwd, scratch, role, contract, command, record, newFlows) {
     HOME: process.env.HOME,
     TMPDIR: scratch,
     LANG: process.env.LANG || 'en_US.UTF-8',
+    // The token of the build run this worker belongs to: with it the ledger takes this worker's records while the
+    // run holds the project (packages/eyes/src/build-run.ts).
+    ...(process.env.SZ_BUILD_TOKEN ? { SZ_BUILD_TOKEN: process.env.SZ_BUILD_TOKEN } : {}),
   };
   const invoke = record
     ? [process.execPath, join(harness, 'packages/eyes/src/cli.ts'), ...command]
@@ -264,7 +267,8 @@ const defs = [
 ];
 
 async function serve() {
-  const [cwd, role, contract, label] = process.argv.slice(2);
+  const [cwd, role, contract, label, token] = process.argv.slice(2);
+  if (token) process.env.SZ_BUILD_TOKEN = token;
   const gui = typeof contract === 'string' && validId.test(contract) && ['build', 'start', 'verifier', 'arbiter', 'fix', 'mend'].includes(role);
   const newFlows = new Set();
   const scratch = realpathSync(mkdtempSync(join(tmpdir(), 'sz-command-')));
