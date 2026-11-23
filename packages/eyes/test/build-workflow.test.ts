@@ -282,6 +282,8 @@ test('a new product is planned twice: its first pass alone, and what comes after
   assert.match(againFirst!, /Yours are these claims: c1, c2, c3, c4, c5\./);
   assert.match(againFirst!, /show again your other claims, each by its own flow, test or command, and what stood before this work \(`sz-eyes standing`\) with the project's quick checks/);
   assert.match(againFirst!, /this was noticed outside the claims: \[첫째가 본 것\]/);
+  // What was noticed where the fix did not reach is returned as it is, not walked to again.
+  assert.match(againFirst!, /One that lies where the fix did not reach is still so: return it as it is, without walking to it again\. Walk again only to those on a screen or in a rule the fix changed, and drop one the fix has ended\. Under "noticed" return those that are still so and whatever you notice that is new/);
   assert.match(againFirst!, /Start a copy of the product of your own/);
   const second = big.calls.find((c) => c.label === 'verify:m1:2of3')!.prompt;
   assert.match(second, /You are one of 3 verifiers[\s\S]*Yours are these claims: c4, c5, c6, c7\. Give a verdict to these and to no other\. Do not show again what stood before this work/);
