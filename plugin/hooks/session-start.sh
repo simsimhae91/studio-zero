@@ -11,7 +11,7 @@ echo "Speak to the owner in the language they write in, the short lines while wo
 if [ -f .sz/map.md ]; then
   echo "This project has a Studio Zero map at .sz/map.md$( [ -f .sz/progress.md ] && echo ' and a progress log at .sz/progress.md (its last lines are where work stands)' ). Read them before working. Use the sz:work skill for any request to build, change or fix something, and sz:feedback when the owner reacts to the product or to work shown to them."
 else
-  echo "This project has a .sz folder and no map yet: use the sz:onboard skill before working in it. (A folder that holds only a case under .sz/worth has no product yet: sz:work starts one from the case.)"
+  echo "This project has a .sz folder and no map yet: use the sz:onboard skill before working in it. (A folder that holds only a case under .sz/worth or an idea under .sz/dive has no product yet: sz:work starts one from it.)"
 fi
 [ -f .sz/owner.md ] && echo "What the owner has said they want of this product (their words, and what was decided with them) is in .sz/owner.md: read it before building anything they will look at."
 if [ -f .sz/progress.md ]; then echo; echo "Last lines of .sz/progress.md:"; tail -n 8 .sz/progress.md; fi
@@ -20,6 +20,10 @@ if [ -f .sz/progress.md ]; then echo; echo "Last lines of .sz/progress.md:"; tai
 if [ -d .sz/worth ]; then
   echo "The case for this service (who pays for what today, what was dropped, how deep it has to be), one line for each (sz-eyes worth show <id> for the whole):"
   "${CLAUDE_PLUGIN_ROOT}/bin/sz-eyes" worth show 2>/dev/null | head -n 8 || true
+fi
+if [ -d .sz/dive ]; then
+  echo "Ideas dug out with the owner (sz:dive), one line for each: one not closed goes on only when the owner asks (/sz:dive); a closed one's idea.md is what a plan starts from, and what it settled is not asked again."
+  "${CLAUDE_PLUGIN_ROOT}/bin/sz-eyes" dive show 2>/dev/null | head -n 5 || true
 fi
 if [ -f .sz/backlog.md ]; then
   left=$(grep -c '^[[:space:]]*- \[ \] ' .sz/backlog.md || true)

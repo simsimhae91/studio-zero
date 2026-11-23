@@ -164,7 +164,10 @@ export function diveFolder(projectDir: string, id: string, env: NodeJS.ProcessEn
 
 export function readDive(folder: string): Dive {
   if (!existsSync(stateFile(folder))) throw new Error(`no dive at ${folder}`);
-  return Dive.parse(JSON.parse(readFileSync(stateFile(folder), 'utf8')));
+  // A dive written before a line was added to its kind has that line open, not missing.
+  const raw = JSON.parse(readFileSync(stateFile(folder), 'utf8')) as { kind?: unknown; lines?: Record<string, unknown> };
+  const kind = DiveKind.safeParse(raw.kind);
+  return Dive.parse({ ...raw, lines: { ...(kind.success ? Object.fromEntries(linesOf(kind.data).map((line) => [line, {}])) : {}), ...raw.lines } });
 }
 
 function write(folder: string, path: string, text: string, durable: boolean): void {

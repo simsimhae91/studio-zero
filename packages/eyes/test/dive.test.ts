@@ -220,10 +220,3 @@ test('the command line holds a dive to the same rules, with the owner\'s words f
     p.done();
   }
 });
-
-test('the route hook names the dive among the stages a passing remark does not start, and says nothing to the command itself', () => {
-  const route = (prompt: string) => spawnSync(process.execPath, [join(ROOT, 'plugin/hooks/route.mjs')], { input: JSON.stringify({ prompt, cwd: tmpdir() }), encoding: 'utf8' }).stdout;
-  assert.match(route('이런 앱 있으면 좋겠다'), /\/sz:dive \(/);
-  assert.match(route('이런 앱 있으면 좋겠다'), /Never start one because what they said is related to it/);
-  assert.equal(route('/sz:dive 모임 정산이 귀찮아'), '');
-});

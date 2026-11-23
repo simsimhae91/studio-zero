@@ -693,20 +693,27 @@ test('work that is asked for is told the harness\'s way of doing it, a stage of 
     assert.match(route('인원수에 0을 넣으면 Infinity원이 나오는데 고쳐줘', project), /^sz: this project has no map yet[\s\S]*sz:onboard skill first[\s\S]*then sz:work[\s\S]*sz:feedback/);
     // How asked work is done follows from the request. A stage of its own (a trial, a case, a release, a
     // look-over) starts only when the owner asks for that stage: what they say in passing starts none.
-    assert.match(route('이거 프러덕션으로 돈 받고싶은데 필요한 기능목록 정의하고 구현해줘.', project), /A stage of its own starts only when the owner asks for that stage, by its command or in words that ask for exactly it: \/sz:trial[\s\S]*\/sz:worth[\s\S]*\/sz:ship[\s\S]*\/sz:tend[\s\S]*Never start one because what they said is related to it, and never as a step of something else[\s\S]*say in one line which command would go further/);
+    assert.match(route('이거 프러덕션으로 돈 받고싶은데 필요한 기능목록 정의하고 구현해줘.', project), /A stage of its own starts only when the owner asks for that stage, by its command or in words that ask for exactly it: \/sz:dive[\s\S]*\/sz:trial[\s\S]*\/sz:worth[\s\S]*\/sz:ship[\s\S]*\/sz:tend[\s\S]*Never start one because what they said is related to it, and never as a step of something else[\s\S]*say in one line which command would go further/);
     mkdirSync(join(project, '.sz'));
     writeFileSync(join(project, '.sz/map.md'), '# 지도\n');
     const mapped = route('숫자가 좀 작은 느낌이에요', project);
     assert.match(mapped, /^sz: if this asks to build, change or fix something in the product, load the sz:work skill first/);
     assert.doesNotMatch(mapped, /onboard/);
     // A command of the tool itself and a word of assent ask for nothing new.
-    for (const said of ['/clear', '', 'ㅇㅋ', '계속']) assert.equal(route(said, project), '', said);
+    for (const said of ['/clear', '/sz:dive 모임 정산이 귀찮아', '', 'ㅇㅋ', '계속']) assert.equal(route(said, project), '', said);
     assert.equal(spawnSync(process.execPath, [join(HERE, '../../../plugin/hooks/route.mjs')], { encoding: 'utf8', input: 'not json' }).status, 0);
     // A session that starts in a project with no .sz folder is told the harness is here.
     const start = (cwd: string): string => spawnSync('sh', [join(HERE, '../../../plugin/hooks/session-start.sh')], { encoding: 'utf8', cwd, env: { ...process.env, CLAUDE_PLUGIN_ROOT: join(HERE, '../../../plugin') } }).stdout;
     const bare = mkdtempSync(join(tmpdir(), 'eyes-bare-'));
     assert.match(start(bare), /The sz harness is loaded in this session[\s\S]*sz:onboard[\s\S]*sz:work/);
     assert.match(start(project), /This project has a Studio Zero map at \.sz\/map\.md/);
+    // A folder that holds only an idea dug out with the owner: no product yet, and the dive is named.
+    const idea = mkdtempSync(join(tmpdir(), 'eyes-idea-'));
+    mkdirSync(join(idea, '.sz/dive/settle'), { recursive: true });
+    writeFileSync(join(idea, '.sz/dive/settle/dive.json'), JSON.stringify({ id: 'settle', createdAt: '2026-11-24T00:00:00.000Z', kind: 'plain', seed: '모임 정산이 귀찮아', lines: {}, closed: null }));
+    const told = start(idea);
+    assert.match(told, /an idea under \.sz\/dive has no product yet[\s\S]*Ideas dug out with the owner \(sz:dive\)[\s\S]*settle: 명확해진 줄 0\/8/);
+    rmSync(idea, { recursive: true, force: true });
     rmSync(bare, { recursive: true, force: true });
   } finally {
     rmSync(project, { recursive: true, force: true });
