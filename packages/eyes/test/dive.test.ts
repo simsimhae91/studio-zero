@@ -205,6 +205,7 @@ test('the command line holds a dive to the same rules, with the owner\'s words f
     const early = eyes('close', 'commute', '--summary', '출근길 한 정거장 게임', '--said', '좋아요 이걸로');
     assert.equal(early.status, 1);
     assert.match(early.stderr, /not clear yet/);
+    assert.match(eyes('page', 'commute', '--summary', '출근길 한 정거장 게임').stdout, /^# 출근길 한 정거장 게임\n[\s\S]*### 그 한 가지[^\n]*\n\n지하철 한 정거장에 한 판\n\n> 주인: "네" \(추천안을 받아들임\)/);
     const show = eyes('show', 'commute');
     assert.match(show.stdout, /seed: "출근길에 할 게임"\n {2}명확해진 줄 1\/8/);
     assert.match(eyes('show').stdout, /commute: 명확해진 줄 1\/8/);

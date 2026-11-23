@@ -1,0 +1,83 @@
+---
+name: dive
+description: Use only when the owner asks for it, by the command /sz:dive or in words that ask for exactly this: to dig a one-line idea out together, round after round, until it is clear in their own head, before any map, plan or case ("아이디어 같이 파 보자", "딥다이브 해 줘", "브레인스토밍 해 줘", "이 생각 좀 구체화해 줘"). A passing wish ("이런 앱 있으면 좋겠다") starts nothing. Shows directions of different kinds to react to, asks for remembered moments rather than opinions, brings in what the world and the owner's report say, settles fixed lines by the owner's own words, and ends with one page, idea.md, that the next stages read.
+---
+
+# Dive: from one line to an idea that is clear
+
+The owner arrives with one line: "this annoys me", "I read a report". A plan cannot be cut from that, and a single answer back is a guess about what they meant. A dive is a conversation of many rounds that ends when what they want is clear in their own head: who it is for and in what moment, the one thing, the first minute, why anyone comes back, what it is not. Building it, judging whether it would sell, and drawing it are later stages that read what the dive leaves.
+
+**It runs when the owner asks for it, and only then.** It writes no product code, no map and no plan, and starts no other stage. It does not judge whether the idea is worth building (that is `sz:worth`, which also runs only when asked), so it never talks the owner out of an idea. When a free product already does exactly this well, say so as a fact with its source: that is material for `now` and `home`, not a verdict.
+
+## What "clear" is
+
+Clear is a fixed set of lines, kept by `sz-eyes dive`, each settled by the owner's words or left open by them on purpose. Every dive has `moment`, `now`, `core`, `first`, `back`, `not`, `feel`, `done`; an app adds `pain` and `home`; a game adds `loop`, `stakes`, `depth` and `lens`. `sz-eyes dive show <id>` prints each line with the question it asks the owner, its state, and what still stands between the dive and its close. How it feels to you is not the measure: the dive closes when the tool lets it close.
+
+A line is `open`, `proposed` (your proposal, shown, not yet answered), `settled` (the owner's words settle it) or `waived` (they said to leave it open: "모르겠다, 만들면서 보자"). Write what each answer settles as soon as it comes, in the same turn:
+
+```
+sz-eyes dive line <id> core --status proposed --says "<your proposal, in a sentence>"
+sz-eyes dive line <id> core --status settled --said "<their words, exactly as typed or chosen>" [--says "<what is settled, from their words>"]
+sz-eyes dive line <id> feel --status waived --said "<their words>"
+```
+
+**Their words are theirs.** `--said` is taken only when it is found among what the owner typed (the plugin's hook keeps it) or chose and wrote in a question box (the session's transcript): quote the part of their answer that settles the line, as it stands. When they answered "1번이요" or "네" to your recommendation, `--said "1번이요"` with no `--says` settles the line on the proposal as it stood, and the page says the proposal was taken. A line they settled changes only by their words again. (A sentence a session wrote in the owner's place was once recorded as "주인:" in a contract; here the tool refuses it.) The hook that keeps their words is Claude Code's; where it does not run (Codex), the tool refuses every line, and the dive is done in Claude Code.
+
+## Where it is kept
+
+`sz-eyes dive new` keeps the dive in `.sz/dive/<id>/` of the folder the session started in: the folder the product will live in, empty or not. Started in the home folder or in the harness's own repository, it is kept under `~/.studio-zero/dives/<day>-<id>/`, which the tool decides and prints; say the path to the owner. Writing there needs the command outside the session's sandbox (`dangerouslyDisableSandbox: true`; the tool says so when the sandbox stopped it). `sz-eyes dive saw --url` opens a page, and runs outside the sandbox too, as `sz:verify` lists.
+
+## 1. The seed, and what there is to read
+
+```
+sz-eyes dive new <id> --kind app|game|plain --seed "<the owner's first words, as they said them>"
+```
+
+`app`: something a person uses (a service, an app, a feature of one). `game`: a game. `plain`: neither, which takes the common lines only. Then read what is there before the first round:
+
+- The idea is an app: read `app.md` beside this file and follow it.
+- The idea is a game: read `game.md` beside this file and follow it. A game from a report starts from the report, and if no file was given the first round asks for it (a path, an address, or pasted text) and nothing else.
+- The folder the session is in: if it has `.sz/map.md`, read it and `.sz/spec.md`; otherwise its README if there is one. Do not run `sz:onboard`.
+
+Start the reading of the world in the background (what `app.md` and `game.md` name) and go on: the first round never waits for it.
+
+## 2. The first round: widen before narrowing
+
+Write what you understood in three lines, then show **three directions of different kinds and one wildcard**: different in who it is for, in the moment, or in what the person does, never three variants of one feature. The wildcard is one the owner would not have thought of. Give each something to react to, since people answer a picture better than a blank page: a scene of one person in it ("월요일 아침 9시, 당신은 …"), a screen as ASCII, and for a game the beats of its first 30 seconds. Record each as it was shown:
+
+```
+sz-eyes dive direction <id> <direction-id> --name "<a few words>" --what "<who, in what moment, doing what>"
+```
+
+Put them in one question box: one single-select question whose four options are the directions, each with its scene and sketch in `preview` (shown beside the list; only single-select questions show it). The owner can always write their own instead ("다 아님", "1이랑 3 섞어서"). When they answer: `sz-eyes dive direction <id> <d> --status taken|merged|dropped --said "<their words>"`. Narrowing opens new forks; where one opens, widen there again with the same kind of choice.
+
+## 3. Rounds that dig
+
+Each round, work out the frontier: the open lines whose answers do not wait on another open line (`moment` and `pain` before `core`, `core` before `first` and `back`). Ask from it, four questions at most, in one turn that ends waiting for the owner:
+
+- **A choice goes in the question box**, with your recommendation first and marked "(추천)", two to four options, and their own words always open. Word it so that taking the recommendation is one tap.
+- **A remembered moment is asked as a typed question, one a round at most**: when it last happened, what they were doing, what they did then. Opinions about the future ("이런 게 있으면 쓰실 건가요?", "어떤 기능이 있으면 좋겠어요?") get kind answers and no facts; a memory gets the fact. The design lines (`core`, `first`, `not`, `feel`) are decisions, asked as choices.
+- Find facts yourself (the world, the report, the folder); put only decisions and memories to the owner.
+- End every round with the line the tool printed after your last change (`명확해진 줄 6/12 · 열린 것: back, depth, lens`).
+
+When the session has no question box (a run with nobody at a terminal), put the same round as a numbered list, each choice with its options and your recommendation, previews as fenced blocks.
+
+The owner's answer comes back in about a minute and a half a question; yours comes back within a minute. Nothing waits on the background reading: ask what does not need it, and bring its findings into the round after they arrive, each fact with its link, filed first with `sz-eyes dive saw`.
+
+## 4. Shake it
+
+When one direction has been taken and most lines are settled, ask two questions that look at it from outside: "1년 뒤에 이게 실패했다면 이유는 뭘까요?" and "이걸 절대 안 열게 만드는 건 뭘까요?". An answer that changes a line takes it back to that line, settled again by their words.
+
+## 5. One page, and the close
+
+When nothing is open or only proposed, show the page as it stands (`sz-eyes dive page <id> --summary "<the idea in one line>"`) and ask what they make of it. A correction goes back to its line. Their words on the page close the dive:
+
+```
+sz-eyes dive close <id> --summary "<the idea in one line>" --said "<their words on the page>"
+```
+
+It is refused while a line is open or only proposed, before three directions were shown and one taken, and without their words. It writes `idea.md` beside the dive. Then say in one line what can come next, and start neither: `/sz:worth` to judge whether it is worth building, `/sz:build` to build it.
+
+## Pausing and coming back
+
+When the owner says to stop ("여기까지", "나중에"), the dive is already kept: say its progress line and the open lines, and stop. `/sz:dive` later begins with `sz-eyes dive show`: one dive not closed is taken up where it stood (say where); several are put to the owner as a choice.

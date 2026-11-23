@@ -14,6 +14,9 @@ With no reference tool connected, the library is the source; where it has nothin
 
 ## `.sz/plan/frame.md`: written first, whole, before any screen
 
+When the owner dug the idea out with `sz:dive` (`.sz/dive/*/idea.md`), the frame is cut from it and does not decide again what they settled there: section 1 from its `moment` line, section 2 from `core`, section 3 from `feel` and the owner's words it quotes, section 5 starts from `first`, and what is not built comes from `not`.
+
+
 1. **무엇이고 누구를 위한 것인가.** Two or three sentences: who, at what moment, doing what.
 2. **반드시 잘해야 하는 한 가지.** The one thing. The designer builds the product's key screen around it. Then what it needs to be real, found before any screen is written: each key, source of data or service on its path (what a person gives, what is done with it, what they get back), where it was found (the address), and whether it is at hand (`sz-eyes secret has <vault id>`). Look for a public source, an open API, a free key the owner applies for; "not connected yet" is not an answer. What is not at hand is asked of the owner at the drawing, each with what it costs them and how it is given (a key: its vault id, and the command that prints the owner's line for it, `sz-eyes arm need <arm>` or `sz-eyes secret has <vault id>`; never a storing line of your own, which fails in the owner's shell).
 3. **주인이 말한 것.** The owner's answers and words about feel, as they said them, and any product they named.

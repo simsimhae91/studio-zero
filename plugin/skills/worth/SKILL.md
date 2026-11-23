@@ -39,7 +39,7 @@ Two kinds of buyer are held to two standards. **People spending their own money:
 ## 1. Two ways in
 
 **The owner has no idea yet, or several** ("뭘 만들까"): a hunt (2), then a case for what survives (3).
-**The owner has an idea, or a product** ("이거 돈 될까", "출시할 만한가", "깊이 판단해 줘"): a case for it (3). For a product that exists, read `.sz/map.md` and `.sz/spec.md` first and write the service line from what the product is, not from what it hopes to be.
+**The owner has an idea, or a product** ("이거 돈 될까", "출시할 만한가", "깊이 판단해 줘"): a case for it (3). For a product that exists, read `.sz/map.md` and `.sz/spec.md` first and write the service line from what the product is, not from what it hopes to be. For an idea the owner dug out with `sz:dive` (`.sz/dive/*/idea.md`), take `--service` from its `moment` and `core` lines and `--seed` from its seed as quoted there, and do not ask again what its lines settled; the owner's own memory in its `pain` line is ground of their own (`--basis owner`, their words as the page quotes them).
 
 Ask the owner first only what they alone know, three questions at most: the job in a sentence (for whom, in what moment) and what they would be up against, if they have a view; whose trouble they see up close and where they can speak to people (a community, an audience, a marketplace account); what they will not build or run. Their answers are ground of their own (`--basis owner`, their words in `--note`). They then read a table and a call, not a blank page. If they are away, go on without, and say which lines stand on nothing of theirs.
 
