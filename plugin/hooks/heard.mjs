@@ -13,6 +13,10 @@ import { join, resolve } from 'node:path';
 
 const ASKS_FOR_A_DIVE = /^\s*\/sz:dive\b|딥\s*다이브|deep\s*dive|브레인\s*스토밍|brainstorm|(아이디어|생각).{0,12}(파\s*보|파고|파헤|구체화)/i;
 const KEPT_FOR_DAYS = 30;
+// What the harness itself puts in the owner's place: a background agent's report, a reminder, a command's echo.
+// Its words are an agent's or the tool's, never the owner's (a background reader's report came in this way in
+// the first headless dive, 2026-11-24, and was kept as said).
+const NOT_THE_OWNER = /^\s*<(task-notification|system-reminder|local-command-|command-(name|message|args)|bash-(input|stdout|stderr)|teammate-message|channel)/;
 
 function openDiveIn(cwd) {
   const root = join(cwd, '.sz', 'dive');
@@ -32,7 +36,7 @@ try {
   const call = JSON.parse(input);
   const prompt = typeof call?.prompt === 'string' ? call.prompt : '';
   const session = String(call?.session_id ?? '').replace(/[^A-Za-z0-9_-]/g, '');
-  if (prompt.trim() !== '' && session !== '') {
+  if (prompt.trim() !== '' && session !== '' && !NOT_THE_OWNER.test(prompt)) {
     const dir = join(process.env.SZ_DIVES_DIR ? resolve(process.env.SZ_DIVES_DIR) : join(homedir(), '.studio-zero', 'dives'), '.heard');
     const log = join(dir, `${session}.jsonl`);
     if (ASKS_FOR_A_DIVE.test(prompt) || existsSync(log) || openDiveIn(String(call?.cwd ?? process.cwd()))) {

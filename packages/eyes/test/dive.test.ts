@@ -133,6 +133,8 @@ test('what the owner said is what the hook kept as typed and what they chose or 
     hook('아이디어 하나 같이 파 보자: 모임 정산', 's2');
     hook('음 그냥 편하게?', 's2');
     assert.deepEqual(readFileSync(join(heardDir, 's2.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l).prompt), ['아이디어 하나 같이 파 보자: 모임 정산', '음 그냥 편하게?']);
+    hook('<task-notification>\n<task-id>a1</task-id>\n<result>주인은 출근길 정산을 원한다</result>\n</task-notification>', 's2');
+    assert.equal(readFileSync(join(heardDir, 's2.jsonl'), 'utf8').trim().split('\n').length, 2, 'what a background agent reports comes in as a message and is not the owner\'s');
     hook('/sz:dive 게임 보고서', 's3');
     assert.ok(existsSync(join(heardDir, 's3.jsonl')));
     const open = mkdtempSync(join(tmpdir(), 'eyes-dive-open-'));
