@@ -49,17 +49,17 @@ Write what you understood in three lines, then show **three directions of differ
 sz-eyes dive direction <id> <direction-id> --name "<a few words>" --what "<who, in what moment, doing what>"
 ```
 
-Put them in one question box: one single-select question whose four options are the directions, each with its scene and sketch in `preview` (shown beside the list; only single-select questions show it). The owner can always write their own instead ("다 아님", "1이랑 3 섞어서"). When they answer: `sz-eyes dive direction <id> <d> --status taken|merged|dropped --said "<their words>"`. Narrowing opens new forks; where one opens, widen there again with the same kind of choice.
+Put them in one question box: one single-select question whose four options are the directions, each with its scene and sketch in `preview` (shown beside the list; only single-select questions show it). The owner can always write their own instead ("다 아님", "1이랑 3 섞어서"). When they answer: `sz-eyes dive direction <id> <d> --status taken|merged|dropped --said "<their words>"`, and for one merged into another, `--note "<the part they took>"`: only that part reaches the page. Narrowing opens new forks; where one opens, widen there again with the same kind of choice.
 
 ## 3. Rounds that dig
 
 Each round, work out the frontier: the open lines whose answers do not wait on another open line (`moment` and `pain` before `core`, `core` before `first` and `back`). Ask from it, four questions at most, in one turn that ends waiting for the owner:
 
 - **A choice goes in the question box**, with your recommendation first and marked "(추천)", two to four options, and their own words always open. Word it so that taking the recommendation is one tap.
-- **A remembered moment is asked as a typed question, one a round at most**: when it last happened, what they were doing, what they did then. Opinions about the future ("이런 게 있으면 쓰실 건가요?", "어떤 기능이 있으면 좋겠어요?") get kind answers and no facts; a memory gets the fact. The design lines (`core`, `first`, `not`, `feel`) are decisions, asked as choices.
+- **A remembered moment is asked as a typed question, one a round at most**: when it last happened, what they were doing, what they did then. Opinions about the future ("이런 게 있으면 쓰실 건가요?", "어떤 기능이 있으면 좋겠어요?") get kind answers and no facts; a memory gets the fact. The design lines (`core`, `first`, `feel`) are decisions, asked as choices.
 - `moment` is a scene: a time of day, a place, what their hands are doing. A proposal with none of these is asked again as a memory ("그때 몇 시였고, 어디서, 뭘 하고 계셨어요?").
 - `done` is asked, never proposed: who they would show it to first, and what that person would have to say. A test you invent ("열 명 중 셋이 끝까지") is not their measure. (In the evaluation, two interviewers proposed a test; the stand-ins took it with "1번이요", and their real measure, a person, never came out.)
-- `not` is asked as a memory too: what they tried before and dropped, and why.
+- `not` starts from a memory: what they tried before and dropped, and why; then the rest of it as a choice.
 - Find facts yourself (the world, the report, the folder); put only decisions and memories to the owner.
 - End every round with the line the tool printed after your last change (`명확해진 줄 6/12 · 열린 것: back, depth, lens`).
 
