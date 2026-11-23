@@ -4,6 +4,14 @@ here="$(cd "$(dirname "$0")/.." && pwd)"
 root="$(cd "$here/.." && pwd)"
 # A copy of the harness made without its dependencies cannot run one command. Said in a line, and with an exit
 # code of its own: a module error and exit 1 were read as a product's fault, and as claims owed.
+if [ ! -d "$root/packages/eyes" ]; then
+  case "$here/" in
+    "${CODEX_HOME:-$HOME/.codex}"/plugins/cache/*)
+      checkout=$(node --input-type=module -e 'import { pathToFileURL } from "node:url"; const { checkout } = await import(pathToFileURL(process.argv[1])); console.log(checkout());' "$here/codex/checkout.mjs") || exit 127
+      exec "$checkout/bin/sz-eyes" "$@"
+      ;;
+  esac
+fi
 if [ ! -d "$root/packages/eyes/node_modules" ]; then
   echo "sz-eyes: this copy of the harness has no dependencies installed ($root/packages/eyes has no node_modules): run 'pnpm install' in $root. Nothing is wrong with the product, and no command of sz-eyes runs until then; another copy's sz-eyes is not this one." >&2
   exit 127

@@ -1,0 +1,6 @@
+{
+  "name": "sz",
+  "version": "0.1.0",
+  "description": "Studio Zero contracts, independent verification and evidence.",
+  "skills": ["./skills", "./codex/skills"]
+}

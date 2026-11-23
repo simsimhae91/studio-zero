@@ -10,6 +10,47 @@ claude --plugin-dir /Users/hosoo/project/conclave/plugin
 
 프로젝트 폴더에서 연다. 계속 쓰려면 Claude Code 안에서 `/plugin marketplace add /Users/hosoo/project/conclave` 뒤 `/plugin install sz`.
 
+## Codex에서 빌드
+
+로컬 체크아웃에서 `pnpm install`, `codex plugin marketplace add .`, `codex plugin add sz@studio-zero`를 실행한다. Codex 입력창에서 `$sz`를 입력해 **build (sz)**를 선택하고 요청을 적는다. 시작 질문에 답하면 빌드가 진행된다. 같은 실행기를 터미널에서도 부를 수 있다. 대상 프로젝트 폴더에서 실제 요청과 답을 JSON으로 전달한다.
+
+```sh
+/Users/hosoo/project/conclave/plugin/bin/sz-codex-build < request.json
+```
+
+```json
+{
+  "request": "정수 세 배를 출력하는 CLI를 고쳐 줘",
+  "asked": "owner",
+  "answers": "기존 CLI를 유지하고 양수·음수 모두 확인해 주세요.",
+  "maxMilestones": 1
+}
+```
+
+Mobbin을 쓰려면 `codex mcp add mobbin --url https://api.mobbin.com/mcp`로 등록하고 브라우저에서 로그인한다. Codex 디자인 작업자는 등록된 Mobbin에서 화면·사용 흐름·웹 섹션을 검색할 수 있다. 사용자가 비활성화한 도구는 제외한다.
+
+로그에는 단계·모델·추론 강도가 나오고 최종 JSON에는 증거 페이지와 중단 사유가 나온다. 모델은 `model`에 Codex 모델 ID 하나로 지정한다. 기본은 `gpt-6.2-astra`이며 검증자는 새 대화에서 제품 소스를 읽고 실행하며 증거를 기록한다. 각 명령은 `codex sandbox` 권한 프로필로 실행한다. 동결된 검사는 빌더에게 읽기 전용이고, 계약 판정은 역할별 `sz-eyes` 명령으로 기록한다. 로컬 제품을 시험하기 위해 루프백 접근을 허용한다. 외부 패키지 다운로드나 기기 접근이 필요한 프로젝트는 의존성과 실행 환경을 먼저 준비한다. 현재 이 Mac의 Codex 샌드박스에서는 헤드리스 Chrome이 시작 중 종료되어 브라우저 화면 검증이 막힌다. CLI 제품은 실행과 증거 마감까지 확인했다. 시안을 기다리거나 외부 조건으로 멈추면 결과의 `stopped`를 읽고 기존 프로젝트에서 다시 실행한다.
+
+### Codex에서 Electron 창 검증
+
+빌더와 검증자는 빌드된 Electron 앱의 첫 창과 조작을 `sz` MCP의 `electron` 도구로 확인한다. 작업자의 일반 명령과 파일 편집은 기존 역할별 샌드박스에서 실행한다. GUI를 열 때마다 이 Mac의 준비된 macOS VM을 복제한다. 게스트에는 프로젝트 스냅샷과 실행 도구를 읽기 전용으로 연결한다. 게스트의 네트워크는 외부와 단절되어 있고, 앱 데이터는 해당 실행과 함께 폐기한다. 같은 프로필로 여러 번 실행해야 하는 검사는 한 Node 흐름에 담는다.
+
+Apple Silicon Mac에서 한 번 준비한다. 아래 경로는 이 Mac의 외장 APFS 볼륨이다.
+
+```sh
+brew install openai/tools/softnet openai/tools/tart
+install -d -m 700 /Volumes/DEV-SSD/sz-tart ~/.config/sz
+ln -s /Volumes/DEV-SSD/sz-tart ~/.config/sz/electron-vm
+TART_HOME=/Volumes/DEV-SSD/sz-tart tart clone ghcr.io/cirruslabs/macos-tahoe-base:latest sz-electron-base
+TART_HOME=/Volumes/DEV-SSD/sz-tart tart set sz-electron-base --display 1920x1200px --no-display-refit
+```
+
+호출 예시는 다음과 같다.
+
+- 첫 창을 확인하려면 `["look", "apps/desktop", "--env", "YTS_E2E_APP_DATA={data}"]`를 전달한다. `do`는 기존 `sz-eyes electron do`의 `--step`을 사용한다.
+- 프로젝트의 GUI 검사는 `["node", "apps/desktop/e2e/example.ts", "--shots", "/tmp/sz-evidence"]`처럼 실행한다. 빌드 결과와 설치한 프로젝트 의존성이 스냅샷에 포함된다. 프로젝트가 포함한 실행 파일은 도구의 선택 입력인 `env`로 게스트의 `PATH`에 추가할 수 있다. 게스트의 프로젝트 경로는 `/private/tmp/sz-input/project`다. 별도 시스템 도구를 설치할 때는 기본 VM에 준비한다.
+- 각 실행은 게스트의 `/tmp/sz-evidence` 바로 아래에 쓴 PNG를 새 `.sz/evidence/<계약>/electron-…/` 폴더로 가져온다. 도구가 출력한 프로젝트 경로를 판정 근거로 사용한다.
+
 ## 말하는 법
 
 두 가지를 나눈다.

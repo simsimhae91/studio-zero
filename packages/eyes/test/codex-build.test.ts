@@ -1,0 +1,232 @@
+import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { cpSync, mkdtempSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { test } from 'node:test';
+import { fileURLToPath } from 'node:url';
+
+const bridge = fileURLToPath(new URL('../../../plugin/codex/tools.mjs', import.meta.url));
+const build = fileURLToPath(new URL('../../../plugin/bin/sz-codex-build', import.meta.url));
+type ToolCall = { name: 'shell' | 'record' | 'electron'; arguments: { command?: string; args?: string[] } };
+const shell = (command: string): ToolCall => ({ name: 'shell', arguments: { command } });
+const record = (...args: string[]): ToolCall => ({ name: 'record', arguments: { args } });
+
+function calls(root: string, role: string, ...tools: ToolCall[]) {
+  const result = spawnSync(process.execPath, [bridge, root, role, 'triple', role + ':triple'], {
+    input:
+      tools.map((params, id) => JSON.stringify({ jsonrpc: '2.0', id, method: 'tools/call', params })).join('\n') + '\n',
+    encoding: 'utf8',
+  });
+  assert.equal(result.status, 0, result.stderr);
+  return result.stdout
+    .trim()
+    .split('\n')
+    .map((line) => JSON.parse(line).result);
+}
+
+test('native entry preserves owner gate before a model is called', () => {
+  const r = spawnSync(build, { input: JSON.stringify({ request: 'build' }), encoding: 'utf8' });
+  assert.equal(r.status, 1);
+  assert.match(JSON.parse(r.stdout).error, /not started/);
+  assert.doesNotMatch(r.stderr, /\[plan\]/);
+});
+
+test(
+  'the installed local plugin finds both executables in its marketplace checkout',
+  { skip: spawnSync('codex', ['--version']).status !== 0 && 'Codex CLI is not installed' },
+  (t) => {
+    const home = realpathSync(mkdtempSync(join(tmpdir(), 'sz-plugin-test-')));
+    t.after(() => rmSync(home, { recursive: true, force: true }));
+    const env = { ...process.env, CODEX_HOME: home };
+    const checkout = fileURLToPath(new URL('../../../', import.meta.url));
+    const installed = spawnSync('codex', ['plugin', 'marketplace', 'add', checkout], { env, encoding: 'utf8' });
+    assert.equal(installed.status, 0, installed.stderr);
+    const added = spawnSync('codex', ['plugin', 'add', 'sz@studio-zero', '--json'], { env, encoding: 'utf8' });
+    assert.equal(added.status, 0, added.stderr);
+    const bin = join(JSON.parse(added.stdout).installedPath, 'bin');
+    for (const name of ['sz-codex-build', 'sz-eyes']) {
+      const result = spawnSync(join(bin, name), ['--help'], { env, encoding: 'utf8' });
+      assert.equal(result.status, 0, result.stderr);
+      assert.match(result.stdout, new RegExp(name));
+    }
+  },
+);
+
+test('builders cannot record verdicts or use owner or different-project overrides', () => {
+  for (const r of calls(
+    process.cwd(),
+    'build',
+    record('contract', 'claim', 'triple'),
+    record('contract', 'built', 'other'),
+    record('contract', 'freeze', 'triple', '--dir', '/tmp'),
+    record('contract', 'judged', 'triple'),
+    shell('killall node'),
+  ))
+    assert.equal(r.isError, true);
+});
+
+test(
+  'real Codex sandbox enforces the build / verify / fix / close boundary',
+  {
+    skip:
+      !process.env.SZ_TEST_CODEX_SANDBOX && 'set SZ_TEST_CODEX_SANDBOX=1 in a terminal that can create a Codex sandbox',
+  },
+  (t) => {
+    const root = realpathSync(mkdtempSync(join(tmpdir(), 'sz-contract-test-')));
+    t.after(() => rmSync(root, { recursive: true, force: true }));
+    mkdirSync(join(root, '.sz/evidence/triple'), { recursive: true });
+    writeFileSync(join(root, 'app.mjs'), 'console.log(8)\n');
+    writeFileSync(join(root, 'check.sh'), 'test "$(node app.mjs)" = 12\n');
+    const run = (role: string, tool: ToolCall, fails = false) => {
+      const [answer] = calls(root, role, tool);
+      assert.equal(answer.isError, fails, answer.content[0].text);
+    };
+    run(
+      'build',
+      shell('git init -q && git add app.mjs && git -c user.name=Test -c user.email=test@localhost commit -qm initial'),
+    );
+    run(
+      'build',
+      record(
+        'contract',
+        'new',
+        'triple',
+        '--request',
+        'Triple four',
+        '--claim',
+        'four|Four triples to twelve|test:check.sh',
+      ),
+    );
+    run('build', record('contract', 'freeze', 'triple', '--frozen', 'check.sh'));
+    run('build', shell('echo true > check.sh'), true);
+    run('verifier', shell('echo bad > app.mjs'), true);
+    if (process.platform === 'darwin') {
+      const publish = fileURLToPath(new URL('../../../plugin/codex/electron-publish.py', import.meta.url));
+      const [result] = calls(root, 'verifier', shell(
+        `mkdir "$TMPDIR/pictures" && echo fixture > "$TMPDIR/pictures/look.png" && /usr/bin/python3 "${publish}" triple "$TMPDIR/pictures"`,
+      ));
+      assert.equal(result.isError, false, result.content[0].text);
+      const path = result.content[0].text.trim().split('\n').at(-1);
+      assert.equal(readFileSync(join(root, path), 'utf8'), 'fixture\n');
+    }
+    run('verifier', shell('sh check.sh'), true);
+    run('verifier', record('contract', 'claim', 'triple', 'four', '--status', 'refuted', '--note', 'got 8'));
+    run('close', record('contract', 'close', 'triple'), true);
+    run('close', shell('echo wrong > app.mjs'), true);
+    run('fix', shell("echo 'console.log(12)' > app.mjs"));
+    run('verifier', shell('sh check.sh'));
+    run('verifier', record('contract', 'claim', 'triple', 'four', '--status', 'proven', '--note', 'got 12'));
+    run('close', record('contract', 'close', 'triple'));
+    run('close', shell('sz-eyes evidence triple'));
+    assert.match(readFileSync(join(root, '.sz/evidence/triple/report.html'), 'utf8'), /Four triples/);
+    run('stage', shell('git worktree add -q .sz/trees/side -b sz/side'));
+    const [side] = calls(
+      join(root, '.sz/trees/side'),
+      'build',
+      shell(
+        'echo side > side.txt && git add side.txt && git -c user.name=Test -c user.email=test@localhost commit -qm side',
+      ),
+    );
+    assert.equal(side.isError, false, side.content[0].text);
+  },
+);
+
+const electron = (...args: string[]): ToolCall => ({ name: 'electron', arguments: { args } });
+
+test('VM evidence cannot traverse a linked contract directory', { skip: process.platform !== 'darwin' }, (t) => {
+  const root = mkdtempSync(join(tmpdir(), 'sz-evidence-link-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const product = join(root, 'source');
+  const pictures = join(root, 'pictures');
+  mkdirSync(product);
+  mkdirSync(pictures);
+  writeFileSync(join(pictures, 'look.png'), 'fixture');
+  mkdirSync(join(root, '.sz/evidence'), { recursive: true });
+  symlinkSync(product, join(root, '.sz/evidence/triple'));
+  const publish = fileURLToPath(new URL('../../../plugin/codex/electron-publish.py', import.meta.url));
+  const result = spawnSync('/usr/bin/python3', [publish, 'triple', pictures], { cwd: root });
+  assert.notEqual(result.status, 0);
+  assert.deepEqual(readdirSync(product), []);
+});
+
+test('the GUI tool rejects other roles and host path arguments before accessing a VM', () => {
+  for (const [role, args] of [
+    ['close', ['look', '.']],
+    ['verifier', ['node', '/tmp/host-script.js']],
+    ['start', ['node', '../another-project/index.js']],
+    ['build', ['node', '--eval']],
+  ] as const) {
+    const [answer] = calls(process.cwd(), role, electron(...args));
+    assert.equal(answer.isError, true);
+    assert.match(answer.content[0].text, /unknown tool|project-relative/);
+  }
+});
+
+test('local Mac VM opens Electron for start and runs a verifier flow with read-only source and checks', {
+  skip: !process.env.SZ_TEST_ELECTRON_DIST && 'set SZ_TEST_ELECTRON_DIST to a Darwin arm64 Electron dist directory',
+}, (t) => {
+  const project = realpathSync(mkdtempSync(join(tmpdir(), 'sz-electron-proof-')));
+  if (!process.env.SZ_KEEP_ELECTRON_PROOF) t.after(() => rmSync(project, { recursive: true, force: true }));
+  const exe = './dist/Electron.app/Contents/MacOS/Electron';
+  cpSync(process.env.SZ_TEST_ELECTRON_DIST!, join(project, 'dist'), { recursive: true, verbatimSymlinks: true });
+  writeFileSync(join(project, 'package.json'), '{"main":"main.cjs"}');
+  writeFileSync(join(project, '.env'), 'LOCAL_ONLY=fixture');
+  const frozen = 'Object.freeze({ claim: "window" });\n';
+  writeFileSync(join(project, 'check.cjs'), frozen);
+  writeFileSync(join(project, 'writes.cjs'), `
+    const { appendFileSync } = require('node:fs');
+    if (require('node:fs').existsSync(require('node:path').join(__dirname, '.env'))) throw Error('local environment file shared');
+    module.exports = () => ['main.cjs','check.cjs'].map(name => {
+      try { appendFileSync(require('node:path').join(__dirname,name),'unexpected write'); }
+      catch (err) { if (['EROFS','EPERM','EACCES'].includes(err.code)) return err.code; throw err; }
+      throw Error('write succeeded: '+name);
+    }).join('/');
+  `);
+  writeFileSync(join(project, 'child.cjs'), "process.parentPort.postMessage(require('./writes.cjs')())");
+  const main = `
+    const { app, BrowserWindow, utilityProcess } = require('electron');
+    const { writeFileSync } = require('node:fs');
+    app.whenReady().then(async () => {
+      const main = require('./writes.cjs')();
+      const child = utilityProcess.fork(require.resolve('./child.cjs'));
+      const denied = await new Promise((ok,fail) => { child.once('message',ok); child.once('exit',()=>fail(Error('child exited'))); });
+      child.kill();
+      const win = new BrowserWindow({width:800, height:500});
+      const title = 'Window verified - main '+main+' - child '+denied;
+      await win.loadURL('data:text/html,'+encodeURIComponent('<title>'+title+'</title><h1>Window verified</h1><p>'+title+'</p>'));
+      console.log(title);
+      if (process.env.SZ_FLOW) {
+        const image = await win.webContents.capturePage();
+        writeFileSync('/tmp/sz-evidence/flow.png', image.toPNG());
+        app.quit();
+      }
+    }).catch(err => { console.error(err); app.exit(1); });
+  `;
+  writeFileSync(join(project, 'main.cjs'), main);
+  writeFileSync(join(project, 'flow.cjs'), `
+    const { spawnSync } = require('node:child_process');
+    const r = spawnSync(${JSON.stringify(exe)}, ['.'], { stdio:'inherit', env:{...process.env,SZ_FLOW:'1'} });
+    process.exit(r.status ?? 1);
+  `);
+  const setup = calls(project, 'build',
+    record('contract', 'new', 'triple', '--request', 'Show a real window', '--claim', 'window|Window opens|test:check.cjs'),
+    record('contract', 'freeze', 'triple', '--frozen', 'check.cjs'));
+  for (const result of setup) assert.equal(result.isError, false, result.content[0].text);
+  for (const [role, tool] of [
+    ['start', electron('look', '.', '--electron', exe, '--window', 'Window verified')],
+    ['verifier', electron('node', 'flow.cjs')],
+  ] as const) {
+    const [answer] = calls(project, role, tool);
+    assert.equal(answer.isError, false, answer.content[0].text);
+    assert.match(answer.content[0].text, /Window verified - main (?:EROFS|EPERM|EACCES)\/(?:EROFS|EPERM|EACCES) - child (?:EROFS|EPERM|EACCES)\/(?:EROFS|EPERM|EACCES)/);
+    const path = answer.content[1].text.trim();
+    assert.match(path, /^\.sz\/evidence\/triple\/electron-[a-f0-9]+\/[\w-]+\.png$/);
+    const png = readFileSync(join(project, path));
+    assert.ok(png.length > 1000);
+    assert.equal(png.subarray(0, 8).toString('hex'), '89504e470d0a1a0a');
+    assert.equal(readFileSync(join(project, 'main.cjs'), 'utf8'), main);
+    assert.equal(readFileSync(join(project, 'check.cjs'), 'utf8'), frozen);
+    t.diagnostic(role + ' ' + join(project, path));
+  }
+});

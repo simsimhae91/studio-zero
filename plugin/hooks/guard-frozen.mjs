@@ -5,6 +5,7 @@
 // until a later contract says that claim is replaced. Exit 2 refuses the edit and tells why.
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
+import { standingClaims, supersededClaims } from './frozen.mjs';
 
 let input = '';
 for await (const chunk of process.stdin) input += chunk;
@@ -48,7 +49,7 @@ const contracts = readdirSync(dir)
       return [];
     }
   });
-const replaced = new Set(contracts.flatMap(({ contract }) => (contract.supersedes ?? []).map((s) => `${s.contract}/${s.claim}`)));
+const replaced = supersededClaims(contracts.map(({ contract }) => contract));
 const under = (path) => target === path || target.startsWith(`${path.replace(/\/$/, '')}/`);
 
 for (const { name, contract } of contracts) {
@@ -70,17 +71,7 @@ for (const { name, contract } of contracts) {
   // change), not locked. A claim names this file when its words hold the file's own path, or hold a frozen
   // folder as a whole (not a file inside it): a contract that froze `e2e/` for one flow in it does not lock
   // the flows later work adds beside it.
-  const escaped = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const namesThis = (ref) => ref.includes(target) || frozen.some((path) => {
-    const folder = path.replace(/\/$/, '');
-    return folder !== target && new RegExp(`(^|[\\s"'=:(])${escaped(folder)}/?($|[\\s"')])`).test(ref);
-  });
-  // A claim that a draft says it replaces is unlocked on purpose: whoever writes the new contract rewrites the
-  // old check before freezing it. A draft that is never frozen shows up as owed, and the change to the file
-  // shows in `sz-eyes standing`.
-  const keeps = (contract.claims ?? []).filter(
-    (claim) => claim.status === 'proven' && ['flow', 'test'].includes(claim.shownBy?.kind) && namesThis(String(claim.shownBy?.ref ?? '')) && !replaced.has(`${contract.id}/${claim.id}`),
-  );
+  const keeps = standingClaims(contract, target, frozen, replaced);
   if (keeps.length > 0) {
     const keys = keeps.map((claim) => `${contract.id}/${claim.id}`).join(', ');
     refuse(

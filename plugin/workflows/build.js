@@ -38,14 +38,19 @@ const TOOLS = 'The command `sz-eyes` is on your PATH (the sz plugin\'s). Load th
 // for itself, by having a browser refused: sixteen lost tries among ten agents.)
 const IN_SANDBOX = ' This session runs its commands inside a sandbox, where nothing that opens a browser, a desktop app, a simulator or Docker can start. Run those outside it from the first try (`dangerouslyDisableSandbox: true` on the Bash call): every `sz-eyes web`, `sz-eyes electron`, `sz-eyes ios`, `sz-eyes docker` and `sz-eyes supabase` command, `sz-eyes login relay start`, `sz-eyes image make`, `sz-eyes image use` with `--size`, and the project\'s own flows and tests that open a browser. So is ending or listing a process that an earlier command started (`kill`, `ps`): inside, the sandbox refuses it. Everything else stays inside. If such a call is refused, do not judge the product by reading its code instead: say in what you return that the sandbox stopped the look.'
 const MAYBE_SANDBOX = ' If `sz-eyes` says the session\'s command sandbox stopped it, run every command that opens a browser, a desktop app, a simulator or Docker outside the sandbox from the first try (`dangerouslyDisableSandbox: true` on the Bash call; the `sz:verify` skill says which), and likewise ending or listing a process that an earlier command started (`kill`, `ps`). If that call is refused, do not judge the product by reading its code instead: say in what you return that the sandbox stopped the look.'
-let SAND = MAYBE_SANDBOX
+const HOST_SANDBOX = typeof hostSandbox === 'undefined' ? null : hostSandbox
+const AFTER_SANDBOX_STOP = HOST_SANDBOX ? HOST_SANDBOX.stop : 'The owner chooses one: run sessions in auto mode, approve the unsandboxed command when asked, or turn the sandbox off for this project (/sandbox); then ask to continue.'
+const observationRefusal = (reason) => HOST_SANDBOX
+  ? reason.trim().slice(0, 300)
+  : `the session's command sandbox stopped the browser and the call outside it was refused (${reason.trim().slice(0, 200)})`
+let SAND = HOST_SANDBOX ? HOST_SANDBOX.instructions : MAYBE_SANDBOX
 // How many simulators this machine holds at once, as whoever planned read it from the eyes: one until that is known.
 let SIMS = 1
 // How many whole gigabytes are free on the disk the project is on, as whoever planned, or closed the milestone
 // before, read it from the eyes. Not known until one of them says, and then nothing is judged by it.
 let ROOM = null
 const learn = (plan) => {
-  if (plan.sandboxed === true) SAND = IN_SANDBOX
+  if (!HOST_SANDBOX && plan.sandboxed === true) SAND = IN_SANDBOX
   if (Number.isInteger(plan.simulators) && plan.simulators > 0) SIMS = plan.simulators
   if (typeof plan.room === 'number' && plan.room >= 0) ROOM = plan.room
 }
@@ -307,7 +312,7 @@ const VERDICT = {
     held: { type: 'array', items: { type: 'string' }, description: 'claims of earlier work (<contract>/<claim>) that were shown again in this look and hold' },
     stood: { type: 'number', description: 'how many claims of earlier work hold after this look, counting those shown before' },
     noticed: { type: 'array', items: { type: 'string' }, description: 'what no claim is about and the owner would want to know; a case in which the product is wrong about what a claim is about is that claim under "refuted", never here' },
-    sandbox: { type: 'string', description: 'empty unless the session\'s command sandbox stopped you from looking at the product and the call outside it was refused: then the exact refusal' },
+    sandbox: { type: 'string', description: HOST_SANDBOX ? 'empty unless a required device observation was blocked in this execution environment; then the exact refusal' : 'empty unless the session\'s command sandbox stopped you from looking at the product and the call outside it was refused: then the exact refusal' },
   },
   required: ['proven', 'refuted', 'unchecked'],
 }
@@ -437,7 +442,7 @@ const SWEPT = {
     drawings: { type: 'number', description: 'how many drawings the sweep measured: the plan\'s screens and their states and limits, the number its summary line gives' },
     findings: { type: 'array', description: 'every screen that does not hold (a drawing at its limits too), each with what was found', items: { type: 'object', properties: { screen: { type: 'string' }, found: { type: 'string' } }, required: ['screen', 'found'] } },
     summary: { type: 'string', description: 'the sweep\'s summary line, as it printed it' },
-    sandbox: { type: 'string', description: 'empty unless the session\'s command sandbox stopped the browser and the call outside it was refused: then the exact refusal' },
+    sandbox: { type: 'string', description: HOST_SANDBOX ? 'empty unless a required device observation was blocked in this execution environment; then the exact refusal' : 'empty unless the session\'s command sandbox stopped the browser and the call outside it was refused: then the exact refusal' },
   },
   required: ['screens', 'hold', 'findings'],
 }
@@ -578,7 +583,7 @@ Mend the part, not the screen: a name cut off in one row is cut off in every row
   }
   if (swept) designed = { prototype: '.sz/design/prototype.html', screens: swept.screens, hold: swept.hold, findings: swept.findings || [], summary: swept.summary || '' }
   if (!swept) return 'the prototype was drawn and could not be measured (nobody answered)'
-  if ((swept.sandbox || '').trim() !== '') return `the prototype was drawn and could not be measured: the session's command sandbox stopped the browser and the call outside it was refused (${swept.sandbox.trim().slice(0, 200)}). The owner chooses one: run sessions in auto mode, approve the unsandboxed command when asked, or turn the sandbox off for this project (/sandbox); then ask to continue.`
+  if ((swept.sandbox || '').trim() !== '') return `the prototype was drawn and could not be measured: ${observationRefusal(swept.sandbox)}. ${AFTER_SANDBOX_STOP}`
   if (!holds(swept)) return `the prototype was drawn and still does not hold after two rounds of mending: ${Math.max(0, Number(swept.screens) - Number(swept.hold))} of the plan's ${swept.screens} screen(s) do not hold: ${(swept.findings || []).map((f) => `${f.screen} (${f.found})`).join('; ') || '(the measurement named none)'}. Nothing is put before the owner that does not hold: run this workflow again to take the drawing up where it stopped.`
   const asks = atDrawing().line
   // The sweep's own line counts drawings (a screen's states and limits too) and calls each a screen: both numbers
@@ -785,6 +790,10 @@ const lookedBefore = (looked, claims) => {
   return { proven, refuted, unchecked, aside, broken }
 }
 async function milestone(m, n, before, where) {
+  // A CLI worker starts in the milestone's actual worktree. Claude's Workflow uses PLACE below.
+  const runAgent = typeof milestoneAgent === 'function'
+    ? (prompt, options) => milestoneAgent(where, m.contractId || m.id, prompt, options)
+    : agent
   let stopped = null
   const here = where ? `the folder \`${where}\`` : 'the current folder'
   const PLACE = where
@@ -808,7 +817,7 @@ async function milestone(m, n, before, where) {
   if (TIGHT) log(`${m.title}: the disk has ${ROOM} GB free and a milestone like this one has taken about ${takes}: it is started, and whoever builds is told to ask before a step that writes gigabytes`)
   const started = !resumed
     ? null
-    : await agent(
+    : await runAgent(
         `A milestone of this product was built by an earlier run and has not been verified to the end. Before anyone looks at it, start it. ${GROUND}${SAND} ${TOOLS}${PLACE}${TIGHT}
 
 Milestone "${m.title}" (${m.id}), contract \`${m.contractId}\` (read it: \`sz-eyes contract show ${m.contractId}\`). It is said to be launched like this: ${m.launch}
@@ -822,7 +831,7 @@ Milestone "${m.title}" (${m.id}), contract \`${m.contractId}\` (read it: \`sz-ey
 Stop what you started, and return the exact command that starts it now.`,
         { label: `start:${m.id}`, phase: 'Build', schema: STARTED, ...effort('build'), ...model('build') },
       )
-  const built = resumed ? (started ? { contractId: m.contractId, summary: started.summary || 'built in an earlier run', launch: started.launch || m.launch, blocked: started.blocked || '', disputes: m.disputes || [] } : null) : await agent(
+  const built = resumed ? (started ? { contractId: m.contractId, summary: started.summary || 'built in an earlier run', launch: started.launch || m.launch, blocked: started.blocked || '', disputes: m.disputes || [] } : null) : await runAgent(
     `You are building milestone ${n} of ${milestones.length} of a product, with nobody watching. ${GROUND}${SAND} ${TOOLS}${PLACE}${TIGHT}
 
 Milestone "${m.title}" (${m.id}): ${m.builds}
@@ -883,7 +892,7 @@ Do not judge your own claims and do not record verdicts: someone who did not bui
   const disputes = (built.disputes || []).filter((d) => d && plainWords(d.file) !== '')
   if (disputes.length > 0) {
     const many = disputes.length > 1
-    await agent(
+    await runAgent(
       `Settle ${many ? `${disputes.length} disputes about frozen checks` : 'a dispute about a frozen check'}, met while building contract \`${built.contractId}\` in the project in ${here}.${PLACE} ${many ? 'The files, each with what the builder says is wrong with it' : 'The file, with what the builder says is wrong with it'}:
 ${disputes.map((d) => `- \`${d.file}\`: ${d.problem}`).join('\n')}
 ${many ? 'Each' : 'It'} was frozen by that contract or by an earlier one that is closed: the contracts under \`.sz/contracts/\` say which, and a correction is recorded on the contract that froze it. The product is launched like this: ${built.launch}.${many ? ' Start what they need once (the product, a simulator of your own) and settle them one after another on it; stop it when you are done.' : ''} Decide ${many ? 'for each ' : ''}which it is (the check, the product, the claim, or a claim that what the owner asked later has replaced), act as your instructions say for that case, and return what you decided${many ? ' for each' : ''}. Where a check is wrong in a way the project's other frozen checks share (a helper called the same way, the same quoting), those are yours to correct too, though nobody disputed them: correct each the same way and record each with \`sz-eyes contract amend\`, and name them in what you return.`,
@@ -895,7 +904,7 @@ ${many ? 'Each' : 'It'} was frozen by that contract or by an earlier one that is
   const record = `\`sz-eyes standing record <contract>/<claim> --status holds|broken|unchecked --during ${built.contractId} --note "<what was run and what it showed>"\``
   // again: null for the first look, or what was shown false and has been worked on since.
   const verify = (again, share) =>
-    agent(
+    runAgent(
       `Verify contract \`${built.contractId}\` of the project in ${here}.${PLACE}${SAND} The product is launched like this: ${built.launch}. ${
         again
           ? `This is a second look, after a fix. ${again.claims.length > 0 ? `These claims of the contract were shown false before: ${again.claims.join(', ')}. Check each from the start, on the product as it is now, and record it with \`sz-eyes contract claim\`. ${again.claims.some((id) => again.facts && again.facts[id]) ? `What was found then: ${again.claims.filter((id) => again.facts && again.facts[id]).map((id) => `[${id}: ${String(again.facts[id]).slice(0, 600)}]`).join(' ')}. Where that is a case the claim's own check does not walk, the check passing shows nothing of the fix: bring the product to that case again. ` : ''}` : ''}${again.standing.length > 0 ? `These promises of earlier work were found broken: ${again.standing.join(', ')}. Show each again and record it with ${record}. ` : ''}A fix can break a neighbour: ${share ? `show again your other claims, each by its own flow, test or command${share.k === 0 ? ', and what stood before this work (\`sz-eyes standing\`) with the project\'s quick checks (its type check and its tests of pure rule)' : ''}` : 'show again this contract\'s other claims and what stood before (\`sz-eyes standing\`) by the project\'s whole check command run once where it has one, and a flow, test or command by itself only where that run failed or says nothing of a claim'}; flows that would get in each other's way on one copy (one moves the clock, one restarts the backend, one fills the database to its limits) run each on a copy of the product of its own (\`sz-eyes copy\`), at the same time and not one after another; report whatever fails now (a claim of this contract under "refuted", recorded with \`sz-eyes contract claim\`; a promise of earlier work under "broken", recorded as above). New cases are tried at this look only where the fix reached: ${again.claims.length > 0 ? 'on the claims named above as shown false before, and on any other claim of yours' : 'on any claim of yours'} whose screens or rules the fix changed (\`git log --stat\` shows on top what the fix just made changed). A claim that an earlier look proved and that the fix did not reach is shown again by its own check and is not tried with new cases: it had that at the first look, and a piece of work in which every look tries new cases on every claim closes only when a look finds nothing new anywhere. What its own check, or the screen in front of you as you run it, shows wrong is still that claim shown false. Claims you did not look at again keep their verdict: leave them out. A claim about every screen at the product's limits is judged by its flow, at the limits the spec states: an input the product does not accept shows nothing about it. ${again.noticed === null ? 'Under "noticed" return only what you notice that is new.' : `Before the fix, this was noticed outside the claims: ${again.noticed.length > 0 ? again.noticed.map((n) => `[${n}]`).join(' ') : '(nothing)'}. One that lies where the fix did not reach is still so: return it as it is, without walking to it again. Walk again only to those on a screen or in a rule the fix changed, and drop one the fix has ended. Under "noticed" return those that are still so and whatever you notice that is new.`}`
@@ -993,7 +1002,7 @@ ${many ? 'Each' : 'It'} was frozen by that contract or by an earlier one that is
     if (verdict.refuted.length === 0 && !named.some(Boolean)) return
     const narrowed = unfixed.length > 0 && named.every(Boolean)
     const open = narrowed ? verdict.refuted.filter((r) => named.includes(r.id)) : verdict.refuted
-    const ruled = await agent(
+    const ruled = await runAgent(
       `Claims of contract \`${built.contractId}\` of the project in ${here} were shown false on the running product by someone who did not build it.${PLACE}${SAND} ${TOOLS} The product is launched like this: ${built.launch}.
 
 The claims shown false, each with what happened instead:
@@ -1056,7 +1065,7 @@ Change no product code and no claim, and no flow or test except as the third cas
     const twice = verdict.refuted.filter((r) => found.has(r.id))
     const lastTime = twice.length > 0 ? `\n${twice.length > 1 ? 'These were' : 'This one was'} mended once already and shown false again. What was found the time before:\n${twice.map((r) => `- ${r.id}: ${String(found.get(r.id)).slice(0, 600)}`).join('\n')}\nA claim is handed to a fixer twice: this is the last time. Where what was found now is another case of the kind found before, a patch for that case meets a third. Mend the kind: change what makes such cases possible, so that none of the kind is left (do not take in or keep what the product cannot handle, do not state a figure it cannot know, work a figure out the way the thing it describes is made), and say under "fixed" why no further case of the kind can come. If that cannot be done, the claim cannot be made true as it is worded: put it under "notFixed" and say why.\n` : ''
     for (const r of verdict.refuted) found.set(r.id, r.fact)
-    const mended = await agent(
+    const mended = await runAgent(
       `You are fixing a product so that claims shown false on it become true. ${GROUND}${SAND} ${TOOLS}${PLACE}
 
 Contract \`${built.contractId}\` (read it: \`sz-eyes contract show ${built.contractId}\`). The product is launched like this: ${built.launch}.
@@ -1093,7 +1102,7 @@ ${round === 1 && earlier ? 'An earlier run found these and stopped; it, or someo
   }
   if (verdict && verdict.refuted.length > 0) await rule([])
   if (verdict && (verdict.sandbox || '').trim() !== '') {
-    stopped = `milestone "${m.title}" was built and could not be looked at: the session's command sandbox stopped the browser and the call outside it was refused (${verdict.sandbox.trim().slice(0, 200)}). Nothing is known to be wrong with the product. The owner chooses one: run sessions in auto mode, approve the unsandboxed command when asked, or turn the sandbox off for this project (/sandbox); then ask to continue.`
+    stopped = `milestone "${m.title}" was built and could not be looked at: ${observationRefusal(verdict.sandbox)}. Nothing is known to be wrong with the product. ${AFTER_SANDBOX_STOP}`
     log(stopped)
     return { entry: { id: m.id, title: m.title, contractId: built.contractId, proven: verdict.proven, refuted: verdict.refuted, unchecked: m.claims.filter((c) => !verdict.proven.includes(c.id)).map((c) => ({ id: c.id, why: 'the command sandbox stopped the look' })), noticed: verdict.noticed || [], report: null, ...left }, stopped }
   }
@@ -1103,7 +1112,7 @@ ${round === 1 && earlier ? 'An earlier run found these and stopped; it, or someo
     return { entry: { id: m.id, title: m.title, contractId: built.contractId, proven: [], refuted: [], unchecked: m.claims.map((c) => ({ id: c.id, why: 'the verifier did not answer' })), noticed: [], report: null, ...left }, stopped }
   }
 
-  const closed = await agent(
+  const closed = await runAgent(
     `Close milestone "${m.title}" of the project in ${here}. ${TOOLS}${PLACE}
 1. \`sz-eyes evidence ${built.contractId}\` writes the evidence page; note its path.
 2. ${verdict.refuted.length + (verdict.broken || []).length === 0 ? `\`sz-eyes contract close ${built.contractId}\` (it also writes what the verifier noticed and what could not be checked to \`.sz/backlog.md\`). It refuses when most of the claims were not looked at: then do not pass \`--accepted\` (that is the owner's to say), leave the contract open, and return "closed": false with what it said under "why". When it said closed, run \`sz-eyes evidence prune ${built.contractId}\` before anything is committed: every look took its pictures again, and this removes from the milestone's evidence folder those that no verdict, notice or record names (the page and what they name stay).` : 'Leave the contract open: it has claims shown false, or broke what stood before it. Its evidence stays as it is: it is what the fix is worked from.'}
@@ -1223,9 +1232,12 @@ Do not merge anything into the project's own folder yourself, and do not record 
   const lastId = (done.find((d) => d.id === group.filter((m) => merged.has(m.id)).slice(-1)[0]?.id) || {}).contractId || group[0].id
   let gate = null
   if (merged.size > 0) {
+    const joinedAgent = typeof milestoneAgent === 'function'
+      ? (prompt, options) => milestoneAgent(null, lastId, prompt, options)
+      : agent
     const record = `\`sz-eyes standing record <contract>/<claim> --status holds|broken|unchecked --during ${lastId} --note "<what was run and what it showed>"\``
     const look = (again) =>
-      agent(
+      joinedAgent(
         `Milestones ${group.filter((m) => merged.has(m.id)).map((m) => `"${m.title}"`).join(', ')} of the project in the current folder were built side by side, each proven in a folder of its own, and have just been brought into this one. Nobody has seen them together. There is no new claim to prove.${SAND} ${
           again
             ? `This is a second look, after a fix. These promises did not hold when the milestones were brought together: ${again.join(', ')}. Show each again, and once more everything else that stands, since a fix can break a neighbour.`
@@ -1236,7 +1248,7 @@ Do not merge anything into the project's own folder yourself, and do not record 
     gate = await look(null)
     for (let round = 1; round <= 2 && gate && !(gate.sandbox || '').trim() && (gate.broken || []).length > 0; round++) {
       const broke = gate.broken.map((b) => `- ${b.key}: ${b.fact}`).join('\n')
-      await agent(
+      await joinedAgent(
         `You are fixing a product after milestones that were built side by side were brought into one. ${GROUND}${SAND} ${TOOLS}
 
 Each was proven alone. Together, these promises do not hold (each is a standing claim: \`sz-eyes standing\` shows how it is checked):
@@ -1253,7 +1265,7 @@ Find the cause in the product (usually two milestones that each changed the same
   joins.push({ ids: group.map((m) => m.id), merged: [...merged], notMerged: out.map((m) => m.id), stood: gate && gate.stood !== undefined ? gate.stood : null, broken: (gate && gate.broken) || [], noticed: (gate && gate.noticed) || [] })
   for (const m of group) if (merged.has(m.id)) closedIds.add(m.id)
   if (merged.size > 0 && !gate) return `milestones ${[...merged].join(', ')} were brought together and could not be shown together (the verifier did not answer)`
-  if (gate && (gate.sandbox || '').trim() !== '') return `milestones ${[...merged].join(', ')} were brought together and could not be looked at: the session's command sandbox stopped the browser and the call outside it was refused (${gate.sandbox.trim().slice(0, 200)}). The owner chooses one: run sessions in auto mode, approve the unsandboxed command when asked, or turn the sandbox off for this project (/sandbox); then ask to continue.`
+  if (gate && (gate.sandbox || '').trim() !== '') return `milestones ${[...merged].join(', ')} were brought together and could not be looked at: ${observationRefusal(gate.sandbox)}. ${AFTER_SANDBOX_STOP}`
   if (gate && (gate.broken || []).length > 0) return `milestones ${[...merged].join(', ')} were each proven alone and, brought together, ${gate.broken.length} promise(s) do not hold after two fixes: ${gate.broken.map((b) => `${b.key} (${b.fact})`).join('; ')}`
   if (out.length > 0) return `milestone(s) ${out.map((m) => `"${m.title}"`).join(', ')} were built and closed on their own branch and could not be brought into the project's folder (the conflict was not settled). They are in ${out.map((m) => whereOf.get(m.id)).join(', ')}.`
   log(`brought together: ${[...merged].join(', ')}${gate && gate.stood !== undefined ? `; ${gate.stood} promise(s) hold on the product as joined` : ''}`)

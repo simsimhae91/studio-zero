@@ -64,9 +64,18 @@ cd <프로젝트 폴더>
 claude --plugin-dir <이 저장소>/plugin
 ```
 
+Codex에서도 같은 빌드 워크플로를 실행할 수 있다. 이 저장소에서 `pnpm install`로 의존성을 준비하고 로컬 마켓플레이스를 등록한다.
+
+```sh
+codex plugin marketplace add .
+codex plugin add sz@studio-zero
+```
+
+대상 프로젝트의 Codex 입력창에 `$sz`를 입력하고 목록에서 **build (sz)**를 선택한 뒤 요청을 적는다. 빌드는 단계마다 새 Codex 세션을 열며 기본 모델은 `gpt-6.2-astra`다. 계획·구현은 `high`, 독립 검증·분쟁 판정은 `xhigh`, 마감·병합은 `low`다. 시안 승인과 실패 후 재검증은 Claude와 같은 워크플로가 처리한다. [터미널 실행법과 권한 범위](plugin/README.md#codex에서-빌드)
+
 계속 쓰려면 Claude Code 안에서 `/plugin marketplace add <이 저장소>` 뒤 `/plugin install sz`.
 
-"고쳐 줘", "이 기능 넣어 줘"는 평소처럼 말하면 된다. 지도가 없는 프로젝트면 먼저 지도(`.sz/map.md`)를 쓴다. 단계는 명령으로 부른다. 명령 뒤에 하고 싶은 말을 붙인다.
+"고쳐 줘", "이 기능 넣어 줘"는 평소처럼 말하면 된다. 지도가 없는 프로젝트면 먼저 지도(`.sz/map.md`)를 쓴다. 아래 표는 Claude Code의 슬래시 명령이다. 명령 뒤에 하고 싶은 말을 붙인다.
 
 | 명령 | 언제 | 걸리는 것 |
 |---|---|---|
