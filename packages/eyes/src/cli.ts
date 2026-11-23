@@ -11,6 +11,7 @@ import { diskRoom, roomText } from './room.ts';
 import { ElectronError, renderAppLook, renderAppWalk, walkElectron } from './electron.ts';
 import { CiteError, seeQuote } from './cite.ts';
 import { Basis, LineId, LineStatus, Objection, Other, addAsk as addWorthAsk, addCite, addObjection, allCases, answerObjection, caseFolder, hearAsk, newCase, readCase, removeOther, renderCase, renderCases, setCall, setLine, setOther, setOwner, setRow, standingOf, unanswered, weighCite, withdrawCite, writeCasePage, writeCasesPage } from './worth.ts';
+import { DiveKind, DiveLineId, LineStatus as DiveLineStatus, addSaw, allDives, closeDive, diveFolder, heardFor, newDive, progressLine, readDive, renderDive, renderDives, seeInFile, setDirection, setDiveLine } from './dive.ts';
 import { engineEnv, findTool, hostedSupabaseCall } from './engine.ts';
 import { writeEvidencePage } from './evidence.ts';
 import { changedSinceFrozen, fingerprint, fingerprints } from './fingerprint.ts';
@@ -211,6 +212,22 @@ const USAGE = `sz-eyes: launch what was built, look at it, operate it, and put w
   sz-eyes worth owner <id> --call build|not|later --said "<the owner's words>"   their decision, which is theirs alone
   sz-eyes worth show [<id>] [--dir <project>]            one case as it stands, or a line for each case
   sz-eyes worth page [<id>] [--dir <project>]            the page the owner reads: one case, or every case side by side (.sz/worth/index.html)
+
+  sz-eyes dive new <id> --kind app|game|plain --seed "<the owner's first words, as they said them>" [--dir <project>]
+        start digging an idea out with the owner, line by line, until it is clear. Kept in .sz/dive/<id>/ of the
+        folder it is started in; started in the home folder or in the harness's repository, under ~/.studio-zero/dives/
+  sz-eyes dive line <id> <line> [--status open|proposed|settled|waived] [--says "<what the line holds>"] [--said "<the owner's words>"]
+        proposed is yours; settled and waived take the owner's words, found among what they typed or chose (the
+        plugin's hook keeps them), never as you would put them. Lines: moment, now, core, first, back, not, feel,
+        done; for an app also pain, home; for a game also loop, stakes, depth, lens
+  sz-eyes dive direction <id> <direction-id> [--name "<a few words>"] [--what "<who, what they do>"] [--status offered|taken|merged|dropped] [--said "<the owner's words>"] [--note "<text>"]
+        a way the idea could go, shown to the owner, and what they made of it (taken, merged, dropped: their words)
+  sz-eyes dive saw <id> (--url <a public page> | --file <a file the owner gave> [--page <n>]) --quote "<the words as they stand there>" --shows "<what they show>" [--line <line>]
+        words read in the world or in the owner's report, looked for where they are said to stand (a PDF on its page)
+  sz-eyes dive close <id> --summary "<the idea in one line>" --said "<the owner's words on the one page>"
+        refused while a line is open or only proposed, before three directions were shown and one taken, and
+        without the owner's words; writes idea.md, which the next stages read
+  sz-eyes dive show [<id>] [--dir <project>]             one dive as it stands (its first lines: the seed, then how many lines are clear), or a line for each
 
   sz-eyes room [--json] [--dir <project>]                whole gigabytes free on the disk the project is on (its first line,
         the number alone), and what a milestone has taken there: asked by whoever plans, before anything is built
@@ -1045,6 +1062,70 @@ async function main(argv: string[]): Promise<number> {
       if (command === 'owner') {
         setOwner(folder, { call: a.one('--call') as 'build', said: a.one('--said') ?? '', at: now });
         out(`the owner: ${a.one('--call')}`);
+        return 0;
+      }
+    } catch (err) {
+      if (err instanceof SandboxError) throw err;
+      const issues = (err as { issues?: { path: (string | number)[]; message: string }[] }).issues;
+      throw new EyesError(Array.isArray(issues) ? `${issues.map((issue) => `${issue.path.join('.') || 'a value'}: ${issue.message}`).join('; ')} (sz-eyes help shows each flag and the words it takes)` : err instanceof Error ? err.message : String(err));
+    }
+  }
+  if (area === 'dive') {
+    const a = parse(rest, []);
+    const project = resolve(a.one('--dir') ?? '.');
+    const now = new Date().toISOString();
+    const id = a.words[0] ?? '';
+    try {
+      if (command === 'show') {
+        if (!id) {
+          out(renderDives(allDives(project)));
+          return 0;
+        }
+        const folder = diveFolder(project, id);
+        out(renderDive(readDive(folder), folder));
+        return 0;
+      }
+      if (!id) throw new Error('which dive: give its id (sz-eyes dive show lists them)');
+      if (command === 'new') {
+        const folder = newDive(project, id, DiveKind.parse(a.one('--kind')), a.one('--seed') ?? '', heardFor(null, now), now);
+        out(`${folder}\n${progressLine(readDive(folder))}`);
+        return 0;
+      }
+      const folder = diveFolder(project, id);
+      const value = readDive(folder);
+      if (command === 'line') {
+        const line = DiveLineId.parse(a.words[1]);
+        const status = a.one('--status');
+        const set = setDiveLine(folder, line, { ...(status ? { status: DiveLineStatus.parse(status) } : {}), ...(a.one('--says') !== undefined ? { says: a.one('--says')! } : {}), ...(a.one('--said') !== undefined ? { said: a.one('--said')! } : {}) }, heardFor(value, now), now);
+        out(`${line}: ${set.status}${set.accepted ? ' (the proposal, taken as it stood)' : ''}\n${progressLine(readDive(folder))}`);
+        return 0;
+      }
+      if (command === 'direction') {
+        const status = a.one('--status');
+        const set = setDirection(folder, { id: a.words[1] ?? '', ...(a.one('--name') !== undefined ? { name: a.one('--name')! } : {}), ...(a.one('--what') !== undefined ? { what: a.one('--what')! } : {}), ...(status ? { status: status as 'taken' } : {}), ...(a.one('--said') !== undefined ? { said: a.one('--said')! } : {}), ...(a.one('--note') !== undefined ? { note: a.one('--note')! } : {}) }, heardFor(value, now), now);
+        out(`direction ${set.id}: ${set.status}`);
+        return 0;
+      }
+      if (command === 'saw') {
+        const url = a.one('--url') ?? null;
+        const file = a.one('--file') ? resolve(a.one('--file')!) : null;
+        const quote = a.one('--quote') ?? '';
+        const shows = a.one('--shows') ?? '';
+        if ((url === null) === (file === null) || quote.trim().length < 2 || shows.trim().length < 2) throw new Error('sz-eyes dive saw <id> (--url <a public page> | --file <a file the owner gave> [--page <n>]) --quote "<the words as they stand there>" --shows "<what they show>" [--line <line>]');
+        const page = a.one('--page') !== undefined ? Number(a.one('--page')) : null;
+        if (page !== null && !(Number.isInteger(page) && page > 0)) throw new Error('--page takes the number of a page');
+        const found = url
+          ? await seeQuote(url, quote).catch((err: unknown) => {
+              if (err instanceof CiteError) throw new Error(err.message);
+              throw err;
+            })
+          : seeInFile(file!, quote, page, now);
+        const made = addSaw(folder, { line: a.one('--line') ? DiveLineId.parse(a.one('--line')) : null, url, file, page, quote, shows }, found);
+        out(made.seen ? `${made.id}: seen: ${made.seen.excerpt.slice(0, 200)}` : `${made.id}: NOT SEEN: ${made.failed}`);
+        return made.seen ? 0 : 1;
+      }
+      if (command === 'close') {
+        out(closeDive(folder, a.one('--said') ?? '', a.one('--summary') ?? '', heardFor(value, now), now));
         return 0;
       }
     } catch (err) {

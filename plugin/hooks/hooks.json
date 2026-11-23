@@ -4,7 +4,7 @@
       { "matcher": "startup|resume|clear|compact", "hooks": [{ "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/session-start.sh\"" }] }
     ],
     "UserPromptSubmit": [
-      { "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/route.mjs\"" }] }
+      { "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/route.mjs\"" }, { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/heard.mjs\"" }] }
     ],
     "PreToolUse": [
       { "matcher": "Edit|Write|NotebookEdit", "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/guard-frozen.mjs\"" }] },
