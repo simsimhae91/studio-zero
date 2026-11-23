@@ -15,7 +15,7 @@
 | `<id>/seed.txt` | 그 사람의 첫 메시지. 실행의 첫 입력 |
 | `<id>/profile.md` | 봉인. 누구인지, 말하는 방식, 숨은 사실 F1…(줄 종류, 드러나는 질문, 채점 기준), 끝났다고 느끼는 조건 |
 | `<id>/workdir/` | 세션이 시작되는 폴더에 놓을 파일 |
-| `report-source/report.html` | 보고서 원본. `report.pdf`는 이것을 헤드리스 Chrome으로 인쇄한 것 |
+| (저장소 밖) `~/.studio-zero/specimens/2026-11-24/dive-eval/report-source/report.html` | 보고서 원본. `report.pdf`는 이것을 헤드리스 Chrome으로 인쇄한 것. 저장소의 슬롭 린트(색을 하드코딩한 HTML)에 걸려 밖에 둔다 |
 
 | id | 사용 사례 | workdir |
 | --- | --- | --- |

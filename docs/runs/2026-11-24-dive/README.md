@@ -5,7 +5,7 @@
 ## 무엇을 했나
 
 - **프로필 넷**: 앱 둘(남의 앱 `app-other`: 당근 판매자, 주인 자신의 앱 `app-own`: 배드민턴 클럽 대진 앱), 게임 둘(`game-a`, `game-b`: 같은 보고서를 읽은 다른 두 사람). 각자 숨은 사실 11~12개, 사실마다 어느 줄인지와 어떤 질문을 받아야 드러나는지가 적혀 있다. 스킬을 짓는 나와 다른 에이전트(Opus)가 썼고, 나는 평가가 끝날 때까지 열어 보지 않았다(`profiles/README.md`).
-- **보고서**: "성공하는 인디게임의 6가지 공통점", 평가용으로 만든 가상의 PDF 5쪽. 방법에 흠이 하나 심어져 있다(`profiles/game-a/workdir/report.pdf`, 원본 HTML은 `profiles/report-source/`).
+- **보고서**: "성공하는 인디게임의 6가지 공통점", 평가용으로 만든 가상의 PDF 5쪽. 방법에 흠이 하나 심어져 있다(`profiles/game-a/workdir/report.pdf`, 원본 HTML은 저장소 밖 `~/.studio-zero/specimens/2026-11-24/dive-eval/report-source/`).
 - **8회**: 프로필마다 dive와 grilling(`mattpocock-skills:grilling`)을 한 번씩. 같은 모델(Opus 5.5), 같은 effort(high), 헤드리스, 샌드박스 끔, 질문 상자 끔(터미널에 사람이 없으면 상자가 뜨지 않는다: 두 갈래 모두 번호 목록으로 물었다). dive는 이 작업 트리의 플러그인을 싣고 `/sz:dive <씨앗>`으로, grilling은 플러그인 없이 `/mattpocock-skills:grilling <씨앗>`으로 시작했다. 대역은 도구와 플러그인 없이 프로필만 들고, 세션의 마지막 말에만 답했다. 대역이 한 장을 보고 만족하면 끝, 최대 30번. grilling은 끝난 뒤 "지금까지 정한 것을 한 장으로 정리해 주세요"를 한 번 더 받아 그 답을 한 장으로 삼았다. 구동기: `drive.mjs`, `run-all.sh`(4개씩 두 묶음, 묶음마다 두 갈래를 섞음).
 - **판정**: 실행마다 Opus 판정자 하나가 프로필, 대화 전체, 마지막 한 장을 읽고 숨은 사실마다 한 장에 맞게 있나(맞음, 일부, 없음, 틀림), 대화에서 드러났나를 매겼다(`runs/<run>/judge.json`). 첫 라운드의 방향은 판정자 하나가 여덟을 같은 기준으로 봤다(`runs/first-round.json`). 주인 말 위조는 기계로도 셌다: dive 기록에 주인 말로 적힌 모든 인용이 대역이 한 말 안에 있는가.
 
