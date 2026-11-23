@@ -1,0 +1,14 @@
+{
+  "arm": "dive",
+  "profile": "game-b",
+  "ended": "dive closed",
+  "ownerReplies": 8,
+  "wallMinutes": 9.01,
+  "sessionMinutes": 7.96,
+  "sessionTokens": 2543179,
+  "sessionOutputTokens": 36878,
+  "sessionCostUsd": 16.07,
+  "standinCostUsd": 1.56,
+  "dive": "/Users/hosoo/.studio-zero/specimens/2026-11-24/dive-eval/game-b-dive/work/.sz/dive/indie-report",
+  "sessionId": "eb66aa8b-e5e3-4fda-b764-62ada7a58301"
+}

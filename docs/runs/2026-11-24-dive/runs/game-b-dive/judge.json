@@ -1,0 +1,99 @@
+{
+  "run": "game-b-dive",
+  "facts": [
+    {
+      "id": "F1",
+      "line": "moment: 아빠와 9살 딸, 일요일 저녁 30분, 거실 TV에서 2인.",
+      "page": "yes",
+      "conversation": "yes",
+      "quote": "일요일 저녁 거실 TV 앞, 아빠와 딸 서아가 한 화면에서 둘이 같이 하는 30분 (제목: 9살 서아)"
+    },
+    {
+      "id": "F2",
+      "line": "now: 지금 같이 하는 게임들이 안 맞음 — 잇 테이크 투(조작·카메라가 어려워 딸이 포기), 오버쿡드(서로 탓하고 고함). 둘 중 하나 이상과 그 이유.",
+      "page": "yes",
+      "conversation": "yes",
+      "quote": "잇 테이크 투. 서아가 카메라 조작을 못 해 같은 곳에서 계속 떨어지다 그만둠"
+    },
+    {
+      "id": "F3",
+      "line": "core: 역할이 다른 2인 협동 — 딸은 기차 운전(주도), 아빠는 그 앞에 선로 깔기, 아빠가 쫓기는 재미.",
+      "page": "yes",
+      "conversation": "yes",
+      "quote": "서아(대장): 속도 레버, 경적, 역에서 승객 태우기. 아빠: 기차 앞에 선로를 잇는다 … 못 따라가 쩔쩔매는 아빠를 서아가 보며 웃는 것"
+    },
+    {
+      "id": "F4",
+      "line": "not: 교육·학습 요소 없음. 교육 요소를 넣으면 틀림.",
+      "page": "yes",
+      "conversation": "yes",
+      "quote": "교육용은 절대 아님(수학 문제, 한글 퀴즈 같은 공부시키기)"
+    },
+    {
+      "id": "F5",
+      "line": "stakes: 게임오버·탈선 없음(기차가 멈추고 별이 깎이는 정도), 한 판 = 노선 하나 약 12분.",
+      "page": "yes",
+      "conversation": "yes",
+      "quote": "탈선·게임오버 없음. 선로가 늦으면 기차가 멈춰 기다리고 승객이 투덜대며 별 하나 깎임. 한 판 = 노선 하나 약 12분"
+    },
+    {
+      "id": "F6",
+      "line": "loop: 30초 선로 깔기·승객 태우기 / 5분 역에서 역까지 / 1시간 새 노선 지도, 딸이 이름 지음.",
+      "page": "yes",
+      "conversation": "yes",
+      "quote": "30초: 아빠 선로 서너 칸, 서아 역에서 승객 태우고 경적. 5분: 역 하나에서 다음 역, 중간에 터널이나 다리 하나. 일요일 두 달(약 8번, 4시간): 새 노선 지도가 열리고 서아가 노선 이름을 지음"
+    },
+    {
+      "id": "F7",
+      "line": "back: 태운 승객이 모이는 앨범 + 지난번 승객이 다시 나와 인사.",
+      "page": "yes",
+      "conversation": "yes",
+      "quote": "승객 앨범: 태운 동물 승객이 앨범에 모이고, 지난번 승객이 다음 노선에 다시 나와 '고마워' 한다"
+    },
+    {
+      "id": "F8",
+      "line": "first: 딸은 버튼 하나(경적)로 바로 출발, 글 없음.",
+      "page": "yes",
+      "conversation": "yes",
+      "quote": "타이틀·튜토리얼 글 없이 바로 기차 위. 0초 서아 경적='출발!' → 기차 출발"
+    },
+    {
+      "id": "F9",
+      "line": "feel: Unrailed!의 선로 깔기 + 둘이 같은 일을 하지 않게 역할을 나눔.",
+      "page": "yes",
+      "conversation": "yes",
+      "quote": "Unrailed!의 선로 까는 재미 … 손 빠른 아빠가 다 해 버리므로, 여기선 서아(운전·승객)와 아빠(선로)의 역할이 다르다"
+    },
+    {
+      "id": "F10",
+      "line": "lens: 리뷰 수로 뽑은 표본이 가족·아이 게임을 빼 버린다는 결함을 짚음 + 그래서 4번(방송용)을 버림.",
+      "page": "yes",
+      "conversation": "yes",
+      "quote": "버림: 렌즈4 방송(표본이 리뷰 5천+ 게임이라 가족·아이 게임은 처음부터 빠졌고, 거실엔 시청자가 없음)"
+    },
+    {
+      "id": "F11",
+      "line": "lens: 2번(5분 안 핵심 재미)과 5번(혼자 1년, 지도 세 개의 작은 범위)을 노림.",
+      "page": "yes",
+      "conversation": "yes",
+      "quote": "정면: 렌즈2 5분 안 핵심 재미(9살은 기다려 주지 않음), 렌즈5 작은 범위(혼자 1년, 노선 지도 3개)"
+    },
+    {
+      "id": "F12",
+      "line": "done: 딸이 스스로 \"한 판 더\" + 아내가 \"오늘은 안 싸우네\".",
+      "page": "yes",
+      "conversation": "yes",
+      "quote": "서아가 시키지 않았는데 '한 판 더' 하고, 부엌의 아내가 '둘이 오늘은 안 싸우네' 하면 다 된 것"
+    }
+  ],
+  "pageYes": 12,
+  "pagePartial": 0,
+  "pageNo": 0,
+  "pageWrong": 0,
+  "revealed": 12,
+  "total": 12,
+  "forged": [],
+  "assumedWrong": [],
+  "questions": 25,
+  "notes": "All 12 hidden facts reached the page, each backed by a verbatim quote: the concrete opening question (the last game played: when, where, why it stopped) drew out F1 and F2, a 직접 쓰기 option on every line let the stand-in override the interviewer's guesses with the real facts, and a re-read of the page before closing brought out F9 and settled the profile's own '1시간' against '일요일 두 달치'. On the weak side, round 1 went to the obvious guesses (a solo roguelite, a streamer game), most recommended options were guesses the stand-in had to reject, F8 was only accepted from a proposal, and Overcooked, the 7:30 start and the two controllers never came out. The page also keeps a wrong world fact (It Takes Two '가격은 11,000원', the soundtrack DLC) and swaps the [feel] and [now] tags on the two Steam sources, though neither is about what the person wants."
+}

@@ -1,0 +1,99 @@
+{
+  "run": "app-own-grilling",
+  "facts": [
+    {
+      "id": "F1",
+      "line": "pain: 신입(D급)이 40분 동안 한 게임도 못 침, 한 명은 탈퇴, 원인은 같은 급수끼리만 묶는 대진.",
+      "page": "yes",
+      "conversation": "yes",
+      "quote": "`같은 급수끼리` 때문에 D급 신입 2명이 40분 동안 한 경기도 못 쳤고, 그중 1명은 클럽을 나갔습니다"
+    },
+    {
+      "id": "F2",
+      "line": "now: 화이트보드+자석 이름표로 손으로 짬, 앱은 결과 입력용, 앱은 대기 시간을 모름.",
+      "page": "no",
+      "conversation": "no",
+      "quote": "(없음. 클럽 날 대진을 지금 실제로 어떻게 짜는지 묻지 않았고, 화이트보드는 대화에도 페이지에도 나오지 않음)"
+    },
+    {
+      "id": "F3",
+      "line": "core: 대기 순서 우선 대진(두 게임 연속 쉬는 사람 없음, 한 시간 최소 두 게임). 급수는 보조.",
+      "page": "yes",
+      "conversation": "yes",
+      "quote": "가장 오래 기다린 4명을 그대로 뽑습니다. 팀은 급수 점수 합이 비슷하게 나누고 … 2판 연속으로 쉬는 사람이 없어야 합니다. 모두 1시간에 2경기 이상 칩니다."
+    },
+    {
+      "id": "F4",
+      "line": "not: 급수별 분리 매칭을 강화하지 않음, 섞어 치게 함.",
+      "page": "yes",
+      "conversation": "yes",
+      "quote": "급수로 나누지 않고 섞어 칩니다 … 삭제: `랜덤` 모드와 `같은 급수끼리` 옵션"
+    },
+    {
+      "id": "F5",
+      "line": "not: 공개 랭킹·승률표 없음(엑셀 승률표 일 때문에).",
+      "page": "no",
+      "conversation": "no",
+      "quote": "(없음. 랭킹·승률을 선택지로 내거나 전에 해 봤다가 안 된 것을 묻지 않음. 페이지에 랭킹이 들어가지는 않음)"
+    },
+    {
+      "id": "F6",
+      "line": "moment: 총무 혼자, 경기 사이 30초, 라켓 든 한 손, 버튼 한 번.",
+      "page": "partial",
+      "conversation": "no",
+      "quote": "운영진 폰 한 대로 (총무 한 사람이 쓴다는 것만 있음, 그것도 F7에서 온 말. 30초, 한 손, 버튼 한 번에 다음 판이라는 장면은 묻지도 적지도 않음)"
+    },
+    {
+      "id": "F7",
+      "line": "now (반대): 체육관 지하라 인터넷이 안 됨 → 총무 폰 하나에서 오프라인으로 동작.",
+      "page": "yes",
+      "conversation": "yes",
+      "quote": "체육관이 지하라 인터넷이 안 돼서 Firestore, QR 출석, 알림도 멈춥니다 … 인터넷 없이 운영진 폰 한 대로 돌립니다"
+    },
+    {
+      "id": "F8",
+      "line": "home: 랠리판 코트 현황판 안의 기능(새 앱 아님).",
+      "page": "partial",
+      "conversation": "yes",
+      "quote": "랠리판 개선 계획 … v1.4 … 다른 두 클럽에는 미리 공지합니다 (랠리판 업데이트인 건 분명하나 코트 현황판 화면이라는 자리는 빠짐)"
+    },
+    {
+      "id": "F9",
+      "line": "first: 총무가 이름 한 번 탭 → 대기열 맨 뒤에 들어감.",
+      "page": "yes",
+      "conversation": "yes",
+      "quote": "운영진이 이름을 누르면 대기 줄 맨 뒤로 들어갑니다 (Q16에서 세션이 제안, 주인이 \"네\")"
+    },
+    {
+      "id": "F10",
+      "line": "feel: 맥도날드 주문번호 모니터처럼 지금/다음/그다음이 한 화면, 큰 이름.",
+      "page": "no",
+      "conversation": "no",
+      "quote": "(없음. 참고할 화면을 묻지 않았고, 페이지에는 화면 모양이 없음)"
+    },
+    {
+      "id": "F11",
+      "line": "back: 월요일 밤까지 이번 주 참석 표시 → 화요일 오전 코트 수 예약 확정(지금은 카톡 투표, 응답 절반).",
+      "page": "no",
+      "conversation": "no",
+      "quote": "(없음)"
+    },
+    {
+      "id": "F12",
+      "line": "done: 실제 클럽 날, 신입이 안 기다렸다고 함 + 회장이 화이트보드를 치워도 된다고 함.",
+      "page": "no",
+      "conversation": "no",
+      "quote": "(없음. 페이지의 완료 기준은 \"23명, 코트 4면, 경기 15분 조건으로 시뮬레이션 테스트\"로 대신 채워졌고, 12월 2일 실제 클럽 날이나 최유나 씨·회장님의 말은 없음)"
+    }
+  ],
+  "pageYes": 5,
+  "pagePartial": 2,
+  "pageNo": 5,
+  "pageWrong": 0,
+  "revealed": 6,
+  "total": 12,
+  "forged": [],
+  "assumedWrong": [],
+  "questions": 24,
+  "notes": "The first round's options ended with an (e) asking for one concrete scene, which drew out the whole 11/18 incident (F1) at once; the interviewer then took the person's pushback against same-level matching and their tighter fairness rule (F3, F4), re-cut v1.4 around the offline correction (F7), and correctly proposed one-tap name attendance to the end of the queue (F9). Badly, it led with its own README-derived agenda: a privacy/anonymisation patch, a release split, and edge-case and warning formulas, in 21 numbered yes/no recommendations. It never asked how pairing is done today (whiteboard, F2), what the moment between games looks like (F6), what screen to model on (F10), why members would open the app outside club day (F11), what had been tried and failed (rankings, F5) or who would say it worked on which day (F12, replaced by a simulation test). The offline fact surfaced only because the person corrected the interviewer's summary."
+}

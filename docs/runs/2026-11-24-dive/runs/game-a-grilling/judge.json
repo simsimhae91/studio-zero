@@ -1,0 +1,99 @@
+{
+  "run": "game-a-grilling",
+  "facts": [
+    {
+      "id": "F1",
+      "line": "core (반대): 세탁소 회전 레일을 돌려 번호표의 옷을 찾아 꺼냄 + 찾으러 올 날을 생각해 거는 위치를 정함, 전투 없음.",
+      "page": "yes",
+      "conversation": "yes",
+      "quote": "회전 옷걸이 레일을 돌려 옷을 맡고 내주는 / 어디에 걸지 정하는 계획, 레일을 멈추는 타이밍, 저녁 줄이 빠지는 보상 / 번호표에는 찾으러 올 요일이 색으로 표시됩니다 / 랜덤 생성, 전투, 세탁 과정은 없습니다"
+    },
+    {
+      "id": "F2",
+      "line": "moment: 평일 밤 침대에서 스팀덱으로 한 판 하고 자는 직장인.",
+      "page": "no",
+      "conversation": "no",
+      "quote": "(none; the only platform line is 'itch.io 웹 빌드' for the prototype)"
+    },
+    {
+      "id": "F3",
+      "line": "stakes (반대): 한 판 = 하루 영업 약 8분, 손님이 떠나고 별점 3개 미만이면 그날 다시, 30일 캠페인, 랜덤·영구사망 없음. 로그라이트로 적으면 틀림.",
+      "page": "partial",
+      "conversation": "yes",
+      "quote": "하루 8분 / 별 5개 만점에 3개 미만이면 그날을 다시 합니다 / 손님이 떠나거나 ... 별 1개가 깎입니다 / 랜덤 생성 ... 없습니다 (no 30-day campaign: page has a 3-day prototype, a 'weeks-long calendar' deferred)"
+    },
+    {
+      "id": "F4",
+      "line": "loop: 30초 손님 한 명 / 5분 아침 맡기기·저녁 찾기 러시 / 1시간 한 주, 일요일 레일 재배치·확장.",
+      "page": "partial",
+      "conversation": "no",
+      "quote": "30초 안에 첫 옷을 건넵니다 / Day 3 ... 마지막 2분에 손님이 몰림 / 저녁 줄이 빠지는 보상 (no morning drop-off rush, no week, no Sunday re-layout; only '레일 칸 수 확대' deferred)"
+    },
+    {
+      "id": "F5",
+      "line": "depth (반대): 6~8시간 분량, 마지막 영업일 엔딩. 무한 반복·100시간 콘텐츠로 적으면 틀림.",
+      "page": "no",
+      "conversation": "no",
+      "quote": "(none; only the prototype ending 'Day 3 ... 아버지의 명절 양복을 꺼냅니다' and a deferred '몇 주짜리 달력')"
+    },
+    {
+      "id": "F6",
+      "line": "back: 맡긴 옷으로 이어지는 단골 손님들의 이야기가 매일 조금씩 진행.",
+      "page": "partial",
+      "conversation": "yes",
+      "quote": "김 과장님은 Day 1과 Day 2에 흰 셔츠 다섯 벌을 맡기고 찾아갑니다. Day 3에는 오지 않습니다. / 웨딩드레스와 상복 이야기 (상업판으로 미룬 것)"
+    },
+    {
+      "id": "F7",
+      "line": "feel: 언패킹(물건으로 사람 이야기) + 페이퍼스 플리즈(반복 업무가 이야기).",
+      "page": "partial",
+      "conversation": "yes",
+      "quote": "이야기 (설명 없이 전합니다) (neither Unpacking nor Papers, Please is named; the 'why' survives only through Kim's shirts)"
+    },
+    {
+      "id": "F8",
+      "line": "not: 코지 힐링·동물·꾸미기 아님, 러시의 바쁨이 핵심.",
+      "page": "partial",
+      "conversation": "yes",
+      "quote": "손님 응대 타임매니지먼트 / 대기 시간이 길면 별이 깎입니다 / 마지막 2분에 손님이 몰림 (nothing says it must not become a cozy, animal or decorating game)"
+    },
+    {
+      "id": "F9",
+      "line": "first: 글 없이, 번호표를 받고 레일을 돌리는 소리로 시작.",
+      "page": "yes",
+      "conversation": "yes",
+      "quote": "0초에 아버지가 '123번'이라고 합니다 / 글로 된 튜토리얼은 없습니다 / 아버지가 번호표를 넘겨줌 (the rail's turning sound is not named; only the stop sound)"
+    },
+    {
+      "id": "F10",
+      "line": "lens (보고서 결함): 비교군(실패작) 없이 성공작만 본 결함을 짚음 + 그래서 3번(짧은 한 판)을 버림.",
+      "page": "yes",
+      "conversation": "yes",
+      "quote": "실패한 게임과 비교하지 않은 보고서라서 성공 요인으로는 쓰지 않습니다. '비틀기 하나'와 '5분 안에 핵심 동작'만 설계 원칙으로 가져왔습니다."
+    },
+    {
+      "id": "F11",
+      "line": "lens: 1번(타임 매니지먼트 + 회전 레일 비틀기)과 2번(5분 안 핵심 재미)을 노림.",
+      "page": "yes",
+      "conversation": "yes",
+      "quote": "바탕 장르는 손님 응대 타임매니지먼트이고, 비틀기는 도는 원형 레일입니다 / '비틀기 하나'와 '5분 안에 핵심 동작'만 설계 원칙으로"
+    },
+    {
+      "id": "F12",
+      "line": "done: 설에 아버지께 보여 드림 + 아버지가 거는 자리에 훈수를 두면 성공.",
+      "page": "no",
+      "conversation": "no",
+      "quote": "(none; the page's test is '테스터 10명 이상 중 30% 이상이 ... 끝까지 하거나 더 하고 싶다고 하면 상업판으로')"
+    }
+  ],
+  "pageYes": 4,
+  "pagePartial": 5,
+  "pageNo": 3,
+  "pageWrong": 0,
+  "revealed": 8,
+  "total": 12,
+  "forged": [],
+  "assumedWrong": [],
+  "questions": 36,
+  "notes": "Concrete multiple-choice questions anchored in the real shop worked: the counter-setting list (세탁소 option), the failure-mode options, 'how does your father know where 123 hangs' and 'a regular you remember' drew F1, F3, F6 and the opening out in the person's own words, and the page carries them faithfully with every correction the person made (no puzzle narrowing, father on screen, 8-minute day, no random) and nothing stated wrong. But it opened with its own critique of the report and attached its own recommendation to every question (roguelite or puzzle, post office, 3-day prototype, a 30%-of-testers commercial test), and never asked who plays when, how long the whole game runs, what it must not become, why those two games, or who should see it first, so F2, F5, F12 and the week/Sunday layer of F4 never surfaced and the page's measure of success is the interviewer's invented tester threshold rather than the father at Seollal. Not counted as forged: three quote-marked near-verbatim condensations of the person's lines in the conversation ('랜덤 런은 제가 만들고 싶은 거랑 다르다', '찾으러 올 요일을 생각해서 건다', '찾으러 올 요일대로 모아서 건다'), meaning kept but hedges like '좀' and '것 같아요' dropped; none on the page."
+}

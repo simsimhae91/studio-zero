@@ -1,0 +1,92 @@
+{
+  "app-other-dive": {
+    "directions": [
+      "① 올리는 순간을 1분으로 (사진 → 제목·설명·동네 시세 자동)",
+      "② 채팅 지옥 정리 (자동답변, 잠수 숨김, 진짜 살 사람 표시)",
+      "③ 노쇼 없는 약속 (상대 출발 상태, 대기자에게 바로 넘기기)",
+      "④ (와일드카드) 이웃이 대신 팔아줌 (위탁 판매, 팔린 만큼 정산)"
+    ],
+    "kinds": 4,
+    "sameKind": "None merged. ①–③ are the same seller, but each is a different moment with a different verb: writing a listing on Sunday night, sorting 11 chats on Tuesday evening, meeting a buyer on Saturday. ④ changes who sells (a neighbor agent) and the verb (hand over a box, get paid out). All four sit inside Daangn's selling flow, so they share a setting, not a kind.",
+    "wildcard": "yes: ④ 이웃이 대신 팔아줌. It adds a new role to the market (a local consignment seller taking a 15% fee) instead of fixing one of the seller's own steps.",
+    "reactable": "yes: each has a scene (a Sunday-night padded-jacket listing, 11 chats at 7 p.m. Tuesday, 2:15 p.m. at the station exit, 40 items two weeks before a move) and a screen sketch.",
+    "memoryQuestion": "yes: 「당근에서 팔다가 \"아 짜증나\" 했던 가장 최근 일이 언제였어요? 무슨 물건을 팔던 중이었는지, 그때 어떻게 하셨는지(그냥 참았는지, 다른 방법을 썼는지, 포기했는지)를 편하게 적어 주세요.」"
+  },
+  "app-other-grilling": {
+    "directions": [],
+    "kinds": 0,
+    "sameKind": "No directions. Q1's (a)–(f) are pain categories offered as answers to 'what exactly is the inconvenience?', which is a fact question. Q2's options (portfolio, pitch to Daangn, build an extension or helper app, sort out thoughts) are the person's purpose, not shapes of the feature. Q3 asks what kind of seller they are; its 'quick reply vs per-item auto-reply' is an illustration, not an option. The research addendum lists gaps (repeated chats, no-shows, after-deal handling, 바로구매 disputes) as findings, not as choices.",
+    "wildcard": "no: there are no directions.",
+    "reactable": "no: there are no directions. The pain options are one-line labels, with one example scene given as an answer template.",
+    "memoryQuestion": "yes, weaker: 「직접 겪은 구체적인 장면 하나로 답해 주세요. 예: \"지난주 의자 팔 때 같은 질문을 12명한테 받음\". 장면이 없으면 (a)를 추천.」 It asks for one experienced scene, but not when it last happened or what they did then, and it offers a default if they have none."
+  },
+  "app-own-dive": {
+    "directions": [
+      "1. 내 차례 보이기 (벤치에서 기다리는 회원)",
+      "2. 총무 현장 손보기 (클럽 날 운영진: 늦게 옴·먼저 감·같이 안 묶기·다시 뽑기)",
+      "3. 회원이 보는 내 기록 (클럽 날 다음 날, 일반 회원)",
+      "4. (와일드카드) 클럽 교류전 (랠리판 쓰는 세 클럽을 섞은 대진)"
+    ],
+    "kinds": 4,
+    "sameKind": "None merged. 1 and 3 have the same user (a regular member), but the moment differs (on the bench mid-session vs. lunch the next day) and so does the verb (check my turn vs. review my record). 2 is the organizer editing the queue on club night. 4 is several clubs hosting one mixed event.",
+    "wildcard": "yes: 4 클럽 교류전. It builds on the fact that three clubs run the app to make a mixed-club day; it does not come from a pain they reported.",
+    "reactable": "yes: each has a scene with a time and a person (8:40 p.m. on the bench, 8:10 latecomers, Thursday lunch, Saturday at the 광교 gym) and a screen sketch.",
+    "memoryQuestion": "yes: 「마지막으로 랠리판 쓰다가 불편했던 게 언제였어요? 그때 뭘 하고 계셨고, 그래서 어떻게 하셨어요? 손으로 고쳤는지, 단톡방에 따로 말했는지, 그냥 넘어갔는지 같은 것들요.」"
+  },
+  "app-own-grilling": {
+    "directions": [
+      "Q3 탈퇴 회원 기록 먼저 고치기 (익명 처리 추천 / 전부 삭제)"
+    ],
+    "kinds": 1,
+    "sameKind": "One direction; its two methods (anonymize, or delete everything) are variants of the same fix. Not counted: Q1's (a)–(e) are pain categories for a fact question, and Q2 is which club to tune for. The solutions named at the end (wait-time priority, mixing short grades with the next grade, previewing the next draw) are put off to the next round, not offered now.",
+    "wildcard": "no: the deletion issue comes from the owner's own README known-issues list. Only the legal framing (privacy law, App Store account deletion) is new.",
+    "reactable": "partly: there are two fix options, each with what it does to other members' stats, but no scene or screen.",
+    "memoryQuestion": "partly: the main ask is to pick categories, with the interviewer's own guess of (a)+(b). A scene is asked for only under (e), 「구체적인 장면 하나만 들려 주세요. 예: \"지난 수요일에 ○○님이 40분 기다림\"」, and in one soft line, 「그래도 실제로 겪으신 장면을 들려 주시는 게 가장 정확합니다.」 There is no 'when' or 'what did you do'."
+  },
+  "game-a-dive": {
+    "directions": [
+      "1. 줄이 지워지면 카드가 터지는 블록 퍼즐 덱빌더 (혼자, 퇴근 후 20분)",
+      "2. 넷이 한 트럭을 나눠 모는 협동 배달 (친구 2~4명, 금요일 밤 디스코드)",
+      "3. 자기 전 하루 한 판, 골목 야식집 (혼자, 침대에 들기 전 15분)",
+      "4. (와일드카드) 채팅이 적을 보내는 방송용 디펜스 (방송인 1명 + 시청자 수백 명)"
+    ],
+    "kinds": 4,
+    "sameKind": "None merged. 1 and 3 are both solo, but at different moments (after work vs. before bed) with different verbs (clearing lines to fire cards vs. overhearing customers and changing the menu). 2 is 2–4 friends coordinating one truck. 4 is a streamer against chat votes.",
+    "wildcard": "yes: 4, the stream defense where chat votes the next wave of enemies.",
+    "reactable": "yes: each has a screen sketch, the first 30 seconds in three beats, the closest games, and what it gives up.",
+    "memoryQuestion": "yes: 「마지막으로 한 판만 더 하다가 늦게 잔 게임이 뭐였나요? 그때 어디서, 얼마나 하다가, 왜 껐는지도 알려 주세요.」"
+  },
+  "game-a-grilling": {
+    "directions": [
+      "Q4 대안: 짧은 한 판 로그라이트나 퍼즐 (300시간 해 본 장르가 없을 때)"
+    ],
+    "kinds": 1,
+    "sameKind": "One direction. Roguelite and puzzle come as one fallback with one rationale (one person can build it, fast to prototype), and no player, moment or verb separates them. Not counted: the Q4 genre list asks what the person already knows (a fact), and Q1–Q3 are purpose, team, and how to use the report. The interviewer says genre candidates and twists come next round.",
+    "wildcard": "no: roguelite or puzzle is the stock default for a solo developer.",
+    "reactable": "no: genre labels only.",
+    "memoryQuestion": "no. The closest is Q4, 「직접 많이 해 봤고, 무엇이 재밌고 무엇이 지루한지 말할 수 있는 장르를 2~3개 알려 주세요.」, which asks about general experience and taste, not a moment."
+  },
+  "game-b-dive": {
+    "directions": [
+      "A. 화투 족보 로그라이트 (혼자, 출퇴근 15분, 발라트로류)",
+      "B. 넷이서 이삿짐 나르기 (친구 2~4명, 금요일 밤 디스코드, 물리 협동)",
+      "C. 소리 나는 골목 짓기 (혼자, 자기 전 침대 20분, 타일 놓기)",
+      "D. (와일드카드) 채팅이 적인 게임 (방송인이 달리고 시청자가 투표로 함정)"
+    ],
+    "kinds": 4,
+    "sameKind": "None merged. A and C are both solo, but at different moments (morning commute vs. in bed) with different verbs (playing scoring hands vs. placing tiles that make a tune). B is 2–4 friends lifting together on Discord. D is a streamer running while chat votes traps.",
+    "wildcard": "yes: D, the game where chat is the enemy. A's 화투 twist on Balatro is also fresh, but D is the clear outsider.",
+    "reactable": "yes: each has a dated scene and a 0–30 s timeline, and A also has a screen sketch.",
+    "memoryQuestion": "yes: 「최근에 짧게 한 판 하고 끈 게임이 있었다면 언제, 어디서, 무슨 게임을, 얼마나 하셨나요? 왜 그만두셨나요?」"
+  },
+  "game-b-grilling": {
+    "directions": [
+      "Q4 추천: 싱글플레이 위주 로그라이트 덱빌딩이나 퍼즐"
+    ],
+    "kinds": 1,
+    "sameKind": "One direction. Roguelite deckbuilder and puzzle are one recommendation with one rationale (single-player, short run, small scope). Not counted: the Q4 genre list asks what the person knows, and co-op/party appears there only to be recommended against. Q1–Q3 are purpose, team, and how to use the report.",
+    "wildcard": "no: roguelite deckbuilder or puzzle is the stock default.",
+    "reactable": "no: genre labels only.",
+    "memoryQuestion": "no. The closest is Q4, 「기반 장르는 본인이 수백 시간 해 본 장르여야 비틀 지점이 보여요. 어떤 장르를 잘 아세요?」, which asks about general experience, not a moment."
+  }
+}

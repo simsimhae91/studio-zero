@@ -1,0 +1,14 @@
+{
+  "arm": "dive",
+  "profile": "game-a",
+  "ended": "dive closed",
+  "ownerReplies": 7,
+  "wallMinutes": 9.22,
+  "sessionMinutes": 8.24,
+  "sessionTokens": 2504744,
+  "sessionOutputTokens": 40099,
+  "sessionCostUsd": 12.3,
+  "standinCostUsd": 1.55,
+  "dive": "/Users/hosoo/.studio-zero/specimens/2026-11-24/dive-eval/game-a-dive/work/.sz/dive/indie-six",
+  "sessionId": "4f160275-42e2-4496-a9b5-cf5a3a72b58e"
+}

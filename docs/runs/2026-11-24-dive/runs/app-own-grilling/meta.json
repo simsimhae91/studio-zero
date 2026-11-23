@@ -1,0 +1,14 @@
+{
+  "arm": "grilling",
+  "profile": "app-own",
+  "ended": "stand-in satisfied",
+  "ownerReplies": 7,
+  "wallMinutes": 6.51,
+  "sessionMinutes": 5.75,
+  "sessionTokens": 868387,
+  "sessionOutputTokens": 30085,
+  "sessionCostUsd": 7.95,
+  "standinCostUsd": 1.37,
+  "dive": null,
+  "sessionId": "0631c581-7d15-4e62-b8c2-6a3754294f05"
+}

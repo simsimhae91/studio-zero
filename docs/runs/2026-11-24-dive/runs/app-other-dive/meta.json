@@ -1,0 +1,14 @@
+{
+  "arm": "dive",
+  "profile": "app-other",
+  "ended": "dive closed",
+  "ownerReplies": 5,
+  "wallMinutes": 7.1,
+  "sessionMinutes": 6.43,
+  "sessionTokens": 1476622,
+  "sessionOutputTokens": 24027,
+  "sessionCostUsd": 8.19,
+  "standinCostUsd": 0.83,
+  "dive": "/Users/hosoo/.studio-zero/specimens/2026-11-24/dive-eval/app-other-dive/work/.sz/dive/daangn-seller",
+  "sessionId": "a4f95b9c-6565-4f5f-b3a2-54a84a59fc30"
+}

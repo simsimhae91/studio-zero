@@ -1,0 +1,330 @@
+{
+  "id": "settle",
+  "createdAt": "2026-11-23T23:05:58.608Z",
+  "kind": "app",
+  "seed": "단톡방에서 모임 끝나고 정산하는 게 너무 귀찮아",
+  "lines": {
+    "moment": {
+      "status": "open",
+      "says": "",
+      "said": "",
+      "accepted": false,
+      "at": null
+    },
+    "pain": {
+      "status": "open",
+      "says": "",
+      "said": "",
+      "accepted": false,
+      "at": null
+    },
+    "now": {
+      "status": "open",
+      "says": "",
+      "said": "",
+      "accepted": false,
+      "at": null
+    },
+    "home": {
+      "status": "open",
+      "says": "",
+      "said": "",
+      "accepted": false,
+      "at": null
+    },
+    "core": {
+      "status": "open",
+      "says": "",
+      "said": "",
+      "accepted": false,
+      "at": null
+    },
+    "first": {
+      "status": "open",
+      "says": "",
+      "said": "",
+      "accepted": false,
+      "at": null
+    },
+    "back": {
+      "status": "open",
+      "says": "",
+      "said": "",
+      "accepted": false,
+      "at": null
+    },
+    "not": {
+      "status": "open",
+      "says": "",
+      "said": "",
+      "accepted": false,
+      "at": null
+    },
+    "feel": {
+      "status": "open",
+      "says": "",
+      "said": "",
+      "accepted": false,
+      "at": null
+    },
+    "done": {
+      "status": "open",
+      "says": "",
+      "said": "",
+      "accepted": false,
+      "at": null
+    }
+  },
+  "directions": [
+    {
+      "id": "receipt",
+      "name": "영수증 한 장 → 단톡 한 줄",
+      "what": "총무가 모임 끝나고 집 가는 길에 영수증(들)을 찍으면 차수별·사람별 금액을 계산해 단톡방에 붙일 메시지와 송금 링크를 만들어 준다",
+      "status": "offered",
+      "said": "",
+      "note": "",
+      "at": "2026-11-23T23:06:25.617Z"
+    },
+    {
+      "id": "tablecheck",
+      "name": "각자 체크하는 테이블",
+      "what": "모임 도중 참석자 각자가 폰으로 자기가 있었던 차수·먹은 것을 표시하고, 끝나는 순간 각자 낼 금액이 확정된다. 총무 혼자 기억하고 계산하지 않는다",
+      "status": "offered",
+      "said": "",
+      "note": "",
+      "at": "2026-11-23T23:06:25.870Z"
+    },
+    {
+      "id": "chaser",
+      "name": "안 낸 사람 대신 챙기기",
+      "what": "정산 요청 보낸 다음 날부터 일주일, 총무 대신 누가 냈고 누가 안 냈는지 입금 내역과 맞춰 보고, 안 낸 사람에게 어색하지 않게 다시 알려 준다",
+      "status": "offered",
+      "said": "",
+      "note": "",
+      "at": "2026-11-23T23:06:26.122Z"
+    },
+    {
+      "id": "turn",
+      "name": "(와일드카드) 정산 없는 모임: 돌아가며 내기",
+      "what": "매번 n빵하지 않고 한 사람이 통째로 낸다. 앱은 모임 멤버 사이의 누적 균형만 기억하고 다음엔 누가 낼 차례인지 단톡에 알려 준다. 정산이라는 행위 자체를 없앤다",
+      "status": "offered",
+      "said": "",
+      "note": "",
+      "at": "2026-11-23T23:06:26.375Z"
+    }
+  ],
+  "saw": [
+    {
+      "id": "s1",
+      "line": "now",
+      "url": "https://apps.apple.com/kr/app/id1464496236",
+      "file": null,
+      "page": null,
+      "quote": "모임 회비, 용돈, 경조사비 등 깜박하지 않고 원하는 주기와 날짜에 예약 송금, 자동 이체",
+      "shows": "KakaoPay store page (free, iOS 4.55 from 30,381 ratings; Play 3.46 from 56,147) lists no 정산 line, only 송금/예약 송금 for 모임 회비",
+      "seen": {
+        "at": "2026-11-23T23:07:29.903Z",
+        "excerpt": "… 만 경험 할 수 있는 특별한 보험상품도 만나보세요 ■ 혜택 - 출석체크, 퀴즈타임, 매일모으기, 만보기 등 재미있는 혜택 서비스로 현금처럼 사용할 수 있는 페이포인트를 매일! 쉽게! 모아보세요. ■ 송금 - 계좌번호 몰라도, 카톡 친구가 아니어도 바로 송금할 수 있는 내 주변 송금 - 모임 회비, 용돈, 경조사비 등 깜박하지 않고 원하는 주기와 날짜에 예약 송금, 자동 이체 - 카톡 친구에게 보낼 때, 카카오페이에 등록한 내 계좌로 보낼 때 무료로 송금 ■ 안심하고 사용하세요 - 핀테크 업계 최초, 금융보안원 정보보호 개인 정보 관리체계(ISMS-P) 통합 인증 - 빅데이터・AI 기반 이상거래 감지시스템(FDS) 구축 ■ 꼭 필요한 권한만 확인해요 - 정 …"
+      },
+      "failed": null
+    },
+    {
+      "id": "s2",
+      "line": "now",
+      "url": "https://m.segye.com/view/20201008512185",
+      "file": null,
+      "page": null,
+      "quote": "한 모임에서 여러 차례에 걸쳐 정산이 필요하다면 최대 5차까지 나눠서 설정하는 것도 가능하다.",
+      "shows": "KakaoPay 정산하기 in-chat already handles multi-round (up to 5차) settling",
+      "seen": {
+        "at": "2026-11-23T23:07:30.301Z",
+        "excerpt": "… 짜와 시각을 설정할 수 있다. 사진 첨부 기능도 더해졌다. 모임에서 찍은 단체 사진이나 영수증 등 함께 나누고 싶은 기록이나 증빙 내역을 공유할 수 있다. '정산하기' 화면 하단의 그림 아이콘을 선택해 최대 3장까지 첨부 가능하다. 어떤 모임이었는지 설명하는 메시지도 추가할 수 있다. 한 모임에서 여러 차례에 걸쳐 정산이 필요하다면 최대 5차까지 나눠서 설정하는 것도 가능하다. 화면 상단의 더하기(+) 표시를 이용해 차수별로 정산 멤버와 금액을 입력하면 카카오페이가 알아서 각 개인이 최종 정산할 금액을 알려준다. 정확하게 '1/N'로 금액을 나누기 애매하다면 개별 정산 금액을 직접 입력해 요청할 수도 있다. 정산 현황 기능도 생겼다. 여러 지인들과 '정산하기 …"
+      },
+      "failed": null
+    },
+    {
+      "id": "s3",
+      "line": "now",
+      "url": "https://m.segye.com/view/20201008512185",
+      "file": null,
+      "page": null,
+      "quote": "정확하게 ‘1/N’로 금액을 나누기 애매하다면 개별 정산 금액을 직접 입력해 요청할 수도 있다.",
+      "shows": "KakaoPay lets the requester enter a different amount per person",
+      "seen": {
+        "at": "2026-11-23T23:07:30.669Z",
+        "excerpt": "… 어떤 모임이었는지 설명하는 메시지도 추가할 수 있다. 한 모임에서 여러 차례에 걸쳐 정산이 필요하다면 최대 5차까지 나눠서 설정하는 것도 가능하다. 화면 상단의 더하기(+) 표시를 이용해 차수별로 정산 멤버와 금액을 입력하면 카카오페이가 알아서 각 개인이 최종 정산할 금액을 알려준다. 정확하게 '1/N'로 금액을 나누기 애매하다면 개별 정산 금액을 직접 입력해 요청할 수도 있다. 정산 현황 기능도 생겼다. 여러 지인들과 '정산하기'를 이용할 때 보낼 금액, 받을 금액을 한 눈에 관리할 수 있어 편리하다. 공유된 사진도 정산 현황에서 확인할 수 있다. 지인과 재미있게 정산할 수 있는 '사다리 타기'도 처음 추가됐다. 랜덤 비율로 정산 금액이 배분되는 기능으로,  …"
+      },
+      "failed": null
+    },
+    {
+      "id": "s4",
+      "line": "now",
+      "url": "https://m.segye.com/view/20201008512185",
+      "file": null,
+      "page": null,
+      "quote": "‘정산하기’를 이용할 때 하단의 종 아이콘을 선택하면 응답하지 않은 친구에게 자동으로 알림 메시지를 다시 보내는 날짜와 시각을 설정할 수 있다.",
+      "shows": "KakaoPay auto-reminds non-payers on a set date/time, so chasing is covered",
+      "seen": {
+        "at": "2026-11-23T23:07:31.019Z",
+        "excerpt": "…  '사다리 타기' 등 지인들과의 정산 과정에 편의와 재미를 더해주는 기능들을 추가한 '정산하기(더치페이)' 코너를 새롭게 선보였다. 먼저 '1/N 정산하기'에는 정산 요청 후 상대방이 아직 송금을 안 했을 경우, 카카오페이가 대신 알림을 보내주는 '미정산 알림 설정' 기능이 추가됐다. '정산하기'를 이용할 때 하단의 종 아이콘을 선택하면 응답하지 않은 친구에게 자동으로 알림 메시지를 다시 보내는 날짜와 시각을 설정할 수 있다. 사진 첨부 기능도 더해졌다. 모임에서 찍은 단체 사진이나 영수증 등 함께 나누고 싶은 기록이나 증빙 내역을 공유할 수 있다. '정산하기' 화면 하단의 그림 아이콘을 선택해 최대 3장까지 첨부 가능하다. 어떤 모임이었는지 설명하는 메시지도 추가할 수 있다. 한 모임에서 여러 차례에 걸쳐 …"
+      },
+      "failed": null
+    },
+    {
+      "id": "s5",
+      "line": "pain",
+      "url": "https://itunes.apple.com/kr/rss/customerreviews/page=1/id=1464496236/sortby=mostrecent/json",
+      "file": null,
+      "page": null,
+      "quote": "정산하려고 카카오페이로 보내려는데 충전은 해주고 돈은 못 보내게 막는 건 대체 뭐냐",
+      "shows": "Only 1 of 79 low-rated (<=3) KakaoPay reviews in newest 100 speaks of 정산, and that is about a send block, not the split flow",
+      "seen": {
+        "at": "2026-11-23T23:07:31.389Z",
+        "excerpt": "…  좀 해주세요\"}, \"content\":{\"label\":\"개인정보 확인하라는데 실물 신분증 어디 뒀는지 안 보여서 모바일 신분증으로 하려니까 안됨ㅋㅋㅋ 요새 은행 앱이나 정부 앱도 모바일 신분증 다 되는데 모바일이 아직도 안 되는 게 말이 됨? 송금 기능 막을 거면 충전도 못하게 해야지 정산하려고 카카오페이로 보내려는데 충전은 해주고 돈은 못 보내게 막는 건 대체 뭐냐. 진짜 거지 같은 금융어플임.\", \"attributes\":{\"type\":\"text\"}}, \"link\":{\"attributes\":{\"rel\":\"related\", \"href\":\"https://itunes.apple.com/kr/review?id=1464496236&type=Purple%2 …"
+      },
+      "failed": null
+    },
+    {
+      "id": "s6",
+      "line": "now",
+      "url": "https://toss.im/tossfeed/article/toss-split-the-bill",
+      "file": null,
+      "page": null,
+      "quote": "‘새 더치페이'를 누르고 나눌 금액을 입력해주세요.",
+      "shows": "Toss has its own free 더치페이: enter amount, pick friends, auto Toss notification, share link via KakaoTalk",
+      "seen": {
+        "at": "2026-11-23T23:07:31.993Z",
+        "excerpt": "… 융의 모든 것 토스의 모든 것 금융 계산기 DSR 계산기 대출 이자 계산기 모임 후 정산할 때 편한, 토스 더치페이 사용법 2024.04.08 토스 1 분 1. 토스를 켜고 우측 하단의 전체 탭을 선택해 주세요. 검색 버튼을 눌러 '더치페이'를 검색합니다. 토스 더치페이 하는 법 2. '새 더치페이'를 누르고 나눌 금액을 입력해주세요. 3. 비용을 나눌 친구들을 선택해주세요. 연락처가 없다면 '번호 없는 친구 추가'를 눌러 수동으로 친구를 추가할 수 있어요. 4. 비용 배분을 마치면 연락처가 있는 친구들에게 자동으로 토스 알림이 가요. 한번 더 공유하고 싶다면 '링크 공유'를 누르고 카카오톡을 선택해주세요. TIP. …"
+      },
+      "failed": null
+    },
+    {
+      "id": "s7",
+      "line": "now",
+      "url": "https://toss.im/tossfeed/article/toss-split-the-bill",
+      "file": null,
+      "page": null,
+      "quote": "한번 더 공유하고 싶다면 ‘링크 공유'를 누르고 카카오톡을 선택해주세요.",
+      "shows": "Toss 더치페이 hands off to KakaoTalk by link; people outside Toss reached through the chat",
+      "seen": {
+        "at": "2026-11-23T23:07:32.452Z",
+        "excerpt": "…  토스 더치페이 하는 법 2. '새 더치페이'를 누르고 나눌 금액을 입력해주세요. 3. 비용을 나눌 친구들을 선택해주세요. 연락처가 없다면 '번호 없는 친구 추가'를 눌러 수동으로 친구를 추가할 수 있어요. 4. 비용 배분을 마치면 연락처가 있는 친구들에게 자동으로 토스 알림이 가요. 한번 더 공유하고 싶다면 '링크 공유'를 누르고 카카오톡을 선택해주세요. TIP. 소비 내역에서 바로 더치페이를 할 수도 있어요. 소비내역 하단에 더치페이를 누르고 계산할 소비 내역을 선택한 뒤 더치페이할 친구들을 선택하면 돼요. - 이 콘텐츠는 2024년 4월 5일 기준으로 작성됐습니다. - 추후 서비스의 사용 방법은 달라질 수 있습니다. 언제든지 쉽고  …"
+      },
+      "failed": null
+    },
+    {
+      "id": "s8",
+      "line": "now",
+      "url": "https://www.tossbank.com/articles/34967",
+      "file": null,
+      "page": null,
+      "quote": "더치페이처럼 무조건 똑같이 나눌 필요 없어요. 모임정산은 각자 결제한 금액을 기준으로, 더 정확하고 유연하게 나눌 수 있어요.",
+      "shows": "Toss Bank 모임 정산: enter what each paid, computes who sends whom; a free answer to unequal amounts",
+      "seen": {
+        "at": "2026-11-23T23:07:32.859Z",
+        "excerpt": "…  때, '토스뱅크 모임 정산'으로 손쉽게 해결하세요. 🧮 복잡한 정산, 3단계로 끝 1️⃣ 정산할 모임을 만들고 2️⃣ 함께한 사람을 초대한 다음 3️⃣ 각자 결제 내역만 입력하면 끝 정산 금액은 알아서 계산되고, 토스에서 바로 송금할 수 있어요. 🧩 더치페이보다 유연하고 간편하게 더치페이처럼 무조건 똑같이 나눌 필요 없어요. 모임정산은 각자 결제한 금액을 기준으로, 더 정확하고 유연하게 나눌 수 있어요. 누가 더 많이 냈는지, 누구는 아무것도 안 냈는지까지 고려해서 정확하게 정산해요. 🔗 정산을 위해 통장을 따로 만들 필요도 없어요 모임통장 없이도, 한 번의 링크로 모임원들과 지출 내역을 쉽게 공유할 수 있어요. 토스 앱이 없어도 괜찮아요. 링크만 열면 누구나 지출 내역을 확인할 수 …"
+      },
+      "failed": null
+    },
+    {
+      "id": "s9",
+      "line": "now",
+      "url": "https://www.tossbank.com/articles/34967",
+      "file": null,
+      "page": null,
+      "quote": "토스 앱이 없어도 괜찮아요. 링크만 열면 누구나 지출 내역을 확인할 수 있어요.",
+      "shows": "Toss 모임 정산 works by link for people without Toss",
+      "seen": {
+        "at": "2026-11-23T23:07:33.331Z",
+        "excerpt": "…  각자 결제한 금액을 기준으로, 더 정확하고 유연하게 나눌 수 있어요. 누가 더 많이 냈는지, 누구는 아무것도 안 냈는지까지 고려해서 정확하게 정산해요. 🔗 정산을 위해 통장을 따로 만들 필요도 없어요 모임통장 없이도, 한 번의 링크로 모임원들과 지출 내역을 쉽게 공유할 수 있어요. 토스 앱이 없어도 괜찮아요. 링크만 열면 누구나 지출 내역을 확인할 수 있어요. 즐거운 모임의 마지막까지 깔끔하게, 토스뱅크 모임 정산으로 쉽게 기록하고 정산하세요. 더 알아보기 고객센터 전화 : 1661-7654(24시간 연중무휴) 해외전화 : +82-2-6975-9000 이메일 : help@tossbank.com 토스뱅크㈜ 사업자 등록번호 : 462-86-01 …"
+      },
+      "failed": null
+    },
+    {
+      "id": "s10",
+      "line": "pain",
+      "url": "https://itunes.apple.com/kr/rss/customerreviews/page=1/id=839333328/sortby=mostrecent/json",
+      "file": null,
+      "page": null,
+      "quote": "모임통장을 왜이렇게 꼭꼭 숨겨두나요?",
+      "shows": "Toss: 0 of 73 low-rated reviews in newest 100 speak of 정산; 3 of 100 speak of 모임통장, about findability",
+      "seen": {
+        "at": "2026-11-23T23:07:33.791Z",
+        "excerpt": "… 8T17:49:22-07:00\"}, \"im:rating\":{\"label\":\"2\"}, \"im:version\":{\"label\":\"5.285.0\"}, \"id\":{\"label\":\"14806955579\"}, \"title\":{\"label\":\"모임통장 조회\"}, \"content\":{\"label\":\"모임통장을 왜이렇게 꼭꼭 숨겨두나요? 그냥 내 계좌처럼 같이 한번에 조회할수있으면 좋을텐데 굳이 모임통장 검색해서 메뉴에 들어가서 내모임통장 조회를 또 눌러야 나오네요\", \"attributes\":{\"type\":\"text\"}}, \"link\":{\"attributes\":{\"rel\":\"related\", \"href\":\"https: …"
+      },
+      "failed": null
+    },
+    {
+      "id": "s11",
+      "line": "now",
+      "url": "https://apps.apple.com/kr/app/id1610923282",
+      "file": null,
+      "page": null,
+      "quote": "이 앱을 총무님들께 바칩니다.",
+      "shows": "Small free app 'A형총무의더치페이' (4.68 from 60 ratings): per-payment attendee check, 총무 role, share to KakaoTalk",
+      "seen": {
+        "at": "2026-11-23T23:07:34.431Z",
+        "excerpt": "… ion Watch TV A형총무의더치페이 생산성 무료 · 앱 내 구입 · iPad⁠용으로 디자인됨 · macOS⁠용으로는 확인되지 않음 공유 60개의 평가 4.7 연령 등급 전체 세 카테고리 생산성 개발자 HYUNWOO LEE 언어 EN 영어 크기 80.4 MB iPhone, iPad 이 앱을 총무님들께 바칩니다. [A형총무의 더치페이 - 엔빵, N빵, 갹출, 여행, 정산, 추렴] - 멤버수 무제한 추가 - 결제내역 무제한 등록 - 절사/올림단위 설정 - 입력정보 자동저장/초기화 가능 - 그룹별 정산내역 관리기능 - 총무지정 기능 [A형총무의 더치페이앱 사용방법] 1. 정산할 멤버를 입력한다 - …"
+      },
+      "failed": null
+    },
+    {
+      "id": "s12",
+      "line": "now",
+      "url": "https://apps.apple.com/kr/app/id1610923282",
+      "file": null,
+      "page": null,
+      "quote": "결제자, 장소, 금액 입력 후 참석 멤버체크",
+      "shows": "Dedicated N빵 app handles multi-place, different attendees per round, then copies result to KakaoTalk",
+      "seen": {
+        "at": "2026-11-23T23:07:34.790Z",
+        "excerpt": "… 무제한 추가 - 결제내역 무제한 등록 - 절사/올림단위 설정 - 입력정보 자동저장/초기화 가능 - 그룹별 정산내역 관리기능 - 총무지정 기능 [A형총무의 더치페이앱 사용방법] 1. 정산할 멤버를 입력한다 - 스페이스로 구분하여 여러명 입력 - 총무지정 가능 2. 결제내역을 입력한다 - 결제자, 장소, 금액 입력 후 참석 멤버체크 - 총무 미지정시 결제금액이 많은 사람이 자동으로 총무가 됨 3. 더치페이 결과를 확인한다 4. 결과를 공유한다 - 클립보드에 메시지 복사됨/카톡공유 6. 첫번째 메뉴에서 자주 사용하는 모임을 추가 등록한다 개선할 점 메일로 보내주시면 답변 드리겠습니다. 이용해 주셔서 감사합니다^^  …"
+      },
+      "failed": null
+    },
+    {
+      "id": "s13",
+      "line": "now",
+      "url": "https://play.google.com/store/apps/details?id=com.rainist.banksalad2&hl=ko&gl=KR",
+      "file": null,
+      "page": null,
+      "quote": "친구와 함께하는 여행이라면 원화/외화 정산 서비스로 깔끔한 정산!",
+      "shows": "Banksalad (Play 4.05 from 37,248) lists 정산 as a travel-card feature, not a chat-group tool",
+      "seen": {
+        "at": "2026-11-23T23:07:35.131Z",
+        "excerpt": "…  등 실생활에 바로 쓸 수 있는 생활 머니에요.<br><br>여행 경비는 트래블로그 하나면 충분해요.<br>국내외 어디서든 간편하게 무료로 환전하고 해외 이용 수수료도 면제예요.<br><br>국내에서는 하나은행 ATM에서 원화 인출! 해외에서는 현지 ATM에서 현지 통화로 인출!<br>친구와 함께하는 여행이라면 원화/외화 정산 서비스로 깔끔한 정산!<br>친구 전화번호만 있으면 원화/외화 모두 무료 송금!<br>여행을 다녀오면 자동으로 기록되는 여행로그로 알아서 딱 여행가계부도 작성해 드려요! 얼마나 잘 다녀왔는지 여행리포트로 확인해 보세요!<br>해외 현지에서 바로 쓸 수 있는 혜택은 해외여행 모드에 넣어드렸으니 꼭 챙겨 보세요 …"
+      },
+      "failed": null
+    },
+    {
+      "id": "s14",
+      "line": "pain",
+      "url": "https://play.google.com/store/apps/details?id=com.rainist.banksalad2&hl=ko&gl=KR",
+      "file": null,
+      "page": null,
+      "quote": "가계부에서 더치페이 내역은 따로 인식되고 있지 않지만",
+      "shows": "Banksalad's own reply to a user: its 가계부 does not recognise 더치페이 entries",
+      "seen": {
+        "at": "2026-11-23T23:07:35.819Z",
+        "excerpt": "… 능한데, 평소보다 큰 금액대 가격이거나 식비에 가격이 크기 나오면 더치페이인건비 확인해달라는 알림\",[1795078132,763000000],0,[\"Banksalad\",\"안녕하세요? 뱅크샐러드 고객감동팀입니다. 뱅크샐러드를 애정하시고, 소중한 의견 전달해 주셔서 진심으로 감사드립니다. 가계부에서 더치페이 내역은 따로 인식되고 있지 않지만, 말씀해 주신 것처럼 식비 값이 크게 나오거나 평소보다 지출이 크다면 더치페이인지 제안 된다면 가계부 관리가 훨씬 편리할 것 같습니다. 지금 당장 반영하기는 어렵지만, 담당 부서를 통해 내용 전달하여 더 나은 서비스를 이용하실 수 있도록 노력하겠습니다. 뱅크샐러드는 \"고객에게 답이 있 …"
+      },
+      "failed": null
+    },
+    {
+      "id": "s15",
+      "line": "pain",
+      "url": "https://glasswallet.com/calculate/split-bill/kakao-settlement/",
+      "file": null,
+      "page": null,
+      "quote": "항목별 구분 불가",
+      "shows": "Third-party guide says 1차/2차 separate settling is hard in KakaoPay and sends 차등 정산 to a calculator first (contradicts the 5차 news, so partly dated)",
+      "seen": {
+        "at": "2026-11-23T23:07:36.508Z",
+        "excerpt": "…  설정 가능 알림 기능 미송금자에게 리마인드 알림 정산 내역 완료/미완료 현황 한눈에 최대 인원 앱 정책과 계정 상태에 따라 달라질 수 있음 ⚠️ 주의사항 ❌ 차등 정산 한계 : 항목별 참여자가 많은 정산은 직접 입력이 번거로움 ❌ 카카오페이 필수 : 미가입자는 별도 계좌이체 필요 ❌ 항목별 구분 불가 : 1차, 2차 별도 정산 어려움 💡 복잡한 정산은 유리지갑 N빵 계산기로 먼저 계산 후, 결과만 카톡으로 공유하세요. 💡 효율적인 정산 플로우 단순 N빵 카카오톡 정산하기 바로 사용 차등 정산 (술값 따로 등) 유리지갑 계산기 → 결과 복사 → 카톡 공유 → 개별 송금 요청 📌 …"
+      },
+      "failed": null
+    }
+  ],
+  "summary": "",
+  "closed": null
+}

@@ -1,0 +1,58 @@
+{
+ "app-other-dive": {
+  "sessionIn": 1956789,
+  "sessionOut": 1945,
+  "sessionCost": 1.78,
+  "calls": 31,
+  "standinCost": 0.24
+ },
+ "app-other-grilling": {
+  "sessionIn": 4097479,
+  "sessionOut": 557,
+  "sessionCost": 4.44,
+  "calls": 64,
+  "standinCost": 0.33
+ },
+ "app-own-dive": {
+  "sessionIn": 2243019,
+  "sessionOut": 1203,
+  "sessionCost": 2.04,
+  "calls": 34,
+  "standinCost": 0.22
+ },
+ "app-own-grilling": {
+  "sessionIn": 838302,
+  "sessionOut": 86,
+  "sessionCost": 1.33,
+  "calls": 13,
+  "standinCost": 0.29
+ },
+ "game-a-dive": {
+  "sessionIn": 2684190,
+  "sessionOut": 1886,
+  "sessionCost": 2.41,
+  "calls": 32,
+  "standinCost": 0.35
+ },
+ "game-a-grilling": {
+  "sessionIn": 1312127,
+  "sessionOut": 126,
+  "sessionCost": 1.75,
+  "calls": 17,
+  "standinCost": 0.38
+ },
+ "game-b-dive": {
+  "sessionIn": 3116902,
+  "sessionOut": 990,
+  "sessionCost": 2.46,
+  "calls": 43,
+  "standinCost": 0.31
+ },
+ "game-b-grilling": {
+  "sessionIn": 1077140,
+  "sessionOut": 615,
+  "sessionCost": 1.47,
+  "calls": 15,
+  "standinCost": 0.43
+ }
+}

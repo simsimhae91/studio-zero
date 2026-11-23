@@ -1,0 +1,14 @@
+{
+  "arm": "dive",
+  "profile": "app-own",
+  "ended": "dive closed",
+  "ownerReplies": 6,
+  "wallMinutes": 8.35,
+  "sessionMinutes": 7.52,
+  "sessionTokens": 1633432,
+  "sessionOutputTokens": 30738,
+  "sessionCostUsd": 10.63,
+  "standinCostUsd": 0.81,
+  "dive": "/Users/hosoo/.studio-zero/specimens/2026-11-24/dive-eval/app-own-dive/work/.sz/dive/rallypan-next",
+  "sessionId": "47d02b45-f943-4387-986b-306156400101"
+}
