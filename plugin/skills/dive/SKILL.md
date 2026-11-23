@@ -21,7 +21,7 @@ sz-eyes dive line <id> core --status settled --said "<their words, exactly as ty
 sz-eyes dive line <id> feel --status waived --said "<their words>"
 ```
 
-**Their words are theirs.** `--said` is taken only when it is found among what the owner typed (the plugin's hook keeps it) or chose and wrote in a question box (the session's transcript): quote the part of their answer that settles the line, as it stands. When they answered "1번이요" or "네" to your recommendation, `--said "1번이요"` with no `--says` settles the line on the proposal as it stood, and the page says the proposal was taken. A line they settled changes only by their words again. (A sentence a session wrote in the owner's place was once recorded as "주인:" in a contract; here the tool refuses it.) The hook that keeps their words is Claude Code's; where it does not run (Codex), the tool refuses every line, and the dive is done in Claude Code.
+**Their words are theirs.** `--said` is taken only when it is found among what the owner typed (the plugin's hook keeps it) or chose and wrote in a question box (the session's transcript): quote the part of their answer that settles the line, as it stands. When they answered "1번이요" or "네" to your recommendation, `--said "1번이요"` with no `--says` settles the line on the proposal as it stood, and the page says the proposal was taken. In what you write to them, too, words in quotation marks are theirs as they stand; a shorter version is yours, said without them. A line they settled changes only by their words again. (A sentence a session wrote in the owner's place was once recorded as "주인:" in a contract; here the tool refuses it.) The hook that keeps their words is Claude Code's; where it does not run (Codex), the tool refuses every line, and the dive is done in Claude Code.
 
 ## Where it is kept
 
@@ -43,7 +43,7 @@ Start the reading of the world in the background (what `app.md` and `game.md` na
 
 ## 2. The first round: widen before narrowing
 
-Write what you understood in three lines, then show **three directions of different kinds and one wildcard**: different in who it is for, in the moment, or in what the person does, never three variants of one feature. The wildcard is one the owner would not have thought of. Give each something to react to, since people answer a picture better than a blank page: a scene of one person in it ("월요일 아침 9시, 당신은 …"), a screen as ASCII, and for a game the beats of its first 30 seconds. Record each as it was shown:
+Write what you understood in three lines, then show **three directions of different kinds and one wildcard**: different in who it is for, in the moment, or in what the person does, never three variants of one feature. Each starts from something in the seed or the material (a word of theirs, a trait of the report, a complaint read) and says which; directions that would fit any seed of the kind are stock. (Two game dives from different people laid out the same four slots.) The wildcard is one the owner would not have thought of. Give each something to react to, since people answer a picture better than a blank page: a scene of one person in it ("월요일 아침 9시, 당신은 …"), a screen as ASCII, and for a game the beats of its first 30 seconds. Record each as it was shown:
 
 ```
 sz-eyes dive direction <id> <direction-id> --name "<a few words>" --what "<who, in what moment, doing what>"
@@ -57,6 +57,9 @@ Each round, work out the frontier: the open lines whose answers do not wait on a
 
 - **A choice goes in the question box**, with your recommendation first and marked "(추천)", two to four options, and their own words always open. Word it so that taking the recommendation is one tap.
 - **A remembered moment is asked as a typed question, one a round at most**: when it last happened, what they were doing, what they did then. Opinions about the future ("이런 게 있으면 쓰실 건가요?", "어떤 기능이 있으면 좋겠어요?") get kind answers and no facts; a memory gets the fact. The design lines (`core`, `first`, `not`, `feel`) are decisions, asked as choices.
+- `moment` is a scene: a time of day, a place, what their hands are doing. A proposal with none of these is asked again as a memory ("그때 몇 시였고, 어디서, 뭘 하고 계셨어요?").
+- `done` is asked, never proposed: who they would show it to first, and what that person would have to say. A test you invent ("열 명 중 셋이 끝까지") is not their measure. (In the evaluation, two interviewers proposed a test; the stand-ins took it with "1번이요", and their real measure, a person, never came out.)
+- `not` is asked as a memory too: what they tried before and dropped, and why.
 - Find facts yourself (the world, the report, the folder); put only decisions and memories to the owner.
 - End every round with the line the tool printed after your last change (`명확해진 줄 6/12 · 열린 것: back, depth, lens`).
 

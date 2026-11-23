@@ -71,6 +71,8 @@ test('a dive closes only when every line is the owner\'s, directions were shown 
     for (const id of linesOf('game')) setDiveLine(folder, id, { status: 'settled', said: '네 좋아요' }, heard, AT);
     assert.throws(() => closeDive(folder, '좋아요 이걸로 해요', '한 판', heard, AT), /is not clear yet:[\s\S]*no direction was taken/);
     setDirection(folder, { id: 'b', status: 'taken', said: '2번이요' }, heard, AT);
+    assert.throws(() => setDirection(folder, { id: 'c', status: 'merged', said: '네 좋아요' }, heard, AT), /says which part of it the owner took/);
+    setDirection(folder, { id: 'c', status: 'merged', said: '네 좋아요', note: '하루 두 번 여는 리듬만' }, heard, AT);
 
     assert.throws(() => closeDive(folder, '', '친구 둘이 한 화면에서 주문을 쳐내는 협동 요리 게임', heard, AT), /the close takes the owner's own words/);
     assert.throws(() => closeDive(folder, '이걸로 확정', '친구 둘이 한 화면에서 주문을 쳐내는 협동 요리 게임', heard, AT), /is not among what the owner said/);
@@ -83,7 +85,9 @@ test('a dive closes only when every line is the owner\'s, directions were shown 
     assert.match(idea, /이 한 장을 보고 주인이 한 말: "좋아요 이걸로 해요"/);
     assert.match(idea, /### 보고서의 공통점 중 정면으로 노리는 것과 버리는 것, 각각의 이유\n\nlens에 대한 안\n\n> 주인: "네 좋아요" \(추천안을 받아들임\)/);
     assert.match(idea, /## 고른 방향\n\n- \*\*협동 요리\*\*: 친구 둘이 한 화면에서 주문을 쳐낸다 \(주인: "2번이요"\)/);
-    assert.match(idea, /## 버린 방향\n\n- \*\*하루 한 판 덱빌딩\*\*: [^\n]*\(주인: "너무 흔해요"\)\n- \*\*방치형 정원\*\*: [^\n]*\(주인이 고르지 않음\)/);
+    assert.match(idea, /다른 방향에서 일부만 가져온 것:\n\n- 방치형 정원에서: 하루 두 번 여는 리듬만 \(주인: "네 좋아요"\)/);
+    assert.doesNotMatch(idea, /하루 두 번 열어 돌보는 느린 게임/, 'the rest of a merged direction does not reach the page');
+    assert.match(idea, /## 버린 방향\n\n- \*\*하루 한 판 덱빌딩\*\*: [^\n]*\(주인: "너무 흔해요"\)\n\n/);
     assert.match(idea, /`\/sz:worth`[\s\S]*`\/sz:build /);
     assert.doesNotMatch(idea, /cp -R/, 'kept with the product, so the next stages find it where they look');
     assert.throws(() => setDiveLine(folder, 'not', { status: 'open' }, heard, AT), /closed at[\s\S]*a closed dive is read, not changed/);

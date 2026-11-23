@@ -329,6 +329,9 @@ export function setDirection(folder: string, change: { id: string; name?: string
   const status = change.status ?? before?.status ?? 'offered';
   const said = change.said?.trim() ?? (change.status === undefined ? (before?.said ?? '') : '');
   if (status !== 'offered') mustBeHeard(heard, said, `a direction ${status}`);
+  // A direction folded into another keeps only the part the owner took: shown whole under what was chosen, the rest of
+  // it read as wanted (in the evaluation, the only wrong things two dive pages said about what the owner wanted).
+  if (status === 'merged' && (change.note ?? before?.note ?? '').trim().length < 8) throw new Error('a direction merged into another says which part of it the owner took, and only that part reaches the page: --note "<the part taken>"');
   const next = Direction.parse({ ...before, ...Object.fromEntries(Object.entries({ id: change.id, name: change.name, what: change.what, note: change.note }).filter(([, v]) => v !== undefined)), status, said: status === 'offered' ? '' : said, at });
   writeDive(folder, { ...value, directions: before ? value.directions.map((d) => (d.id === next.id ? next : d)) : [...value.directions, next] });
   return next;
@@ -431,7 +434,8 @@ export function ideaPage(value: Dive, folder: string, env: NodeJS.ProcessEnv = p
   const ids = linesOf(value.kind);
   const settled = ids.filter((id) => value.lines[id]!.status === 'settled');
   const waived = ids.filter((id) => value.lines[id]!.status === 'waived');
-  const taken = value.directions.filter((d) => d.status === 'taken' || d.status === 'merged');
+  const taken = value.directions.filter((d) => d.status === 'taken');
+  const merged = value.directions.filter((d) => d.status === 'merged');
   const dropped = value.directions.filter((d) => d.status === 'dropped' || d.status === 'offered');
   const kind = { app: '앱', game: '게임', plain: '그 밖' }[value.kind];
   const durable = isDurable(folder, env);
@@ -449,8 +453,8 @@ ${waived.length > 0 ? waived.map((id) => `- ${ASKS[id]}${value.lines[id]!.says ?
 
 ## 고른 방향
 
-${taken.length > 0 ? taken.map((d) => `- **${d.name}**${d.status === 'merged' ? ' (다른 방향에 섞음)' : ''}: ${d.what}${d.said ? ` (주인: "${d.said}")` : ''}${d.note ? ` ${d.note}` : ''}`).join('\n') : '없음'}
-
+${taken.length > 0 ? taken.map((d) => `- **${d.name}**: ${d.what}${d.said ? ` (주인: "${d.said}")` : ''}${d.note ? ` ${d.note}` : ''}`).join('\n') : '없음'}
+${merged.length > 0 ? `\n다른 방향에서 일부만 가져온 것:\n\n${merged.map((d) => `- ${d.name}에서: ${d.note} (주인: "${d.said}")`).join('\n')}\n` : ''}
 ## 버린 방향
 
 ${dropped.length > 0 ? dropped.map((d) => `- **${d.name}**: ${d.what}${d.status === 'dropped' ? ` (주인: "${d.said}")` : ' (주인이 고르지 않음)'}${d.note ? ` ${d.note}` : ''}`).join('\n') : '없음'}
