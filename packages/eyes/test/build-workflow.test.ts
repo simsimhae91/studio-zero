@@ -461,6 +461,11 @@ test('a prototype the owner said yes to is what the first pass is planned from, 
   // What no claim requires is the claim shown false, every one of them named: that list is what gets mended.
   assert.match(look, /A difference that no claim requires is this claim shown false: name every one with its screen, not the first, because whoever mends them is handed the whole list/);
   assert.doesNotMatch(look, /A difference in content, order, parts or tokens is that claim shown false, with the screen named/);
+  // The look after a fix judges the drawing the same way: the claim is mended and looked at again now, not set aside
+  // with the flows that held four screens away from it (2026-11-23), and whoever looks again needs the two kinds.
+  let n = 0;
+  const mended = await run({ request: 'x' }, { plan: () => ({ mode: 'new', summary: 's', design: 'approved', milestones: [firstPass] }), build: built, verify: () => (n++ === 0 ? { proven: [], refuted: [{ id: firstPass.claims[0].id, fact: '네 화면이 그림과 다름' }], unchecked: [] } : allProven()), fix: () => ({ fixed: [firstPass.claims[0].id] }), close: closed });
+  assert.match(mended.calls.find((c) => c.label === 'verify:m1:again')!.prompt, /For the claim that every screen is built as drawn, where it is yours[\s\S]*A difference that no claim requires is this claim shown false: name every one with its screen/);
 
   // A plan with no word on the design is built as before: no drawing to carry, and none to be held to.
   const plain = await run({ request: 'x' }, { plan: () => ({ mode: 'new', summary: 's', milestones: [firstPass] }), build: built, verify: allProven, close: closed });
@@ -713,6 +718,77 @@ test('the stages that run at low effort are told to do every step before they re
   assert.deepEqual(low.sort(), ['close', 'join', 'stage', 'sweep']);
   assert.equal([...SOURCE.matchAll(/\$\{FINISH\}/g)].length, 4);
   assert.equal([...SOURCE.matchAll(/effort\('(?:close|join)'\)/g)].length, 4);
+});
+
+test('a look after a fix tries new cases only where the fix reached, and a frozen check that only presses old words is corrected, not set aside', async () => {
+  // 2026-11-23: a first pass's third look left one claim false. Its fourth found three: a claim the third had
+  // proven, broken by a new case; another new case; a fault the third fix put in. 297 minutes, left open. And a
+  // frozen flow that pressed "30일 넘게" after the product was mended to the law's "30일 이상" sent its claim to the
+  // owner, because whoever ruled after a fix could change no flow.
+  let looks = 0;
+  const ran = await run(
+    { request: 'x' },
+    {
+      plan: plan('m1'),
+      build: built,
+      verify: () => (looks++ === 0 ? { proven: ['two'], refuted: [{ id: 'one', fact: '흐름이 151걸음에서 멈춤' }], unchecked: [] } : { proven: ['one', 'two'], refuted: [], unchecked: [] }),
+      fix: () => ({ fixed: [], notFixed: ['one: flows/one.sh:96 presses "30일 넘게"; the screen says "30일 이상" as the law does', 'two: flows/two.sh:12 reads the old label "받았어요"; the drawing has "늦게 받았어요"'] }),
+      rule: () => ({ disputed: [], productWrong: [], corrected: [{ id: 'one', file: 'flows/one.sh', changed: 'line 96 presses "30일 이상"' }, { id: 'two', file: 'flows/two.sh', changed: 'line 12 reads "늦게 받았어요"' }, { id: 'nobody', file: 'x', changed: 'y' }] }),
+      close: closed,
+    },
+  );
+  assert.deepEqual(ran.calls.map((c) => c.label), ['plan', 'build:m1', 'verify:m1', 'fix:m1:1', 'rule:m1', 'verify:m1:again', 'close:m1']);
+  const first = ran.calls.find((c) => c.label === 'verify:m1')!.prompt;
+  const again = ran.calls.find((c) => c.label === 'verify:m1:again')!.prompt;
+  // The first look tries every claim; a look after a fix says where new cases are tried and where they are not.
+  assert.match(first, /A claim's figures are one case of what it is about: when you try another case/);
+  assert.doesNotMatch(first, /New cases are tried at this look only where the fix reached/);
+  assert.match(again, /These claims of the contract were shown false before: one\./);
+  assert.match(again, /What was found then: \[one: 흐름이 151걸음에서 멈춤\]/);
+  assert.match(again, /New cases are tried at this look only where the fix reached: on the claims named above as shown false before, and on any other claim of yours whose screens or rules the fix changed \(`git log --stat` shows on top what the fix just made changed\)/);
+  assert.match(again, /A claim that an earlier look proved and that the fix did not reach is shown again by its own check and is not tried with new cases: it had that at the first look/);
+  assert.match(again, /What its own check, or the screen in front of you as you run it, shows wrong is still that claim shown false/);
+
+  // Whoever fixes mends to the source or the drawing, says which frozen checks now press the old form, and leaves no server.
+  const fixer = ran.calls.find((c) => c.label === 'fix:m1:1')!.prompt;
+  assert.match(fixer, /keep what it reads as it was unless the claim you were handed says otherwise\. Where it does \(its source, or the drawing the product is held to, asks for the new form\), mend the product and do not bend it back to keep that check passing: put one line under "notFixed" for each frozen check that now presses or reads the old form, beginning with the id of the claim that check shows, with the file, the line, the old words and the new\. Whoever rules next corrects how such a check presses or reads; it is not yours to edit/);
+  assert.match(fixer, /Do not leave a server running\.$/);
+
+  // Whoever rules may correct how such a check presses or reads, and nothing it expects; product code and claims stay closed to it.
+  const ruling = ran.calls.find((c) => c.label === 'rule:m1')!.prompt;
+  assert.match(ruling, /when in doubt it is this one[\s\S]*sz-eyes contract dispute m1 <claim id> --ruling/);
+  assert.match(ruling, /\*\*A frozen flow or test stops for a reason that is not its claim's\.\*\* The product was mended to follow a claim's source or the drawing it is held to, and the check still presses, reads or waits for the old words, an old label or an old selector, or asserts text its claim never mentions\. Such a check asks the product for no answer/);
+  assert.match(ruling, /correct how it presses or reads, by the smallest change and as your own rules say \(never a figure or an outcome it expects, a condition, a step its claim requires, or a failure into a pass\), record it \(`sz-eyes contract amend m1 --file <the file> --why "<what the mend changed in the product, by which source or drawing, and what you changed in the check>"`\), run it once, and commit that file and no other/);
+  assert.match(ruling, /A claim whose check you corrected is not set aside: return it under "corrected"/);
+  assert.match(ruling, /Change no product code and no claim, and no flow or test except as the third case says\./);
+  // A line about a check of a claim that was not shown false does not hand every false claim to whoever rules.
+  assert.match(ruling, /- one: 흐름이 151걸음에서 멈춤/);
+  assert.match(ruling, /two: flows\/two\.sh:12 reads the old label/);
+  // A corrected claim is not the owner's: it is looked at again, and the run says what was corrected.
+  assert.deepEqual(ran.result.forOwner, []);
+  assert.ok(ran.logs.some((l) => /the check flows\/one\.sh of claim "one" was corrected in how it presses or reads, not in what it expects: line 96 presses "30일 이상"/.test(l)), ran.logs.join('\n'));
+  assert.ok(ran.logs.some((l) => /the check flows\/two\.sh of claim "two" was corrected/.test(l)));
+  assert.ok(!ran.logs.some((l) => /claim "nobody"/.test(l)), 'a claim the contract does not have is not reported');
+  assert.deepEqual(ran.result.milestones[0].proven.sort(), ['one', 'two']);
+  assert.equal(ran.result.stopped, null);
+
+  // Only stale checks, nothing that cannot be made true: whoever rules is handed no claim to decide, only the checks.
+  let looks2 = 0;
+  const stale = await run(
+    { request: 'x' },
+    {
+      plan: plan('m1'),
+      build: built,
+      verify: () => (looks2++ === 0 ? { proven: ['two'], refuted: [{ id: 'one', fact: '합계가 0' }], unchecked: [] } : { proven: ['one', 'two'], refuted: [], unchecked: [] }),
+      fix: () => ({ fixed: ['one'], notFixed: ['two: flows/two.sh:12 reads the old label'] }),
+      rule: () => ({ disputed: [], productWrong: [], corrected: [{ id: 'two', file: 'flows/two.sh', changed: 'line 12' }] }),
+      close: closed,
+    },
+  );
+  const only = stale.calls.find((c) => c.label === 'rule:m1')!.prompt;
+  assert.doesNotMatch(only, /- one: 합계가 0/, 'the claim that was mended is not handed to whoever rules');
+  assert.match(only, /None of the claims shown false is yours to decide this time: what follows is about frozen checks that now press or read an old form/);
+  assert.match(only, /two: flows\/two\.sh:12 reads the old label/);
 });
 
 test('every agent is told from its first line when the session is sandboxed, an earlier milestone\'s verdicts are not made up, and how hard each stage thinks can be said', async () => {
