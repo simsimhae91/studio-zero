@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { TAKES } from '../src/room.ts';
 import { Claim, Contract } from '../src/contract.ts';
 
-type Call = { prompt: string; label: string; effort?: string; model?: string };
+type Call = { prompt: string; label: string; effort?: string; model?: string; contractId?: string; claims?: string[] };
 type WorkerOptions = Omit<Call, 'prompt'>;
 type MilestoneCall = (where: string | null, contract: string, prompt: string, options: WorkerOptions) => void;
 type Answer = (call: Call, nth: number) => unknown;
@@ -20,8 +20,9 @@ async function run(args: unknown, answers: Record<string, Answer>, observeMilest
   const calls: Call[] = [];
   const logs: string[] = [];
   const seen = new Map<string, number>();
-  const agent = async (prompt: string, opts: { label: string; effort?: string; model?: string }): Promise<unknown> => {
-    calls.push({ prompt, label: opts.label, ...(opts.effort ? { effort: opts.effort } : {}), ...(opts.model ? { model: opts.model } : {}) });
+  const agent = async (prompt: string, opts: WorkerOptions): Promise<unknown> => {
+    const call = { prompt, ...opts };
+    calls.push(call);
     const key = Object.keys(answers).find((k) => opts.label.startsWith(k));
     // Most fixtures have no published criterion. The facts stage still runs once before their plan.
     if (!key && opts.label === 'facts') return { needed: false, why: 'no published criterion' };
@@ -30,7 +31,7 @@ async function run(args: unknown, answers: Record<string, Answer>, observeMilest
     if (!key) throw new Error(`no answer for ${opts.label}`);
     const nth = seen.get(key) ?? 0;
     seen.set(key, nth + 1);
-    return answers[key]!({ prompt, label: opts.label }, nth);
+    return answers[key]!(call, nth);
   };
   // Every run says whether the owner was asked beforehand; the tests that are not about that run as "away".
   const given = args && typeof args === 'object' && !('asked' in args) ? { asked: 'away', ...args } : args;
@@ -296,6 +297,10 @@ test('a new product is planned twice: its first pass alone, and what comes after
   // After the fix the look is shared too, by fewer: the flows are written, and each verifier shows its own claims
   // again. (2026-11-18: one verifier took 33 minutes over 17 claims at the second look, the fix behind it.)
   assert.deepEqual(big.calls.filter((c) => c.label.startsWith('verify')).map((c) => c.label), ['verify:m1:1of3', 'verify:m1:2of3', 'verify:m1:3of3', 'verify:m1:again:1of2', 'verify:m1:again:2of2']);
+  assert.deepEqual(big.calls.filter((c) => c.label.startsWith('verify:')).map((c) => c.claims), [
+    ['c1', 'c2', 'c3'], ['c4', 'c5', 'c6', 'c7'], ['c8', 'c9', 'c10'],
+    ['c1', 'c2', 'c3', 'c4', 'c5'], ['c6', 'c7', 'c8', 'c9', 'c10'],
+  ], 'without a milestone agent each verifier receives exactly its own claims, including after a fix');
   const [againFirst, againSecond] = ['verify:m1:again:1of2', 'verify:m1:again:2of2'].map((label) => big.calls.find((c) => c.label === label)!.prompt);
   assert.match(againSecond!, /This is a second look, after a fix\. These claims of the contract were shown false before: c7\. Check each from the start/);
   // Where new cases are tried is said to both; a verifier whose share holds nothing shown false is not pointed at claims "named above".
@@ -417,6 +422,7 @@ test('a new product with screens is planned, drawn and measured first, and the r
     drawing({ plan: needed, screens: () => late('screens', planned), refs: () => late('refs', { primary: '토스', kinds: ['홈'] }), design: () => late('design', { drawn: 3 }) }),
   );
   assert.deepEqual(labels(ran.calls), ['plan', 'screens', 'refs', 'design', 'sweep:design']);
+  assert.equal(ran.calls.find((c) => c.label === 'sweep:design')!.contractId, 'design', 'the sweep receives its contract even without a milestone agent');
   for (const label of ['screens', 'refs', 'design']) assert.deepEqual(startedWith[label], ['screens', 'refs', 'design'], `${label} was started beside the other two, not after them`);
   assert.deepEqual(ran.calls.map((c) => [c.label, c.effort]), [['plan', undefined], ['screens', undefined], ['refs', 'high'], ['design', 'high'], ['sweep:design', 'low']]);
   // The builders' word does not move the drawing: the board and the drawing have a name of their own, and the
@@ -731,6 +737,7 @@ test('a closing review reads the product and files its finding in the worktree o
   const prompt = ran.calls.find((c) => c.label === 'redteam:m2')!.prompt;
   assert.match(prompt, /its folder is \`\/p\/\.sz\/trees\/m2\`/);
   assert.ok(prompt.includes('cd /p/.sz/trees/m2 &&') && prompt.includes('.sz/evidence/m2/'));
+  assert.match(prompt, /\$TMPDIR\/[\s\S]+?sz-eyes copy "\$copy"[\s\S]+?sz-eyes copy "\$copy" --end/);
   assert.equal(ran.result.redteam.length, 4);
   assert.ok(ran.result.redteam.every((r: { held: string[] }) => r.held.includes('빈 상태에서 다시 열기')));
 });

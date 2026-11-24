@@ -27,16 +27,17 @@ export const COPY_MARK = '.sz-copy.json';
 
 const run = (file: string, args: string[], cwd?: string): { code: number | null; out: string; err: string } => {
   const res = spawnSync(file, args, { cwd, encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 });
-  return { code: res.status, out: res.stdout ?? '', err: res.stderr ?? '' };
+  return { code: res.status, out: res.stdout ?? '', err: res.error?.message || res.stderr || res.signal || `exit ${res.status}` };
 };
 
 /** Clones a folder: on this machine's file system a clone costs no time and no space until one side changes. */
 function clone(from: string, to: string): void {
   mkdirSync(dirname(to), { recursive: true });
-  const cloned = process.platform === 'darwin' ? run('cp', ['-c', '-R', from, to]) : { code: 1, out: '', err: '' };
+  const cp = process.platform === 'darwin' ? '/bin/cp' : 'cp';
+  const cloned = process.platform === 'darwin' ? run(cp, ['-c', '-R', from, to]) : { code: 1, out: '', err: '' };
   if (cloned.code === 0) return;
   rmSync(to, { recursive: true, force: true });
-  const copied = run('cp', ['-R', from, to]);
+  const copied = run(cp, ['-R', from, to]);
   if (copied.code !== 0) throw new EyesError(`${from} could not be copied: ${copied.err.trim().split('\n')[0] ?? ''}`);
 }
 
@@ -67,8 +68,10 @@ export function makeCopy(project: string, folder: string, opts: { at?: string; w
   try {
     mkdirSync(to, { recursive: true });
     // Everything of the commit but the pictures kept as evidence: thousands of files nobody runs.
-    const unpacked = spawnSync('sh', ['-c', 'git -C "$1" archive "$2" -- . ":(exclude).sz/evidence" | tar -x -C "$3"', 'sh', from, commit, to], { encoding: 'utf8' });
-    if (unpacked.status !== 0) throw new EyesError(`the files of ${commit.slice(0, 7)} could not be laid out in ${to}: ${(unpacked.stderr ?? '').trim().split('\n')[0] ?? ''}`);
+    // The native Codex sandbox admits /bin/sh; looking up sh through the session's PATH can return EPERM.
+    const shell = process.platform === 'darwin' ? '/bin/sh' : 'sh';
+    const unpacked = run(shell, ['-c', 'git -C "$1" archive "$2" -- . ":(exclude).sz/evidence" | tar -x -C "$3"', 'sh', from, commit, to]);
+    if (unpacked.code !== 0) throw new EyesError(`the files of ${commit.slice(0, 7)} could not be laid out in ${to}: ${unpacked.err.trim().split('\n')[0]}`);
     // Dependencies where they are installed: beside each package file of the commit.
     const depth = (dir: string): number => (dir === '.' ? 0 : dir.split('/').length);
     const packages = tracked.filter((file) => basename(file) === 'package.json').map((file) => dirname(file)).sort((a, b) => depth(a) - depth(b) || a.localeCompare(b));

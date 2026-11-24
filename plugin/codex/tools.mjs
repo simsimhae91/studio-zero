@@ -243,9 +243,16 @@ function sandbox(cwd, scratch, role, contract, command, record, newFlows) {
     LANG: process.env.LANG || 'en_US.UTF-8',
     ...(record && runToken ? { SZ_BUILD_TOKEN: runToken } : {}),
   };
-  const invoke = record
+  let invoke = record
     ? [process.execPath, join(harness, 'packages/eyes/src/cli.ts'), ...command]
     : Array.isArray(command) ? command : ['/bin/sh', '-c', command];
+  if (role === 'redteam' && !record) {
+    // Keep the product's state and copy --end's stack inventory together for this review.
+    // Apply HOME inside the sandbox so the Codex launcher still loads its normal settings.
+    const reviewHome = join(scratch, 'review-home');
+    mkdirSync(reviewHome, { recursive: true, mode: 0o700 });
+    invoke = ['/usr/bin/env', 'HOME=' + reviewHome, ...invoke];
+  }
   return new Promise((ok, fail) => {
     const p = spawn('codex', [...config, '--', ...invoke], { cwd, env, stdio: ['ignore', 'pipe', 'pipe'] });
     let output = '';

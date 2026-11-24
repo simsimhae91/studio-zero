@@ -276,6 +276,45 @@ test('a Codex reviewer writes only by filing a backlog line through record', {
   assert.doesNotMatch(page, /changed/);
 });
 
+test('the red team runs the milestone in a disposable copy and ends it without changing either worktree', {
+  skip: !process.env.SZ_TEST_CODEX_SANDBOX && 'set SZ_TEST_CODEX_SANDBOX=1 in a terminal that can create a Codex sandbox',
+}, (t) => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'sz-review-copy-')));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const git = (cwd: string, ...args: string[]) => {
+    const ran = spawnSync('git', ['-c', 'user.email=test@localhost', '-c', 'user.name=Test', ...args], { cwd, encoding: 'utf8' });
+    assert.equal(ran.status, 0, ran.stderr);
+    return ran.stdout.trim();
+  };
+  git(root, 'init', '-q');
+  const app = "import { readFileSync, writeFileSync } from 'node:fs';\nwriteFileSync('saved.txt', readFileSync('version.txt'));\n";
+  writeFileSync(join(root, 'app.mjs'), app);
+  writeFileSync(join(root, 'version.txt'), 'main\n');
+  writeFileSync(join(root, '.gitignore'), 'dist/\n');
+  git(root, 'add', 'app.mjs', 'version.txt', '.gitignore');
+  git(root, 'commit', '-qm', 'main product');
+  const side = join(root, '.sz/trees/triple');
+  git(root, 'worktree', 'add', '-qb', 'sz/triple', side);
+  writeFileSync(join(side, 'version.txt'), 'milestone\n');
+  git(side, 'commit', '-qam', 'milestone product');
+  mkdirSync(join(side, 'dist'));
+  cpSync(join(side, 'app.mjs'), join(side, 'dist/app.mjs'));
+  const token = startBuildRun(root, 'review the milestone');
+
+  const [home, copy, trial, end] = callsOfRun(token, side, 'redteam',
+    shell('test -d "$HOME" && test "${HOME%/*}" = "$TMPDIR"'),
+    shell('sz-eyes copy "$TMPDIR/review" --with dist'),
+    shell('cd "$TMPDIR/review" && node dist/app.mjs && cat saved.txt'),
+    shell('sz-eyes copy "$TMPDIR/review" --end && test ! -e "$TMPDIR/review"'));
+  for (const result of [home, copy, trial, end]) assert.equal(result.isError, false, result.content[0].text);
+  assert.equal(trial.content[0].text.trim(), 'milestone');
+  assert.match(end.content[0].text, /ended: /);
+  assert.equal(git(side, 'status', '--porcelain'), '');
+  assert.equal(readFileSync(join(side, 'dist/app.mjs'), 'utf8'), app);
+  assert.equal(readFileSync(join(root, 'version.txt'), 'utf8'), 'main\n');
+  for (const source of [side, root]) assert.equal(existsSync(join(source, 'saved.txt')), false);
+});
+
 test('the fact reader can write only its page in the project', {
   skip: !process.env.SZ_TEST_CODEX_SANDBOX && 'set SZ_TEST_CODEX_SANDBOX=1 in a terminal that can create a Codex sandbox',
 }, (t) => {

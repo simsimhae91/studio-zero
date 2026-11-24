@@ -276,6 +276,27 @@ test('the confirmation must be heard, and every owner quotation must occur in on
   assert.equal(readFileSync(writeBrief(folder, page, '네, 이대로', briefHeard, AT), 'utf8'), page);
 });
 
+test('a Markdown owner label still attributes the quotation to the owner', (t) => {
+  const p = project();
+  t.after(p.done);
+  const folder = closeForBrief(p.dir, 'plain');
+  const draft = briefDraft('plain');
+  for (const attribution of [
+    '**주인:** "허위 인용"',
+    '**주인**: "허위 인용"',
+    '주인 : "허위 인용"',
+    '주인\u00a0: "허위 인용"',
+    '*주인:* "허위 인용"',
+    '_주인_: "허위 인용"',
+    '주인: **“허위 인용”**',
+  ]) {
+    assert.throws(() => writeBrief(folder, draft + attribution, '네, 이대로', briefHeard, AT),
+      /"허위 인용" is quoted as the owner's, and they did not say it/, attribution);
+  }
+  const page = draft + '> **주인:** "출근길에 한 판"';
+  assert.equal(readFileSync(writeBrief(folder, page, '네, 이대로', briefHeard, AT), 'utf8'), page);
+});
+
 test('the command prints the brief beside idea.md and a second write needs --force', (t) => {
   const p = project();
   t.after(p.done);

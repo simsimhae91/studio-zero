@@ -449,7 +449,8 @@ export function writeBrief(folder: string, draft: string, said: string, heard: H
   }
 
   const words = [value.seed, ...Object.values(value.lines).map((line) => line.said), ...value.directions.map((d) => d.said), value.closed.said];
-  for (const match of draft.matchAll(/주인:\s*(?:"([^"]*)(?:"|$)|“([^”]*)(?:”|$))/gu)) {
+  // Markdown can emphasise the label, its colon, or the quotation. Match those markers outside the quoted words.
+  for (const match of draft.matchAll(/주인[\s*_]*:[\s*_]*(?:"([^"]*)(?:"|$)|“([^”]*)(?:”|$))/gu)) {
     const quote = match[1] ?? match[2]!;
     const closer = match[1] === undefined ? '”' : '"';
     if (!match[0].endsWith(closer) || !words.some((answer) => findQuote(answer, quote) !== null)) {
