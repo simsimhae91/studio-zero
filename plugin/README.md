@@ -10,6 +10,8 @@ claude --plugin-dir /Users/hosoo/project/conclave/plugin
 
 프로젝트 폴더에서 연다. 계속 쓰려면 Claude Code 안에서 `/plugin marketplace add /Users/hosoo/project/conclave` 뒤 `/plugin install sz`.
 
+Codex에서 아이디어를 파려면 입력창에서 **dive (sz)**를 선택하고 첫 생각을 적는다. 선택지에는 같은 대화에서 번호나 문장으로 답한다. 훅 기록이 없어도 현재 Codex 스레드에 남은 직접 입력을 확인한다.
+
 ## Codex에서 빌드
 
 로컬 체크아웃에서 `pnpm install`, `codex plugin marketplace add .`, `codex plugin add sz@studio-zero`를 실행한다. Codex 입력창에서 `$sz`를 입력해 **build (sz)**를 선택하고 요청을 적는다. 시작 질문에 답하면 빌드가 진행된다. 같은 실행기를 터미널에서도 부를 수 있다. 대상 프로젝트 폴더에서 실제 요청과 답을 JSON으로 전달한다.

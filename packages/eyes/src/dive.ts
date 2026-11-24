@@ -1,10 +1,11 @@
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, writeFileSync } from 'node:fs';
+import { existsSync, globSync, mkdirSync, readFileSync, readdirSync, realpathSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { extname, join, resolve, sep } from 'node:path';
 import { z } from 'zod';
 import { SZ_DIR, localDay } from './contract.ts';
 import { findQuote, type Seen } from './cite.ts';
+import { codexHeard } from './codex-heard.ts';
 import { SandboxError } from './web.ts';
 
 /**
@@ -211,24 +212,24 @@ export interface Heard {
 const HOURS = 3_600_000;
 
 /**
- * Everything the owner said since a moment, as the plugin's hook and their sessions' transcripts kept it. Typed
- * messages come from the hook, which receives them exactly as typed. Answers in a question box come from the
- * transcript of the session the hook names (`toolUseResult.answers`): a chosen option counts as their choice and
- * what they wrote in its place as their words. Nothing the session wrote is in either.
+ * Claude Code keeps typed prompts in the hook log and question-box answers in the transcript it names.
+ * In Codex both the hook log and the rollout must belong to the active thread.
  */
-export function heardSince(since: string, env: NodeJS.ProcessEnv = process.env): Heard[] {
+export async function heardSince(since: string, env: NodeJS.ProcessEnv = process.env): Promise<Heard[]> {
   const dir = heardDir(env);
-  if (!existsSync(dir)) return [];
+  const thread = env.CODEX_THREAD_ID;
+  if (thread !== undefined && !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(thread)) return [];
   const from = new Date(since).getTime();
   const heard: Heard[] = [];
   const transcripts = new Set<string>();
-  for (const name of readdirSync(dir).filter((n) => n.endsWith('.jsonl'))) {
+  for (const name of globSync(thread ? thread + '.jsonl' : '*.jsonl', { cwd: dir })) {
     const path = join(dir, name);
     for (const line of readFileSync(path, 'utf8').split('\n')) {
       if (!line.trim()) continue;
       try {
-        const entry = JSON.parse(line) as { at?: string; prompt?: string; transcript?: string | null };
-        if (typeof entry.transcript === 'string') transcripts.add(entry.transcript);
+        const entry = JSON.parse(line) as { at?: string; prompt?: string; session?: string; transcript?: string | null };
+        if (thread && entry.session !== thread) continue;
+        if (!thread && typeof entry.transcript === 'string') transcripts.add(entry.transcript);
         if (typeof entry.at === 'string' && typeof entry.prompt === 'string' && new Date(entry.at).getTime() >= from) heard.push({ at: entry.at, kind: 'typed', words: entry.prompt, transcript: entry.transcript ?? null });
       } catch {
         // A line cut off by a full disk says nothing.
@@ -236,11 +237,19 @@ export function heardSince(since: string, env: NodeJS.ProcessEnv = process.env):
     }
   }
   for (const transcript of transcripts) heard.push(...answersIn(transcript, from));
-  return heard.sort((a, b) => a.at.localeCompare(b.at));
+  if (thread) {
+    const captured = new Set(heard.map((entry) => entry.words));
+    for (const entry of await codexHeard(thread, from, env)) {
+      if (!captured.has(entry.words)) heard.push(entry);
+    }
+  }
+  // Codex can deliver a runtime notification in the user's place, including to the prompt hook.
+  const inputs = thread ? heard.filter(({ words }) => !/^\s*<(?:subagent_notification|environment_context|turn_aborted|task-notification|system-reminder)\b/i.test(words)) : heard;
+  return inputs.sort((a, b) => a.at.localeCompare(b.at));
 }
 
 /** What the owner said that can settle a dive: since two hours before it began (the seed comes first), or before now. */
-export const heardFor = (value: Dive | null, now: string, env: NodeJS.ProcessEnv = process.env): Heard[] => heardSince(new Date(new Date(value?.createdAt ?? now).getTime() - 2 * HOURS).toISOString(), env);
+export const heardFor = (value: Dive | null, now: string, env: NodeJS.ProcessEnv = process.env): Promise<Heard[]> => heardSince(new Date(new Date(value?.createdAt ?? now).getTime() - 2 * HOURS).toISOString(), env);
 
 /** What the owner answered in question boxes, in one session's transcript. */
 export function answersIn(transcript: string, from = 0): Heard[] {
@@ -276,7 +285,7 @@ export const findHeard = (heard: Heard[], said: string): Heard | null => (said.t
 function mustBeHeard(heard: Heard[], said: string, what: string): void {
   if (said.trim().length === 0) throw new Error(`${what} takes the owner's own words: --said "<what they typed or chose, as it stands>"`);
   if (findHeard(heard, said)) return;
-  if (heard.length === 0) throw new Error(`nothing the owner said has been heard, so "${said.slice(0, 80)}" cannot be taken as theirs. The sz plugin's hook keeps the owner's words while a dive is asked for (/sz:dive, or words such as "딥다이브") or under way: if the plugin is not loaded, the dive cannot record the owner's words`);
+  if (heard.length === 0) throw new Error(`nothing the owner said has been heard, so "${said.slice(0, 80)}" cannot be taken as theirs. Start the dive in the owner's conversation and ask them to reply there. Codex reads direct input from its active thread or prompt hook; Claude Code needs the sz prompt hook.`);
   throw new Error(`"${said.slice(0, 120)}" is not among what the owner said. Their words are taken as they typed or chose them, never as you would put them: quote the part of their answer that settles this. The last things they said:\n${heard
     .slice(-4)
     .map((h) => `  - ${h.kind === 'typed' ? '' : `(${h.kind}) `}${h.words.slice(0, 200)}`)

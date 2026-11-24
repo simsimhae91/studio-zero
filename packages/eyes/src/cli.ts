@@ -217,8 +217,8 @@ const USAGE = `sz-eyes: launch what was built, look at it, operate it, and put w
         start digging an idea out with the owner, line by line, until it is clear. Kept in .sz/dive/<id>/ of the
         folder it is started in; started in the home folder or in the harness's repository, under ~/.studio-zero/dives/
   sz-eyes dive line <id> <line> [--status open|proposed|settled|waived] [--says "<what the line holds>"] [--said "<the owner's words>"]
-        proposed is yours; settled and waived take the owner's words, found among what they typed or chose (the
-        plugin's hook keeps them), never as you would put them. Lines: moment, now, core, first, back, not, feel,
+        proposed is yours; settled and waived take the owner's words as recorded by the prompt hook or in the
+        active Codex thread. Lines: moment, now, core, first, back, not, feel,
         done; for an app also pain, home; for a game also loop, stakes, depth, lens
   sz-eyes dive direction <id> <direction-id> [--name "<a few words>"] [--what "<who, what they do>"] [--status offered|taken|merged|dropped] [--said "<the owner's words>"] [--note "<text>"]
         a way the idea could go, shown to the owner, and what they made of it (taken, merged, dropped: their words)
@@ -1090,7 +1090,7 @@ async function main(argv: string[]): Promise<number> {
       }
       if (!id) throw new Error('which dive: give its id (sz-eyes dive show lists them)');
       if (command === 'new') {
-        const folder = newDive(project, id, DiveKind.parse(a.one('--kind')), a.one('--seed') ?? '', heardFor(null, now), now);
+        const folder = newDive(project, id, DiveKind.parse(a.one('--kind')), a.one('--seed') ?? '', await heardFor(null, now), now);
         out(`${folder}\n${progressLine(readDive(folder))}`);
         return 0;
       }
@@ -1099,13 +1099,13 @@ async function main(argv: string[]): Promise<number> {
       if (command === 'line') {
         const line = DiveLineId.parse(a.words[1]);
         const status = a.one('--status');
-        const set = setDiveLine(folder, line, { ...(status ? { status: DiveLineStatus.parse(status) } : {}), ...(a.one('--says') !== undefined ? { says: a.one('--says')! } : {}), ...(a.one('--said') !== undefined ? { said: a.one('--said')! } : {}) }, heardFor(value, now), now);
+        const set = setDiveLine(folder, line, { ...(status ? { status: DiveLineStatus.parse(status) } : {}), ...(a.one('--says') !== undefined ? { says: a.one('--says')! } : {}), ...(a.one('--said') !== undefined ? { said: a.one('--said')! } : {}) }, await heardFor(value, now), now);
         out(`${line}: ${set.status}${set.accepted ? ' (the proposal, taken as it stood)' : ''}\n${progressLine(readDive(folder))}`);
         return 0;
       }
       if (command === 'direction') {
         const status = a.one('--status');
-        const set = setDirection(folder, { id: a.words[1] ?? '', ...(a.one('--name') !== undefined ? { name: a.one('--name')! } : {}), ...(a.one('--what') !== undefined ? { what: a.one('--what')! } : {}), ...(status ? { status: status as 'taken' } : {}), ...(a.one('--said') !== undefined ? { said: a.one('--said')! } : {}), ...(a.one('--note') !== undefined ? { note: a.one('--note')! } : {}) }, heardFor(value, now), now);
+        const set = setDirection(folder, { id: a.words[1] ?? '', ...(a.one('--name') !== undefined ? { name: a.one('--name')! } : {}), ...(a.one('--what') !== undefined ? { what: a.one('--what')! } : {}), ...(status ? { status: status as 'taken' } : {}), ...(a.one('--said') !== undefined ? { said: a.one('--said')! } : {}), ...(a.one('--note') !== undefined ? { note: a.one('--note')! } : {}) }, await heardFor(value, now), now);
         out(`direction ${set.id}: ${set.status}`);
         return 0;
       }
@@ -1139,12 +1139,12 @@ async function main(argv: string[]): Promise<number> {
           else out(`no brief for dive ${id}`);
         } else {
           if (!file) throw new Error('sz-eyes dive brief <id> --file <draft.md> --said "<their words>" [--force]');
-          out(writeBrief(folder, readFileSync(resolve(file), 'utf8'), a.one('--said') ?? '', heardFor(value, now), now, { force: a.has('--force') }));
+          out(writeBrief(folder, readFileSync(resolve(file), 'utf8'), a.one('--said') ?? '', await heardFor(value, now), now, { force: a.has('--force') }));
         }
         return 0;
       }
       if (command === 'close') {
-        out(closeDive(folder, a.one('--said') ?? '', a.one('--summary') ?? '', heardFor(value, now), now));
+        out(closeDive(folder, a.one('--said') ?? '', a.one('--summary') ?? '', await heardFor(value, now), now));
         return 0;
       }
     } catch (err) {

@@ -14,8 +14,58 @@ const said = (...words: string[]): Heard[] => words.map((w, i) => ({ at: `2026-1
 
 function project(): { dir: string; env: NodeJS.ProcessEnv; done: () => void } {
   const dir = mkdtempSync(join(tmpdir(), 'eyes-dive-'));
-  return { dir, env: { ...process.env, SZ_DIVES_DIR: join(dir, 'dives-home') }, done: () => rmSync(dir, { recursive: true, force: true }) };
+  const env: NodeJS.ProcessEnv = { ...process.env, CODEX_HOME: join(dir, 'codex'), SZ_DIVES_DIR: join(dir, 'dives-home') };
+  delete env.CODEX_THREAD_ID;
+  return { dir, env, done: () => rmSync(dir, { recursive: true, force: true }) };
 }
+
+test('Codex hears only direct user input in the active thread, with or without its hook', async (t) => {
+  const p = project();
+  t.after(p.done);
+  const thread = '00000000-0000-4000-8000-000000000001';
+  const other = '00000000-0000-4000-8000-000000000002';
+  p.env.CODEX_THREAD_ID = thread;
+  const day = join(p.env.CODEX_HOME!, 'sessions/2026/11/24');
+  mkdirSync(day, { recursive: true });
+  const rollout = (id: string) => join(day, `rollout-2026-11-24T10-00-00-${id}.jsonl`);
+  const meta = (id: string) => ({ type: 'session_meta', payload: { id, source: 'cli' } });
+  const event = (payload: object, timestamp = AT) => ({ type: 'event_msg', timestamp, payload });
+  const message = (text: string, id = thread) => event({ type: 'item_completed', thread_id: id, item: { type: 'UserMessage', content: [{ type: 'text', text }] } });
+  const rows = [
+    message('내가 입력한 아이디어'), message('다른 스레드의 승인', other),
+    event({ type: 'user_message', message: '직접 쓴 답' }),
+    message('<subagent_notification>에이전트가 보낸 답</subagent_notification>'),
+    event({ type: 'user_message', message: '<environment_context>런타임 환경</environment_context>' }),
+    event({ type: 'user_message', message: '기간 밖의 답' }, '2026-11-23T01:00:00Z'),
+    event({ type: 'user_message', message: '시간을 모르는 답' }, 'bad-date'),
+    event({ type: 'item_completed', thread_id: thread, item: { type: 'AgentMessage', content: [{ type: 'text', text: '에이전트 제안' }] } }),
+    { type: 'response_item', timestamp: AT, payload: { type: 'message', role: 'user', content: [{ type: 'input_text', text: '런타임이 넣은 환경 정보' }] } },
+    { type: 'response_item', timestamp: AT, payload: { type: 'function_call_output', output: '{"answers":{"q":"도구 출력"}}' } },
+  ];
+  const log = (file: string, entries: object[]) => writeFileSync(file, entries.map((row) => JSON.stringify(row)).join('\n') + '\n{"partial":');
+  log(rollout(thread), [meta(thread), ...rows]);
+  log(rollout(other), [meta(other), message('다른 파일의 승인', other)]);
+  const words = async () => (await heardSince(AT, p.env)).map((h) => h.words);
+  assert.deepEqual(await words(), ['내가 입력한 아이디어', '직접 쓴 답']);
+
+  const hooks = join(p.env.SZ_DIVES_DIR!, '.heard');
+  mkdirSync(hooks, { recursive: true });
+  log(join(hooks, other + '.jsonl'), [{ at: AT, session: other, prompt: '다른 훅이 들은 승인' }]);
+  log(join(hooks, thread + '.jsonl'), [
+    { at: AT, session: thread, prompt: '직접 쓴 답' },
+    { at: AT, session: thread, prompt: '로그에 아직 없는 답' },
+    { at: AT, session: thread, prompt: '<turn_aborted>중단 알림</turn_aborted>' },
+    { at: AT, session: other, prompt: '다른 스레드의 훅 기록' },
+  ]);
+  assert.deepEqual((await words()).sort(), ['내가 입력한 아이디어', '직접 쓴 답', '로그에 아직 없는 답'].sort());
+  rmSync(rollout(thread));
+  assert.deepEqual(await words(), ['직접 쓴 답', '로그에 아직 없는 답']);
+  rmSync(join(hooks, thread + '.jsonl'));
+  log(rollout(thread), [meta(other), ...rows]);
+  assert.deepEqual(await words(), []);
+  rmSync(rollout(thread));
+  assert.deepEqual(await words(), []);
+});
 
 test('a line is settled or left open only by words the owner said, and a proposal is the dive\'s own', () => {
   const p = project();
@@ -97,7 +147,7 @@ test('a dive closes only when every line is the owner\'s, directions were shown 
   }
 });
 
-test('what the owner said is what the hook kept as typed and what they chose or wrote in a question box, and nothing the session wrote', () => {
+test('what the owner said is what the hook kept as typed and what they chose or wrote in a question box, and nothing the session wrote', async () => {
   const p = project();
   try {
     const heardDir = join(p.env.SZ_DIVES_DIR!, '.heard');
@@ -114,7 +164,7 @@ test('what the owner said is what the hook kept as typed and what they chose or 
         .join('\n'),
     );
     writeFileSync(join(heardDir, 'abc.jsonl'), `${JSON.stringify({ at: '2026-11-24T00:59:00.000Z', session: 'abc', transcript, prompt: '/sz:dive 모임 정산이 귀찮아' })}\n`);
-    const heard = heardSince('2026-11-24T00:30:00.000Z', p.env);
+    const heard = await heardSince('2026-11-24T00:30:00.000Z', p.env);
     assert.deepEqual(
       heard.map((h) => [h.kind, h.words]),
       [
@@ -141,6 +191,10 @@ test('what the owner said is what the hook kept as typed and what they chose or 
     assert.equal(readFileSync(join(heardDir, 's2.jsonl'), 'utf8').trim().split('\n').length, 2, 'what a background agent reports comes in as a message and is not the owner\'s');
     hook('/sz:dive 게임 보고서', 's3');
     assert.ok(existsSync(join(heardDir, 's3.jsonl')));
+    for (const [i, prompt] of ['$sz:dive 게임 보고서', '[$sz:dive](/local/skills/dive/SKILL.md) 게임 보고서'].entries()) {
+      hook(prompt, 'picker-' + i);
+      assert.ok(existsSync(join(heardDir, 'picker-' + i + '.jsonl')), prompt);
+    }
     const open = mkdtempSync(join(tmpdir(), 'eyes-dive-open-'));
     try {
       newDive(open, 'x', 'plain', '모임 정산이 귀찮아', said('모임 정산이 귀찮아'), AT, p.env);
