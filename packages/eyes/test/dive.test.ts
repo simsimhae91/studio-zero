@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { test } from 'node:test';
-import { addSaw, answersIn, closeDive, diveFolder, diveRoot, findHeard, heardSince, ideaPage, leftBefore, linesOf, newDive, progressLine, readDive, seeInFile, setDirection, setDiveLine, type Heard } from '../src/dive.ts';
+import { BRIEF_FILE, BRIEF_SECTIONS, addSaw, answersIn, closeDive, diveFolder, diveRoot, findHeard, heardSince, ideaPage, leftBefore, linesOf, newDive, progressLine, readDive, seeInFile, setDirection, setDiveLine, writeBrief, type DiveKind, type Heard } from '../src/dive.ts';
 
 const HERE = import.meta.dirname;
 const ROOT = resolve(HERE, '../../..');
@@ -219,4 +219,90 @@ test('the command line holds a dive to the same rules, with the owner\'s words f
   } finally {
     p.done();
   }
+});
+
+const briefHeard = said('출근길에 한 판', '둘이서 해요', '지하철에서   해요', '좋아요 이걸로 해요', '네, 이대로');
+const briefDraft = (kind: DiveKind) => BRIEF_SECTIONS[kind].join('\n결정한 내용\n\n') + '\n결정한 내용\n';
+
+function closeForBrief(projectDir: string, kind: DiveKind): string {
+  const folder = newDive(projectDir, 'commute', kind, '출근길에 한 판', briefHeard, AT);
+  for (const id of ['a', 'b', 'c']) setDirection(folder, { id, name: id, what: '출근길 지하철에서 한 판' }, briefHeard, AT);
+  setDirection(folder, { id: 'a', status: 'taken', said: '둘이서 해요' }, briefHeard, AT);
+  for (const id of linesOf(kind)) setDiveLine(folder, id, { status: 'settled', says: '출근길에 함께 한 판', said: '지하철에서   해요' }, briefHeard, AT);
+  closeDive(folder, '좋아요 이걸로 해요', '출근길에 함께 하는 한 판', briefHeard, AT);
+  return folder;
+}
+
+test('a brief is written only after the owner closes the dive', (t) => {
+  const p = project();
+  t.after(p.done);
+  const folder = newDive(p.dir, 'commute', 'plain', '출근길에 한 판', briefHeard, AT);
+  assert.throws(() => writeBrief(folder, briefDraft('plain'), '네, 이대로', briefHeard, AT), /the brief is written after the dive closes: sz-eyes dive close commute/);
+  assert.equal(existsSync(join(folder, 'brief.md')), false);
+});
+
+test('a brief names a missing or misplaced heading for this kind of dive', (t) => {
+  const p = project();
+  t.after(p.done);
+  const folder = closeForBrief(p.dir, 'game');
+  const draft = briefDraft('game');
+  assert.throws(() => writeBrief(folder, draft.replace('## 비워 둘 것', '~~~\n## 비워 둘 것\n~~~'), '네, 이대로', briefHeard, AT), /missing.*## 비워 둘 것/);
+  assert.throws(() => writeBrief(folder, draft.replace('## 코어 동사', '').concat('\n## 코어 동사\n'), '네, 이대로', briefHeard, AT), /order.*## 시간축 루프/);
+  assert.throws(() => writeBrief(folder, briefDraft('app'), '네, 이대로', briefHeard, AT), /missing.*## 북극성과 손맛/);
+});
+
+test('putting the brief off keeps the draft for another day, even when those words were heard', (t) => {
+  const p = project();
+  t.after(p.done);
+  const folder = closeForBrief(p.dir, 'plain');
+  for (const defer of ['나중에', ' 아직 ', '보류', 'later', 'not now']) {
+    assert.throws(() => writeBrief(folder, briefDraft('plain'), defer, said(defer), AT), /the brief is written on their yes to this page, not on their 'not now'/);
+  }
+  assert.equal(existsSync(join(folder, BRIEF_FILE)), false);
+});
+
+test('the confirmation must be heard, and every owner quotation must occur in one answer kept by this dive', (t) => {
+  const p = project();
+  t.after(p.done);
+  const folder = closeForBrief(p.dir, 'app');
+  const draft = briefDraft('app');
+  assert.throws(() => writeBrief(folder, draft, '', briefHeard, AT), /the brief takes the owner's own words/);
+  assert.throws(() => writeBrief(folder, draft, '완전 최고예요', briefHeard, AT), /is not among what the owner said/);
+  for (const fake of ['주인: "출근길에 함께 한 판"', '> 주인: "네, 이대로"']) {
+    assert.throws(() => writeBrief(folder, draft + fake, '네, 이대로', briefHeard, AT), /is quoted as the owner's, and they did not say it/);
+  }
+  const quotes = ['출근길에 한 판', '둘이서 해요', '지하철에서 해요'.normalize('NFD'), '좋아요 이걸로'].map((quote) => '> 주인: "' + quote + '"');
+  const page = draft + quotes.join('\n');
+  assert.equal(readFileSync(writeBrief(folder, page, '네, 이대로', briefHeard, AT), 'utf8'), page);
+});
+
+test('the command prints the brief beside idea.md and a second write needs --force', (t) => {
+  const p = project();
+  t.after(p.done);
+  const folder = closeForBrief(p.dir, 'plain');
+  const heardDir = join(p.env.SZ_DIVES_DIR!, '.heard');
+  mkdirSync(heardDir, { recursive: true });
+  writeFileSync(join(heardDir, 'cli.jsonl'), JSON.stringify({ at: AT, prompt: '네, 이대로' }));
+  const eyes = (...args: string[]) => spawnSync(process.execPath, [CLI, 'dive', ...args, '--dir', p.dir], { env: p.env, encoding: 'utf8' });
+  assert.match(eyes('brief', 'commute').stdout, /no brief/);
+  const draft = briefDraft('plain');
+  const source = join(p.dir, 'draft.md');
+  writeFileSync(source, draft);
+  const keep = (...flags: string[]) => eyes('brief', 'commute', '--file', source, '--said', '네, 이대로', ...flags);
+  const first = keep();
+  const path = join(folder, 'brief.md');
+  assert.equal(first.status, 0, first.stderr);
+  assert.equal(first.stdout.trim(), path);
+  assert.ok(existsSync(join(folder, 'idea.md')));
+  assert.equal(readFileSync(path, 'utf8'), draft);
+  assert.equal(eyes('brief', 'commute').stdout, draft);
+  assert.ok(eyes('show', 'commute').stdout.includes('brief: ' + path));
+  writeFileSync(source, draft + '수정\n');
+  const refused = keep();
+  assert.equal(refused.status, 1);
+  assert.match(refused.stderr, /--force/);
+  assert.equal(readFileSync(path, 'utf8'), draft);
+  const replaced = keep('--force');
+  assert.equal(replaced.status, 0, replaced.stderr);
+  assert.equal(readFileSync(path, 'utf8'), draft + '수정\n');
 });

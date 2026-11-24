@@ -11,7 +11,7 @@ import { diskRoom, roomText } from './room.ts';
 import { ElectronError, renderAppLook, renderAppWalk, walkElectron } from './electron.ts';
 import { CiteError, seeQuote } from './cite.ts';
 import { Basis, LineId, LineStatus, Objection, Other, addAsk as addWorthAsk, addCite, addObjection, allCases, answerObjection, caseFolder, hearAsk, newCase, readCase, removeOther, renderCase, renderCases, setCall, setLine, setOther, setOwner, setRow, standingOf, unanswered, weighCite, withdrawCite, writeCasePage, writeCasesPage } from './worth.ts';
-import { DiveKind, DiveLineId, LineStatus as DiveLineStatus, addSaw, allDives, closeDive, diveFolder, heardFor, ideaPage, newDive, progressLine, readDive, renderDive, renderDives, seeInFile, setDirection, setDiveLine } from './dive.ts';
+import { BRIEF_FILE, DiveKind, DiveLineId, LineStatus as DiveLineStatus, addSaw, allDives, closeDive, diveFolder, heardFor, ideaPage, newDive, progressLine, readDive, renderDive, renderDives, seeInFile, setDirection, setDiveLine, writeBrief } from './dive.ts';
 import { engineEnv, findTool, hostedSupabaseCall } from './engine.ts';
 import { writeEvidencePage } from './evidence.ts';
 import { changedSinceFrozen, fingerprint, fingerprints } from './fingerprint.ts';
@@ -228,6 +228,8 @@ const USAGE = `sz-eyes: launch what was built, look at it, operate it, and put w
   sz-eyes dive close <id> --summary "<the idea in one line>" --said "<the owner's words on the one page>"
         refused while a line is open or only proposed, before three directions were shown and one taken, and
         without the owner's words; writes idea.md, which the next stages read
+  sz-eyes dive brief <id> --file <draft.md> --said "<their words>" [--force] [--dir <project>]
+  sz-eyes dive brief <id>                                  prints the brief, or says there is none
   sz-eyes dive show [<id>] [--dir <project>]             one dive as it stands (its first lines: the seed, then how many lines are clear), or a line for each
 
   sz-eyes room [--json] [--dir <project>]                whole gigabytes free on the disk the project is on (its first line,
@@ -1072,7 +1074,7 @@ async function main(argv: string[]): Promise<number> {
     }
   }
   if (area === 'dive') {
-    const a = parse(rest, []);
+    const a = parse(rest, command === 'brief' ? ['--force'] : []);
     const project = resolve(a.one('--dir') ?? '.');
     const now = new Date().toISOString();
     const id = a.words[0] ?? '';
@@ -1127,6 +1129,18 @@ async function main(argv: string[]): Promise<number> {
       }
       if (command === 'page') {
         out(ideaPage({ ...value, summary: a.one('--summary') ?? value.summary }, folder));
+        return 0;
+      }
+      if (command === 'brief') {
+        const file = a.one('--file');
+        if (file === undefined && !a.has('--said') && !a.has('--force')) {
+          const path = join(folder, BRIEF_FILE);
+          if (existsSync(path)) process.stdout.write(readFileSync(path, 'utf8'));
+          else out(`no brief for dive ${id}`);
+        } else {
+          if (!file) throw new Error('sz-eyes dive brief <id> --file <draft.md> --said "<their words>" [--force]');
+          out(writeBrief(folder, readFileSync(resolve(file), 'utf8'), a.one('--said') ?? '', heardFor(value, now), now, { force: a.has('--force') }));
+        }
         return 0;
       }
       if (command === 'close') {

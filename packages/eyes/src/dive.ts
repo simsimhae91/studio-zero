@@ -29,6 +29,14 @@ export type DiveLineId = z.infer<typeof DiveLineId>;
 export const DiveKind = z.enum(['app', 'game', 'plain']);
 export type DiveKind = z.infer<typeof DiveKind>;
 
+/** The required headings in the page the designer and builder execute, in reading order. */
+export const BRIEF_FILE = 'brief.md';
+export const BRIEF_SECTIONS: Record<DiveKind, string[]> = {
+  app: ['## 북극성', '## 첫 1분과 핵심 여정', '## 채울 것', '## 비워 둘 것', '## 톤과 제약', '## 완료 기준'],
+  game: ['## 북극성과 손맛', '## 코어 동사', '## 시간축 루프', '## 승패와 밸런스', '## 채울 것', '## 비워 둘 것', '## sz:game 연결', '## 완료 기준'],
+  plain: ['## 북극성', '## 채울 것', '## 비워 둘 것', '## 완료 기준'],
+};
+
 /** The lines of each kind of dive, in the order the owner reads them. */
 const ORDER: Record<DiveKind, DiveLineId[]> = {
   app: ['moment', 'pain', 'now', 'home', 'core', 'first', 'back', 'not', 'feel', 'done'],
@@ -170,12 +178,13 @@ export function readDive(folder: string): Dive {
   return Dive.parse({ ...raw, lines: { ...(kind.success ? Object.fromEntries(linesOf(kind.data).map((line) => [line, {}])) : {}), ...raw.lines } });
 }
 
-function write(folder: string, path: string, text: string, durable: boolean): void {
+function write(folder: string, path: string, text: string, durable: boolean, flag: 'w' | 'wx' = 'w'): void {
   try {
     mkdirSync(folder, { recursive: true });
-    writeFileSync(path, text);
+    writeFileSync(path, text, { flag });
   } catch (err) {
     const code = (err as NodeJS.ErrnoException).code;
+    if (flag === 'wx' && code === 'EEXIST') throw new Error(`${path} already exists: --force replaces it with the draft the owner approved`);
     if (durable && (code === 'EPERM' || code === 'EACCES')) throw new SandboxError(`${path} could not be written: this dive is kept outside the project (${folder}), where the session's command sandbox does not let a command write. Run sz-eyes dive outside the sandbox (dangerouslyDisableSandbox: true on the Bash call).`);
     throw err;
   }
@@ -406,6 +415,53 @@ export function closeDive(folder: string, said: string, summary: string, heard: 
   return path;
 }
 
+function briefHeadings(draft: string): string[] {
+  const headings: string[] = [];
+  let fence = '';
+  for (const line of draft.replace(/<!--[\s\S]*?(?:-->|$)/g, '').split(/\r?\n/)) {
+    const delimiter = /^ {0,3}(`{3,}|~{3,})(.*)$/.exec(line);
+    if (delimiter) {
+      const mark = delimiter[1]!;
+      if (!fence) fence = mark;
+      else if (mark.startsWith(fence) && !delimiter[2]!.trim()) fence = '';
+    } else if (!fence && line.startsWith('## ')) headings.push(line.trimEnd());
+  }
+  return headings;
+}
+
+/** The heard log establishes whose words they are. The dive asks for those words on this draft. */
+export function writeBrief(folder: string, draft: string, said: string, heard: Heard[], _at: string, { force = false } = {}): string {
+  const value = readDive(folder);
+  if (value.closed === null) throw new Error(`the brief is written after the dive closes: sz-eyes dive close ${value.id} --summary … --said …`);
+  mustBeHeard(heard, said, 'the brief');
+  if (['나중에', '아직', '보류', 'later', 'not now'].includes(said.trim().toLowerCase())) {
+    throw new Error(`the brief is written on their yes to this page, not on their 'not now': ${said.trim()}`);
+  }
+
+  const headings = briefHeadings(draft);
+  let previous = -1;
+  for (const required of BRIEF_SECTIONS[value.kind]) {
+    const index = headings.indexOf(required);
+    if (index < 0) throw new Error(`the ${value.kind} brief is missing ${required}`);
+    if (index <= previous) throw new Error(`headings out of order: ${required} follows ${headings[previous]}`);
+    if (headings.lastIndexOf(required) !== index) throw new Error(`the brief has more than one ${required}`);
+    previous = index;
+  }
+
+  const words = [value.seed, ...Object.values(value.lines).map((line) => line.said), ...value.directions.map((d) => d.said), value.closed.said];
+  for (const match of draft.matchAll(/주인:\s*(?:"([^"]*)(?:"|$)|“([^”]*)(?:”|$))/gu)) {
+    const quote = match[1] ?? match[2]!;
+    const closer = match[1] === undefined ? '”' : '"';
+    if (!match[0].endsWith(closer) || !words.some((answer) => findQuote(answer, quote) !== null)) {
+      throw new Error(`"${quote}" is quoted as the owner's, and they did not say it: quote what they said, or write it as what will be built`);
+    }
+  }
+
+  const path = join(folder, BRIEF_FILE);
+  write(folder, path, draft, isDurable(folder), force ? 'w' : 'wx');
+  return path;
+}
+
 // ---------------------------------------------------------------------------------------------------------
 // What is read.
 
@@ -424,6 +480,7 @@ export function renderDive(value: Dive, folder: string): string {
   const left = leftBefore(value);
   if (!value.closed && left.length > 0) lines.push('', 'before it can close:', ...left.map((line) => `  - ${line}`));
   if (value.closed) lines.push('', `closed on: "${value.closed.said}"`, `page: ${join(folder, 'idea.md')}`);
+  if (existsSync(join(folder, BRIEF_FILE))) lines.push(`brief: ${join(folder, BRIEF_FILE)}`);
   return lines.join('\n');
 }
 
