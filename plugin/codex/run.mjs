@@ -82,6 +82,66 @@ const LEFT = {
 const leftPrompt = (label, files) =>
   `The worker before you (${label}) finished and left these files of the product changed and not committed: ${files.join(', ')}. Look at each (\`git status\`, \`git diff\`, the file itself). Commit, by exact path, each one that is part of that work (a check it wrote, a file it changed), in one commit whose message says what they are. Remove each that is only a leftover of running something (an output, a log, a copy). Change nothing else, and run nothing else: the work itself is done. Return the paths under "committed" and "removed".`;
 
+const MAX_HAND_BACK = 2;
+
+function contractOf(cwd, id) {
+  if (!id) return null;
+  try {
+    return json(join(cwd, '.sz/contracts', id + '.json'));
+  } catch (error) {
+    if (error.code === 'ENOENT') return null;
+    throw error;
+  }
+}
+
+// A verifier owes only its share. Open claims are a fixer's and an arbiter's normal state.
+function owesNow(cwd, role, contract, assigned) {
+  if (!contract || !['build', 'start', 'verifier', 'sweep'].includes(role)) return '';
+  const current = contractOf(cwd, contract);
+  if (!current) {
+    if (role === 'sweep') return "the design contract `design` was not recorded: record it, freeze it, and record the screens' verdict";
+    if (role === 'build') return `record and freeze the contract ${contract} and finish its work`;
+    return '';
+  }
+  if (current.closedAt) return '';
+  if (role === 'build' || role === 'start')
+    return current.built ? '' : `the contract ${contract} still needs \`sz-eyes contract built ${contract} --launch "<how it starts>"\``;
+  if (role === 'sweep' && !current.frozenAt) return `freeze the design contract and record the screens' verdict`;
+  return current.claims
+    .filter((claim) => claim.status === 'unproven' && claim.shownBy.kind !== 'owner' && (!assigned || assigned.includes(claim.id)))
+    .map((claim) => `${claim.id}: no verdict yet (${claim.shownBy.kind}: ${claim.shownBy.ref}): ${claim.says}`)
+    .join('\n');
+}
+
+// A fresh verifier may return just what it did on its latest attempt. The ledger settles
+// the claims across all attempts, including when the model reports a verdict it never recorded.
+function withEarlierVerdicts(earlier, latest, current, assigned) {
+  if (!current) throw new Error("the verifier's contract disappeared after hand-back");
+  const revisited = new Set([...(latest.held || []), ...(latest.broken || []).map((b) => b.key)]);
+  const result = {
+    ...earlier,
+    ...latest,
+    proven: [], refuted: [], unchecked: [],
+    held: [...(earlier.held || []).filter((key) => !revisited.has(key)), ...(latest.held || [])],
+    broken: [...(earlier.broken || []).filter((b) => !revisited.has(b.key)), ...(latest.broken || [])],
+    noticed: [...new Set([...(earlier.noticed || []), ...(latest.noticed || [])])],
+  };
+  for (const { id, status, note, shownBy } of current.claims) {
+    if (assigned && !assigned.includes(id)) continue;
+    if (status === 'proven') result.proven.push(id);
+    if (status === 'refuted') {
+      const fact = note || latest.refuted.find((r) => r.id === id)?.fact || earlier.refuted.find((r) => r.id === id)?.fact;
+      result.refuted.push({ id, fact: fact || 'recorded as refuted' });
+    }
+    if (status === 'unchecked') {
+      const why = note || latest.unchecked.find((u) => u.id === id)?.why || earlier.unchecked.find((u) => u.id === id)?.why;
+      result.unchecked.push({ id, why: why || 'recorded as unchecked' });
+    }
+    if (status === 'unproven' && shownBy.kind !== 'owner') result.unchecked.push({ id, why: 'no verdict was recorded' });
+  }
+  return result;
+}
+
 // One stage of the build: a fresh `codex exec` in the project, with the sz tools of its role.
 export function codexWorker({ root, model, z, log, active, holdProject, interrupted }) {
   const worker = async (where, contract, prompt, options) => {
@@ -91,11 +151,12 @@ export function codexWorker({ root, model, z, log, active, holdProject, interrup
     const { label, agentType, schema } = options;
     const effort = options.effort ?? (agentType ? 'xhigh' : 'high');
     const role = agentType?.split(':')[1] ?? label.split(':')[0];
+    contract ??= options.contractId;
+    const cleanup = label.endsWith(':left');
     if (contract && !/^[a-z0-9][a-z0-9-]{2,60}$/.test(contract)) throw new Error('invalid contract id: ' + contract);
     const runToken = holdProject();
     const scratch = realpathSync(mkdtempSync(join(tmpdir(), 'sz-worker-')));
     const schemaFile = join(scratch, 'output.schema.json');
-    const output = join(scratch, 'result.json');
     try {
       const before = ['build', 'fix', 'mend', 'start'].includes(role) ? uncommittedProduct(cwd) : null;
       const strict = outputSchema(schema);
@@ -147,39 +208,57 @@ export function codexWorker({ root, model, z, log, active, holdProject, interrup
         'mcp_servers.sz.default_tools_approval_mode="approve"',
         '--output-schema',
         schemaFile,
-        '--output-last-message',
-        output,
-        '-',
       ];
-      await new Promise((ok, fail) => {
-        const child = spawn('codex', cli, { cwd: scratch, stdio: ['pipe', 'ignore', 'pipe'] });
-        active.add(child);
-        let tail = '';
-        child.stderr.on('data', (data) => {
-          tail = (tail + data).slice(-6000);
+      let result;
+      let stopped;
+      const sweepBefore = role === 'sweep' ? contractOf(cwd, contract)?.claims.find((claim) => claim.id === 'screens') : null;
+      let lastOwed = '';
+      let reminder = '';
+      for (let attempt = 0; ; attempt++) {
+        if (interrupted()) throw new Error('build interrupted');
+        const output = join(scratch, `result-${attempt}.json`);
+        await new Promise((ok, fail) => {
+          const child = spawn('codex', [...cli, '--output-last-message', output, '-'], { cwd: scratch, stdio: ['pipe', 'ignore', 'pipe'] });
+          active.add(child);
+          let tail = '';
+          child.stderr.on('data', (data) => {
+            tail = (tail + data).slice(-6000);
+          });
+          child.stdin.on('error', () => {});
+          child.once('error', fail);
+          child.once('close', (code, signal) => {
+            active.delete(child);
+            if (code === 0) ok();
+            else fail(new Error(`${label}: codex exited ${signal || code}. ${tail.slice(-1800)}`));
+          });
+          child.stdin.end(directions + searchInstructions + roleText + '\n' + prompt + reminder);
         });
-        child.stdin.on('error', () => {});
-        child.once('error', fail);
-        child.once('close', (code, signal) => {
-          active.delete(child);
-          if (code === 0) ok();
-          else fail(new Error(`${label}: codex exited ${signal || code}. ${tail.slice(-1800)}`));
-        });
-        child.stdin.end(directions + searchInstructions + roleText + '\n' + prompt);
-      });
-      const result = JSON.parse(readFileSync(output, 'utf8'), (_key, v) => (v === null ? undefined : v));
-      z.fromJSONSchema(schema).parse(result);
-      if (before && !result.blocked) {
+        const latest = JSON.parse(readFileSync(output, 'utf8'), (_key, v) => (v === null ? undefined : v));
+        z.fromJSONSchema(schema).parse(latest);
+        result = role === 'verifier' && result?.proven && latest.proven ? withEarlierVerdicts(result, latest, contractOf(cwd, contract), options.claims) : latest;
+        stopped = result.blocked?.trim() || result.sandbox?.trim() || result.notReal?.some((entry) => entry.what.trim());
+        if (stopped || interrupted() || cleanup) break;
+        let owed = owesNow(cwd, role, contract, options.claims);
+        if (!owed && sweepBefore && contractOf(cwd, contract)?.claims.find((claim) => claim.id === 'screens')?.at === sweepBefore.at)
+          owed = 'record the verdict for screens from this sweep';
+        if (!owed || owed === lastOwed || attempt >= MAX_HAND_BACK) break;
+        lastOwed = owed;
+        reminder = `\n\nYou stopped before this work was done. Still owed on contract \`${contract}\`:\n${owed}\n\n` +
+          'Take it up from where you stopped: finish each of these, or say plainly which one cannot be done and why. ' +
+          'What you already did stands. Return the complete result for your assignment.';
+        log(`[${label}] stopped with ${owed.split('\n').length} still owed: handed back (${attempt + 1}/${MAX_HAND_BACK})`);
+      }
+      if (before && !stopped) {
         let left = leftSince(cwd, before);
-        if (left.length && !label.endsWith(':left')) {
-          log(`[${label}] left ${left.join(', ')} uncommitted: handed back once`);
+        if (left.length && !cleanup) {
+          log(`[${label}] left ${left.join(', ')} uncommitted: requesting one cleanup`);
           await worker(where, contract, leftPrompt(label, left), { label: label + ':left', schema: LEFT, effort: 'low', phase: options.phase });
           left = leftSince(cwd, before);
         }
         if (left.length)
-          throw new Error(label + ': product changes still need a commit, after they were handed back: ' + left.join(', '));
+          throw new Error(label + ': product changes still need a commit after cleanup: ' + left.join(', '));
       }
-      if (role === 'build' && !result.blocked) {
+      if (role === 'build' && !cleanup && !stopped) {
         if (result.contractId !== contract || !json(join(cwd, '.sz/contracts', contract + '.json')).built)
           throw new Error(label + ': no matching built contract');
       }

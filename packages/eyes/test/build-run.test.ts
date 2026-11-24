@@ -127,9 +127,22 @@ const out = a[a.indexOf('--output-last-message') + 1];
 const mcp = a.find((x) => x.startsWith('mcp_servers.sz.args='));
 const [, cwd, role, contract, label, token] = JSON.parse(mcp.slice('mcp_servers.sz.args='.length));
 const prompt = fs.readFileSync(0, 'utf8');
-fs.appendFileSync(${JSON.stringify(log)}, JSON.stringify({ label, role, token, held: fs.existsSync(path.join(cwd, '.git', 'sz-build-run.json')) }) + '\\n');
+fs.appendFileSync(${JSON.stringify(log)}, JSON.stringify({ label, role, token, prompt, held: fs.existsSync(path.join(cwd, '.git', 'sz-build-run.json')) }) + '\\n');
 const git = (...args) => spawnSync('git', ['-c', 'user.name=Test', '-c', 'user.email=test@localhost', ...args], { cwd });
-if (/left these files/.test(prompt)) {
+const script = path.join(__dirname, 'steps.json');
+if (fs.existsSync(script) && !label.endsWith(':left')) {
+  const steps = JSON.parse(fs.readFileSync(script, 'utf8'));
+  const attempt = fs.readFileSync(${JSON.stringify(log)}, 'utf8').trim().split('\\n').length - 1;
+  const step = steps[attempt];
+  if (!step) throw Error('unexpected worker invocation ' + attempt);
+  if (step.contract) {
+    const folder = path.join(cwd, '.sz/contracts');
+    fs.mkdirSync(folder, { recursive: true });
+    fs.writeFileSync(path.join(folder, contract + '.json'), JSON.stringify(step.contract));
+  }
+  if (step.left) fs.writeFileSync(path.join(cwd, 'helper.txt'), 'part of the build');
+  fs.writeFileSync(out, JSON.stringify(step.result));
+} else if (/left these files/.test(prompt)) {
   if (process.env.FAKE_MODE !== 'keeps-leaving') { git('add', 'helper.txt'); git('commit', '-qm', 'a helper the fix used'); }
   fs.writeFileSync(out, JSON.stringify({ committed: ['helper.txt'], removed: [] }));
 } else {
@@ -142,7 +155,8 @@ if (/left these files/.test(prompt)) {
   return { dir, log };
 }
 
-async function fixWorker(root: string, dir: string, mode: string) {
+async function fakeWorker(root: string, dir: string, mode: string, contract: string | null = 'triple',
+  options: Record<string, unknown> = { label: 'fix:triple:1', schema: { type: 'object', properties: { ok: { type: 'boolean' } }, required: ['ok'] } }) {
   const { codexWorker } = await import(runModule);
   const lines: string[] = [];
   let token: string | null = null;
@@ -159,7 +173,7 @@ async function fixWorker(root: string, dir: string, mode: string) {
   process.env.PATH = `${dir}:${path}`;
   process.env.FAKE_MODE = mode;
   try {
-    return { lines, result: await worker(null, 'triple', 'mend the claim', { label: 'fix:triple:1', schema: { type: 'object', properties: { ok: { type: 'boolean' } }, required: ['ok'] } }) };
+    return { lines, result: await worker(null, contract, 'finish your assignment', options) };
   } finally {
     process.env.PATH = path;
     delete process.env.FAKE_MODE;
@@ -169,9 +183,10 @@ async function fixWorker(root: string, dir: string, mode: string) {
 test('a worker that leaves a file uncommitted is handed it back once, and the build goes on', async (t) => {
   const root = project(t);
   const { dir, log } = fakeCodex(t);
-  const { lines, result } = await fixWorker(root, dir, 'commits-when-asked');
+  const { lines, result } = await fakeWorker(root, dir, 'commits-when-asked');
   assert.deepEqual(result, { ok: true });
-  assert.match(lines.join('\n'), /\[fix:triple:1\] left helper\.txt uncommitted: handed back once/);
+  // Cleanup has its own message so the hand-back count measures unfinished contract work only.
+  assert.match(lines.join('\n'), /\[fix:triple:1\] left helper\.txt uncommitted: requesting one cleanup/);
   assert.equal(git(root, 'status', '--porcelain'), '');
   assert.match(git(root, 'log', '-1', '--format=%s'), /a helper the fix used/);
   const calls = readFileSync(log, 'utf8').trim().split('\n').map((line) => JSON.parse(line));
@@ -183,8 +198,90 @@ test('a worker that leaves a file uncommitted is handed it back once, and the bu
 test('a file still left after it was handed back stops the build, by name', async (t) => {
   const root = project(t);
   const { dir, log } = fakeCodex(t);
-  await assert.rejects(fixWorker(root, dir, 'keeps-leaving'), /fix:triple:1: product changes still need a commit, after they were handed back: helper\.txt/);
+  await assert.rejects(fakeWorker(root, dir, 'keeps-leaving'), /fix:triple:1: product changes still need a commit after cleanup: helper\.txt/);
   assert.equal(readFileSync(log, 'utf8').trim().split('\n').length, 2, 'handed back once, not again and again');
+});
+
+type Step = { result: Record<string, unknown>; contract?: object; left?: boolean };
+async function scripted(t: TestContext, options: Record<string, unknown>, steps: Step[]) {
+  const root = project(t);
+  const { dir, log } = fakeCodex(t);
+  writeFileSync(join(dir, 'steps.json'), JSON.stringify(steps));
+  const { result } = await fakeWorker(root, dir, 'scripted', options.contractId ? null : 'triple', { schema: { type: 'object' }, ...options });
+  const calls = readFileSync(log, 'utf8').trim().split('\n').map((line) => JSON.parse(line));
+  return { result, calls };
+}
+
+function ledger(claims: Record<string, string>, notes: Record<string, string> = {}) {
+  return {
+    frozenAt: 'today',
+    claims: Object.entries(claims).map(([id, status]) => ({
+      id, status, note: notes[id] || '', says: 'shows ' + id, shownBy: { kind: id === 'feel' ? 'owner' : 'test', ref: id },
+    })),
+  };
+}
+
+const verifier = { label: 'verify:triple', agentType: 'sz:verifier' };
+const verdict = (proven: string[]) => ({ proven, unchecked: [], refuted: [] });
+
+test('a verifier gets only its outstanding share back, with earlier verdicts retained and newer ones taking precedence', async (t) => {
+  const { result, calls } = await scripted(t, { ...verifier, claims: ['one', 'two', 'three', 'feel'] }, [
+    { contract: ledger({ one: 'unproven', two: 'proven', three: 'proven', four: 'unproven', feel: 'unproven' }), result: { ...verdict(['two', 'three']), held: ['past/n'], noticed: ['before'] } },
+    { contract: ledger({ one: 'proven', two: 'proven', three: 'refuted', four: 'unproven', feel: 'unproven' }, { three: 'the recorded case failed' }), result: { ...verdict(['one', 'three']), broken: [{ key: 'past/n', fact: 'new case' }], noticed: ['after'] } },
+  ]);
+  assert.equal(calls.length, 2);
+  assert.match(calls[1].prompt, /one: no verdict yet/);
+  assert.doesNotMatch(calls[1].prompt, /(?:four|feel): no verdict yet/);
+  // After a hand-back, use contract order and the recorded observation wherever the model disagrees.
+  assert.deepEqual(result, { proven: ['one', 'two'], unchecked: [], refuted: [{ id: 'three', fact: 'the recorded case failed' }], held: [], broken: [{ key: 'past/n', fact: 'new case' }], noticed: ['before', 'after'] });
+});
+
+test('an unchanged debt is said once; a debt that changes gets at most two hand-backs', async (t) => {
+  const unchanged = { contract: ledger({ one: 'unproven' }), result: verdict(['one']) };
+  const same = await scripted(t, verifier, [unchanged, unchanged]);
+  assert.equal(same.calls.length, 2);
+  assert.deepEqual(same.result.proven, []);
+  assert.deepEqual(same.result.unchecked, [{ id: 'one', why: 'no verdict was recorded' }]);
+  const three = await scripted(t, verifier, [
+    { contract: ledger({ one: 'unproven', two: 'unproven', three: 'unproven' }), result: verdict([]) },
+    { contract: ledger({ one: 'proven', two: 'unproven', three: 'unproven' }), result: verdict(['one']) },
+    { contract: ledger({ one: 'proven', two: 'proven', three: 'unproven' }), result: verdict(['two', 'three']) },
+  ]);
+  assert.equal(three.calls.length, 3);
+  assert.deepEqual(three.result.proven, ['one', 'two']);
+  assert.deepEqual(three.result.unchecked, [{ id: 'three', why: 'no verdict was recorded' }]);
+  assert.match(three.calls[2].prompt, /two: no verdict yet/);
+  assert.doesNotMatch(three.calls[2].prompt, /one: no verdict yet/);
+});
+
+test('a sweep creates its missing contract; a stopped observation or a missing input is returned immediately', async (t) => {
+  const sweep = { label: 'sweep:design', contractId: 'design' };
+  const swept = { screens: 1, hold: 1, findings: [] };
+  const made = await scripted(t, sweep, [
+    { result: swept }, { contract: ledger({ screens: 'proven', feel: 'unproven' }), result: swept },
+  ]);
+  assert.equal(made.calls.length, 2);
+  assert.match(made.calls[1].prompt, /the design contract `design` was not recorded/);
+  for (const [options, result] of [
+    [sweep, { ...swept, sandbox: 'cannot start browser' }],
+    [{ label: 'build:triple' }, { blocked: 'requires a device' }],
+    [{ label: 'build:triple' }, { notReal: [{ what: 'live tariff', needs: 'a key' }] }],
+  ] as const) {
+    const stopped = await scripted(t, options, [{ result }]);
+    assert.equal(stopped.calls.length, 1);
+    assert.deepEqual(stopped.result, result);
+  }
+});
+
+test('the builder records that the product runs and its cleanup worker only commits the files left behind', async (t) => {
+  const result = { contractId: 'triple', launch: 'node app.mjs' };
+  const worked = await scripted(t, { label: 'build:triple' }, [
+    { contract: ledger({ one: 'unproven' }), result },
+    { contract: { ...ledger({ one: 'unproven' }), built: { launch: 'node app.mjs' } }, result, left: true },
+  ]);
+  assert.deepEqual(worked.calls.map((call) => call.label), ['build:triple', 'build:triple', 'build:triple:left']);
+  assert.match(worked.calls[1].prompt, /sz-eyes contract built triple/);
+  assert.deepEqual(worked.result, result);
 });
 
 test('a build that stops on an error keeps its record, and the runner says to run it again', (t) => {
