@@ -203,6 +203,8 @@ export function codexWorker({ root, model, z, log, active, holdProject, interrup
         'mcp_servers.sz.required=true',
         '-c',
         'mcp_servers.sz.tool_timeout_sec=1800',
+        // The fact reader opens the publisher's current page with Codex web search. Its project shell stays local.
+        ...(role === 'facts' ? ['-c', 'web_search="live"'] : []),
         ...mobbin,
         '-c',
         'mcp_servers.sz.default_tools_approval_mode="approve"',
@@ -233,7 +235,11 @@ export function codexWorker({ root, model, z, log, active, holdProject, interrup
           });
           child.stdin.end(directions + searchInstructions + roleText + '\n' + prompt + reminder);
         });
-        const latest = JSON.parse(readFileSync(output, 'utf8'), (_key, v) => (v === null ? undefined : v));
+        // A successful fact check can finish without an answer; actual process or schema failures still surface.
+        if (role === 'facts' && !existsSync(output)) return null;
+        const answer = readFileSync(output, 'utf8');
+        if (role === 'facts' && !answer.trim()) return null;
+        const latest = JSON.parse(answer, (_key, v) => (v === null ? undefined : v));
         z.fromJSONSchema(schema).parse(latest);
         result = role === 'verifier' && result?.proven && latest.proven ? withEarlierVerdicts(result, latest, contractOf(cwd, contract), options.claims) : latest;
         stopped = result.blocked?.trim() || result.sandbox?.trim() || result.notReal?.some((entry) => entry.what.trim());

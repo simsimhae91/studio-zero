@@ -156,14 +156,18 @@ function sandbox(cwd, scratch, role, contract, command, record, newFlows) {
   ])
     if (existsSync(prefix)) fs.set(prefix, 'read');
   const reviewing = role === 'verifier' || role === 'arbiter';
-  fs.set(cwd, reviewing || record || role === 'close' ? 'read' : 'write');
+  const reading = reviewing || role === 'facts';
+  fs.set(cwd, reading || record || role === 'close' ? 'read' : 'write');
   const allow = (name) => fs.set(inside(cwd, name), 'write');
-  gitAccess(cwd, fs, !record && !reviewing);
+  gitAccess(cwd, fs, !record && !reading);
   if (record) {
     for (let i = 0; i < command.length; i++) if (command[i] === '--frozen') inside(cwd, command[i + 1]);
     allow('.sz');
   } else if (role === 'close') {
     allow('.sz');
+  } else if (role === 'facts') {
+    mkdirSync(inside(cwd, '.sz'), { recursive: true });
+    allow('.sz/facts.md');
   } else if (reviewing) {
     allow('.sz/evidence');
     const current = contracts.find((c) => c.id === contract);

@@ -330,6 +330,18 @@ const CLOSED = {
   required: ['report', 'closed', 'line'],
 }
 
+const FACTS = {
+  type: 'object',
+  properties: {
+    needed: { type: 'boolean', description: 'whether the product depends on a published rule, figure or exception' },
+    why: { type: 'string', description: 'one line on what the product hinges on' },
+    page: { type: 'string', description: 'the path written (.sz/facts.md), or empty' },
+    fixed: { type: 'array', items: { type: 'string' }, description: 'what the page settles, a line each' },
+    unread: { type: 'array', items: { type: 'string' }, description: 'what could not be read and what it needs' },
+  },
+  required: ['needed', 'why'],
+}
+
 // ------------------------------------------------------------------ Plan
 phase('Plan')
 // A new product is planned twice: its first pass alone, and, when that stands, what comes after it. Claims for
@@ -401,6 +413,7 @@ What holds for every milestone, this one and those planned later:
 - A product people use is more than a screen: where it keeps what a person enters, what happens when there is nothing yet, when something fails, the second time someone comes. Each milestone after the first pass carries these for its own area; they are not left for the end.
 - A product that lives is looked after: from the first milestone it writes down what failed (a log the owner can read) and counts the one thing it is for (started, finished), and \`.sz/map.md\` says where. Without that nobody can tell later whether it works for people.
 - A product is made to be put where people reach it. Choose what it stands on with \`sz:backend\` and say in the spec which and why, in two lines. From the first milestone: its settings come from the environment (no secret and no address of this machine in the code), \`/healthz\` answers with the commit it was built from, and every flow runs against the address in \`SZ_URL\` when given one and starts a server of its own only when not. If people have accounts in it, one milestone's claims say that one person cannot read or change what another stored, and neither can someone not signed in, shown by a flow with two people.
+- If \`.sz/facts.md\` is there, the spec and its claims are cut from it: a figure or a rule it gives is used as it gives it, with the day it was read; anything it lists as unread is not stated as true — it is either off the product's path or listed under \`notReal\` with what it needs.
 - A claim does not state as true a fact about the world that nobody has read from its source. Where the request gives one (a limit, a price, a rule of somebody else's service), the claim says that the product follows the source and shows it with the day it was read, and the spec keeps the request's figure as what the owner wrote. A claim that repeats such a figure cannot be made true if the source says otherwise, and the work stops on it.
 - A claim about every screen (nothing cut off, nothing that scrolls sideways, nothing to press smaller than 44px) is a claim at the product's limits, and says so: the spec states each limit (the longest name, the longest sentence a person may write, the largest figure), and the claim is shown by a flow that fills every field with its longest value and measures every screen in every state, named like any other flow. Pictures of the usual case do not show it, and stated without its limits it can be shown false for ever by a longer input. (Four first passes each went a second round on such a claim: a name cut off, mended, and the same name cut off on another screen.)
 - A milestone after the first pass has 3 to 7 claims. A claim is something true of the running product that can be shown: with the figure, the words on the screen, the state. Each says how it is shown: a flow (name the file it will be kept in, in the project's own format: whoever verifies writes it), a test of what is pure rule (written before the code), a look at a named screen in a named state, or a command. One claim says what the milestone must not break. What only a person can judge is one claim shown by "owner".
@@ -418,7 +431,7 @@ Return the plan.`,
 // fifteen minutes, a build nobody wanted costs two hours.
 // A dive leaves the product's spine and the builder's decisions on separate lines of its confirmed brief.
 const BRIEF = 'choose the newest relevant dive folder under `.sz/dive/` by its `dive.json` creation date. Read its `idea.md` if there is one and its `brief.md` only if it exists in that same folder. A draft is not a confirmed brief. Never borrow another dive’s brief.'
-const DESIGN_GROUND = 'You are working in the project\'s folder, on a new product whose screens are drawn and put before its owner before anything of it is built. The command `sz-eyes` is on your PATH (the sz plugin\'s). Read `.sz/owner.md` if it is there (what the owner has said they want of this product: it comes before your own taste). What an earlier run of this stage left under `.sz/plan/` and `.sz/design/` is taken up where it stopped, not started again. If there was a dive, ' + BRIEF + ' The screens are cut from what the brief fills (북극성, the spine, one or two signature moments as effects, and the constraints). What it lists under 비워 둘 것 stays open in the frame and screen plans, with each constraint, for the designer or builder who owns the decision.'
+const DESIGN_GROUND = 'You are working in the project\'s folder, on a new product whose screens are drawn and put before its owner before anything of it is built. The command `sz-eyes` is on your PATH (the sz plugin\'s). Read `.sz/owner.md` if it is there (what the owner has said they want of this product: it comes before your own taste). What an earlier run of this stage left under `.sz/plan/` and `.sz/design/` is taken up where it stopped, not started again. If there was a dive, ' + BRIEF + ' The screens are cut from what the brief fills (북극성, the spine, one or two signature moments as effects, and the constraints). What it lists under 비워 둘 것 stays open in the frame and screen plans, with each constraint, for the designer or builder who owns the decision.' + ' Read `.sz/facts.md` where it is there: a figure or wording a screen must show is taken from it, with the day.'
 const DESIGN_RECORD = ' For each drawing decision the brief left open, record the choice and a one-line reason under 비워 둔 것과 정한 것 in `.sz/design/direction.md`. Leave inputs and implementation to the builder.'
 // Browser storage belongs to the person viewing the prototype. A worker taking a picture in a fresh browser
 // needs the theme in the address. Resolve it against this checkout when the drawing is opened from a copy.
@@ -609,6 +622,51 @@ const stopAtDesign = (stopped) => {
 const stopNotReal = (stopped) => {
   log(stopped)
   return { mode: plan.mode || null, summary: plan.summary || '', decided: plan.decided || [], spec: '.sz/spec.md', design: designed, milestones: [], joins: [], forOwner: [], notBuilt: [...milestones.filter((m) => m.state !== 'closed').map((m) => m.title), ...(more ? later : [])], needed, stopped }
+}
+
+// Both auto (the default) and on ask once. The researcher decides whether anything needs writing.
+if (args.facts !== 'off') {
+  const found = await agent(
+    `You read what an authority publishes about the one thing this product is for, and you write it to one page before
+anyone plans the product. ${SAND}
+
+The owner's request:
+${request}
+
+${OWNER_ANSWERS}
+
+First decide whether the product's one thing turns on a rule, a figure or an exception that somebody other than the
+owner publishes: a law or a regulation, a benefit or a price table, a standard, a licence, a fee schedule, a
+published criterion (분양가 상한, 퇴직금 산정, 보상 기준, 약가, 요금표, 공공데이터의 정의). If nothing on the path
+the product's person takes does, write nothing and return needed: false, with the reason in one line.
+
+If it does: open the page that holds the criterion (법령정보센터, 정부24, 공단·공사, the operator's own tariff page,
+the standard's publisher) and quote the sentence as it stands, with its address and the day you read it. Then write
+\`.sz/facts.md\` in this shape, the headings as they stand:
+
+# 사실 기준: <what it governs>
+읽은 날: <YYYY-MM-DD>
+## 무엇을 정하는가
+## 기준
+## 예외
+## 숫자
+## 우리 제품에 걸리는 것
+## 아직 못 읽은 것
+
+A figure enters the page inside a quotation, or as plain arithmetic over quoted figures that you show. No figure of
+your own, none from memory, none summarised to favour the product. A page that refuses you (a login, a fee, another
+country's law) is written under 아직 못 읽은 것 with what it needs. Judge nothing about whether the product should be
+built, and change no product code.
+
+Return needed, why, the page's path, what the page now settles (one line each), and what you could not read.`,
+    { label: 'facts', phase: 'Plan', agentType: 'sz:facts', schema: FACTS, ...effort('plan') },
+  )
+  if (!found) log('the fact check did not answer: the plan is made without it')
+  else if (!found.needed) log(`no published rule bears on this product: ${found.why}`)
+  else {
+    const unread = found.unread ?? []
+    log(`the fact page ${found.page || '.sz/facts.md'} stands: ${(found.fixed ?? []).slice(0, 3).join(' / ')}${unread.length ? ` (not read: ${unread.join('; ')})` : ''}`)
+  }
 }
 
 let plan = await planIt('start')

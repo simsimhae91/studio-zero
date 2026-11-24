@@ -249,6 +249,20 @@ fs.writeFileSync(args[args.indexOf('--output-last-message') + 1], JSON.stringify
   assert.equal(existsSync(join(folder, 'unreferenced.png')), false);
 });
 
+test('the fact reader can write only its page in the project', {
+  skip: !process.env.SZ_TEST_CODEX_SANDBOX && 'set SZ_TEST_CODEX_SANDBOX=1 in a terminal that can create a Codex sandbox',
+}, (t) => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'sz-research-test-')));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  assert.equal(spawnSync('git', ['init', '-q'], { cwd: root }).status, 0);
+  const [page, product, ledger, git, claim] = calls(root, 'facts',
+    shell('echo rule > .sz/facts.md'), shell('echo wrong > app.mjs'), shell('echo wrong > .sz/backlog.md'),
+    shell('git add .sz/facts.md'), record('contract', 'claim', 'triple'));
+  assert.equal(page.isError, false, page.content[0].text);
+  assert.equal(readFileSync(join(root, '.sz/facts.md'), 'utf8'), 'rule\n');
+  for (const denied of [product, ledger, git, claim]) assert.equal(denied.isError, true, denied.content[0].text);
+});
+
 const electron = (...args: string[]): ToolCall => ({ name: 'electron', arguments: { args } });
 
 test('VM evidence cannot traverse a linked contract directory', { skip: process.platform !== 'darwin' }, (t) => {

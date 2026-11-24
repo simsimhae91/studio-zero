@@ -14,13 +14,15 @@ const SOURCE = readFileSync(fileURLToPath(new URL('../../../plugin/workflows/bui
 const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor as new (...names: string[]) => (...values: unknown[]) => Promise<any>;
 
 /** Runs the script with agents answered by the first table entry whose key starts the agent's label. */
-async function run(args: unknown, answers: Record<string, Answer>): Promise<{ result: any; calls: Call[]; logs: string[] }> {
+async function run(args: unknown, answers: Record<string, Answer>): Promise<{ result: any; calls: Call[]; allCalls: Call[]; logs: string[] }> {
   const calls: Call[] = [];
   const logs: string[] = [];
   const seen = new Map<string, number>();
   const agent = async (prompt: string, opts: { label: string; effort?: string; model?: string }): Promise<unknown> => {
     calls.push({ prompt, label: opts.label, ...(opts.effort ? { effort: opts.effort } : {}), ...(opts.model ? { model: opts.model } : {}) });
     const key = Object.keys(answers).find((k) => opts.label.startsWith(k));
+    // Most fixtures have no published criterion. The facts stage still runs once before their plan.
+    if (!key && opts.label === 'facts') return { needed: false, why: 'no published criterion' };
     // Nobody set a claim aside unless the test says so: the ruling on claims still false finds the product wrong.
     if (!key && opts.label.startsWith('rule:')) return { disputed: [] };
     if (!key) throw new Error(`no answer for ${opts.label}`);
@@ -31,7 +33,8 @@ async function run(args: unknown, answers: Record<string, Answer>): Promise<{ re
   // Every run says whether the owner was asked beforehand; the tests that are not about that run as "away".
   const given = args && typeof args === 'object' && !('asked' in args) ? { asked: 'away', ...args } : args;
   const result = await new AsyncFunction('agent', 'phase', 'log', 'args', SOURCE)(agent, () => {}, (line: string) => logs.push(line), given);
-  return { result, calls, logs };
+  // Existing assertions compare the order and settings of the build stages; keep the complete trace for the pre-plan check.
+  return { result, calls: calls.filter((c) => c.label !== 'facts'), allCalls: calls, logs };
 }
 
 const claim = (id: string) => ({ id, says: `${id} is true`, kind: 'test', ref: `test/${id}.test.mjs` });
@@ -39,13 +42,32 @@ const plan = (...ids: string[]) => () => ({ mode: 'extend', summary: 's', milest
 const built = ({ label }: Call) => ({ contractId: label.split(':')[1], summary: 'built', launch: 'PORT=$(sz-eyes port) node server.mjs' });
 const closed = () => ({ report: 'r.html', closed: true, line: 'l' });
 
+test('one fact check precedes the plan unless switched off, and unread rules are never planned as facts', async () => {
+  const steps = { plan: plan('m1'), build: built, verify: () => ({ proven: ['one', 'two'], refuted: [], unchecked: [] }), close: closed };
+  const args = { request: '요금 계산', asked: 'owner', answers: '공시 요금을 써요' };
+  const ordinary = await run(args, steps);
+  assert.deepEqual(ordinary.allCalls.map((c) => c.label), ['facts', 'plan', 'build:m1', 'verify:m1', 'close:m1']);
+  const facts = ordinary.allCalls[0]!.prompt;
+  assert.ok(facts.includes(args.request) && facts.includes(args.answers));
+  assert.match(facts, /## 무엇을 정하는가[\s\S]+## 기준[\s\S]+## 예외[\s\S]+## 숫자[\s\S]+## 우리 제품에 걸리는 것[\s\S]+## 아직 못 읽은 것/);
+  assert.match(ordinary.allCalls[1]!.prompt, /If `\.sz\/facts\.md` is there[\s\S]*?notReal/);
+  const found = await run({ ...args, facts: 'on' }, { ...steps, facts: () => ({ needed: true, why: 'tariff', page: '.sz/facts.md' }) });
+  assert.ok(found.logs.some((line) => line.includes('the fact page .sz/facts.md')));
+  const silent = await run(args, { ...steps, facts: () => null });
+  assert.ok(silent.logs.includes('the fact check did not answer: the plan is made without it'));
+  assert.equal(silent.result.stopped, null);
+  const off = await run({ ...args, facts: 'off' }, steps);
+  assert.equal(off.allCalls[0]!.label, 'plan');
+  assert.ok(!off.allCalls.some((c) => c.label === 'facts'));
+});
+
 test('the workflow does not start until it is told whether the owner was asked', async () => {
   const table = { plan: plan('m1', 'm2'), build: built, verify: () => ({ proven: ['one', 'two'], refuted: [], unchecked: [] }), close: closed };
 
   const silent = await run({ request: '택배 비교', asked: undefined }, table);
   assert.match(silent.result.error, /not started: say whether the owner was asked/);
   assert.match(silent.result.error, /AskUserQuestion/);
-  assert.equal(silent.calls.length, 0, 'no agent runs before that is said');
+  assert.equal(silent.allCalls.length, 0, 'no agent runs before that is said');
 
   const own = await run({ request: '택배 비교', asked: 'owner' }, table);
   assert.match(own.result.error, /needs answers/, 'the session\'s own answers cannot pass as the owner\'s by being left out');
@@ -1022,11 +1044,13 @@ test('an agent the workflow starts by type and tells to load skills has the Skil
   // copy in another checkout of the repository, not the one of the plugin that was running.
   const file = (name: string): string => readFileSync(fileURLToPath(new URL(`../../../plugin/agents/${name}.md`, import.meta.url)), 'utf8');
   const types = [...new Set([...SOURCE.matchAll(/agentType: 'sz:([a-z-]+)'/g)].map((m) => m[1]!))];
-  assert.deepEqual(types.sort(), ['arbiter', 'verifier']);
+  assert.deepEqual(types.sort(), ['arbiter', 'facts', 'verifier']);
   assert.match(SOURCE, /Load the skills you need with the Skill tool/);
   for (const type of types) {
     const tools = /^tools:\s*(.+)$/m.exec(file(type))?.[1]?.split(',').map((t) => t.trim()) ?? [];
-    assert.ok(tools.includes('Skill'), `${type}: told to load skills, and has no Skill tool (${tools.join(', ')})`);
+    // The fact reader gets its entire assignment in the prompt. Only adjudication and verification load skills.
+    if (type === 'facts') assert.deepEqual(tools, ['Read', 'Bash', 'WebSearch', 'WebFetch']);
+    else assert.ok(tools.includes('Skill'), `${type}: told to load skills, and has no Skill tool (${tools.join(', ')})`);
     assert.ok(!tools.includes('Write'), `${type}: writes with commands under the evidence folder, and is given no tool that edits the product by hand`);
   }
   // 2026-11-18: a flow that did not walk to its end in any of ten runs at the second look, and its claim left proven
