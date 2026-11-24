@@ -1,6 +1,6 @@
 ---
 name: dive
-description: Use only when the owner asks for it, by the command /sz:dive or in words that ask for exactly this: to dig a one-line idea out together, round after round, until it is clear in their own head, before any map, plan or case ("아이디어 같이 파 보자", "딥다이브 해 줘", "브레인스토밍 해 줘", "이 생각 좀 구체화해 줘"). A passing wish ("이런 앱 있으면 좋겠다") starts nothing. Shows directions of different kinds to react to, asks for remembered moments rather than opinions, brings in what the world and the owner's report say, settles fixed lines by the owner's own words, and ends with one page, idea.md, that the next stages read.
+description: Use only when the owner asks for it, by the command /sz:dive or in words that ask for exactly this: to dig a one-line idea out together, round after round, until it is clear in their own head, before any map, plan or case ("아이디어 같이 파 보자", "딥다이브 해 줘", "브레인스토밍 해 줘", "이 생각 좀 구체화해 줘"). A passing wish ("이런 앱 있으면 좋겠다") starts nothing. Shows directions of different kinds to react to, asks for remembered moments rather than opinions, brings in what the world and the owner's report say, settles fixed lines by the owner's own words, and writes idea.md and the brief.md the owner confirms for the designer and builder.
 ---
 
 # Dive: from one line to an idea that is clear
@@ -79,8 +79,85 @@ When nothing is open or only proposed, show the page as it stands (`sz-eyes dive
 sz-eyes dive close <id> --summary "<the idea in one line>" --said "<their words on the page>"
 ```
 
-It is refused while a line is open or only proposed, before three directions were shown and one taken, and without their words. It writes `idea.md` beside the dive. Then say in one line what can come next, and start neither: `/sz:worth` to judge whether it is worth building, `/sz:build` to build it.
+It is refused while a line is open or only proposed, before three directions were shown and one taken, and without their words. It writes `idea.md` beside the dive. Take that page into the brief.
+
+## 6. The brief: the page the next stages execute
+
+`idea.md` says what the owner wants. The drawing and the build need one page that says what will be built. Write it
+in the same sitting, while their answers are at hand. It takes one approval question. Every other line comes from
+the dive.
+
+**Where the line between filled and empty falls.** Two questions decide every line:
+
+- 이게 빠지면 **다른 제품**이 되는가? Would this be a different product if it were missing? Then it is filled.
+- 빌더가 이걸 **완전히 다르게** 정해도 같은 제품인가? Would a builder who decided it completely differently still
+  have built this product? Then it is empty.
+
+**Fill four things:**
+
+1. The spine: who and in what moment (`moment`, `pain`), the world and its tone, the areas or the map's spaces, the
+   one thing (`core`), the first minute (`first`), why a person comes back (`back`), the loop, how a run is won and
+   lost and what is still new late (`loop`, `stakes`, `depth`), and what is deliberately absent (`not`).
+2. One or two signature moments, **as the effect**. "상품을 돌리면 숨은 저주 바코드가 드러난다. 손끝이 먼저 안다."
+   A claim can ask to see the hidden barcode appear. "R키로 15도씩 돌린다" and "스캐너 버튼은 우하단 56px" fix the
+   input and layout before anyone has tried them.
+3. The constraints no builder may break: the figures and wording a law gives, actual data sources, the platform,
+   what a person's data may do, and money.
+4. `done`: how the owner recognises that this is it, in their own words.
+
+**Name all four things left open** under `## 비워 둘 것`: UI layout (UI 배치: where a control sits, how many lines,
+sheet or page, tab order), input details (입력·단축키 세목: key, gesture, threshold, animation length),
+implementation (구현 세부: component names, libraries, state, file boundaries), and the remaining candidates for
+feel (나머지 손맛 후보). Leaving each open is a decision. Give each its constraint in one line: "상품을 돌리는 손맛은
+있어야 한다 — 어떻게 돌리는지는 정하지 않는다". The designer records the decisions they take and why in
+`direction.md`; the builder records the ones still theirs and why in `.sz/map.md`.
+
+The sections, by kind (the tool checks these headings, in this order):
+
+- app: `## 북극성`, `## 첫 1분과 핵심 여정`, `## 채울 것`, `## 비워 둘 것`, `## 톤과 제약`, `## 완료 기준`
+- game: `## 북극성과 손맛`, `## 코어 동사`, `## 시간축 루프`, `## 승패와 밸런스`, `## 채울 것`, `## 비워 둘 것`, `## sz:game 연결`, `## 완료 기준`
+- plain: `## 북극성`, `## 채울 것`, `## 비워 둘 것`, `## 완료 기준`
+
+What each holds:
+
+- **북극성**: whose moment, what one result, one paragraph. Quote only the owner's own words as theirs.
+- **첫 1분과 핵심 여정**: `home` → `first` → why they come back, as the screens or steps a person passes.
+- **코어 동사** (game): the verb and the feel, one sentence each. The keys, the gesture and the feedback mechanism
+  stay open. 손맛은 채우고 조작은 비운다.
+- **시간축 루프** (game): 30초 / 5분 / 한 시간 / 백 시간, as beats with numbers.
+- **승패와 밸런스** (game): how a run ends, how long it takes, what makes it harder, the first numbers.
+- **톤과 제약**: the feel, the product they named and what of its way is taken, the constraints, and what the dive
+  read in the world (`saw`: what people already use, what it costs) where it bears on scope or money, each with its link.
+- **sz:game 연결** (game): the fields `window.__game.state()` exposes, the invariants a check reads, and what a
+  seed must reproduce.
+- **채울 것 / 비워 둘 것**: as above, a line each. The last lines of 채울 것 are what is deliberately absent
+  (`not`), each with why.
+- **완료 기준**: `done`, in the owner's words.
+
+Keep this to one page. Write your inferences plainly as what will be built. Use `주인: "…"` only for words from
+the seed, a line, a choice of direction or the close of this dive.
+
+Run `sz-eyes dive show <id>` and use **the folder it prints**, including when this dive lives outside the project.
+Write `brief.draft.md` in that folder and show that draft in full. For a dive outside the project, use the Write
+tool for the draft and give `--file` its full path. Ask one question as a choice they can tap:
+**"이 북극성대로 지을까요?"** (네, 이대로 / 고칠 게 있어요 / 나중에).
+
+- **네, 이대로**: use their exact answer and keep the version just shown, without editing it after approval.
+- **고칠 게 있어요**: change only what they name, show the revised draft, and put the same approval question
+  to them on that version. Their correction leaves the brief pending.
+- **나중에**: keep only the draft and stop. Give its path and say that design and planning can proceed without a
+  confirmed brief. When they come back to it, show the draft and ask the same question.
+
+```
+sz-eyes dive brief <id> --file "<folder printed by dive show>/brief.draft.md" --said "<their words>"
+```
+
+The heard log establishes that they said those words. It does not tell you which page they meant: only their
+answer to this draft authorises keeping it. The tool checks the headings and the owner's quotations and writes
+`brief.md` beside `idea.md`. Use `--force` only when they approve the new draft over an existing brief. Once they
+have confirmed it, say in one line what they can ask for next: `/sz:worth` to judge whether it is worth building
+or `/sz:build` to build it.
 
 ## Pausing and coming back
 
-When the owner says to stop ("여기까지", "나중에"), the dive is already kept: say its progress line and the open lines, and stop. `/sz:dive` later begins with `sz-eyes dive show`: one dive not closed is taken up where it stood (say where); several are put to the owner as a choice.
+When the owner says to stop ("여기까지", "나중에"), the dive is already kept: say its progress line and the open lines, and stop. `/sz:dive` later begins with `sz-eyes dive show`: one dive not closed is taken up where it stood (say where); several are put to the owner as a choice. For a closed dive with a `brief.draft.md` and no `brief.md` in its folder, resume at step 6: show that draft for approval. The dive stays closed.

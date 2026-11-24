@@ -23,3 +23,5 @@ For someone else's app, start one agent in the background as the first round goe
 - `moment` and `now` come out of `pain`: where they were, what they used, where it fell short. Propose them from what they said and let them settle them.
 - `home`: a choice, with what each way costs them ("카카오톡 안에 붙이면 사람들이 이미 거기 있지만, 카카오가 열어 둔 만큼만 할 수 있습니다").
 - `core`, `first`, `back`, `not`, `feel`, `done`: choices with a recommendation, after `pain` and `home` are settled, each option concrete enough to picture (a screen, a moment of the day).
+
+In the brief, `## 첫 1분과 핵심 여정` follows `home` → `first` → `back` in the order of the screens the person uses.

@@ -306,3 +306,15 @@ test('the command prints the brief beside idea.md and a second write needs --for
   assert.equal(replaced.status, 0, replaced.stderr);
   assert.equal(readFileSync(path, 'utf8'), draft + '수정\n');
 });
+
+test('the dive skill gives the complete brief for each kind and takes the owner through one approval question', () => {
+  const skill = readFileSync(join(ROOT, 'plugin/skills/dive/SKILL.md'), 'utf8');
+  const section = skill.slice(skill.indexOf('## 6.'), skill.indexOf('## Pausing and coming back'));
+  for (const [kind, headings] of Object.entries(BRIEF_SECTIONS)) {
+    const line = section.split('\n').find((line) => line.startsWith('- ' + kind + ':'));
+    assert.deepEqual(line?.match(/## [^`]+/g), headings, kind);
+  }
+  assert.match(section, /네, 이대로[\s\S]*고칠 게 있어요[\s\S]*나중에/);
+  assert.match(section, /나중에\*\*: keep only the draft and stop/);
+  assert.match(section, /sz-eyes dive brief <id> --file "<folder printed by dive show>\/brief.draft.md" --said/);
+});

@@ -38,3 +38,5 @@ For each reference game the owner warms to, start one agent in the background (t
 - `moment` and `now` are about the player: when they play and what they play now. Ask the owner about their own last time playing something like it: what, where, how long, why they stopped.
 
 Building the game after the dive is `sz:game` and `sz:work`.
+
+In the brief, `## 코어 동사` gives just the verb and the feel, leaving the input open. `## sz:game 연결` names the fields `window.__game.state()` must expose for a check to show that the loop works.
