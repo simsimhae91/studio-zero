@@ -164,7 +164,7 @@ export function codexWorker({ root, model, z, log, active, holdProject, interrup
       const roleText = agentType
         ? readFileSync(join(plugin, 'agents', role + '.md'), 'utf8').replace(/^---[\s\S]*?---\s*/, '')
         : '';
-      const directions = `You are a fresh Codex worker for ${label}. Your actual project is ${cwd}. Use the sz MCP shell for project commands and file edits. For a built Electron app use the sz electron tool for its first window, interaction and project Node GUI flows. Pass look/do flags from the project map and use returned project-relative PNG paths when recording evidence. Use the sz record tool for every contract or standing mutation, passing an argv array without sz-eyes. Shell writes to the ledger are denied. The native sandbox and this tool's boundaries are final. When a browser or other device cannot start, report it as unchecked or blocked. In place of Claude's Skill tool, read the full ${plugin}/skills/<name>/SKILL.md and its relative references with the sz shell. Use $TMPDIR for disposable copies and build outputs. Do not spawn other workers. In JSON use null for optional fields that don't apply.\n`;
+      const directions = `You are a fresh Codex worker for ${label}. Your actual project is ${cwd}. Use the sz MCP shell for project commands and file edits. For a built Electron app use the sz electron tool for its first window, interaction and project Node GUI flows. Pass look/do flags from the project map and use returned project-relative PNG paths when recording evidence. Use the sz record tool for every contract or standing mutation, passing an argv array without sz-eyes. For close, use record for sz-eyes evidence <contract> and sz-eyes evidence prune <contract> as well. Shell writes to the ledger are denied. The native sandbox and this tool's boundaries are final. When a browser or other device cannot start, report it as unchecked or blocked. In place of Claude's Skill tool, read the full ${plugin}/skills/<name>/SKILL.md and its relative references with the sz shell. Use $TMPDIR for disposable copies and build outputs. Do not spawn other workers. In JSON use null for optional fields that don't apply.\n`;
       log(`[${label}] ${model} / ${effort}`);
       const mobbin = mobbinOptions(options.phase, label, scratch);
       const searchInstructions = mobbin.length
@@ -279,6 +279,14 @@ export function codexWorker({ root, model, z, log, active, holdProject, interrup
   return worker;
 }
 
+// A stop is resumable: the run keeps its hold, with the reason visible to the next session.
+export function closeRun(runs, project, token, result) {
+  if (token === null) return;
+  const why = result && (result.error || result.stopped);
+  if (why) runs.stopBuildRun(project, String(why));
+  else runs.endBuildRun(project);
+}
+
 export async function runBuild(args, project = process.cwd()) {
   const source = readFileSync(join(plugin, 'workflows/build.js'), 'utf8').replace('export const meta', 'const meta');
   const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor;
@@ -310,7 +318,7 @@ export async function runBuild(args, project = process.cwd()) {
         ' Use the Codex project shell and the sz electron tool for Electron observations. If their permissions stop a required observation, return the actual refusal under sandbox. Keep that observation unchecked.',
       stop: 'Resume from the same project when that observation can run with the required permissions.',
     });
-    if (token !== null) runs.endBuildRun(root);
+    closeRun(runs, root, token, result);
     return result;
   } catch (error) {
     // The record stays, saying why: the ledger takes nothing more until a run starts again and resumes.

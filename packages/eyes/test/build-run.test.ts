@@ -84,6 +84,34 @@ test('a run that stopped holds the ledger until it runs again, and says how', (t
   assert.doesNotMatch(eyes(root, claim, { SZ_BUILD_TOKEN: again }).stderr, /not recorded/);
 });
 
+test('only a completed workflow releases the run; a stopped one can be read and the owner can judge it', async (t) => {
+  const { closeRun } = await import(runModule);
+  const runs = await import('../src/build-run.ts');
+  const root = project(t);
+  for (const args of [
+    ['contract', 'new', 'triple', '--request', 'triple four', '--claim', 'feel|It feels right|owner:the product'],
+    ['contract', 'freeze', 'triple'],
+  ]) assert.equal(eyes(root, args).status, 0);
+
+  for (const result of [{ error: 'no plan came back' }, { stopped: 'waiting at the drawing' }]) {
+    const token = startBuildRun(root, 'triple four');
+    closeRun(runs, root, null, {});
+    assert.ok(readBuildRun(root));
+    closeRun(runs, root, token, result);
+    const run = readBuildRun(root);
+    assert.ok(run?.stoppedAt);
+    assert.equal(run.stopped, result.error || result.stopped);
+    assert.match(eyes(root, claim, { SZ_BUILD_TOKEN: token }).stderr, /not recorded: the build run/);
+    assert.match(eyes(root, claim).stderr, /not recorded: the build run/);
+    assert.match(eyes(root, ['contract', 'status']).stdout, /contract triple .*still owes/);
+    assert.equal(eyes(root, ['contract', 'show', 'triple']).status, 0);
+  }
+  const judged = eyes(root, ['contract', 'judged', 'triple', 'feel', '--verdict', 'yes', '--said', '이대로 지어요']);
+  assert.equal(judged.status, 0, judged.stderr);
+  closeRun(runs, root, startBuildRun(root, 'triple four'), { milestones: ['triple'] });
+  assert.equal(readBuildRun(root), null);
+});
+
 test('a run that died without a word holds the ledger too; a second run is refused while the first lives', (t) => {
   const root = project(t);
   const dead = spawnSync(process.execPath, ['-e', '0']).pid!;
@@ -92,6 +120,26 @@ test('a run that died without a word holds the ledger too; a second run is refus
 
   startBuildRun(root, 'finish the editor');
   assert.throws(() => startBuildRun(root, 'something else', process.pid + 1), /another build run \(pid \d+/);
+});
+
+test('a run started before git exists still holds its ledger after the first commit and in linked worktrees', (t) => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'sz-build-first-')));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const token = startBuildRun(root, 'make an editor');
+  const original = buildRunFile(root);
+  git(root, 'init', '-q');
+  git(root, 'add', '.');
+  git(root, 'commit', '-qm', 'the first commit');
+  assert.doesNotMatch(git(root, 'ls-files'), /sz-build-run\.json/);
+  git(root, 'worktree', 'add', '-q', '.sz/trees/side', '-b', 'sz/side');
+  const side = join(root, '.sz/trees/side');
+  assert.equal(buildRunFile(side), original);
+  assert.match(eyes(side, claim).stderr, /not recorded: a build run/);
+  assert.doesNotMatch(eyes(side, claim, { SZ_BUILD_TOKEN: token }).stderr, /not recorded/);
+  stopBuildRun(root, 'wait for the drawing');
+  assert.equal(readBuildRun(side)?.stopped, 'wait for the drawing');
+  endBuildRun(root);
+  assert.equal(readBuildRun(side), null);
 });
 
 test('a milestone folder under .sz/trees finds the same record as the project', (t) => {

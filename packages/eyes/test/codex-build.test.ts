@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { cpSync, mkdtempSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, cpSync, mkdtempSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -161,11 +162,92 @@ test(
       const answer = ofRun(role, tool);
       assert.equal(answer.isError, false, answer.content[0].text);
     }
+    const [env, direct] = callsOfRun(token, root, 'verifier', shell('printenv SZ_BUILD_TOKEN || echo none'),
+      shell('sz-eyes contract claim triple four --status proven --note checked'));
+    assert.equal(env.content[0].text.trim(), 'none');
+    assert.equal(env.isError, false, env.content[0].text);
+    assert.equal(direct.isError, true);
+    assert.match(direct.content[0].text, /not recorded: a build run/);
     const [outside] = calls(root, 'verifier', record('contract', 'claim', 'triple', 'four', '--status', 'refuted', '--note', 'a session beside the run'));
     assert.equal(outside.isError, true);
     assert.match(outside.content[0].text, /not recorded: a build run/);
   },
 );
+
+test('only the closer can write or prune the evidence of its own contract', () => {
+  for (const [role, tool] of [
+    ['build', record('evidence', 'triple')],
+    ['close', record('evidence', 'other')],
+    ['close', record('evidence', 'prune', 'other')],
+    ['close', record('evidence', 'triple', '--dir', '/tmp')],
+    ['close', record('evidence', 'prune', 'triple', '--anything')],
+  ] as const) {
+    const [answer] = calls(process.cwd(), role, tool);
+    assert.equal(answer.isError, true);
+  }
+});
+
+test('a locked run closes with its evidence pruned and committed, through the closer’s record tool', {
+  skip: !process.env.SZ_TEST_CODEX_SANDBOX && 'set SZ_TEST_CODEX_SANDBOX=1 to exercise the native Codex sandbox',
+}, async (t) => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'sz-locked-close-')));
+  const bin = realpathSync(mkdtempSync(join(tmpdir(), 'sz-scripted-close-')));
+  t.after(() => { rmSync(root, { recursive: true, force: true }); rmSync(bin, { recursive: true, force: true }); });
+  writeFileSync(join(root, 'check.sh'), 'true\n');
+  const git = (...args: string[]) => spawnSync('git', args, { cwd: root, encoding: 'utf8' });
+  assert.equal(git('init', '-q').status, 0);
+  const token = startBuildRun(root, 'triple four');
+  const seed = [
+    ...callsOfRun(token, root, 'build',
+      record('contract', 'new', 'triple', '--request', 'triple four', '--claim', 'four|Four triples to twelve|test:check.sh'),
+      record('contract', 'freeze', 'triple', '--frozen', 'check.sh'),
+      record('contract', 'built', 'triple', '--launch', 'sh check.sh')),
+    ...callsOfRun(token, root, 'verifier', record('contract', 'claim', 'triple', 'four', '--status', 'proven', '--note', 'check passed')),
+  ];
+  for (const answer of seed) assert.equal(answer.isError, false, answer.content[0].text);
+  const folder = join(root, '.sz/evidence/triple');
+  mkdirSync(folder, { recursive: true });
+  writeFileSync(join(folder, 'unreferenced.png'), 'old');
+  const original = process.env.PATH;
+  const codex = spawnSync('which', ['codex'], { encoding: 'utf8' }).stdout.trim();
+  const commands = [
+    record('evidence', 'triple'), record('contract', 'close', 'triple'), record('evidence', 'prune', 'triple'),
+    shell('git add .sz check.sh && git -c user.email=test@localhost -c user.name=Test commit -qm closed'),
+  ].map((params, id) => JSON.stringify({ jsonrpc: '2.0', id, method: 'tools/call', params })).join('\n') + '\n';
+  // Only the model is scripted. Both the bridge's tools and the runner's post-close checks use real codex sandbox.
+  writeFileSync(join(bin, 'codex'), `#!/usr/bin/env node
+const { spawnSync } = require('node:child_process');
+const fs = require('node:fs');
+const args = process.argv.slice(2);
+if (args[0] === 'sandbox') process.exit(spawnSync(${JSON.stringify(codex)}, args, { stdio: 'inherit' }).status ?? 1);
+if (args[0] !== 'exec') process.exit(2);
+fs.readFileSync(0);
+const config = args.find((arg) => arg.startsWith('mcp_servers.sz.args='));
+const bridge = JSON.parse(config.slice('mcp_servers.sz.args='.length));
+const ran = spawnSync(process.execPath, bridge, { input: ${JSON.stringify(commands)}, encoding: 'utf8' });
+if (ran.status !== 0) throw Error(ran.stderr);
+for (const line of ran.stdout.trim().split('\\n')) {
+  const { result } = JSON.parse(line);
+  if (result.isError) throw Error(result.content[0].text);
+}
+fs.writeFileSync(args[args.indexOf('--output-last-message') + 1], JSON.stringify({ closed: true }));
+`);
+  chmodSync(join(bin, 'codex'), 0o755);
+  process.env.PATH = bin + ':' + original;
+  try {
+    const { codexWorker } = await import(new URL('../../../plugin/codex/run.mjs', import.meta.url).href);
+    const worker = codexWorker({ root, model: 'scripted', z: createRequire(import.meta.url)('zod'),
+      log: () => {}, active: new Set(), holdProject: () => token, interrupted: () => false });
+    const result = await worker(null, 'triple', 'close the milestone', { label: 'close:triple',
+      schema: { type: 'object', properties: { closed: { type: 'boolean' } }, required: ['closed'] } });
+    assert.equal(result.report, join(folder, 'report.html'));
+  } finally {
+    process.env.PATH = original;
+  }
+  assert.ok(JSON.parse(git('show', 'HEAD:.sz/contracts/triple.json').stdout).closedAt);
+  assert.match(git('show', 'HEAD:.sz/evidence/triple/report.html').stdout, /Four triples to twelve/);
+  assert.equal(existsSync(join(folder, 'unreferenced.png')), false);
+});
 
 const electron = (...args: string[]): ToolCall => ({ name: 'electron', arguments: { args } });
 

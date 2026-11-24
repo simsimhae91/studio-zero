@@ -16,11 +16,13 @@ import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
 
+import { BUILD_RUN_NAME, buildRunFile } from '../../packages/eyes/src/build-run.ts';
 import { standingClaims, supersededClaims } from '../hooks/frozen.mjs';
 import { electronTool, observeElectron } from './electron-vm.mjs';
 
 const plugin = dirname(dirname(fileURLToPath(import.meta.url)));
 const harness = dirname(plugin);
+let runToken = ''; // Only a validated record invocation is given the token.
 const validId = /^[a-z0-9][a-z0-9-]{2,60}$/;
 
 function inside(root, name) {
@@ -53,6 +55,11 @@ export function authorizeRecord(role, contract, label, args) {
   )
     throw new Error('invalid record arguments');
   const [area, op, id] = args;
+  if (area === 'evidence') {
+    if (role === 'close' && validId.test(contract) &&
+        ((args.length === 2 && op === contract) || (args.length === 3 && op === 'prune' && id === contract))) return;
+    throw new Error('only the closer can write or prune the evidence of its own contract');
+  }
   if (!operations[role]?.includes(area + ' ' + op)) throw new Error('this worker cannot record ' + area + ' ' + op);
   if (area === 'contract') {
     if (
@@ -103,6 +110,7 @@ function gitAccess(cwd, fs, writable) {
   const dot = inside(cwd, '.git');
   if (!lstatSync(dot, { throwIfNoEntry: false })?.isFile()) {
     fs.set(dot, writable ? 'write' : 'read');
+    fs.set(join(dot, BUILD_RUN_NAME), 'read');
     return;
   }
   const match = /^gitdir: (.+)$/m.exec(readFileSync(dot, 'utf8'));
@@ -181,6 +189,7 @@ function sandbox(cwd, scratch, role, contract, command, record, newFlows) {
         }
   }
   if (!record) {
+    fs.set(buildRunFile(cwd), 'read');
     if (!['stage', 'join', 'resolve'].includes(role)) fs.set(inside(cwd, '.sz/trees'), 'read');
     // Joining branches has to merge their ledgers. Verification follows the join.
     if (!['join', 'resolve'].includes(role)) {
@@ -219,9 +228,7 @@ function sandbox(cwd, scratch, role, contract, command, record, newFlows) {
     HOME: process.env.HOME,
     TMPDIR: scratch,
     LANG: process.env.LANG || 'en_US.UTF-8',
-    // The token of the build run this worker belongs to: with it the ledger takes this worker's records while the
-    // run holds the project (packages/eyes/src/build-run.ts).
-    ...(process.env.SZ_BUILD_TOKEN ? { SZ_BUILD_TOKEN: process.env.SZ_BUILD_TOKEN } : {}),
+    ...(record && runToken ? { SZ_BUILD_TOKEN: runToken } : {}),
   };
   const invoke = record
     ? [process.execPath, join(harness, 'packages/eyes/src/cli.ts'), ...command]
@@ -257,7 +264,7 @@ const defs = [
   {
     name: 'record',
     description:
-      'Run a permitted sz-eyes contract or standing mutation. Supply individual argv strings, without sz-eyes.',
+      'Run a permitted sz-eyes contract, standing or evidence command. Supply individual argv strings, without sz-eyes.',
     inputSchema: {
       type: 'object',
       properties: { args: { type: 'array', items: { type: 'string' } } },
@@ -268,7 +275,7 @@ const defs = [
 
 async function serve() {
   const [cwd, role, contract, label, token] = process.argv.slice(2);
-  if (token) process.env.SZ_BUILD_TOKEN = token;
+  runToken = token || '';
   const gui = typeof contract === 'string' && validId.test(contract) && ['build', 'start', 'verifier', 'arbiter', 'fix', 'mend'].includes(role);
   const newFlows = new Set();
   const scratch = realpathSync(mkdtempSync(join(tmpdir(), 'sz-command-')));

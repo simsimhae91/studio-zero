@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto';
-import { existsSync, lstatSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, lstatSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 
 /**
@@ -44,7 +44,12 @@ function gitFolderOf(project: string): string | null {
 /** Where a project's run record is kept: in its git folder, or under `.sz` when it has none. */
 export function buildRunFile(project: string): string {
   const git = gitFolderOf(project);
-  return git ? join(git, BUILD_RUN_NAME) : join(resolve(project), '.sz', BUILD_RUN_NAME);
+  // A new product can initialize git after the run has started. Keep finding the original
+  // record from the main folder and its linked worktrees until that run releases it.
+  const fallback = join(git ? dirname(git) : resolve(project), '.sz', BUILD_RUN_NAME);
+  if (!git) return fallback;
+  const inGit = join(git, BUILD_RUN_NAME);
+  return !existsSync(inGit) && existsSync(fallback) ? fallback : inGit;
 }
 
 export function readBuildRun(project: string): BuildRun | null {
@@ -77,6 +82,13 @@ export function startBuildRun(project: string, request: string, pid = process.pi
   const token = randomBytes(24).toString('hex');
   const file = buildRunFile(project);
   mkdirSync(dirname(file), { recursive: true });
+  if (!gitFolderOf(project)) {
+    // The first commit can come before the run ends. Keep only the fallback record out of it.
+    const ignore = join(dirname(file), '.gitignore');
+    const rules = existsSync(ignore) ? readFileSync(ignore, 'utf8') : '';
+    if (!rules.split(/\r?\n/).includes('/' + BUILD_RUN_NAME))
+      appendFileSync(ignore, `${rules && !rules.endsWith('\n') ? '\n' : ''}/${BUILD_RUN_NAME}\n`);
+  }
   const run: BuildRun = { pid, tokenHash: hash(token), startedAt: new Date().toISOString(), request: request.slice(0, 300) };
   writeFileSync(file, `${JSON.stringify(run, null, 2)}\n`);
   return token;
@@ -99,7 +111,7 @@ export function heldByBuildRun(project: string, env: NodeJS.ProcessEnv = process
   const run = readBuildRun(project);
   if (!run) return null;
   const token = env[BUILD_TOKEN_ENV];
-  if (token && hash(token) === run.tokenHash) return null;
+  if (!run.stoppedAt && token && hash(token) === run.tokenHash) return null;
   const file = buildRunFile(project);
   const since = `started ${run.startedAt}`;
   if (!run.stoppedAt && alive(run.pid))

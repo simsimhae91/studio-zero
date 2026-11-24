@@ -1347,6 +1347,8 @@ test('nothing is built on a disk a milestone would not fit on; on a tight one th
 
   assert.match(short.calls[0]!.prompt, /Run `sz-eyes room` as well and return the number on its first line under "room": the gigabytes free on the disk this project is on, by which the run judges whether a milestone fits before it builds one/);
   const closing = tight.calls.find((c) => c.label === 'close:m1')!.prompt;
+  for (const operation of ['["evidence", "m1"]', '["contract", "close", "m1"]', '["evidence", "prune", "m1"]'])
+    assert.ok(closing.includes(operation), operation);
   assert.match(closing, /When it said closed, run `sz-eyes evidence prune m1` before anything is committed: every look took its pictures again, and this removes from the milestone's evidence folder those that no verdict, notice or record names \(the page and what they name stay\)\./);
   assert.match(closing, /7\. Run `sz-eyes room` and return the number on its first line under "room"\./);
   // A milestone left with a claim shown false keeps all of its evidence: nobody is told to prune it.

@@ -1262,8 +1262,8 @@ async function main(argv: string[]): Promise<number> {
     const id = pruning ? a.words[1] : a.words[0];
     if (!id) throw new EyesError('which contract: give its id');
     const file = contractFile(project, id);
-    // Reading a contract is anyone's; the owner's own verdict on a drawing is theirs to record at any time.
-    if (area === 'evidence' || !['show', 'frozen', 'judged'].includes(command ?? '')) needNoBuildRun(project);
+    // A stopped run keeps its hold; anyone can read what it owes and the owner can still judge the drawing.
+    if (area === 'evidence' || !['show', 'frozen', 'judged', 'status'].includes(command ?? '')) needNoBuildRun(project);
     if (area === 'contract' && command === 'new') {
       if (existsSync(file)) throw new EyesError(`${file} is already there`);
       const claims = a.all('--claim').map((text) => {
