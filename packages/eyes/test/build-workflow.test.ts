@@ -417,7 +417,8 @@ test('a new product with screens is planned, drawn and measured first, and the r
   assert.match(designer, /you decide nothing before both are there/);
   const sweep = prompt('sweep:design');
   assert.match(sweep, /You did not draw it and you take nobody's word for it/);
-  assert.match(sweep, /sz-eyes web sweep "file:\/\/\$PWD\/\.sz\/design\/prototype\.html" --from \.sz\/design\/sweep\.txt --size phone --out \.sz\/design\/shots/);
+  // A fresh browser measures the theme written in direction.md. Screen list, size and canonical destination stay fixed.
+  assert.match(sweep, /file:\/\/\$PWD\/\.sz\/design\/prototype\.html\?t=<name>[^\n]+sz-eyes web sweep "\$drawing_url" --from \.sz\/design\/sweep\.txt --size phone --out \.sz\/design\/shots/);
   assert.match(sweep, /sz-eyes contract new design --lane M --request "[^"]+" --claim "screens\|[^"]+\|command:[^"]+" --claim "feel\|[^"]+\|owner:\.sz\/design\/prototype\.html"/);
   assert.match(sweep, /`sz-eyes contract freeze design`, with no files/);
   assert.match(sweep, /sz-eyes contract claim design screens --status proven\|refuted --note "<the sweep's summary line>"/);
@@ -427,6 +428,23 @@ test('a new product with screens is planned, drawn and measured first, and the r
   assert.match(ran.result.stopped, /sz-eyes contract judged design feel --verdict yes\|no --said "<their words>"[\s\S]*Then run this workflow again/);
   assert.ok(ran.logs.some((l) => /^DESIGN READY: open \.sz\/design\/prototype\.html\. 3 screen\(s\) of the plan drawn, all 3 hold/.test(l)), ran.logs.join('\n'));
   assert.deepEqual(ran.result.milestones, []);
+});
+
+test('a selected theme is measured before approval and is the reference for building and verifying', async () => {
+  const waiting = await run({ request: 'r' }, drawing({ plan: needed }));
+  assert.match(waiting.result.stopped, /Before recording yes[^\n]+prototype\.html\?t=<name>[^\n]+fresh temporary shots folder/);
+  assert.match(waiting.result.stopped, /If the sweep fails[^\n]+keep the canonical pictures and direction unchanged[^\n]+stop before recording yes/);
+  assert.match(waiting.result.stopped, /Only after the whole set holds[^\n]+주인이 고른 테마[^\n]+sz-eyes contract judged design feel/);
+  const approved = await run({ request: 'r', design: 'go' }, {
+    plan: () => ({ mode: 'new', design: 'approved', milestones: [firstPass] }),
+    build: built, verify: allProven, close: closed,
+  });
+  assert.match(approved.calls.find((call) => call.label === 'plan')!.prompt, /designer’s measured theme if there is no owner choice/);
+  for (const label of ['build:m1', 'verify:m1']) {
+    const prompt = approved.calls.find((call) => call.label === label)!.prompt;
+    assert.match(prompt, /direction\.md[^\n]+prototype\.html\?t=<name>[^\n]+아직 없음/);
+    assert.match(prompt, /canonical (pictures|set) for that address/);
+  }
 });
 
 test('a design stage run again takes up what an earlier run left: a whole plan and a board stand, and a drawing begun is gone on with', async () => {
