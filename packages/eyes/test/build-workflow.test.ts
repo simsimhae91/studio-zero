@@ -353,6 +353,29 @@ const drawing = (extra: Record<string, Answer> = {}): Record<string, Answer> => 
 const firstPass = { id: 'm1', title: '첫 판', builds: '온 제품', claims: [claim('one'), claim('two')] };
 const allProven = () => ({ proven: ['one', 'two'], refuted: [], unchecked: [] });
 
+test("the drawing and the plan are cut from the dive brief, and what it left open is the builder's", async () => {
+  const ran = await run({ request: '황천편의점', design: 'go' }, drawing({
+    plan: (_call, nth) => nth === 0 ? needed() : { mode: 'new', design: 'approved', milestones: [firstPass] },
+    build: built, verify: allProven, close: closed,
+  }));
+  const prompt = (label: string) => ran.calls.find((call) => call.label === label)!.prompt;
+  for (const label of ['plan', 'screens', 'refs', 'design', 'sweep:design', 'build:m1']) {
+    assert.match(prompt(label), /newest relevant dive folder[^\n]+idea\.md[^\n]+brief\.md[^\n]+same folder/);
+  }
+  for (const label of ['screens', 'refs', 'sweep:design']) {
+    assert.match(prompt(label), /비워 둘 것 stays open in the frame/);
+    assert.doesNotMatch(prompt(label), /record the choice and a one-line reason/);
+  }
+  assert.match(prompt('design'), /record the choice and a one-line reason under 비워 둔 것과 정한 것/);
+  assert.match(prompt('plan'), /채울 것[^\n]+비워 둘 것[^\n]+빌더가 정한다[^\n]+no claim fixes the mechanism/);
+  const later = await run({ request: '이어서' }, { plan: plan('m2'), build: built, verify: allProven, close: closed });
+  for (const builder of [prompt('build:m1'), later.calls.find((c) => c.label === 'build:m2')!.prompt])
+    assert.match(builder, /비워 둘 것[^\n]+input, timing and implementation[^\n]+`\.sz\/map\.md`[^\n]+"blocked"/);
+  const skill = (file: string) => readFileSync(new URL('../../../plugin/skills/' + file, import.meta.url), 'utf8');
+  assert.match(skill('design/references/handoff.md'), /11\. \*\*비워 둔 것\.\*\*/);
+  assert.match(skill('dive/SKILL.md'), /sz-eyes dive brief/);
+});
+
 test('a new product with screens is planned, drawn and measured first, and the run stops there: nothing is built before the owner has seen it', async () => {
   // The three start together: each answers only after a turn of the clock, and says which had been started by then.
   const begun: string[] = [];

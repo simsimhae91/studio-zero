@@ -14,8 +14,11 @@ With no reference tool connected, the library is the source; where it has nothin
 
 ## `.sz/plan/frame.md`: written first, whole, before any screen
 
-When the owner dug the idea out with `sz:dive` (`.sz/dive/*/idea.md`), the frame is cut from it and does not decide again what they settled there: section 1 from its `moment` line, section 2 from `core`, section 3 from `feel` and the owner's words it quotes, section 5 starts from `first`, and what is not built comes from `not`.
-
+When the owner dug the idea out with `sz:dive`, choose the newest relevant folder under `.sz/dive/` by its
+`dive.json` creation date. Read its `idea.md` when present. Only the `brief.md` beside that idea is the confirmed
+brief; if there is only a draft, use the settled idea alone. Cut the frame from those pages: section 1 from
+`moment`, section 2 from `core` and the brief's 북극성, section 3 from `feel` and the words it quotes, section 5
+from `first`, sections 7 and 8 from 첫 1분과 핵심 여정, section 11 from 비워 둘 것, and what is not built from `not`.
 
 1. **무엇이고 누구를 위한 것인가.** Two or three sentences: who, at what moment, doing what.
 2. **반드시 잘해야 하는 한 가지.** The one thing. The designer builds the product's key screen around it. Then what it needs to be real, found before any screen is written: each key, source of data or service on its path (what a person gives, what is done with it, what they get back), where it was found (the address), and whether it is at hand (`sz-eyes secret has <vault id>`). Look for a public source, an open API, a free key the owner applies for; "not connected yet" is not an answer. What is not at hand is asked of the owner at the drawing, each with what it costs them and how it is given (a key: its vault id, and the command that prints the owner's line for it, `sz-eyes arm need <arm>` or `sz-eyes secret has <vault id>`; never a storing line of your own, which fails in the owner's shell).
@@ -25,8 +28,12 @@ When the owner dug the idea out with `sz:dive` (`.sz/dive/*/idea.md`), the frame
 6. **정보 구조.** The sections a person moves between (on a phone, the tabs: three to five) and what lives under each; what is reached from where; what is outside the sections (first run, sheets, the screen after an action).
 7. **화면 목록.** One line a screen: an id (`HM-01`: two letters for the area, a number), its name, the section, what it is for, its states by name.
 8. **흐름.** Each scenario as a row of screen ids with what is pressed between them: `HM-01 —대결 시작→ MT-01 —상대 찾기→ MT-02`.
-9. **규칙과 숫자.** Every rule a screen shows and every limit that shapes a screen: the longest name, the longest sentence a person may write, the largest figure, how a score is worked out. A limit nobody stated is decided here and marked as decided here.
+9. **규칙과 숫자.** Every rule a screen shows and every limit that shapes a screen: the longest name, the longest sentence a person may write, the largest figure, how a score is worked out. A limit nobody stated is decided here and marked as decided here. Where `.sz/facts.md` is there (a page of what an authority publishes, read with its address and the day), a rule or a figure it gives is used as it gives it, with the day it was read.
 10. **아직 진짜가 아닌 것.** What a screen must say plainly is not real yet, an entry each in four parts: what it is; which of four reasons (`owner`: a key, an account, money or publishing only the owner can give; `people`: others not there yet, partners, reviews, the other side of a market; `device`: a device, a store's review or a machine this Mac does not have; `later`: the owner said later, in their words); what was tried and found (the address looked at, what `sz-eyes secret has` said); what it needs to be real, and from whom. "Not connected yet" and "nobody has read it yet" are not reasons: finding the source and reading it is the work. Never on it unless the owner said so, quoted: anything on the one thing's path, and anything the request names. What is built for real and only waits for people (an empty list with its plain line) is real.
+11. **비워 둔 것.** What the brief left to the designer and the builder, a line each, with the constraint it must
+    stay inside ("상품을 돌리는 손맛은 있어야 한다 — 어떻게 돌리는지는 정하지 않는다"). Nothing here is placed, given
+    an input or drawn in the frame or screen plans: the designer decides where it sits, the builder how it works,
+    and each records the decision and its reason.
 
 ## `.sz/plan/screens/<NN>-<id>.md`: one file a screen, ten to twenty-five lines
 
