@@ -41,6 +41,7 @@ const operations = {
   verifier: ['contract claim', 'contract add-check', 'contract notice', 'standing record'],
   arbiter: ['contract amend', 'contract dispute', 'contract supersede'],
   close: ['contract close'],
+  redteam: ['backlog add'],
   sweep: ['contract new', 'contract freeze', 'contract claim'],
   join: ['standing mend'],
   resolve: ['standing mend'],
@@ -61,6 +62,11 @@ export function authorizeRecord(role, contract, label, args) {
     throw new Error('only the closer can write or prune the evidence of its own contract');
   }
   if (!operations[role]?.includes(area + ' ' + op)) throw new Error('this worker cannot record ' + area + ' ' + op);
+  if (role === 'redteam') {
+    const source = 'red team: ' + label.slice('redteam:'.length);
+    if (!label.startsWith('redteam:') || args.length !== 5 || !id?.trim() || id.startsWith('-') || args[3] !== '--from' || args[4] !== source)
+      throw new Error('redteam records one backlog line with the source of its own review');
+  }
   if (area === 'contract') {
     if (
       typeof id !== 'string' ||
@@ -156,11 +162,14 @@ function sandbox(cwd, scratch, role, contract, command, record, newFlows) {
   ])
     if (existsSync(prefix)) fs.set(prefix, 'read');
   const reviewing = role === 'verifier' || role === 'arbiter';
-  const reading = reviewing || role === 'facts';
+  const reading = reviewing || role === 'facts' || role === 'redteam';
   fs.set(cwd, reading || record || role === 'close' ? 'read' : 'write');
   const allow = (name) => fs.set(inside(cwd, name), 'write');
   gitAccess(cwd, fs, !record && !reading);
-  if (record) {
+  if (record && role === 'redteam') {
+    mkdirSync(inside(cwd, '.sz'), { recursive: true });
+    allow('.sz/backlog.md');
+  } else if (record) {
     for (let i = 0; i < command.length; i++) if (command[i] === '--frozen') inside(cwd, command[i + 1]);
     allow('.sz');
   } else if (role === 'close') {

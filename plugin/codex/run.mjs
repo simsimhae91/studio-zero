@@ -149,6 +149,7 @@ export function codexWorker({ root, model, z, log, active, holdProject, interrup
     const cwd = where ? realpathSync(resolve(root, where)) : root;
     if (where && !cwd.startsWith(join(root, '.sz/trees') + '/')) throw new Error('invalid milestone worktree: ' + cwd);
     const { label, agentType, schema } = options;
+    const workerModel = options.codexModel ?? model;
     const effort = options.effort ?? (agentType ? 'xhigh' : 'high');
     const role = agentType?.split(':')[1] ?? label.split(':')[0];
     contract ??= options.contractId;
@@ -165,7 +166,7 @@ export function codexWorker({ root, model, z, log, active, holdProject, interrup
         ? readFileSync(join(plugin, 'agents', role + '.md'), 'utf8').replace(/^---[\s\S]*?---\s*/, '')
         : '';
       const directions = `You are a fresh Codex worker for ${label}. Your actual project is ${cwd}. Use the sz MCP shell for project commands and file edits. For a built Electron app use the sz electron tool for its first window, interaction and project Node GUI flows. Pass look/do flags from the project map and use returned project-relative PNG paths when recording evidence. Use the sz record tool for every contract or standing mutation, passing an argv array without sz-eyes. For close, use record for sz-eyes evidence <contract> and sz-eyes evidence prune <contract> as well. Shell writes to the ledger are denied. The native sandbox and this tool's boundaries are final. When a browser or other device cannot start, report it as unchecked or blocked. In place of Claude's Skill tool, read the full ${plugin}/skills/<name>/SKILL.md and its relative references with the sz shell. Use $TMPDIR for disposable copies and build outputs. Do not spawn other workers. In JSON use null for optional fields that don't apply.\n`;
-      log(`[${label}] ${model} / ${effort}`);
+      log(`[${label}] ${workerModel} / ${effort}`);
       const mobbin = mobbinOptions(options.phase, label, scratch);
       const searchInstructions = mobbin.length
         ? 'For real design references, use the Mobbin MCP search tools. For app screens specify ios or web, for a user journey search flows, and for marketing sites search sections. Search for the screen purpose and inspect the returned examples. If the service reports a limit or login error, report it and use the reference library.\n'
@@ -181,7 +182,7 @@ export function codexWorker({ root, model, z, log, active, holdProject, interrup
         '--cd',
         scratch,
         '--model',
-        model,
+        workerModel,
         '-c',
         'model_reasoning_effort=' + JSON.stringify(effort),
         ...[
@@ -236,9 +237,10 @@ export function codexWorker({ root, model, z, log, active, holdProject, interrup
           child.stdin.end(directions + searchInstructions + roleText + '\n' + prompt + reminder);
         });
         // A successful fact check can finish without an answer; actual process or schema failures still surface.
-        if (role === 'facts' && !existsSync(output)) return null;
+        const reviewOrFacts = role === 'redteam' || role === 'facts';
+        if (reviewOrFacts && !existsSync(output)) return null;
         const answer = readFileSync(output, 'utf8');
-        if (role === 'facts' && !answer.trim()) return null;
+        if (reviewOrFacts && !answer.trim()) return null;
         const latest = JSON.parse(answer, (_key, v) => (v === null ? undefined : v));
         z.fromJSONSchema(schema).parse(latest);
         result = role === 'verifier' && result?.proven && latest.proven ? withEarlierVerdicts(result, latest, contractOf(cwd, contract), options.claims) : latest;
@@ -317,9 +319,15 @@ export async function runBuild(args, project = process.cwd()) {
   process.once('SIGTERM', abort);
   const log = (message) => console.error(message);
   const worker = codexWorker({ root, model, z, log, active, holdProject, interrupted: () => interrupted });
+  // Both the root plan review and worktree milestone reviews go through this adapter.
+  const id = args.redteamModel;
+  const redteamModel = typeof id === 'string' && /^[A-Za-z0-9._-]{2,60}$/.test(id) && !['sonnet', 'opus'].includes(id) ? id : model;
+  const runWorker = (where, contract, prompt, options) => worker(where, contract, prompt,
+    options.agentType === 'sz:redteam' ? { ...options, codexModel: redteamModel } : options);
   try {
     // Claude model aliases belong to its adapter. The Codex model was resolved above.
-    const result = await workflow({ ...args, model: undefined }, (p, o) => worker(null, null, p, o), worker, log, log, {
+    const result = await workflow({ ...args, model: undefined }, (p, o) => runWorker(null, o.contractId ?? null, p, o), runWorker, log, log, {
+      redteamModel,
       instructions:
         ' Use the Codex project shell and the sz electron tool for Electron observations. If their permissions stop a required observation, return the actual refusal under sandbox. Keep that observation unchecked.',
       stop: 'Resume from the same project when that observation can run with the required permissions.',

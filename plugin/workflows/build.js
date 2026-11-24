@@ -1,7 +1,7 @@
 export const meta = {
   name: 'build',
   description: 'Build a product, or grow one that exists, to the end, unattended: for a new product with screens, first every screen planned, drawn as one clickable prototype, measured, and put before the owner, whose word it waits for; then a spec (new, or the existing one extended), then for each milestone a frozen contract, the build, a verification by an agent that did not build it which also shows again what stood before, fixes, and a page of evidence. Milestones follow one another unless the plan puts some side by side: those are built at the same time in folders of their own, brought together, and everything that stands is shown again on the product as joined',
-  whenToUse: 'A new product, or a change of several features to a product that already has a spec (lane L), after the owner has been put the questions only they can answer (a few, each a choice they can tap) and has asked for it to run to the end without them. Typing the command is not an answer to those questions: ask first, then start it with asked and answers (args is an object: { request, asked, answers, design? }). A new product with screens is drawn before anything of it is built: the first run plans and draws every screen, measures them, and stops with the prototype. Open .sz/design/prototype.html for the owner, record what they say in their words (sz-eyes contract judged design feel --verdict yes|no --said "<their words>"), and start the workflow again: on yes it builds the first pass to the drawing, on no it draws again what they said. Only design: "go" in args takes a run from the measured prototype straight into building without their word, and only the owner can ask for it (a prototype waits fifteen minutes; a build nobody wanted costs two hours). For a new product, right after starting the run that builds its first pass (after their yes, with design: "go", or for a product with no screens), start in the background a wait for its builder to say it stands (until sz-eyes contract built > /dev/null 2>&1; do sleep 20; done; sz-eyes contract built: it prints the contract and how the product is started, about an hour in; nothing else answers before the first pass is closed, hours later). When that returns, make a copy of the product (sz-eyes copy <a folder outside the project> --with <what .sz/map.md says is built and not in git>), start the copy the way that line says and tell the owner its address, and that it is still being verified: they see the whole product then, not when everything is finished.',
+  whenToUse: 'A new product, or a change of several features to a product that already has a spec (lane L), after the owner has been put the questions only they can answer (a few, each a choice they can tap) and has asked for it to run to the end without them. Typing the command is not an answer to those questions: ask first, then start it with asked and answers (args is an object: { request, asked, answers, design? }). A new product with screens is drawn before anything of it is built: the first run plans and draws every screen, measures them, and stops with the prototype. Open .sz/design/prototype.html for the owner, record what they say in their words (sz-eyes contract judged design feel --verdict yes|no --said "<their words>"), and start the workflow again: on yes it builds the first pass to the drawing, on no it draws again what they said. Only design: "go" in args takes a run from the measured prototype straight into building without their word, and only the owner can ask for it (a prototype waits fifteen minutes; a build nobody wanted costs two hours). For a new product, right after starting the run that builds its first pass (after their yes, with design: "go", or for a product with no screens), start in the background a wait for its builder to say it stands (until sz-eyes contract built > /dev/null 2>&1; do sleep 20; done; sz-eyes contract built: it prints the contract and how the product is started, about an hour in; nothing else answers before the first pass is closed, hours later). When that returns, make a copy of the product (sz-eyes copy <a folder outside the project> --with <what .sz/map.md says is built and not in git>), start the copy the way that line says and tell the owner its address, and that it is still being verified: they see the whole product then, not when everything is finished. facts: "auto" (default) or "on" asks once whether an authority publishes a criterion the product needs; "off" skips it. redteam: "plan" | "close" | "both" adds a review in a new conversation before building a plan or closing a milestone (5 to 10 minutes a milestone). Another model is used only when redteamModel names one distinct from the original.',
   phases: [
     { title: 'Plan', detail: 'the spec and its milestones, each with the claims that make it done' },
     { title: 'Design', detail: 'for a new product with screens: every screen planned, drawn as one prototype and measured, then put before the owner before anything is built' },
@@ -11,7 +11,7 @@ export const meta = {
   ],
 }
 
-// args: { request: string, asked: 'owner' | 'away', answers?: string, design?: 'go', maxMilestones?: number, side?: 1|2|3, effort?: string | object, model?: string | object }
+// args: { request: string, asked: 'owner' | 'away', answers?: string, design?: 'go', maxMilestones?: number, side?: 1|2|3, effort?: string | object, model?: string | object, facts?: "auto"|"on"|"off", redteam?: "off"|"plan"|"close"|"both", redteamModel?: string }
 // `request` is the owner's words. `asked` says whether the owner was put the questions only they can answer
 // before this run: 'owner' = they were, and `answers` holds what they chose, word for word; 'away' = they said to
 // go on without questions, or nobody is in the session. The run asks nobody anything, and it does not start
@@ -342,6 +342,28 @@ const FACTS = {
   required: ['needed', 'why'],
 }
 
+const REDREVIEW = {
+  type: 'object',
+  properties: {
+    checks: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          what: { type: 'string' },
+          why: { type: 'string', description: 'what is unshown, false or missing, and where you saw it' },
+          weight: { type: 'string', enum: ['fatal', 'serious', 'minor'] },
+          where: { type: 'string', description: 'the claim id, screen, file or address' },
+        },
+        required: ['what', 'why', 'weight', 'where'],
+      },
+    },
+    fatal: { type: 'array', items: { type: 'string' }, description: 'the fatal checks, a line each' },
+    held: { type: 'array', items: { type: 'string' }, description: 'what you tried that held, a line each' },
+  },
+  required: ['checks', 'fatal'],
+}
+
 // ------------------------------------------------------------------ Plan
 phase('Plan')
 // A new product is planned twice: its first pass alone, and, when that stands, what comes after it. Claims for
@@ -468,6 +490,63 @@ const SWEPT = {
 }
 // What the last measurement of the prototype showed, for the session the run returns to.
 let designed = null
+const redteam = ['plan', 'close', 'both'].includes(args.redteam) ? args.redteam : 'off'
+const reviews = []
+// Use the caller's runner. A milestone built in a worktree has its own product, ledger and backlog.
+const redTeam = async (at, m, built, run = agent, where = null) => {
+  const beside = where ? ` This milestone was built beside others: its folder is \`${where}\` (a git worktree of the project on its own branch), and everything it built is there. Run every command in it (\`cd ${where} && …\`), start the product from there, and read no other folder's product.` : ''
+  const planning = at === 'plan'
+  const prompt = planning
+    ? `You review a plan before anything is built from it, and you did not write it. ${SAND} Start no other agent.
+
+The owner's request:
+${request}
+
+${OWNER_ANSWERS}
+
+The spec: \`.sz/spec.md\`. The screens, if they were drawn: \`.sz/plan/frame.md\`, \`.sz/plan/screens/\`, and the brief a
+dive left: \`.sz/dive/*/brief.md\`. The fact page, if there is one: \`.sz/facts.md\`.
+The first milestones and their claims: ${JSON.stringify(plan.milestones.map(({ title, claims }) => ({ title, claims })))}.
+
+Read the plan and find what would make it fail after two hours of building: two claims that cannot both be true; a
+case nobody planned for (the first time, nothing yet, something failed, the second visit, the longest name and the
+largest figure the rules allow); a rule or a figure of the world stated as true with no source; something on the
+path of the one thing that is not real and is not listed under notReal; one person able to reach another's data, a
+secret in the code to be, a service's terms that forbid this; for a game, a loop, stakes and depth that contradict
+each other, or nothing worth doing in the first thirty seconds. Then say what you tried to break and could not.
+File each finding as it stands: \`sz-eyes backlog add "<one line, in the owner's language>" --from "red team: plan"\`
+(in a Codex worker: \`record ["backlog", "add", "<one line>", "--from", "red team: plan"]\`).
+Change no file, write no code, and record no verdict: a claim is the verifier's to show and the owner's to judge.
+fatal = if this is true the plan cannot be built as it stands.`
+    : `You review a built milestone before it is closed, and you did not build it. ${SAND}${beside}
+
+The product starts like this: ${built.launch}. Its contract: \`sz-eyes contract show ${built.contractId}\`. Read its
+recorded verdicts and the evidence files they name under \`.sz/evidence/${built.contractId}/\`. The closer writes report.html after your review.
+
+Use the existing verdicts for the claims. Try one ordinary, unclaimed use case on the local product with disposable
+fixture data, such as returning to an empty list or entering the longest supported name. Stop the server you
+started. For privacy and secrets, inspect the local authorization code, tests and committed files; report only the
+location and impact. Keep live interaction to the ordinary product flow. Say what held up as well as what failed. File each finding with \`sz-eyes backlog add "<one line, in the owner's language>" --from "red team: ${m.id}"\`
+(in a Codex worker: \`record ["backlog", "add", "<one line>", "--from", "red team: ${m.id}"]\`).
+Change no product code and record no verdict. fatal = this cannot stand as it is.`
+  const review = await run(prompt, {
+    label: planning ? 'redteam:plan' : `redteam:${m.id}`, phase: planning ? 'Plan' : 'Close',
+    agentType: 'sz:redteam', schema: REDREVIEW, ...effort(planning ? 'plan' : 'verify'),
+    ...(MODELS.includes(args.redteamModel) ? { model: args.redteamModel } : {}),
+  })
+  if (!review) {
+    log(`red team on ${planning ? 'the plan' : m.title}: the review did not answer`)
+    return null
+  }
+  const { checks, fatal } = review
+  const held = review.held ?? []
+  reviews.push({ at, ...(planning ? {} : { milestone: m.id }), checks, fatal, held })
+  const reviewModel = HOST_SANDBOX?.redteamModel || (MODELS.includes(args.redteamModel) ? args.redteamModel : 'opus')
+  log(`red team on ${planning ? 'the plan' : m.title}: ${reviewModel}, new conversation; ${checks.length} found, ${fatal.length} fatal${held.length ? `; could not break: ${held.slice(0, 3).join(' / ')}` : ''}`)
+  if (fatal.length) return `${fatal.join('; ')}. The findings are in ${where ? where + '/' : ''}.sz/backlog.md`
+  return null
+}
+
 // What the screens' planner listed as not real: the owner sees it at the drawing, before anything is built, and is
 // asked there for what the build needs from them.
 let drawnList = null
@@ -621,7 +700,7 @@ const stopAtDesign = (stopped) => {
 // Nothing is built while the plan leaves not real what only the owner can let be so.
 const stopNotReal = (stopped) => {
   log(stopped)
-  return { mode: plan.mode || null, summary: plan.summary || '', decided: plan.decided || [], spec: '.sz/spec.md', design: designed, milestones: [], joins: [], forOwner: [], notBuilt: [...milestones.filter((m) => m.state !== 'closed').map((m) => m.title), ...(more ? later : [])], needed, stopped }
+  return { mode: plan.mode || null, summary: plan.summary || '', decided: plan.decided || [], spec: '.sz/spec.md', design: designed, milestones: [], joins: [], forOwner: [], notBuilt: [...milestones.filter((m) => m.state !== 'closed').map((m) => m.title), ...(more ? later : [])], needed, redteam: reviews, stopped }
 }
 
 // Both auto (the default) and on ask once. The researcher decides whether anything needs writing.
@@ -693,6 +772,14 @@ if (design === 'needed' || design === 'again') {
 }
 if (design === 'waiting' || design === 'needed' || design === 'again') return stopAtDesign(WAITS)
 if (!Array.isArray(plan.milestones) || plan.milestones.length === 0) return { error: 'no plan came back' }
+if (redteam === 'plan' || redteam === 'both') {
+  const reason = await redTeam('plan', null, null)
+  if (reason) {
+    const stopped = `nothing was built: ${reason}. The plan stands at .sz/spec.md. Review the request and answers, and start again.`
+    log(stopped)
+    return { mode: plan.mode || null, summary: plan.summary || '', decided: plan.decided || [], spec: '.sz/spec.md', design: designed, milestones: [], joins: [], forOwner: [], notBuilt: plan.milestones.map((m) => m.title), needed, redteam: reviews, stopped }
+  }
+}
 // A first pass whose screens were drawn and judged (or let go on) is built to the drawing and held to it.
 const toDrawing = design === 'approved'
 // Of a new product only the first pass is built from this plan; what comes after it is planned when it stands.
@@ -1179,6 +1266,16 @@ ${round === 1 && earlier ? 'An earlier run found these and stopped; it, or someo
     return { entry: { id: m.id, title: m.title, contractId: built.contractId, proven: [], refuted: [], unchecked: m.claims.map((c) => ({ id: c.id, why: 'the verifier did not answer' })), noticed: [], report: null, ...left }, stopped }
   }
 
+  const broken = verdict.broken || []
+  const entry = { id: m.id, title: m.title, contractId: built.contractId, launch: built.launch, setAside, proven: verdict.proven.filter((id) => !setAside.some((d) => d.id === id)), refuted: verdict.refuted, unchecked: verdict.unchecked, broken, stood: verdict.stood === undefined ? null : verdict.stood, replaced: m.supersedes || [], noticed: verdict.noticed || [], report: null, corrections: [], ...left }
+  if (redteam === 'close' || redteam === 'both') {
+    const reason = await redTeam('close', m, built, runAgent, where)
+    if (reason) {
+      stopped = `milestone "${m.title}" was verified and is not closed: ${reason}. Its contract stays open.`
+      log(stopped)
+      return { entry, stopped }
+    }
+  }
   const closed = await runAgent(
     `Close milestone "${m.title}" of the project in ${here}. ${TOOLS}${PLACE}
 1. \`sz-eyes evidence ${built.contractId}\` writes the evidence page; note its path. In Codex, call record with ["evidence", "${built.contractId}"].
@@ -1192,8 +1289,8 @@ Change no product code.${FINISH}`,
     { label: `close:${m.id}`, phase: 'Close', schema: CLOSED, ...effort('close') },
   )
   if (closed && typeof closed.room === 'number' && closed.room >= 0) ROOM = closed.room
-  const broken = verdict.broken || []
-  const entry = { id: m.id, title: m.title, contractId: built.contractId, launch: built.launch, setAside, proven: verdict.proven.filter((id) => !setAside.some((d) => d.id === id)), refuted: verdict.refuted, unchecked: verdict.unchecked, broken, stood: verdict.stood === undefined ? null : verdict.stood, replaced: m.supersedes || [], noticed: verdict.noticed || [], report: closed ? closed.report : null, corrections: (closed && closed.corrections) || [], ...left }
+  entry.report = closed ? closed.report : null
+  entry.corrections = (closed && closed.corrections) || []
   log(`${m.title}: ${verdict.proven.length} proven, ${verdict.refuted.length} refuted, ${verdict.unchecked.length} unchecked${verdict.stood === undefined ? '' : `; of what stood before, ${verdict.stood} hold and ${broken.length} broke`}`)
 
   // Nothing is built on a milestone that is known to be broken: the owner is told where it stands instead. The
@@ -1449,6 +1546,7 @@ return {
   // The last measurement of a new product's prototype when this run drew it; null when it drew nothing.
   design: designed,
   milestones: done,
+  redteam: reviews,
   // What was built side by side: which milestones, which came into the project's folder, and how many promises held on the product as joined.
   joins,
   // Claims whose own words turned out wrong about the world: set aside, not changed. Each is the owner's to settle (sz-eyes contract judged <contract> <claim> --verdict yes|no --said "...").

@@ -249,6 +249,33 @@ fs.writeFileSync(args[args.indexOf('--output-last-message') + 1], JSON.stringify
   assert.equal(existsSync(join(folder, 'unreferenced.png')), false);
 });
 
+test('researchers have no ledger role and only the review can file a backlog finding', async () => {
+  const { authorizeRecord } = await import(bridge);
+  const line = ['backlog', 'add', '요금이 다릅니다', '--from', 'red team: plan'];
+  assert.doesNotThrow(() => authorizeRecord('redteam', 'triple', 'redteam:plan', line));
+  for (const args of [['backlog', 'done', 'line', '--by', 'x'], ['contract', 'claim', 'triple', 'one', '--status', 'proven'], ['standing', 'record', 'triple/one'], [...line, '--dir', '/tmp']])
+    assert.throws(() => authorizeRecord('redteam', 'triple', 'redteam:plan', args));
+  assert.throws(() => authorizeRecord('facts', 'triple', 'facts', line));
+});
+
+test('a Codex reviewer writes only by filing a backlog line through record', {
+  skip: !process.env.SZ_TEST_CODEX_SANDBOX && 'set SZ_TEST_CODEX_SANDBOX=1 in a terminal that can create a Codex sandbox',
+}, (t) => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'sz-review-test-')));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  assert.equal(spawnSync('git', ['init', '-q'], { cwd: root }).status, 0);
+  const token = startBuildRun(root, 'review');
+  const [added, direct, add, done, product, git] = callsOfRun(token, root, 'redteam',
+    record('backlog', 'add', '요금이 다릅니다', '--from', 'red team: triple'),
+    shell('echo changed >> .sz/backlog.md'), shell('sz-eyes backlog add changed'),
+    record('backlog', 'done', '요금', '--by', 'x'), shell('echo changed > app.mjs'), shell('git add .sz/backlog.md'));
+  assert.equal(added.isError, false, added.content[0].text);
+  for (const denied of [direct, add, done, product, git]) assert.equal(denied.isError, true, denied.content[0].text);
+  const page = readFileSync(join(root, '.sz/backlog.md'), 'utf8');
+  assert.match(page, /- \[ \] 요금이 다릅니다 \(red team: triple\)/);
+  assert.doesNotMatch(page, /changed/);
+});
+
 test('the fact reader can write only its page in the project', {
   skip: !process.env.SZ_TEST_CODEX_SANDBOX && 'set SZ_TEST_CODEX_SANDBOX=1 in a terminal that can create a Codex sandbox',
 }, (t) => {

@@ -8,13 +8,15 @@ import { TAKES } from '../src/room.ts';
 import { Claim, Contract } from '../src/contract.ts';
 
 type Call = { prompt: string; label: string; effort?: string; model?: string };
+type WorkerOptions = Omit<Call, 'prompt'>;
+type MilestoneCall = (where: string | null, contract: string, prompt: string, options: WorkerOptions) => void;
 type Answer = (call: Call, nth: number) => unknown;
 
 const SOURCE = readFileSync(fileURLToPath(new URL('../../../plugin/workflows/build.js', import.meta.url)), 'utf8').replace('export const meta', 'const meta');
 const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor as new (...names: string[]) => (...values: unknown[]) => Promise<any>;
 
 /** Runs the script with agents answered by the first table entry whose key starts the agent's label. */
-async function run(args: unknown, answers: Record<string, Answer>): Promise<{ result: any; calls: Call[]; allCalls: Call[]; logs: string[] }> {
+async function run(args: unknown, answers: Record<string, Answer>, observeMilestone?: MilestoneCall): Promise<{ result: any; calls: Call[]; allCalls: Call[]; logs: string[] }> {
   const calls: Call[] = [];
   const logs: string[] = [];
   const seen = new Map<string, number>();
@@ -32,7 +34,11 @@ async function run(args: unknown, answers: Record<string, Answer>): Promise<{ re
   };
   // Every run says whether the owner was asked beforehand; the tests that are not about that run as "away".
   const given = args && typeof args === 'object' && !('asked' in args) ? { asked: 'away', ...args } : args;
-  const result = await new AsyncFunction('agent', 'phase', 'log', 'args', SOURCE)(agent, () => {}, (line: string) => logs.push(line), given);
+  const milestoneAgent = observeMilestone && ((where: string | null, contract: string, prompt: string, options: WorkerOptions) => {
+    observeMilestone(where, contract, prompt, options);
+    return agent(prompt, options);
+  });
+  const result = await new AsyncFunction('agent', 'phase', 'log', 'args', 'milestoneAgent', SOURCE)(agent, () => {}, (line: string) => logs.push(line), given, milestoneAgent);
   // Existing assertions compare the order and settings of the build stages; keep the complete trace for the pre-plan check.
   return { result, calls: calls.filter((c) => c.label !== 'facts'), allCalls: calls, logs };
 }
@@ -670,6 +676,65 @@ const joinedAll = ({ label }: Call) => ({ merged: label.split(':')[1]!.split('+'
 const held = (stood: number) => () => ({ proven: [], refuted: [], unchecked: [], broken: [], held: [], stood });
 const labels = (calls: Call[]): string[] => calls.map((c) => c.label);
 
+test('the plan review is opt-in, runs once in order and stops building on a fatal finding', async () => {
+  const steps = { plan: plan('m1'), build: built, verify: proven, close: closed };
+  const args = { request: '요금 계산', redteam: 'plan', redteamModel: 'sonnet' };
+  const off = await run({ request: args.request }, steps);
+  assert.deepEqual(off.result.redteam, []);
+  const clear = await run(args, { ...steps, redteam: () => ({ checks: [], fatal: [] }) });
+  assert.deepEqual(clear.allCalls.map((c) => c.label), ['facts', 'plan', 'redteam:plan', 'build:m1', 'verify:m1', 'close:m1']);
+  assert.equal(clear.allCalls[2]!.model, 'sonnet');
+  assert.deepEqual(clear.result.redteam, [{ at: 'plan', checks: [], fatal: [], held: [] }]);
+  assert.equal(clear.result.stopped, null);
+  const fatal = await run({ ...args, facts: 'off' }, { ...steps, redteam: () => ({ checks: [], fatal: ['공시 요율을 읽을 수 없음'] }) });
+  assert.deepEqual(fatal.allCalls.map((c) => c.label), ['plan', 'redteam:plan']);
+  assert.match(fatal.result.stopped, /공시 요율을 읽을 수 없음/);
+  assert.deepEqual(fatal.result.notBuilt, ['title m1']);
+  const silent = await run(args, { ...steps, redteam: () => null });
+  // A review without a reply provides no fatal finding. Report the missing result before continuing.
+  assert.equal(silent.result.stopped, null);
+  assert.ok(silent.logs.some((line) => line.includes('the review did not answer')));
+  assert.deepEqual(silent.result.redteam, []);
+});
+
+test('a requested closing review leaves the verified contract open on a fatal finding', async () => {
+  for (const reply of [null, { checks: [], fatal: ['요금표와 맞지 않음'] }]) {
+    const ran = await run({ request: '검토', redteam: 'close' }, {
+      plan: plan('m1'), build: built, verify: proven, redteam: () => reply, close: closed,
+    });
+    if (!reply) {
+      assert.deepEqual(labels(ran.calls), ['plan', 'build:m1', 'verify:m1', 'redteam:m1', 'close:m1']);
+      assert.equal(ran.result.stopped, null);
+      assert.ok(ran.logs.some((line) => line.includes('the review did not answer')));
+      continue;
+    }
+    assert.deepEqual(labels(ran.calls), ['plan', 'build:m1', 'verify:m1', 'redteam:m1']);
+    assert.match(ran.result.stopped, /요금표와 맞지 않음/);
+    const [m] = ran.result.milestones;
+    assert.deepEqual(m.proven, ['one', 'two']);
+    assert.equal(m.report, null);
+    assert.equal(m.contractId, 'm1');
+  }
+});
+
+test('a closing review reads the product and files its finding in the worktree of its own milestone', async () => {
+  const roots: [string | null, string, string][] = [];
+  const ran = await run({ request: '검토', redteam: 'both' }, {
+    plan: graph({ id: 'm1' }, { id: 'm2', after: ['m1'] }, { id: 'm3', after: ['m1'] }),
+    stage: staged, build: built, verify: proven, close: closed, join: joinedAll, gate: held(4),
+    redteam: () => ({ checks: [], fatal: [], held: ['빈 상태에서 다시 열기'] }),
+  }, (where, contract, _prompt, options) => {
+    if (options.label.startsWith('redteam:')) roots.push([where, contract, options.label]);
+  });
+  assert.equal(ran.result.stopped, null);
+  assert.deepEqual(roots, [[null, 'm1', 'redteam:m1'], ['/p/.sz/trees/m2', 'm2', 'redteam:m2'], ['/p/.sz/trees/m3', 'm3', 'redteam:m3']]);
+  const prompt = ran.calls.find((c) => c.label === 'redteam:m2')!.prompt;
+  assert.match(prompt, /its folder is \`\/p\/\.sz\/trees\/m2\`/);
+  assert.ok(prompt.includes('cd /p/.sz/trees/m2 &&') && prompt.includes('.sz/evidence/m2/'));
+  assert.equal(ran.result.redteam.length, 4);
+  assert.ok(ran.result.redteam.every((r: { held: string[] }) => r.held.includes('빈 상태에서 다시 열기')));
+});
+
 test('milestones the plan puts side by side are built in folders of their own, brought together, and everything that stands is shown again before anything is built on them', async () => {
   const { result, calls, logs } = await run(
     { request: '택배 비교', side: 3 },
@@ -1044,12 +1109,12 @@ test('an agent the workflow starts by type and tells to load skills has the Skil
   // copy in another checkout of the repository, not the one of the plugin that was running.
   const file = (name: string): string => readFileSync(fileURLToPath(new URL(`../../../plugin/agents/${name}.md`, import.meta.url)), 'utf8');
   const types = [...new Set([...SOURCE.matchAll(/agentType: 'sz:([a-z-]+)'/g)].map((m) => m[1]!))];
-  assert.deepEqual(types.sort(), ['arbiter', 'facts', 'verifier']);
+  assert.deepEqual(types.sort(), ['arbiter', 'facts', 'redteam', 'verifier']);
   assert.match(SOURCE, /Load the skills you need with the Skill tool/);
   for (const type of types) {
     const tools = /^tools:\s*(.+)$/m.exec(file(type))?.[1]?.split(',').map((t) => t.trim()) ?? [];
-    // The fact reader gets its entire assignment in the prompt. Only adjudication and verification load skills.
-    if (type === 'facts') assert.deepEqual(tools, ['Read', 'Bash', 'WebSearch', 'WebFetch']);
+    // The two readers get their entire assignments in the prompt. Only adjudication and verification load skills.
+    if (type === 'facts' || type === 'redteam') assert.deepEqual(tools, ['Read', 'Bash', 'WebSearch', 'WebFetch']);
     else assert.ok(tools.includes('Skill'), `${type}: told to load skills, and has no Skill tool (${tools.join(', ')})`);
     assert.ok(!tools.includes('Write'), `${type}: writes with commands under the evidence folder, and is given no tool that edits the product by hand`);
   }
