@@ -177,6 +177,8 @@ function sandbox(cwd, scratch, role, contract, command, record, newFlows) {
   } else if (role === 'facts') {
     mkdirSync(inside(cwd, '.sz'), { recursive: true });
     allow('.sz/facts.md');
+    // The answer that nothing is published, kept so that the next run does not pay for the question again.
+    allow('.sz/facts.none');
   } else if (reviewing) {
     allow('.sz/evidence');
     const current = contracts.find((c) => c.id === contract);

@@ -321,11 +321,14 @@ test('the fact reader can write only its page in the project', {
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'sz-research-test-')));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   assert.equal(spawnSync('git', ['init', '-q'], { cwd: root }).status, 0);
-  const [page, product, ledger, git, claim] = calls(root, 'facts',
-    shell('echo rule > .sz/facts.md'), shell('echo wrong > app.mjs'), shell('echo wrong > .sz/backlog.md'),
+  const [page, none, product, ledger, git, claim] = calls(root, 'facts',
+    shell('echo rule > .sz/facts.md'), shell('echo 2026-11-26 nothing published > .sz/facts.none'),
+    shell('echo wrong > app.mjs'), shell('echo wrong > .sz/backlog.md'),
     shell('git add .sz/facts.md'), record('contract', 'claim', 'triple'));
   assert.equal(page.isError, false, page.content[0].text);
   assert.equal(readFileSync(join(root, '.sz/facts.md'), 'utf8'), 'rule\n');
+  assert.equal(none.isError, false, none.content[0].text);
+  assert.equal(readFileSync(join(root, '.sz/facts.none'), 'utf8'), '2026-11-26 nothing published\n');
   for (const denied of [product, ledger, git, claim]) assert.equal(denied.isError, true, denied.content[0].text);
 });
 

@@ -66,6 +66,43 @@ test('one fact check precedes the plan unless switched off, and unread rules are
   const off = await run({ ...args, facts: 'off' }, steps);
   assert.equal(off.allCalls[0]!.label, 'plan');
   assert.ok(!off.allCalls.some((c) => c.label === 'facts'));
+
+  // What an earlier run wrote is read first, and a page that stands is used without paying for it again.
+  const asked = ordinary.allCalls[0]!.prompt;
+  assert.match(asked, /STEP 1 — does what an earlier run wrote still stand\?/);
+  assert.match(asked, /30 days ago or less[\s\S]+?open no publisher and write nothing, not one character/);
+  assert.match(asked, /write `\.sz\/facts\.none` as that one line, `<today> <the reason>`/);
+  assert.match(asked, /`date \+%F`/);
+  assert.match(asked, /Every quotation on it stays word for word[\s\S]+?the old one is marked as replaced, not deleted/);
+  assert.match(asked, /`읽은 날` is the day of the oldest reading the page rests on: change it only when you\s+have opened again, in this run, the publisher of every quotation on the page/);
+  // `on` differs from `auto` by this one block, and only by it.
+  assert.ok(found.allCalls[0]!.prompt.startsWith('This run was started with facts "on"'));
+  assert.ok(!asked.includes('started with facts "on"'));
+  assert.equal(found.allCalls[0]!.prompt.slice(found.allCalls[0]!.prompt.indexOf('You keep the one page')), asked.slice(asked.indexOf('You keep the one page')));
+  const page = { needed: true, why: 'tariff', page: '.sz/facts.md', stands: true, readOn: '2026-11-20', fixed: ['요금은 공시표를 따른다'] };
+  const stood = await run(args, { ...steps, facts: () => page });
+  assert.ok(stood.logs.includes('the fact page .sz/facts.md stands as it was read on 2026-11-20: not read again'), stood.logs.join('\n'));
+  assert.match(stood.calls.find((c) => c.label === 'plan')!.prompt, /If `\.sz\/facts\.md` is there/);
+  const none = await run(args, { ...steps, facts: () => ({ needed: false, why: '공표 기준 없음', stands: true, readOn: '2026-11-19' }) });
+  assert.ok(none.logs.includes('no published rule bears on this product (settled on 2026-11-19): not looked into again'), none.logs.join('\n'));
+  // Asked to read again, a check that read nothing is said to have done so.
+  const ignored = await run({ ...args, facts: 'on' }, { ...steps, facts: () => page });
+  assert.ok(ignored.logs.some((line) => line.startsWith('facts: "on" asked for the publishers to be read again, and the fact check read nothing')), ignored.logs.join('\n'));
+});
+
+test('a run that only waits at the drawing and a run whose milestones are all closed do not buy the same facts twice', async () => {
+  const stands = { needed: true, why: '요금표', page: '.sz/facts.md', stands: true, readOn: '2026-11-20' };
+  const waiting = await run({ request: '요금 계산기' }, { facts: () => stands, plan: () => ({ mode: 'new', summary: 's', design: 'waiting', milestones: [] }) });
+  assert.deepEqual(waiting.allCalls.map((c) => c.label), ['facts', 'plan']);
+  assert.ok(waiting.logs.some((line) => line.includes('not read again')));
+  assert.match(waiting.result.stopped, /^the prototype waits for the owner/);
+  const resume = await run({ request: '이어서' }, {
+    facts: () => stands,
+    plan: () => ({ mode: 'continue', summary: 's', milestones: [{ id: 'm1', title: 't', builds: 'b', claims: [claim('one'), claim('two')], notReal: [], state: 'closed', contractId: 'm1' }] }),
+  });
+  assert.deepEqual(resume.allCalls.map((c) => c.label), ['facts', 'plan']);
+  assert.ok(resume.logs.some((line) => line.includes('not read again')));
+  assert.equal(resume.result.stopped, null);
 });
 
 test('the workflow does not start until it is told whether the owner was asked', async () => {

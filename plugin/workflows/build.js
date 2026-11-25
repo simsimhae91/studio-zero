@@ -1,7 +1,7 @@
 export const meta = {
   name: 'build',
   description: 'Build a product, or grow one that exists, to the end, unattended: for a new product with screens, first every screen planned, drawn as one clickable prototype, measured, and put before the owner, whose word it waits for; then a spec (new, or the existing one extended), then for each milestone a frozen contract, the build, a verification by an agent that did not build it which also shows again what stood before, fixes, and a page of evidence. Milestones follow one another unless the plan puts some side by side: those are built at the same time in folders of their own, brought together, and everything that stands is shown again on the product as joined',
-  whenToUse: 'A new product, or a change of several features to a product that already has a spec (lane L), after the owner has been put the questions only they can answer (a few, each a choice they can tap) and has asked for it to run to the end without them. Typing the command is not an answer to those questions: ask first, then start it with asked and answers (args is an object: { request, asked, answers, design? }). A new product with screens is drawn before anything of it is built: the first run plans and draws every screen, measures them, and stops with the prototype. Open .sz/design/prototype.html for the owner, record what they say in their words (sz-eyes contract judged design feel --verdict yes|no --said "<their words>"), and start the workflow again: on yes it builds the first pass to the drawing, on no it draws again what they said. Only design: "go" in args takes a run from the measured prototype straight into building without their word, and only the owner can ask for it (a prototype waits fifteen minutes; a build nobody wanted costs two hours). For a new product, right after starting the run that builds its first pass (after their yes, with design: "go", or for a product with no screens), start in the background a wait for its builder to say it stands (until sz-eyes contract built > /dev/null 2>&1; do sleep 20; done; sz-eyes contract built: it prints the contract and how the product is started, about an hour in; nothing else answers before the first pass is closed, hours later). When that returns, make a copy of the product (sz-eyes copy <a folder outside the project> --with <what .sz/map.md says is built and not in git>), start the copy the way that line says and tell the owner its address, and that it is still being verified: they see the whole product then, not when everything is finished. facts: "auto" (default) or "on" asks once whether an authority publishes a criterion the product needs; "off" skips it. redteam: "plan" | "close" | "both" adds a review in a new conversation before building a plan or closing a milestone (5 to 10 minutes a milestone). Another model is used only when redteamModel names one distinct from the original.',
+  whenToUse: 'A new product, or a change of several features to a product that already has a spec (lane L), after the owner has been put the questions only they can answer (a few, each a choice they can tap) and has asked for it to run to the end without them. Typing the command is not an answer to those questions: ask first, then start it with asked and answers (args is an object: { request, asked, answers, design? }). A new product with screens is drawn before anything of it is built: the first run plans and draws every screen, measures them, and stops with the prototype. Open .sz/design/prototype.html for the owner, record what they say in their words (sz-eyes contract judged design feel --verdict yes|no --said "<their words>"), and start the workflow again: on yes it builds the first pass to the drawing, on no it draws again what they said. Only design: "go" in args takes a run from the measured prototype straight into building without their word, and only the owner can ask for it (a prototype waits fifteen minutes; a build nobody wanted costs two hours). For a new product, right after starting the run that builds its first pass (after their yes, with design: "go", or for a product with no screens), start in the background a wait for its builder to say it stands (until sz-eyes contract built > /dev/null 2>&1; do sleep 20; done; sz-eyes contract built: it prints the contract and how the product is started, about an hour in; nothing else answers before the first pass is closed, hours later). When that returns, make a copy of the product (sz-eyes copy <a folder outside the project> --with <what .sz/map.md says is built and not in git>), start the copy the way that line says and tell the owner its address, and that it is still being verified: they see the whole product then, not when everything is finished. facts: "auto" (default) reads once what an authority publishes that the product needs, and later runs use the page it left (for 30 days, or until a request needs a criterion the page lacks); "on" has the publishers read again whatever the page says; "off" skips it. redteam: "plan" | "close" | "both" adds a review in a new conversation before building a plan or closing a milestone (5 to 10 minutes a milestone). Another model is used only when redteamModel names one distinct from the original.',
   phases: [
     { title: 'Plan', detail: 'the spec and its milestones, each with the claims that make it done' },
     { title: 'Design', detail: 'for a new product with screens: every screen planned, drawn as one prototype and measured, then put before the owner before anything is built' },
@@ -334,9 +334,11 @@ const FACTS = {
   type: 'object',
   properties: {
     needed: { type: 'boolean', description: 'whether the product depends on a published rule, figure or exception' },
+    stands: { type: 'boolean', description: 'true only when what an earlier run wrote (`.sz/facts.md` or `.sz/facts.none`) settles this request, and nothing was opened or written in this run' },
+    readOn: { type: 'string', description: 'when it stands: the day on the page\'s `읽은 날` line, or the day `.sz/facts.none` gives; empty otherwise' },
     why: { type: 'string', description: 'one line on what the product hinges on' },
     page: { type: 'string', description: 'the path written (.sz/facts.md), or empty' },
-    fixed: { type: 'array', items: { type: 'string' }, description: 'what the page settles, a line each' },
+    fixed: { type: 'array', items: { type: 'string' }, description: 'what the page settles, a line each (when it stands, the lines of its `## 기준` as they are)' },
     unread: { type: 'array', items: { type: 'string' }, description: 'what could not be read and what it needs' },
   },
   required: ['needed', 'why'],
@@ -706,25 +708,44 @@ const stopNotReal = (stopped) => {
   return { mode: plan.mode || null, summary: plan.summary || '', decided: plan.decided || [], spec: '.sz/spec.md', design: designed, milestones: [], joins: [], forOwner: [], notBuilt: [...milestones.filter((m) => m.state !== 'closed').map((m) => m.title), ...(more ? later : [])], needed, redteam: reviews, stopped }
 }
 
-// Both auto (the default) and on ask once. The researcher decides whether anything needs writing.
+// Every run but `off` asks once. What an earlier run wrote is read first, and a publisher's page is paid for again
+// only when that page is gone, older than 30 days, or short of a criterion this request turns on. (Until 2026-11-26
+// every run read the publishers again and wrote the page anew: a run that only stopped at the drawing, and one whose
+// milestones were all closed, each paid for the same reading, and the page's day became the day of the last run.)
+// `on` is the owner's word to read the publishers again whatever the page says; `auto` (the default) is not.
+const factsAgain = args.facts === 'on'
 if (args.facts !== 'off') {
   const found = await agent(
-    `You read what an authority publishes about the one thing this product is for, and you write it to one page before
-anyone plans the product. ${SAND}
+    `${factsAgain ? 'This run was started with facts "on": the owner wants the publishers read again. Skip STEP 1 whatever the page says, open again the publisher of every quotation the page has, and correct only what they publish differently now.\n\n' : ''}You keep the one page of what an authority publishes about the one thing this product is for, and you write it
+before anyone plans the product. ${SAND}
 
 The owner's request:
 ${request}
 
 ${OWNER_ANSWERS}
 
-First decide whether the product's one thing turns on a rule, a figure or an exception that somebody other than the
-owner publishes: a law or a regulation, a benefit or a price table, a standard, a licence, a fee schedule, a
-published criterion (분양가 상한, 퇴직금 산정, 보상 기준, 약가, 요금표, 공공데이터의 정의). If nothing on the path
-the product's person takes does, write nothing and return needed: false, with the reason in one line.
+Today is what \`date +%F\` prints: run it, and count days from it.
 
-If it does: open the page that holds the criterion (법령정보센터, 정부24, 공단·공사, the operator's own tariff page,
-the standard's publisher) and quote the sentence as it stands, with its address and the day you read it. Then write
-\`.sz/facts.md\` in this shape, the headings as they stand:
+STEP 1 — does what an earlier run wrote still stand? Read \`.sz/facts.md\` and \`.sz/facts.none\`, whichever is there
+(when both are, \`.sz/facts.md\` is the one that counts).
+- \`.sz/facts.md\`, its \`읽은 날\` 30 days ago or less, and nothing in the request above turns on a criterion its
+  \`## 기준\` does not cover: open no publisher and write nothing, not one character. Return needed: true, stands: true,
+  readOn: the day on its \`읽은 날\` line, page: ".sz/facts.md", and under fixed the lines of its \`## 기준\` as they are.
+  A page an earlier run paid for is what this run uses: reading the same publishers again for the same product makes
+  the owner pay twice for one answer.
+- \`.sz/facts.none\`, dated 30 days ago or less, and nothing in the request above is new to it: write nothing, and
+  return needed: false, stands: true, readOn: its day, why: its reason.
+Otherwise go on to STEP 2.
+
+STEP 2 — decide whether the product's one thing turns on a rule, a figure or an exception that somebody other than
+the owner publishes: a law or a regulation, a benefit or a price table, a standard, a licence, a fee schedule, a
+published criterion (분양가 상한, 퇴직금 산정, 보상 기준, 약가, 요금표, 공공데이터의 정의).
+- If nothing on the path the product's person takes does: write no page, return needed: false with the reason in
+  one line, and write \`.sz/facts.none\` as that one line, \`<today> <the reason>\`, so that the next run does not pay
+  for this question again.
+- If it does: open the page that holds the criterion (법령정보센터, 정부24, 공단·공사, the operator's own tariff page,
+  the standard's publisher) and quote the sentence as it stands, with its address and the day you read it. Then
+  write \`.sz/facts.md\` in this shape, the headings as they stand:
 
 # 사실 기준: <what it governs>
 읽은 날: <YYYY-MM-DD>
@@ -735,16 +756,28 @@ the standard's publisher) and quote the sentence as it stands, with its address 
 ## 우리 제품에 걸리는 것
 ## 아직 못 읽은 것
 
+A page that is already there is extended, not written anew. Every quotation on it stays word for word, with its
+address and its day. Where a publisher now says otherwise, the new quotation goes beside the old one with its own
+day, and the old one is marked as replaced, not deleted. What this request needs and the page lacks is added, each
+line with the day it was read. \`읽은 날\` is the day of the oldest reading the page rests on: change it only when you
+have opened again, in this run, the publisher of every quotation on the page. A page you added to without that keeps
+the day it has, so that it never looks younger than what it quotes.
+
 A figure enters the page inside a quotation, or as plain arithmetic over quoted figures that you show. No figure of
 your own, none from memory, none summarised to favour the product. A page that refuses you (a login, a fee, another
 country's law) is written under 아직 못 읽은 것 with what it needs. Judge nothing about whether the product should be
 built, and change no product code.
 
-Return needed, why, the page's path, what the page now settles (one line each), and what you could not read.`,
+Return needed, stands (true only when STEP 1 held and nothing was opened or written), readOn, why, the page's path,
+what the page now settles (one line each), and what you could not read.`,
     { label: 'facts', phase: 'Plan', agentType: 'sz:facts', schema: FACTS, ...effort('plan') },
   )
+  const stood = Boolean(found && found.stands === true)
+  const day = found && found.readOn ? found.readOn : 'an earlier run'
   if (!found) log('the fact check did not answer: the plan is made without it')
-  else if (!found.needed) log(`no published rule bears on this product: ${found.why}`)
+  else if (stood && factsAgain) log(`facts: "on" asked for the publishers to be read again, and the fact check read nothing: what it settled on ${day} is used as it stands`)
+  else if (!found.needed) log(stood ? `no published rule bears on this product (settled on ${day}): not looked into again` : `no published rule bears on this product: ${found.why}`)
+  else if (stood) log(`the fact page ${found.page || '.sz/facts.md'} stands as it was read on ${day}: not read again`)
   else {
     const unread = found.unread ?? []
     log(`the fact page ${found.page || '.sz/facts.md'} stands: ${(found.fixed ?? []).slice(0, 3).join(' / ')}${unread.length ? ` (not read: ${unread.join('; ')})` : ''}`)
