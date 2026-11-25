@@ -19,11 +19,13 @@ if (args[0] === 'sandbox') {
   process.exit(require('node:child_process').spawnSync(cmd[0], cmd.slice(1), { stdio: 'inherit' }).status ?? 1);
 }
 if (args[0] !== 'exec') process.exit(2);
-fs.readFileSync(0);
+const prompt = fs.readFileSync(0, 'utf8');
 const bridge = args.find((arg) => arg.startsWith('mcp_servers.sz.args='));
 const [, , , , label] = JSON.parse(bridge.slice('mcp_servers.sz.args='.length));
 const model = args[args.indexOf('--model') + 1];
-fs.appendFileSync(path.join(__dirname, 'calls'), JSON.stringify([label, model]) + '\\n');
+const live = args.includes('web_search="live"');
+fs.appendFileSync(path.join(__dirname, 'calls'), JSON.stringify([label, model, live]) + '\\n');
+fs.writeFileSync(path.join(__dirname, 'prompt-' + label.replace(/:/g, '_') + '.txt'), prompt);
 const answers = JSON.parse(fs.readFileSync(path.join(__dirname, 'answers.json')));
 if (!Object.hasOwn(answers, label)) throw new Error('unexpected worker ' + label);
 const result = answers[label];
@@ -61,11 +63,16 @@ test('native Codex routes both red-team calls to the selected model and keeps th
   assert.match(result.stderr, /the fact check did not answer/);
   assert.ok(JSON.parse(result.stdout).stopped.includes(fatal), result.stdout);
   assert.deepEqual(readFileSync(join(dir, 'calls'), 'utf8').trim().split('\n').map((line) => JSON.parse(line)), [
-    ['facts', 'build-model'],
-    ['plan', 'build-model'],
-    ['redteam:plan', 'review-model'],
-    ['start:counter', 'build-model'],
-    ['verify:counter', 'build-model'],
-    ['redteam:counter', 'review-model'],
+    ['facts', 'build-model', true],
+    ['plan', 'build-model', false],
+    ['redteam:plan', 'review-model', true],
+    ['start:counter', 'build-model', false],
+    ['verify:counter', 'build-model', false],
+    ['redteam:counter', 'review-model', true],
   ]);
+  // The roles that read a publisher's page are told how, and the others are not told of it.
+  const prompt = (label: string) => readFileSync(join(dir, `prompt-${label}.txt`), 'utf8');
+  for (const label of ['facts', 'redteam_plan', 'redteam_counter']) assert.match(prompt(label), /read a publisher's page with web search, not with the shell/);
+  for (const label of ['plan', 'start_counter', 'verify_counter']) assert.doesNotMatch(prompt(label), /web search/);
+  assert.match(prompt('redteam_counter'), /its address and the day you read it in its `why`/);
 });

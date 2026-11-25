@@ -84,6 +84,11 @@ const leftPrompt = (label, files) =>
 
 const MAX_HAND_BACK = 2;
 
+// `--ignore-user-config` runs every worker on Codex's own defaults, where web search is `cached` (an index, not the
+// page). The roles whose word rests on what a publisher says now read the page itself: the fact reader, the red
+// team, and the arbiter, who opens a claim's source before it sets the claim aside. Their shell stays local.
+const WEB_SEARCH = new Set(['facts', 'redteam', 'arbiter']);
+
 function contractOf(cwd, id) {
   if (!id) return null;
   try {
@@ -165,7 +170,7 @@ export function codexWorker({ root, model, z, log, active, holdProject, interrup
       const roleText = agentType
         ? readFileSync(join(plugin, 'agents', role + '.md'), 'utf8').replace(/^---[\s\S]*?---\s*/, '')
         : '';
-      const directions = `You are a fresh Codex worker for ${label}. Your actual project is ${cwd}. Use the sz MCP shell for project commands and file edits. For a built Electron app use the sz electron tool for its first window, interaction and project Node GUI flows. Pass look/do flags from the project map and use returned project-relative PNG paths when recording evidence. Use the sz record tool for every contract or standing mutation, passing an argv array without sz-eyes. For close, use record for sz-eyes evidence <contract> and sz-eyes evidence prune <contract> as well. Shell writes to the ledger are denied. The native sandbox and this tool's boundaries are final. When a browser or other device cannot start, report it as unchecked or blocked. In place of Claude's Skill tool, read the full ${plugin}/skills/<name>/SKILL.md and its relative references with the sz shell. Use $TMPDIR for disposable copies and build outputs. Do not spawn other workers. In JSON use null for optional fields that don't apply.\n`;
+      const directions = `You are a fresh Codex worker for ${label}. Your actual project is ${cwd}. Use the sz MCP shell for project commands and file edits. For a built Electron app use the sz electron tool for its first window, interaction and project Node GUI flows. Pass look/do flags from the project map and use returned project-relative PNG paths when recording evidence. Use the sz record tool for every contract or standing mutation, passing an argv array without sz-eyes. For close, use record for sz-eyes evidence <contract> and sz-eyes evidence prune <contract> as well. Shell writes to the ledger are denied. The native sandbox and this tool's boundaries are final. When a browser or other device cannot start, report it as unchecked or blocked. In place of Claude's Skill tool, read the full ${plugin}/skills/<name>/SKILL.md and its relative references with the sz shell. Use $TMPDIR for disposable copies and build outputs. ${WEB_SEARCH.has(role) ? "You read a publisher's page with web search, not with the shell: the shell reaches this machine only (localhost). Where what you return rests on a published page, give its address and the day you read it. " : ''}Do not spawn other workers. In JSON use null for optional fields that don't apply.\n`;
       log(`[${label}] ${workerModel} / ${effort}`);
       const mobbin = mobbinOptions(options.phase, label, scratch);
       const searchInstructions = mobbin.length
@@ -204,8 +209,7 @@ export function codexWorker({ root, model, z, log, active, holdProject, interrup
         'mcp_servers.sz.required=true',
         '-c',
         'mcp_servers.sz.tool_timeout_sec=1800',
-        // The fact reader opens the publisher's current page with Codex web search. Its project shell stays local.
-        ...(role === 'facts' ? ['-c', 'web_search="live"'] : []),
+        ...(WEB_SEARCH.has(role) ? ['-c', 'web_search="live"'] : []),
         ...mobbin,
         '-c',
         'mcp_servers.sz.default_tools_approval_mode="approve"',

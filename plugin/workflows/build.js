@@ -353,7 +353,7 @@ const REDREVIEW = {
         type: 'object',
         properties: {
           what: { type: 'string' },
-          why: { type: 'string', description: 'what is unshown, false or missing, and where you saw it' },
+          why: { type: 'string', description: 'what is unshown, false or missing, and where you saw it; for a rule or a figure of the world, the address of the page that gives it and the day it was read' },
           weight: { type: 'string', enum: ['fatal', 'serious', 'minor'] },
           where: { type: 'string', description: 'the claim id, screen, file or address' },
         },
