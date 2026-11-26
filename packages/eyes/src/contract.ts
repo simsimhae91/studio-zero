@@ -243,7 +243,7 @@ export function renderContract(contract: Contract): string {
           ]
         : []),
     ].join('\n'),
-    list('끝났을 때 참인 것', contract.claims.map((claim) => `- [${MARK[claim.status]}] **${claim.id}** ${claim.says}\n  - 보이는 방법: ${claim.shownBy.kind} \`${claim.shownBy.ref}\`${claim.note ? `\n  - ${claim.note}` : ''}${claim.commit ? `\n  - 판정한 커밋: ${claim.commit}` : ''}${claim.refutedCount > 0 ? `\n  - ${claim.refutedCount}번 반증됨` : ''}`)),
+    list('끝났을 때 참인 것', contract.claims.map((claim) => `- [${MARK[claim.status]}] **${claim.id}** ${claim.says}\n  - 보이는 방법: ${claim.shownBy.kind} \`${claim.shownBy.ref}\`${claim.note ? `\n  - ${claim.note}` : ''}${claim.commit ? `\n  - 판정한 커밋: ${claim.commit.slice(0, 10)}` : ''}${claim.refutedCount > 0 ? `\n  - ${claim.refutedCount}번 반증됨` : ''}`)),
     ...(contract.notDoing.length > 0 ? [list('하지 않는 것', contract.notDoing.map((line) => `- ${line}`))] : []),
     ...(contract.supersedes.length > 0 ? [list('이 작업으로 물러나는 약속', contract.supersedes.map((s) => `- \`${s.contract}/${s.claim}\`: ${s.why}${addedLate(contract, s) ? ' (얼린 뒤에 적힘)' : ''}`))] : []),
     ...(contract.risks.length > 0 ? [list('위험', contract.risks.map((line) => `- ${line}`))] : []),

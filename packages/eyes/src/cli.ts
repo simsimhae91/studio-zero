@@ -730,7 +730,7 @@ async function main(argv: string[]): Promise<number> {
       const last = lastRelease(project, place);
       if (!last) throw new EyesError(`nothing released to ${place} stands, so there is nothing to look at again. Releases: ${renderReleases(project)}`);
       const kept = (id: string): boolean => id.startsWith('live-') && id !== 'live-kept';
-      contract = { ...last, id: idFree(`live-${localDay(now)}`), request: `${place}에 살아 있는 것 점검 (${last.release!.commit.slice(0, 7)}, ${last.id}로 내보낸 것)`, claims: last.claims.filter((claim) => kept(claim.id)).map((claim) => ({ ...claim, status: 'unproven', evidence: [], note: '', at: null })), notDoing: last.notDoing.filter((line) => kept(line)), noticed: [], amendments: [], frozenAt: now, createdAt: now, closedAt: null, release: { ...last.release!, candidate: null, previous: null } };
+      contract = { ...last, id: idFree(`live-${localDay(now)}`), request: `${place}에 살아 있는 것 점검 (${last.release!.commit.slice(0, 7)}, ${last.id}로 내보낸 것)`, claims: last.claims.filter((claim) => kept(claim.id)).map((claim) => ({ ...claim, status: 'unproven', evidence: [], note: '', at: null, commit: null, refutedCount: 0 })), notDoing: last.notDoing.filter((line) => kept(line)), noticed: [], amendments: [], frozenAt: now, createdAt: now, closedAt: null, release: { ...last.release!, candidate: null, previous: null } };
     } else if (command === 'new') {
       const url = a.one('--url');
       const given = a.one('--commit');
@@ -1449,7 +1449,7 @@ async function main(argv: string[]): Promise<number> {
         // as HEAD it would hide that commit from the next comparison. (2026-11-26: verifiers looked at copies while
         // the session went on committing fixes beside them.)
         const given = a.one('--at');
-        const rev = spawnSync('git', ['-C', project, 'rev-parse', '--verify', '--quiet', '--short', `${given ?? 'HEAD'}^{commit}`], { encoding: 'utf8' });
+        const rev = spawnSync('git', ['-C', project, 'rev-parse', '--verify', '--quiet', `${given ?? 'HEAD'}^{commit}`], { encoding: 'utf8' });
         if (given !== undefined && rev.status !== 0) throw new EyesError(`--at ${given}: no such commit in ${project}. It is the commit the product was at when you looked: the first line sz-eyes copy printed names it.`);
         const seenAt = rev.status === 0 && `${rev.stdout ?? ''}`.trim() !== '' ? `${rev.stdout}`.trim() : null;
         // Set aside for the owner, a claim is nobody else's to call proven: a ruling that set it aside and then
@@ -1553,7 +1553,9 @@ async function main(argv: string[]): Promise<number> {
           ? { commit: null, failed: false, said: 'left for the build run to commit: its runner has what a worker leaves committed before the next one starts' }
           : commitFrozenCheck(project, id, target, file);
       // Left to a run, nothing is said of a commit (it comes); otherwise the record says which commit, or that there is none.
-      if (!ofRun || a.has('--no-commit')) updateContract(file, (contract) => ({ ...contract, amendments: contract.amendments.map((amend) => (amend.file === target && amend.at === at ? { ...amend, commit: kept.commit } : amend)) }));
+      // The fingerprint is taken again after the commit: a product's own commit hook may have rewritten the check
+      // (a formatter), and what the contract holds is the file as it now is.
+      if (!ofRun || a.has('--no-commit')) updateContract(file, (contract) => ({ ...contract, frozenPrints: { ...contract.frozenPrints, [target]: fingerprint(project, target) }, amendments: contract.amendments.map((amend) => (amend.file === target && amend.at === at ? { ...amend, commit: kept.commit } : amend)) }));
       out(`amended: ${target}. ${kept.said}`);
       if (kept.failed) {
         process.stderr.write(`sz-eyes contract amend: the correction is recorded and is NOT committed: ${kept.said}. Settle what stopped it and commit those two paths yourself, and nothing else (git commit -- ${target} ${relative(project, file)}). Until then the corrected check is in the project's folder only: a copy has it while this contract is open, and nothing else does.\n`);

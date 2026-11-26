@@ -1584,7 +1584,9 @@ test('a look after a fix does not run what the fix did not reach, and says which
   });
   const [first, second] = ran.calls.filter((c) => c.label.startsWith('verify:')).map((c) => c.prompt);
   assert.doesNotMatch(first!, /"carried"/, 'a first look runs everything: there is no earlier verdict to stand on');
-  assert.match(second!, /Where the fix did not reach a claim at all, even its own check is not run again\./);
+  assert.match(second!, /Not every such claim needs even its own check, and this goes before what is said above about showing your other claims again/);
+  assert.match(second!, /or is listed in the contract as corrected and not committed \(얼린 뒤 고친 검사, 커밋되지 않음: a diff of commits does not see it\)/);
+  assert.match(second!, /one whose check is the command that runs all of the project's checks \(any change to the product or to its tests is a change to what that command runs\)/);
   assert.match(second!, /`git diff --name-only <that commit>\.\.HEAD`, run in the project's folder \(a copy is not a repository\)/);
   assert.match(second!, /return it under "carried" with its id, the two commits and what the diff named, and its verdict stands as it was/);
   assert.match(second!, /a module more than one screen uses \(anything the map calls shared\)/);
@@ -1596,7 +1598,7 @@ test('a look after a fix does not run what the fix did not reach, and says which
   // again is not, and neither is one the contract does not have.
   assert.deepEqual(ran.result.milestones[0].carried.map((c: { id: string }) => c.id), ['one']);
   assert.deepEqual([...ran.result.milestones[0].proven].sort(), ['one', 'two'], 'a carried claim keeps the verdict it had');
-  assert.match(ran.calls.find((c) => c.label === 'close:m1')!.prompt, /2 proven, 0 refuted, 0 unchecked, and 1 not run again because the fix did not reach them \(one\)/);
+  assert.match(ran.calls.find((c) => c.label === 'close:m1')!.prompt, /2 proven, 0 refuted, 0 unchecked \(1 of those proven were not run again at the last look, because the fix did not reach them: one\)/);
   // Carrying never gives a verdict: a claim shown false and "carried" is still false.
   const dodge = await run({ request: 'x' }, { plan: plan('m1'), build: built, close: () => ({ report: 'r.html', closed: false, line: 'l' }), fix: () => ({ fixed: ['two'] }), verify: (_: Call, nth: number) => (nth === 0 ? { proven: ['one'], refuted: [{ id: 'two', fact: 'f' }], unchecked: [] } : { proven: [], refuted: [], unchecked: [], carried: [{ id: 'two', range: 'a..b', why: 'x' }] }) });
   assert.deepEqual(dodge.result.milestones[0].refuted.map((r: { id: string }) => r.id), ['two']);
@@ -1618,10 +1620,13 @@ test('a fix runs the checks its own change reaches and says which', async () => 
     verify: (_: Call, nth: number) => (nth === 0 ? { proven: ['one'], refuted: [{ id: 'two', fact: 'f' }], unchecked: [] } : { proven: ['one', 'two'], refuted: [], unchecked: [] }),
   });
   const fixer = ran.calls.find((c) => c.label === 'fix:m1:1')!.prompt;
-  assert.match(fixer, /they are most of an hour in which nothing is learned\. One exception, and it is not that: the checks your own change reaches\./);
+  assert.match(fixer, /they are most of an hour in which nothing is learned\. One exception: the few checks your own change reaches\./);
   assert.match(fixer, /git show --stat --oneline HEAD/);
   assert.match(fixer, /put one line each under "ranAlso"/);
-  assert.match(fixer, /Where one of them fails now, the product is wrong: mend it before you return/);
+  assert.match(fixer, /Where one of them fails now, find out why before you return\. Where your change broke what that claim says, mend it here/);
+  // A check that only reads an old form is not bent back to: the rule that follows it in the same request still holds.
+  assert.match(fixer, /Where the check only reads the old form of something your claim's source or the drawing changed, it is the case the next sentences settle \(a line under "notFixed"\), not a thing to bend back\./);
+  assert.match(SOURCE, /the mend after the join also ran \$\{joinAlso\.length\} check\(s\) its change reached/);
   assert.ok(ran.logs.includes('title m1: fix 1 also ran 2 check(s) its change reached: one: its flow passed | other-m/split: its test passed'), ran.logs.join('\n'));
   assert.match(SOURCE, /ranAlso: \{ type: 'array', items: \{ type: 'string' \}, description: 'one line each for the checks of other claims/);
   assert.match(SOURCE, /Run the project's checks, and the checks of the promises your change reaches/, 'whoever mends what broke when milestones were joined does the same');
@@ -1659,9 +1664,18 @@ test('claims shown false by one cause are one mend, one ruling and one count, an
   const open = () => ({ report: 'r.html', closed: false, line: 'l' });
   const sameCause = await run({ request: 'x' }, { plan: three, build: built, close: open, fix: () => ({ fixed: ['x'] }), verify: looks([f('one')], [f('three', 'one')], [f('three', 'one')]) });
   assert.deepEqual(sameCause.calls.filter((c) => c.label.startsWith('fix:')).map((c) => c.label), ['fix:m1:1', 'fix:m1:2'], 'one cause, two fixes');
-  assert.match(sameCause.calls.find((c) => c.label === 'fix:m1:2')!.prompt, /mended once already and shown false again\. What was found the time before:\n- three: one is not so/);
+  assert.match(sameCause.calls.find((c) => c.label === 'fix:m1:2')!.prompt, /mended once already and shown false again\. What was found the time before:\n- three \(the cause it shares with one, which was mended\): one is not so/);
   const ownCause = await run({ request: 'x' }, { plan: three, build: built, close: open, fix: () => ({ fixed: ['x'] }), verify: looks([f('one')], [f('three')], [f('three')], [f('three')]) });
   assert.deepEqual(ownCause.calls.filter((c) => c.label.startsWith('fix:')).map((c) => c.label), ['fix:m1:1', 'fix:m1:2', 'fix:m1:3'], 'a cause of its own has its own two');
+  // Each naming the other, as the skill tells a verifier to write it, is still one cause: one count, one log line.
+  // (A review of this change found that two claims naming each other came out as two causes, so nothing was grouped.)
+  const mutual = await run({ request: 'x' }, { plan: three, build: built, close: open, fix: () => ({ fixed: ['x'] }), verify: looks([f('one', 'three'), f('three', 'one')], [f('three', 'one')], [f('one', 'three')]) });
+  assert.ok(mutual.logs.includes('title m1: fix 1: one cause is one mend: one = three'), mutual.logs.join('\n'));
+  assert.deepEqual(mutual.calls.filter((c) => c.label.startsWith('fix:')).map((c) => c.label), ['fix:m1:1', 'fix:m1:2'], 'whichever of the two is false now, it is the same cause');
+  assert.match(mutual.calls.find((c) => c.label === 'fix:m1:1')!.prompt, /- one: one is not so \(the same cause as three: one change mends both/);
+  // What was tied at one look stays tied when a later look names the claim alone: a cause is not counted afresh.
+  const untied = await run({ request: 'x' }, { plan: three, build: built, close: open, fix: () => ({ fixed: ['x'] }), verify: looks([f('one'), f('three', 'one')], [f('three')], [f('three')]) });
+  assert.deepEqual(untied.calls.filter((c) => c.label.startsWith('fix:')).map((c) => c.label), ['fix:m1:1', 'fix:m1:2']);
   // A name that is no claim of the contract, or the claim itself, names no cause.
   const stray = await run({ request: 'x' }, { plan: three, build: built, close: closed, fix: () => ({ fixed: ['x'] }), verify: looks([f('one', 'nine'), f('two', 'two')], []) });
   assert.doesNotMatch(stray.calls.find((c) => c.label === 'fix:m1:1')!.prompt, /the same cause as/);

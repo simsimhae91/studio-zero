@@ -136,7 +136,9 @@ function withEarlierVerdicts(earlier, latest, current, assigned) {
     if (status === 'proven') result.proven.push(id);
     if (status === 'refuted') {
       const fact = note || latest.refuted.find((r) => r.id === id)?.fact || earlier.refuted.find((r) => r.id === id)?.fact;
-      result.refuted.push({ id, fact: fact || 'recorded as refuted' });
+      // What the verifier said of a cause it shares with another claim is not in the contract: it is kept from what it returned.
+      const sameAs = latest.refuted.find((r) => r.id === id)?.sameAs || earlier.refuted.find((r) => r.id === id)?.sameAs;
+      result.refuted.push({ id, fact: fact || 'recorded as refuted', ...(sameAs ? { sameAs } : {}) });
     }
     if (status === 'unchecked') {
       const why = note || latest.unchecked.find((u) => u.id === id)?.why || earlier.unchecked.find((u) => u.id === id)?.why;
@@ -164,7 +166,10 @@ export function codexWorker({ root, model, z, log, active, holdProject, interrup
     const scratch = realpathSync(mkdtempSync(join(tmpdir(), 'sz-worker-')));
     const schemaFile = join(scratch, 'output.schema.json');
     try {
-      const before = ['build', 'fix', 'mend', 'start'].includes(role) ? uncommittedProduct(cwd) : null;
+      // Whoever rules may correct a frozen check and cannot commit it (its git is read-only): what it leaves is
+      // handed to one cleanup like a builder's, or a corrected check outside `.sz` is in no commit when the
+      // contract closes, and every later look runs the old one.
+      const before = ['build', 'fix', 'mend', 'start', 'arbiter'].includes(role) ? uncommittedProduct(cwd) : null;
       const strict = outputSchema(schema);
       writeFileSync(schemaFile, JSON.stringify(strict));
       const roleText = agentType

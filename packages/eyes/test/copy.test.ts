@@ -3,7 +3,7 @@
 // side by side made these by hand, each time (fourteen times in one first pass, 2026-11-17).
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
@@ -47,11 +47,13 @@ test('a copy runs the checks its open contract holds, not the ones the last comm
     put(project, '.sz/flows/saw.sh', 'echo corrected\n');
     assert.match(eyes(project, 'contract', 'amend', 'm1-saw', '--file', '.sz/flows/saw.sh', '--why', '제목 키 대신 사이트 이름으로 찾는다', '--no-commit').text, /not committed \(--no-commit\)/);
     put(project, '.sz/flows/new.sh', 'echo new\n');
+    chmodSync(join(project, '.sz/flows/new.sh'), 0o755);
     assert.equal(eyes(project, 'contract', 'add-check', 'm1-saw', '--frozen', '.sz/flows/new.sh').code, 0);
     put(project, 'src/a.txt', 'being edited, not committed\n');
     const made = makeCopy(project, join(root, 'copies', 'v1'), {});
     assert.equal(readFileSync(join(made.folder, '.sz/flows/saw.sh'), 'utf8'), 'echo corrected\n', 'the check the contract holds, not the one the commit carries');
     assert.equal(readFileSync(join(made.folder, '.sz/flows/new.sh'), 'utf8'), 'echo new\n', 'and one no commit has');
+    assert.equal(statSync(join(made.folder, '.sz/flows/new.sh')).mode & 0o111, 0o111, 'still to be run as ./new.sh');
     assert.deepEqual(made.carried.sort(), ['.sz/flows/new.sh (m1-saw)', '.sz/flows/saw.sh (m1-saw)']);
     assert.deepEqual(made.stale, []);
     assert.equal(readFileSync(join(made.folder, 'src/a.txt'), 'utf8'), 'committed\n', 'nothing else of the working folder comes along');
@@ -63,6 +65,11 @@ test('a copy runs the checks its open contract holds, not the ones the last comm
     assert.deepEqual(second.stale, ['.sz/flows/saw.sh (m1-saw)']);
     assert.deepEqual(second.carried, ['.sz/flows/new.sh (m1-saw)']);
     assert.match(copyText(second, project), /changed in the project with no correction recorded, so the copy has them as committed: \.sz\/flows\/saw\.sh \(m1-saw\)/);
+    // Deleted in the project with no correction recorded: likewise said, and the copy keeps the committed one.
+    rmSync(join(project, '.sz/flows/saw.sh'));
+    const third = makeCopy(project, join(root, 'copies', 'v2b'), {});
+    assert.deepEqual(third.stale, ['.sz/flows/saw.sh (m1-saw)']);
+    assert.equal(readFileSync(join(third.folder, '.sz/flows/saw.sh'), 'utf8'), 'echo old\n');
     // A copy of an earlier commit is that commit: nothing of today's folder is put into it.
     const first = git(project, 'rev-parse', 'HEAD');
     const earlier = makeCopy(project, join(root, 'copies', 'v0'), { at: first });

@@ -277,6 +277,16 @@ test('a frozen check may be corrected by whoever was started as the arbiter, und
     assert.equal(at({ agent_type: 'arbiter-7' }).code, 2, 'no record of it at all');
     assert.equal(at({ agent_id: 'averify-1-443e6a', agent_type: 'verify-1' }).code, 2);
     assert.equal(at({ agent_id: '../../../../etc/x', agent_type: 'arbiter-1', transcript_path: '/nowhere/x.jsonl' }).code, 2, 'an id is not a path');
+    // Two teammates under one name, one of them started as a general agent: the name cannot say which is calling,
+    // so by name neither passes; by its id each is known for what it is. A record that is not JSON is passed over.
+    meta('aarbiter-1-a6a806', { agentType: 'arbiter-1', name: 'arbiter-1', taskKind: 'in_process_teammate', spawnedAgentType: 'general-purpose' });
+    writeFileSync(join(session, 'subagents', 'agent-junk.meta.json'), '{ not json');
+    assert.equal(at({ agent_type: 'arbiter-1' }).code, 2, 'a shared name is nobody');
+    assert.equal(at({ agent_id: 'aarbiter-1-e26127', agent_type: 'arbiter-1' }).code, 0);
+    assert.equal(at({ agent_id: 'aarbiter-1-a6a806', agent_type: 'arbiter-1' }).code, 2);
+    // What nobody froze is nobody's to refuse, whoever asks and whatever the records hold.
+    const free = spawnSync(process.execPath, [join(HERE, '../../../plugin/hooks/guard-frozen.mjs')], { encoding: 'utf8', input: JSON.stringify({ cwd: project, transcript_path: `${session}.jsonl`, agent_type: 'verify-1', tool_input: { file_path: join(project, 'src/free.ts') } }) });
+    assert.equal(free.status, 0);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -365,12 +375,14 @@ test('a verdict remembers the commit the product was at when it was looked at', 
     writeFileSync(join(project, 'a.txt'), 'a\n');
     git('add', '-A');
     git('commit', '-q', '-m', 'first');
-    const first = git('rev-parse', '--short', 'HEAD');
+    const first = git('rev-parse', 'HEAD');
     assert.equal(eyes(project, 'contract', 'new', 'm1-seen', '--lane', 'M', '--request', '본다', '--claim', 'here|파일이 있다|command:true', '--claim', 'copy|사본에서 본다|command:true').code, 0);
     assert.equal(eyes(project, 'contract', 'freeze', 'm1-seen').code, 0);
     writeFileSync(join(project, 'a.txt'), 'b\n');
     git('commit', '-q', '-am', 'a fix');
-    const head = git('rev-parse', '--short', 'HEAD');
+    // The whole hash is kept (two records are compared by it), and the contract shows its first ten characters.
+    const head = git('rev-parse', 'HEAD');
+    assert.equal(head.length, 40);
     assert.equal(eyes(project, 'contract', 'claim', 'm1-seen', 'here', '--status', 'proven', '--note', '돌려서 봤다').code, 0);
     assert.equal(claimOf('here').commit, head, 'the commit the project is at, unless told otherwise');
     // Shown on a copy made before the fix landed: the verdict is about that commit, and says so.
@@ -379,8 +391,11 @@ test('a verdict remembers the commit the product was at when it was looked at', 
     assert.match(eyes(project, 'contract', 'claim', 'm1-seen', 'copy', '--status', 'proven', '--note', '사본에서 돌려 봤다', '--at', 'nope').text, /--at nope: no such commit/);
     assert.equal(claimOf('copy').commit, first, 'a verdict that was refused changes nothing');
     const shown = eyes(project, 'contract', 'show', 'm1-seen').text;
-    assert.match(shown, new RegExp(`\\*\\*here\\*\\*[^\\n]*\\n[^\\n]*\\n[^\\n]*\\n  - 판정한 커밋: ${head}`));
-    assert.match(shown, new RegExp(`판정한 커밋: ${first}`));
+    assert.match(shown, new RegExp(`\\*\\*here\\*\\*[^\\n]*\\n[^\\n]*\\n[^\\n]*\\n  - 판정한 커밋: ${head.slice(0, 10)}\\n`));
+    assert.match(shown, new RegExp(`판정한 커밋: ${first.slice(0, 10)}\\n`));
+    // Told by a short name of the commit, it keeps the same whole hash.
+    assert.equal(eyes(project, 'contract', 'claim', 'm1-seen', 'copy', '--status', 'proven', '--note', '사본에서 돌려 봤다', '--at', first.slice(0, 8)).code, 0);
+    assert.equal(claimOf('copy').commit, first);
     // Outside a repository a verdict keeps no commit, and says so by having none.
     const lonely = mkdtempSync(join(tmpdir(), 'eyes-nocommit-'));
     try {

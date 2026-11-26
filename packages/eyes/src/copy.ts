@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { allContracts } from './contract.ts';
 import { fingerprint } from './fingerprint.ts';
@@ -71,6 +71,16 @@ function filesUnder(project: string, path: string): string[] {
   return readdirSync(at).filter((entry) => entry !== 'node_modules' && entry !== '.git').sort().flatMap((entry) => filesUnder(project, join(path, entry)));
 }
 
+/** Whether a path under a folder is reached without passing through a link: nothing is read or written through one. */
+function plain(root: string, path: string): boolean {
+  let at = root;
+  for (const part of path.split('/').filter(Boolean)) {
+    at = join(at, part);
+    if (lstatSync(at, { throwIfNoEntry: false })?.isSymbolicLink()) return false;
+  }
+  return true;
+}
+
 export function makeCopy(project: string, folder: string, opts: { at?: string; with?: readonly string[] }): Copy {
   const from = resolve(project);
   const to = resolve(folder);
@@ -131,8 +141,14 @@ export function makeCopy(project: string, folder: string, opts: { at?: string; w
       for (const held of heldChecks(from)) {
         const rel = relative(from, resolve(from, held.path));
         if (isAbsolute(held.path) || rel === '' || rel.startsWith('..')) continue;
-        const differ = filesUnder(from, rel).filter((file) => !existsSync(join(to, file)) || !readFileSync(join(to, file)).equals(readFileSync(join(from, file))));
-        if (differ.length === 0) continue;
+        // Nothing is read or written through a link, in the project or in the copy.
+        if (!plain(from, rel) || !plain(to, rel)) continue;
+        const here = filesUnder(from, rel);
+        const differ = here.filter((file) => !existsSync(join(to, file)) || !readFileSync(join(to, file)).equals(readFileSync(join(from, file))));
+        // What the commit has under that path and the project's folder no longer does (a file of a frozen folder
+        // taken out, a frozen file deleted).
+        const gone = (lstatSync(join(to, rel), { throwIfNoEntry: false }) ? filesUnder(to, rel) : []).filter((file) => !here.includes(file));
+        if (differ.length === 0 && gone.length === 0) continue;
         const name = `${held.path} (${held.contract})`;
         if (held.print === undefined || fingerprint(from, held.path) !== held.print) {
           if (!stale.includes(name)) stale.push(name);
@@ -141,7 +157,10 @@ export function makeCopy(project: string, folder: string, opts: { at?: string; w
         for (const file of differ) {
           mkdirSync(dirname(join(to, file)), { recursive: true });
           writeFileSync(join(to, file), readFileSync(join(from, file)));
+          // A flow somebody made executable stays so: it is run as `./flow.sh` in the copy as in the project.
+          chmodSync(join(to, file), lstatSync(join(from, file)).mode & 0o777);
         }
+        for (const file of gone) rmSync(join(to, file), { force: true });
         if (!carried.includes(name)) carried.push(name);
       }
     }

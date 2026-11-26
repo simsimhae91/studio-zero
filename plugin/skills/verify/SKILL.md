@@ -152,7 +152,7 @@ A look after a fix does not run everything again. Every verdict keeps the commit
 
 A change to one of these reaches every claim, so the claim is run: the app's entry or router, a module more than one screen uses (anything the map calls shared), a package manifest or a lock file, the build and type-check configuration, a schema or migration, the design's tokens or theme, a setting read everywhere (the environment, the words, the error handler), and the line of `.sz/map.md` that says how it is launched.
 
-Never carried: a claim with no commit on its verdict, a claim shown false before (`sz-eyes contract show` says how often), one whose own check is in the diff, and one shown by the command that runs all of the project's checks, where that command changed. Where you cannot tell whether the diff stands near a claim's words, run it.
+Never carried: a claim with no commit on its verdict, a claim shown false before (`sz-eyes contract show` says how often), one whose own check is in the diff or is listed in the contract as corrected and not committed (`얼린 뒤 고친 검사`, `커밋되지 않음`: a diff of commits does not see it), and one whose check is the command that runs all of the project's checks (any change to the product or to its tests is a change to what that command runs). Where you cannot tell whether the diff stands near a claim's words, run it.
 
 A verdict is about the commit you looked at. Given on a copy made before the project moved on, it says so: `sz-eyes contract claim <id> <claim> ... --at <the copy's commit>` (the first line `sz-eyes copy` printed names it). Recorded as the project's HEAD, it would hide the commits in between from the next comparison.
 

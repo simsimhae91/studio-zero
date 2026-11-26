@@ -285,6 +285,11 @@ test('whoever rules may give back a verdict that was not the claim\'s, and recor
     [...proven, '--accepted', '닫아'],
   ])
     assert.throws(() => authorizeRecord('arbiter', 'triple', 'rule:triple', args, shownFalse), JSON.stringify(args));
+  // What whoever rules leaves uncommitted is handed to a cleanup as a builder's is (it cannot commit: its git is
+  // read-only), and what a verifier said of a shared cause survives a hand-back.
+  const runner = readFileSync(fileURLToPath(new URL('../../../plugin/codex/run.mjs', import.meta.url)), 'utf8');
+  assert.match(runner, /\['build', 'fix', 'mend', 'start', 'arbiter'\]\.includes\(role\) \? uncommittedProduct\(cwd\)/);
+  assert.match(runner, /\.\.\.\(sameAs \? \{ sameAs \} : \{\}\)/);
   // A builder still records no verdict at all.
   assert.throws(() => authorizeRecord('build', 'triple', 'build:triple', proven));
 });
