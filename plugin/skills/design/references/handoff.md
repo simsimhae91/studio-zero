@@ -14,8 +14,10 @@ With no reference tool connected, the library is the source; where it has nothin
 
 ## `.sz/plan/frame.md`: written first, whole, before any screen
 
-When the owner dug the idea out with `sz:dive`, choose the newest relevant folder under `.sz/dive/` by its
-`dive.json` creation date. Read its `idea.md` when present. Only the `brief.md` beside that idea is the confirmed
+When the owner dug the idea out with `sz:dive`, run `sz-eyes dive show` and use the folder it prints: the product's
+own dives (under `.sz/dive/`) come first, then those kept outside any product (under `~/.studio-zero/dives`), which
+are this product's only when the request names one or its seed is plainly this product. Choose the newest relevant
+one by its `dive.json` creation date. Read its `idea.md` when present. Only the `brief.md` beside that idea is the confirmed
 brief; if there is only a draft, use the settled idea alone. Cut the frame from those pages: section 1 from
 `moment`, section 2 from `core` and the brief's 북극성, section 3 from `feel` and the words it quotes, section 5
 from `first`, sections 7 and 8 from 첫 1분과 핵심 여정, section 11 from 비워 둘 것, and what is not built from `not`.

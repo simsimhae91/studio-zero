@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { test } from 'node:test';
-import { BRIEF_FILE, BRIEF_SECTIONS, addSaw, answersIn, closeDive, diveFolder, diveRoot, findHeard, heardSince, ideaPage, leftBefore, linesOf, newDive, progressLine, readDive, seeInFile, setDirection, setDiveLine, writeBrief, type DiveKind, type Heard } from '../src/dive.ts';
+import { BRIEF_FILE, BRIEF_SECTIONS, addSaw, allDives, answersIn, closeDive, diveFolder, diveRoot, findHeard, heardSince, ideaPage, leftBefore, linesOf, newDive, progressLine, readDive, seeInFile, setDirection, setDiveLine, writeBrief, type DiveKind, type Heard } from '../src/dive.ts';
 
 const HERE = import.meta.dirname;
 const ROOT = resolve(HERE, '../../..');
@@ -392,4 +392,57 @@ test('the dive skill gives the complete brief for each kind and takes the owner 
   assert.match(section, /네, 이대로[\s\S]*고칠 게 있어요[\s\S]*나중에/);
   assert.match(section, /나중에\*\*: keep only the draft and stop/);
   assert.match(section, /sz-eyes dive brief <id> --file "<folder printed by dive show>\/brief.draft.md" --said/);
+});
+
+test('a dive kept outside the product is found from inside it, listed after the product\'s own, and the product\'s copy wins', () => {
+  const p = project();
+  try {
+    // Started where no product lived: kept under the dives folder, with the day in its name.
+    const outside = newDive(p.dir, 'settle', 'plain', '모임 정산이 귀찮아', said('모임 정산이 귀찮아'), AT, p.env, p.dir);
+    assert.equal(outside, join(p.env.SZ_DIVES_DIR!, '2026-11-24-settle'));
+    const product = join(p.dir, 'product');
+    mkdirSync(product, { recursive: true });
+    assert.deepEqual(allDives(product, p.env, '/nowhere').map((d) => d.folder), [outside]);
+    assert.equal(diveFolder(product, 'settle', p.env, '/nowhere'), outside);
+    assert.throws(() => newDive(product, 'settle', 'plain', '모임 정산이 귀찮아', said('모임 정산이 귀찮아'), AT, p.env, '/nowhere'), /already a dive "settle"/);
+    const cli = (...args: string[]) => spawnSync(process.execPath, [CLI, 'dive', ...args, '--dir', product], { encoding: 'utf8', env: p.env });
+    writeFileSync(join(outside, BRIEF_FILE), '# 밖에서 쓴 브리프\n');
+    assert.equal(cli('brief', 'settle').stdout, '# 밖에서 쓴 브리프\n');
+    // The product's own copy, under the same id, is the one read; other ideas kept outside come after, under a line that says whose they are.
+    newDive(p.dir, 'other', 'plain', '동네 산책 기록', said('동네 산책 기록'), AT, p.env, p.dir);
+    mkdirSync(join(product, '.sz/dive'), { recursive: true });
+    cpSync(outside, join(product, '.sz/dive/settle'), { recursive: true });
+    writeFileSync(join(product, '.sz/dive/settle', BRIEF_FILE), '# 제품 안의 브리프\n');
+    assert.equal(diveFolder(product, 'settle', p.env, '/nowhere'), join(product, '.sz/dive/settle'));
+    assert.equal(cli('brief', 'settle').stdout, '# 제품 안의 브리프\n');
+    const shown = cli('show').stdout.trim().split('\n');
+    assert.equal(shown.length, 3, shown.join('\n'));
+    assert.match(shown[0]!, /^settle: .*\.sz\/dive\/settle\)$/);
+    assert.match(shown[1]!, /^kept outside any product \(.*dives-home\): one of these is this product's only when the owner names it/);
+    assert.match(shown[2]!, /^other: .*"동네 산책 기록".*2026-11-24-other\)$/);
+    assert.match(ideaPage({ ...readDive(outside), summary: '모임 정산' }, outside, p.env), /제품 폴더에서도 `sz-eyes dive show`가 이 생각을[\s\S]*mkdir -p \.sz\/dive && cp -R/);
+  } finally {
+    p.done();
+  }
+});
+
+test('where the dives kept outside any product cannot be read, the product\'s own are listed and the refusal is said', { skip: process.getuid?.() === 0 && 'root reads every folder' }, () => {
+  const p = project();
+  try {
+    newDive(p.dir, 'away', 'plain', '모임 정산이 귀찮아', said('모임 정산이 귀찮아'), AT, p.env, p.dir);
+    const product = join(p.dir, 'product');
+    const own = newDive(product, 'here', 'plain', '동네 산책 기록', said('동네 산책 기록'), AT, p.env, '/nowhere');
+    chmodSync(p.env.SZ_DIVES_DIR!, 0o000);
+    try {
+      assert.deepEqual(allDives(product, p.env, '/nowhere').map((d) => d.folder), [own]);
+      const shown = spawnSync(process.execPath, [CLI, 'dive', 'show', '--dir', product], { encoding: 'utf8', env: p.env });
+      assert.equal(shown.status, 0, shown.stderr);
+      assert.match(shown.stdout, /^here: [\s\S]*dives-home could not be read here \(EACCES\): the dives kept outside any product are not listed\n$/);
+      assert.throws(() => diveFolder(product, 'away', p.env, '/nowhere'), /no dive "away" here \(.*product\/\.sz\/dive, or .*dives-home\); .*could not be read here/);
+    } finally {
+      chmodSync(p.env.SZ_DIVES_DIR!, 0o755);
+    }
+  } finally {
+    p.done();
+  }
 });

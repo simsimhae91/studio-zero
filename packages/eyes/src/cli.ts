@@ -11,7 +11,7 @@ import { diskRoom, roomText } from './room.ts';
 import { ElectronError, renderAppLook, renderAppWalk, walkElectron } from './electron.ts';
 import { CiteError, seeQuote } from './cite.ts';
 import { Basis, LineId, LineStatus, Objection, Other, addAsk as addWorthAsk, addCite, addObjection, allCases, answerObjection, caseFolder, hearAsk, newCase, readCase, removeOther, renderCase, renderCases, setCall, setLine, setOther, setOwner, setRow, standingOf, unanswered, weighCite, withdrawCite, writeCasePage, writeCasesPage } from './worth.ts';
-import { BRIEF_FILE, DiveKind, DiveLineId, LineStatus as DiveLineStatus, addSaw, allDives, closeDive, diveFolder, heardFor, ideaPage, newDive, progressLine, readDive, renderDive, renderDives, seeInFile, setDirection, setDiveLine, writeBrief } from './dive.ts';
+import { BRIEF_FILE, DiveKind, DiveLineId, LineStatus as DiveLineStatus, addSaw, allDives, closeDive, diveFolder, diveRoot, heardFor, ideaPage, newDive, outsideDivesRefused, progressLine, readDive, renderDive, renderDives, seeInFile, setDirection, setDiveLine, writeBrief } from './dive.ts';
 import { engineEnv, findTool, hostedSupabaseCall } from './engine.ts';
 import { writeEvidencePage } from './evidence.ts';
 import { changedSinceFrozen, fingerprint, fingerprints } from './fingerprint.ts';
@@ -230,7 +230,8 @@ const USAGE = `sz-eyes: launch what was built, look at it, operate it, and put w
         without the owner's words; writes idea.md, which the next stages read
   sz-eyes dive brief <id> --file <draft.md> --said "<their words>" [--force] [--dir <project>]
   sz-eyes dive brief <id>                                  prints the brief, or says there is none
-  sz-eyes dive show [<id>] [--dir <project>]             one dive as it stands (its first lines: the seed, then how many lines are clear), or a line for each
+  sz-eyes dive show [<id>] [--dir <project>]             one dive as it stands (its first lines: the seed, then how many lines are clear), or a line for each:
+        the project's own, then those kept outside any product (~/.studio-zero/dives), each with its folder
 
   sz-eyes room [--json] [--dir <project>]                whole gigabytes free on the disk the project is on (its first line,
         the number alone), and what a milestone has taken there: asked by whoever plans, before anything is built
@@ -1081,7 +1082,8 @@ async function main(argv: string[]): Promise<number> {
     try {
       if (command === 'show') {
         if (!id) {
-          out(renderDives(allDives(project)));
+          const blocked = outsideDivesRefused();
+          out(`${renderDives(allDives(project), diveRoot(project).root)}${blocked ? `\n${blocked}` : ''}`);
           return 0;
         }
         const folder = diveFolder(project, id);

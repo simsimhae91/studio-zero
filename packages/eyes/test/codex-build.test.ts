@@ -332,6 +332,37 @@ test('the fact reader can write only its page in the project', {
   for (const denied of [product, ledger, git, claim]) assert.equal(denied.isError, true, denied.content[0].text);
 });
 
+test('a worker reads the dives kept outside any product, and not what the owner typed while digging', {
+  skip: !process.env.SZ_TEST_CODEX_SANDBOX && 'set SZ_TEST_CODEX_SANDBOX=1 in a terminal that can create a Codex sandbox',
+}, (t) => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'sz-dives-test-')));
+  const dives = join(root, 'dives');
+  const before = process.env.SZ_DIVES_DIR;
+  t.after(() => {
+    if (before === undefined) delete process.env.SZ_DIVES_DIR;
+    else process.env.SZ_DIVES_DIR = before;
+    rmSync(root, { recursive: true, force: true });
+  });
+  const project = join(root, 'product');
+  mkdirSync(project);
+  assert.equal(spawnSync('git', ['init', '-q'], { cwd: project }).status, 0);
+  mkdirSync(join(dives, '2026-11-24-settle'), { recursive: true });
+  writeFileSync(join(dives, '2026-11-24-settle/dive.json'), JSON.stringify({ id: 'settle', createdAt: '2026-11-24T00:00:00.000Z', kind: 'plain', seed: '모임 정산이 귀찮아', lines: {}, closed: null }));
+  writeFileSync(join(dives, '2026-11-24-settle/brief.md'), '# 밖에서 쓴 브리프\n');
+  mkdirSync(join(dives, '.heard'));
+  writeFileSync(join(dives, '.heard/s.jsonl'), '{"prompt":"주인이 친 말"}\n');
+  process.env.SZ_DIVES_DIR = dives;
+  // The review runs with a HOME of its own: the dives are still read from where they are kept.
+  for (const role of ['plan', 'redteam']) {
+    const [shown, brief, heard] = calls(project, role, shell('sz-eyes dive show'), shell('sz-eyes dive brief settle'), shell(`cat ${join(dives, '.heard/s.jsonl')}`));
+    assert.equal(shown.isError, false, shown.content[0].text);
+    assert.match(shown.content[0].text, /kept outside any product[\s\S]*settle: .*"모임 정산이 귀찮아"/);
+    assert.equal(brief.isError, false, brief.content[0].text);
+    assert.match(brief.content[0].text, /# 밖에서 쓴 브리프/);
+    assert.equal(heard.isError, true, heard.content[0].text);
+  }
+});
+
 const electron = (...args: string[]): ToolCall => ({ name: 'electron', arguments: { args } });
 
 test('VM evidence cannot traverse a linked contract directory', { skip: process.platform !== 'darwin' }, (t) => {

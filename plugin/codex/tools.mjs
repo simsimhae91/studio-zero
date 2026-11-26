@@ -23,6 +23,8 @@ import { electronTool, observeElectron } from './electron-vm.mjs';
 const plugin = dirname(dirname(fileURLToPath(import.meta.url)));
 const harness = dirname(plugin);
 let runToken = ''; // Only a validated record invocation is given the token.
+// Where the ideas the owner dug out before a product had a folder are kept (`divesDir` in packages/eyes/src/dive.ts).
+const DIVES = process.env.SZ_DIVES_DIR ? resolve(process.env.SZ_DIVES_DIR) : join(homedir(), '.studio-zero', 'dives');
 const validId = /^[a-z0-9][a-z0-9-]{2,60}$/;
 
 function inside(root, name) {
@@ -161,6 +163,13 @@ function sandbox(cwd, scratch, role, contract, command, record, newFlows) {
     join(homedir(), '.config/git'),
   ])
     if (existsSync(prefix)) fs.set(prefix, 'read');
+  // A plan, a drawing, a builder and a review find a brief dug out before the product had a folder with
+  // `sz-eyes dive show`, which reads it there. What the owner typed while digging (`.heard`) settles a dive by
+  // their own words, and is not a worker's to read.
+  if (existsSync(DIVES)) {
+    fs.set(DIVES, 'read');
+    fs.set(join(DIVES, '.heard'), 'deny');
+  }
   const reviewing = role === 'verifier' || role === 'arbiter';
   const reading = reviewing || role === 'facts' || role === 'redteam';
   fs.set(cwd, reading || record || role === 'close' ? 'read' : 'write');
@@ -243,6 +252,8 @@ function sandbox(cwd, scratch, role, contract, command, record, newFlows) {
     HOME: process.env.HOME,
     TMPDIR: scratch,
     LANG: process.env.LANG || 'en_US.UTF-8',
+    // Named, so that a review's own HOME does not move where the dives are read from.
+    SZ_DIVES_DIR: DIVES,
     ...(record && runToken ? { SZ_BUILD_TOKEN: runToken } : {}),
   };
   let invoke = record

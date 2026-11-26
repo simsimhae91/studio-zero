@@ -1,7 +1,7 @@
 import { spawnSync } from 'node:child_process';
 import { existsSync, globSync, mkdirSync, readFileSync, readdirSync, realpathSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { extname, join, resolve, sep } from 'node:path';
+import { dirname, extname, join, resolve, sep } from 'node:path';
 import { z } from 'zod';
 import { SZ_DIR, localDay } from './contract.ts';
 import { findQuote, type Seen } from './cite.ts';
@@ -154,20 +154,61 @@ export function diveRoot(projectDir: string, env: NodeJS.ProcessEnv = process.en
 
 const stateFile = (folder: string): string => join(folder, 'dive.json');
 
-/** Every dive kept where this project's dives are, oldest first. */
+const refused = (err: unknown): string | null => {
+  const code = (err as NodeJS.ErrnoException).code;
+  return code === 'EPERM' || code === 'EACCES' ? code : null;
+};
+
+/** Why the dives kept outside any product cannot be listed by this command (a sandbox that lets it see the folder and not read it), or null. */
+export function outsideDivesRefused(env: NodeJS.ProcessEnv = process.env): string | null {
+  const dir = divesDir(env);
+  try {
+    if (existsSync(dir)) readdirSync(dir);
+    return null;
+  } catch (err) {
+    const code = refused(err);
+    if (code === null) throw err;
+    return `${dir} could not be read here (${code}): the dives kept outside any product are not listed`;
+  }
+}
+
+/**
+ * Every dive this project can work from, oldest first: those kept under `.sz/dive/` of the product, and those started
+ * where no product lived (`divesDir`), which a product finds only here, since nothing copies them into it. A dive of
+ * the same id in both places is the product's copy. (Until 2026-11-26 only the first place was read: a brief written
+ * before the product had a folder was not seen by its plan, its drawing or its builder, and `dive show` and
+ * `dive brief` could not name it from inside the product.) What a sandbox does not let this command read of the
+ * second place is left out, and `outsideDivesRefused` says so; the product's own dives are listed all the same.
+ */
 export function allDives(projectDir: string, env: NodeJS.ProcessEnv = process.env, home = homedir()): { folder: string; dive: Dive }[] {
   const { root } = diveRoot(projectDir, env, home);
-  if (!existsSync(root)) return [];
-  return readdirSync(root)
-    .filter((name) => !name.startsWith('.') && existsSync(stateFile(join(root, name))))
-    .map((name) => ({ folder: join(root, name), dive: readDive(join(root, name)) }))
-    .sort((a, b) => a.dive.createdAt.localeCompare(b.dive.createdAt));
+  const outside = divesDir(env);
+  const byId = new Map<string, { folder: string; dive: Dive }>();
+  for (const dir of real(root) === real(outside) ? [root] : [root, outside]) {
+    let names: string[];
+    try {
+      names = existsSync(dir) ? readdirSync(dir) : [];
+    } catch (err) {
+      if (dir === outside && refused(err) !== null) continue;
+      throw err;
+    }
+    for (const name of names.filter((entry) => !entry.startsWith('.') && existsSync(stateFile(join(dir, entry))))) {
+      const dive = readDive(join(dir, name));
+      if (!byId.has(dive.id)) byId.set(dive.id, { folder: join(dir, name), dive });
+    }
+  }
+  return [...byId.values()].sort((a, b) => a.dive.createdAt.localeCompare(b.dive.createdAt));
 }
 
 /** The folder of a dive that exists. */
 export function diveFolder(projectDir: string, id: string, env: NodeJS.ProcessEnv = process.env, home = homedir()): string {
   const found = allDives(projectDir, env, home).find(({ dive }) => dive.id === id);
-  if (!found) throw new Error(`no dive "${id}" here (${diveRoot(projectDir, env, home).root}). sz-eyes dive show lists them; sz-eyes dive new <id> --kind app|game|plain --seed "<the owner's first words>" starts one`);
+  if (!found) {
+    const root = diveRoot(projectDir, env, home).root;
+    const where = real(root) === real(divesDir(env)) ? root : `${root}, or ${divesDir(env)}`;
+    const blocked = outsideDivesRefused(env);
+    throw new Error(`no dive "${id}" here (${where})${blocked ? `; ${blocked}` : ''}. sz-eyes dive show lists them; sz-eyes dive new <id> --kind app|game|plain --seed "<the owner's first words>" starts one`);
+  }
   return found.folder;
 }
 
@@ -494,9 +535,20 @@ export function renderDive(value: Dive, folder: string): string {
   return lines.join('\n');
 }
 
-export function renderDives(dives: { folder: string; dive: Dive }[]): string {
+/**
+ * A line for each dive. Given the folder this project keeps its dives in, those kept outside any product come after
+ * its own, under a line that says whose they are: every idea dug out before a product had a folder is listed in
+ * every product, and is this one's only when the owner says so.
+ */
+export function renderDives(dives: { folder: string; dive: Dive }[], root: string | null = null): string {
   if (dives.length === 0) return 'no dive here (sz-eyes dive new <id> --kind app|game|plain --seed "<the owner\'s first words>")';
-  return dives.map(({ folder, dive }) => `${dive.id}: ${dive.closed ? 'closed' : progressLine(dive)}  "${dive.seed.slice(0, 80)}"  (${folder})`).join('\n');
+  const line = ({ folder, dive }: { folder: string; dive: Dive }): string => `${dive.id}: ${dive.closed ? 'closed' : progressLine(dive)}  "${dive.seed.slice(0, 80)}"  (${folder})`;
+  const own = root === null ? dives : dives.filter(({ folder }) => real(folder).startsWith(`${real(root)}${sep}`));
+  const outside = dives.filter((entry) => !own.includes(entry));
+  return [
+    ...own.map(line),
+    ...(outside.length > 0 ? [`kept outside any product (${dirname(outside[0]!.folder)}): one of these is this product's only when the owner names it or its seed is plainly this product`, ...outside.map(line)] : []),
+  ].join('\n');
 }
 
 /** The one page the owner and the next stages read. */
@@ -537,5 +589,5 @@ ${value.saw.length > 0 ? value.saw.map((s) => `- ${s.line ? `[${s.line}] ` : ''}
 
 - 지을 만한지, 돈 낼 만한지 따져 보려면: \`/sz:worth\`
 - 지으려면: \`/sz:build ${value.summary || value.seed}\` (정해진 것은 다시 묻지 않습니다)
-${durable ? `- 이 생각은 제품 폴더 밖에 있습니다. 제품을 만들 폴더에서 \`mkdir -p .sz/dive && cp -R "${folder}" .sz/dive/${value.id}\` 하면 다음 단계가 이 파일을 읽습니다.\n` : ''}`;
+${durable ? `- 이 생각은 제품 폴더 밖(\`${dirname(folder)}\`)에 있습니다. 제품 폴더에서도 \`sz-eyes dive show\`가 이 생각을 "제품 밖" 줄 아래에 보여 주고, 계획·설계는 요청이 이 생각을 가리킬 때 여기서 읽습니다. 제품과 함께 두려면 제품 폴더에서 \`mkdir -p .sz/dive && cp -R "${folder}" .sz/dive/${value.id}\` 하십시오(같은 id면 제품 폴더 것이 먼저 쓰입니다).\n` : ''}`;
 }

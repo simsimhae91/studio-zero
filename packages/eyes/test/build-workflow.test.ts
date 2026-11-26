@@ -431,6 +431,9 @@ test("the drawing and the plan are cut from the dive brief, and what it left ope
   const prompt = (label: string) => ran.calls.find((call) => call.label === label)!.prompt;
   for (const label of ['plan', 'screens', 'refs', 'design', 'sweep:design', 'build:m1']) {
     assert.match(prompt(label), /newest relevant dive folder[^\n]+idea\.md[^\n]+brief\.md[^\n]+same folder/);
+    // A dive dug out before the product had a folder is found with the command, and is this product's only when named.
+    assert.match(prompt(label), /`sz-eyes dive show`[^\n]+`~\/\.studio-zero\/dives`[^\n]+only when the request or the owner’s answers name it or its seed is plainly this product/);
+    assert.doesNotMatch(prompt(label), /dive folder under `\.sz\/dive\/`/);
   }
   for (const label of ['screens', 'refs', 'sweep:design']) {
     assert.match(prompt(label), /비워 둘 것 stays open in the frame/);

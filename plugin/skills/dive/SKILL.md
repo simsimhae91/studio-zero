@@ -160,4 +160,4 @@ or `/sz:build` to build it.
 
 ## Pausing and coming back
 
-When the owner says to stop ("여기까지", "나중에"), the dive is already kept: say its progress line and the open lines, and stop. `/sz:dive` later begins with `sz-eyes dive show`: one dive not closed is taken up where it stood (say where); several are put to the owner as a choice. For a closed dive with a `brief.draft.md` and no `brief.md` in its folder, resume at step 6: show that draft for approval. The dive stays closed.
+When the owner says to stop ("여기까지", "나중에"), the dive is already kept: say its progress line and the open lines, and stop. `/sz:dive` later begins with `sz-eyes dive show`: one dive not closed is taken up where it stood (say where); several are put to the owner as a choice. In a product's folder it also lists, after the product's own, the dives kept outside any product: one of those is taken up only when the owner names it. For a closed dive with a `brief.draft.md` and no `brief.md` in its folder, resume at step 6: show that draft for approval. The dive stays closed.

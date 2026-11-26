@@ -454,7 +454,10 @@ Return the plan.`,
 // clean.) Then someone who drew nothing measures every screen, and the run stops for the owner: a prototype waits
 // fifteen minutes, a build nobody wanted costs two hours.
 // A dive leaves the product's spine and the builder's decisions on separate lines of its confirmed brief.
-const BRIEF = 'choose the newest relevant dive folder under `.sz/dive/` by its `dive.json` creation date. Read its `idea.md` if there is one and its `brief.md` only if it exists in that same folder. A draft is not a confirmed brief. Never borrow another dive’s brief.'
+// A dive started before the product had a folder is kept outside it (`~/.studio-zero/dives`), and `sz-eyes dive show`
+// lists it from inside the product after the product's own, with every other idea kept there. (Until 2026-11-26 this
+// pointed at `.sz/dive/` alone, and a brief written outside the product was passed over without a word.)
+const BRIEF = 'run `sz-eyes dive show`: it lists this product’s own dives (under `.sz/dive/`), then those kept outside any product (under `~/.studio-zero/dives`), each with its folder. One kept outside is this product’s only when the request or the owner’s answers name it or its seed is plainly this product; when in doubt it is not. Of this product’s dives choose the newest relevant dive folder by its `dive.json` creation date. Read its `idea.md` if there is one and its `brief.md` only if it exists in that same folder. A draft is not a confirmed brief. Never borrow another dive’s brief.'
 const DESIGN_GROUND = 'You are working in the project\'s folder, on a new product whose screens are drawn and put before its owner before anything of it is built. The command `sz-eyes` is on your PATH (the sz plugin\'s). Read `.sz/owner.md` if it is there (what the owner has said they want of this product: it comes before your own taste). What an earlier run of this stage left under `.sz/plan/` and `.sz/design/` is taken up where it stopped, not started again. If there was a dive, ' + BRIEF + ' The screens are cut from what the brief fills (북극성, the spine, one or two signature moments as effects, and the constraints). What it lists under 비워 둘 것 stays open in the frame and screen plans, with each constraint, for the designer or builder who owns the decision.' + ' Read `.sz/facts.md` where it is there: a figure or wording a screen must show is taken from it, with the day.'
 const DESIGN_RECORD = ' For each drawing decision the brief left open, record the choice and a one-line reason under 비워 둔 것과 정한 것 in `.sz/design/direction.md`. Leave inputs and implementation to the builder.'
 // Browser storage belongs to the person viewing the prototype. A worker taking a picture in a fresh browser
@@ -507,7 +510,8 @@ ${request}
 ${OWNER_ANSWERS}
 
 The spec: \`.sz/spec.md\`. The screens, if they were drawn: \`.sz/plan/frame.md\`, \`.sz/plan/screens/\`, and the brief a
-dive left: \`.sz/dive/*/brief.md\`. The fact page, if there is one: \`.sz/facts.md\`.
+dive left (\`sz-eyes dive show\` lists its folder, under \`.sz/dive/\` or, kept outside any product, under
+\`~/.studio-zero/dives\`). The fact page, if there is one: \`.sz/facts.md\`.
 The first milestones and their claims: ${JSON.stringify(plan.milestones.map(({ title, claims }) => ({ title, claims })))}.
 
 Read the plan and find what would make it fail after two hours of building: two claims that cannot both be true; a
