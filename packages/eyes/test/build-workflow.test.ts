@@ -105,6 +105,20 @@ test('a run that only waits at the drawing and a run whose milestones are all cl
   assert.equal(resume.result.stopped, null);
 });
 
+test('a milestone an earlier run built is taken up without the plan saying how it starts', async () => {
+  const ran = await run({ request: '이어서' }, {
+    plan: () => ({ mode: 'continue', summary: 's', milestones: [{ id: 'm1', title: 'M1 계정', builds: 'b', claims: [claim('one'), claim('two')], notReal: [], state: 'built', contractId: 'm1-accounts' }] }),
+    start: () => ({ launch: 'PORT=$(sz-eyes port) node server.mjs' }),
+    build: built, verify: () => ({ proven: ['one', 'two'], refuted: [], unchecked: [] }), close: closed,
+  });
+  assert.deepEqual(ran.calls.map((c) => c.label), ['plan', 'start:m1', 'verify:m1', 'close:m1'], 'what was built is not built again');
+  const start = ran.calls.find((c) => c.label === 'start:m1')!.prompt;
+  assert.match(start, /The plan did not say how it is launched: `sz-eyes contract show m1-accounts` gives it on the line 띄우는 법/);
+  assert.doesNotMatch(start, /launched like this: undefined/);
+  assert.match(ran.calls.find((c) => c.label === 'verify:m1')!.prompt, /launched like this: PORT=\$\(sz-eyes port\) node server\.mjs/);
+  assert.equal(ran.result.stopped, null);
+});
+
 test('the workflow does not start until it is told whether the owner was asked', async () => {
   const table = { plan: plan('m1', 'm2'), build: built, verify: () => ({ proven: ['one', 'two'], refuted: [], unchecked: [] }), close: closed };
 

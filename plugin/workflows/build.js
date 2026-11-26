@@ -247,7 +247,7 @@ const PLAN = {
           first: { type: 'boolean', description: 'true for the product\'s first pass while it is not closed: the one milestone of a new product, or, when an earlier run stopped before it closed, that same milestone again' },
           state: { type: 'string', enum: ['todo', 'built', 'closed'], description: 'todo unless this run continues an earlier one: built = its code and frozen contract exist and it has not been verified to the end; closed = its contract is closed' },
           contractId: { type: 'string', description: 'for a milestone that is built or closed: the id of its contract' },
-          launch: { type: 'string', description: 'for a milestone that is built: the exact command that starts the product and where it is seen' },
+          launch: { type: 'string', description: 'for a milestone that is built, when you know it: the exact command that starts the product and where it is seen. Leave it out otherwise: the run reads it from the contract' },
           disputes: { type: 'array', description: 'for a milestone that is built: frozen checks an earlier run found to be wrong about how they check and nobody has corrected since (not those the contract lists as corrected)', items: { type: 'object', properties: { file: { type: 'string' }, problem: { type: 'string' } }, required: ['file', 'problem'] } },
         },
         required: ['id', 'title', 'builds', 'claims', 'notReal'],
@@ -412,7 +412,7 @@ ${request}
 ${OWNER_ANSWERS}
 
 If \`.sz/spec.md\` already exists, the product has been worked on before. Read it, the contracts under \`.sz/contracts/\` (\`sz-eyes contract status\`, \`sz-eyes contract show <id>\`), \`.sz/progress.md\`, \`.sz/backlog.md\`, \`git log\` and \`sz-eyes standing\` (what earlier work proved and the product has to keep true). Do not plan again what is done and do not rewrite the spec's history. Then it is one of two cases, or both:
-- **Continue** (mode "continue"): an earlier run stopped before finishing what the spec has, and the request asks for that. Return the spec's milestones with their claims as the contracts and the spec have them, each with its "state": "closed" (its contract is closed), "built" (its contract is frozen and its code is committed, and it was not verified to the end: give "contractId", "launch", and under "disputes" any frozen check the earlier run reported as wrong about how it checks and nobody has corrected since: one the contract lists as corrected (\`sz-eyes contract show\`, under 얼린 뒤 고친 검사) is settled, and is not listed again) or "todo". A milestone whose code was written and that nobody has seen run is still "built" (say under "launch" how it is meant to be started, and that it has not been): this run starts it, and fixes what keeps it from starting, before anyone looks at it. If the product's first pass is not closed yet (an earlier run stopped before it was), return it with "first": true and list what the spec has after it under "later", without claims: that is planned when the first pass stands. Once the first pass is closed, what the spec lists as coming after it and has no contract yet is planned now: write each as a milestone into the spec and return it as "todo" with its claims, ${Math.max(1, maxMilestones - 1)} at most, the rest left listed for a later run. The order of the milestones that are not built yet is decided afresh by the rule under "The order" below: some of them may go side by side now even if the spec lists them in a line (give them "after").
+- **Continue** (mode "continue"): an earlier run stopped before finishing what the spec has, and the request asks for that. Return the spec's milestones with their claims as the contracts and the spec have them, each with its "state": "closed" (its contract is closed), "built" (its contract is frozen and its code is committed, and it was not verified to the end: give "contractId", "launch" when you know how it starts (the contract's line 띄우는 법 in \`sz-eyes contract show\` has it; leave it out otherwise, and the run reads it there), and under "disputes" any frozen check the earlier run reported as wrong about how it checks and nobody has corrected since: one the contract lists as corrected (\`sz-eyes contract show\`, under 얼린 뒤 고친 검사) is settled, and is not listed again) or "todo". A milestone whose code was written and that nobody has seen run is still "built" (say under "launch" how it is meant to be started, and that it has not been): this run starts it, and fixes what keeps it from starting, before anyone looks at it. If the product's first pass is not closed yet (an earlier run stopped before it was), return it with "first": true and list what the spec has after it under "later", without claims: that is planned when the first pass stands. Once the first pass is closed, what the spec lists as coming after it and has no contract yet is planned now: write each as a milestone into the spec and return it as "todo" with its claims, ${Math.max(1, maxMilestones - 1)} at most, the rest left listed for a later run. The order of the milestones that are not built yet is decided afresh by the rule under "The order" below: some of them may go side by side now even if the spec lists them in a line (give them "after").
 - **Extend** (mode "extend"): the request asks for something the spec does not have, or for something to work differently. Amend \`.sz/spec.md\` so that it describes the product as it will be: change the lines that become false, add the new features to the order they are built in under new milestone names. Return the milestones that are not closed yet plus the new ones (state "todo"), with ids no contract has used. For each new milestone, besides its claims:
   - If \`git worktree list\` shows folders under \`.sz/trees/\`, an earlier run built milestones side by side and stopped before bringing them together: for each such milestone whose contract exists, state "built" (or "closed" if its contract is closed there) and "where": that folder's whole path.
   - "supersedes": the standing claims that will stop being true because what was asked has changed, each with the reason. Be exact: a standing claim you do not list stays a promise, and the milestone must keep it true. Prefer a change that keeps old promises (a new choice whose default is the old behaviour) to one that replaces them.
@@ -1021,7 +1021,10 @@ async function milestone(m, n, before, where) {
   // A milestone an earlier run built is started before anyone looks at it. (One was handed to its verifier with
   // code that had never run: the app's first build was still to be made, the verifier waited on a download for 36
   // minutes, and what kept the app from opening was found later by nobody whose work it was.)
-  const resumed = Boolean(m.state === 'built' && m.contractId && m.launch)
+  // What makes it one is that it was built and its contract frozen, not that the plan wrote down how it starts:
+  // `launch` is the plan's to leave out, and until 2026-11-26 a milestone without it was built again, and
+  // `sz-eyes contract new` refused the id it already had.
+  const resumed = Boolean(m.state === 'built' && m.contractId)
   // Nothing is started on a disk it would not fit on.
   const takes = TAKES(m, resumed)
   if (ROOM !== null && ROOM < takes) {
@@ -1036,7 +1039,7 @@ async function milestone(m, n, before, where) {
     : await runAgent(
         `A milestone of this product was built by an earlier run and has not been verified to the end. Before anyone looks at it, start it. ${GROUND}${SAND} ${TOOLS}${PLACE}${TIGHT}
 
-Milestone "${m.title}" (${m.id}), contract \`${m.contractId}\` (read it: \`sz-eyes contract show ${m.contractId}\`). It is said to be launched like this: ${m.launch}
+Milestone "${m.title}" (${m.id}), contract \`${m.contractId}\` (read it: \`sz-eyes contract show ${m.contractId}\`). ${m.launch ? `It is said to be launched like this: ${m.launch}` : `The plan did not say how it is launched: \`sz-eyes contract show ${m.contractId}\` gives it on the line 띄우는 법 (what its builder said when it stood), and where the contract has no such line, \`.sz/map.md\` says how the product is started.`}
 
 1. Commit what the earlier run left uncommitted, if it belongs to this milestone.
 2. Start the product that way and see it running: its first screen in a browser, or for a phone app the build installed and opened on a simulator of your own (\`sz:verify\` says how, and what a first build of a phone app needs).
@@ -1047,7 +1050,7 @@ Milestone "${m.title}" (${m.id}), contract \`${m.contractId}\` (read it: \`sz-ey
 Stop what you started, and return the exact command that starts it now.`,
         { label: `start:${m.id}`, phase: 'Build', schema: STARTED, ...effort('build'), ...model('build') },
       )
-  const built = resumed ? (started ? { contractId: m.contractId, summary: started.summary || 'built in an earlier run', launch: started.launch || m.launch, blocked: started.blocked || '', disputes: m.disputes || [] } : null) : await runAgent(
+  const built = resumed ? (started ? { contractId: m.contractId, summary: started.summary || 'built in an earlier run', launch: started.launch || m.launch || '', blocked: started.blocked || '', disputes: m.disputes || [] } : null) : await runAgent(
     `You are building milestone ${n} of ${milestones.length} of a product, with nobody watching. ${GROUND}${SAND} ${TOOLS}${PLACE}${TIGHT}
 
 Milestone "${m.title}" (${m.id}): ${m.builds}
