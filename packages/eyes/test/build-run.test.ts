@@ -110,6 +110,26 @@ test('a stopped run does not hold back the owner\'s word to close its contract a
   assert.match(closed.stdout, /^closed: triple/);
 });
 
+test('a worker of a build run records a corrected check and leaves the commit to the run', (t) => {
+  // A Codex worker's ledger call cannot write the repository: the runner has what a worker leaves committed before
+  // the next one starts. A correction recorded there is not a failed commit.
+  const root = project(t);
+  writeFileSync(join(root, 'check.sh'), 'test "$(node app.mjs)" = 12\n');
+  git(root, 'add', 'check.sh');
+  git(root, 'commit', '-qm', 'a check');
+  for (const args of [
+    ['contract', 'new', 'triple', '--request', 'triple four', '--claim', 'twelve|It prints twelve|command:sh check.sh'],
+    ['contract', 'freeze', 'triple', '--frozen', 'check.sh'],
+  ]) assert.equal(eyes(root, args).status, 0, args.join(' '));
+  const token = startBuildRun(root, 'triple four');
+  writeFileSync(join(root, 'check.sh'), 'test "$(node app.mjs)" -eq 12\n');
+  const before = git(root, 'rev-parse', 'HEAD');
+  const amended = eyes(root, ['contract', 'amend', 'triple', '--file', 'check.sh', '--why', 'a number is compared as a number'], { SZ_BUILD_TOKEN: token });
+  assert.equal(amended.status, 0, amended.stderr);
+  assert.match(amended.stdout, /amended: check\.sh\. left for the build run to commit/);
+  assert.equal(git(root, 'rev-parse', 'HEAD'), before);
+});
+
 test('only a completed workflow releases the run; a stopped one can be read and the owner can judge it', async (t) => {
   const { closeRun } = await import(runModule);
   const runs = await import('../src/build-run.ts');

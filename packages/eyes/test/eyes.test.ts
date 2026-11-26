@@ -10,7 +10,7 @@ import { existsSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { addToBacklog, doneInBacklog, leftBy, openBacklog } from '../src/backlog.ts';
 import { freePort } from '../src/port.ts';
-import { Contract, openContracts, owed, renderContract, writeContract, CONTRACTS_DIR } from '../src/contract.ts';
+import { Contract, openContracts, owed, readContract, renderContract, writeContract, CONTRACTS_DIR } from '../src/contract.ts';
 import { createServer } from 'node:http';
 import { addSaid, newRound, noteSaid, readRound, renderRound, roundPage } from '../src/feedback.ts';
 import { reviewWeb } from '../src/review.ts';
@@ -279,6 +279,77 @@ test('a frozen check may be corrected by whoever was started as the arbiter, und
     assert.equal(at({ agent_id: '../../../../etc/x', agent_type: 'arbiter-1', transcript_path: '/nowhere/x.jsonl' }).code, 2, 'an id is not a path');
   } finally {
     rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a corrected check is committed with the contract that records it, and nothing else goes along', () => {
+  // (2026-11-26: a correction was recorded and left in the working folder; whoever verified worked from a copy of
+  // what was committed, and three verifiers copied the flows into their copies by hand, nineteen times.)
+  const project = mkdtempSync(join(tmpdir(), 'eyes-amend-'));
+  const env = { ...process.env, GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@example.com', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@example.com' };
+  const git = (...args: string[]): string => {
+    const ran = spawnSync('git', args, { cwd: project, encoding: 'utf8', env });
+    assert.equal(ran.status, 0, `git ${args.join(' ')}: ${ran.stderr}`);
+    return ran.stdout.trim();
+  };
+  const amend = (...more: string[]): { code: number | null; text: string } => {
+    const ran = spawnSync(process.execPath, [join(HERE, '../src/cli.ts'), 'contract', 'amend', 'm1-split', ...more, '--dir', project], { encoding: 'utf8', env });
+    return { code: ran.status, text: `${ran.stdout}${ran.stderr}` };
+  };
+  try {
+    git('init', '-q', '-b', 'main');
+    mkdirSync(join(project, 'flows'), { recursive: true });
+    writeFileSync(join(project, 'flows/split.sh'), 'grep 40,000\n');
+    writeFileSync(join(project, 'flows/late.sh'), 'true\n');
+    writeFileSync(join(project, 'kept.txt'), 'kept\n');
+    writeFileSync(join(project, 'staged.txt'), 'old\n');
+    writeFileSync(join(project, '.gitignore'), 'private/\n');
+    git('add', '-A');
+    git('commit', '-q', '-m', 'first');
+    mkdirSync(join(project, 'private'), { recursive: true });
+    writeFileSync(join(project, 'private/own.sh'), 'true\n');
+    assert.equal(eyes(project, 'contract', 'new', 'm1-split', '--lane', 'M', '--request', '나눠 낸다', '--claim', 'split|셋이 12만원이면 4만원씩|flow:flows/split.sh').code, 0);
+    assert.equal(eyes(project, 'contract', 'freeze', 'm1-split', '--frozen', 'flows/split.sh', '--frozen', 'flows/late.sh', '--frozen', 'private/own.sh').code, 0);
+    git('add', '-A');
+    git('commit', '-q', '-m', 'freeze');
+    writeFileSync(join(project, 'flows/split.sh'), "grep '40,000'\n");
+    writeFileSync(join(project, 'kept.txt'), 'being edited, not committed\n');
+    writeFileSync(join(project, 'staged.txt'), 'staged by someone, for a commit of their own\n');
+    git('add', 'staged.txt');
+    const amended = amend('--file', 'flows/split.sh', '--why', '쉼표가 든 금액을 따옴표로 묶었다');
+    assert.equal(amended.code, 0, amended.text);
+    assert.match(amended.text, /amended: flows\/split\.sh\. committed [0-9a-f]{7,} \(flows\/split\.sh, \.sz\/contracts\/m1-split\.json\)/);
+    assert.deepEqual(git('show', '--name-only', '--format=', 'HEAD').split('\n').filter(Boolean).sort(), ['.sz/contracts/m1-split.json', 'flows/split.sh']);
+    assert.match(git('status', '--porcelain'), /^ M kept\.txt$/m, 'what else was being edited is not committed along');
+    assert.match(git('status', '--porcelain'), /^M  staged\.txt$/m, 'nor what someone had staged, which stays staged');
+    assert.match(readContract(join(project, '.sz/contracts/m1-split.json')).amendments[0]!.commit ?? '', /^[0-9a-f]{7,}$/);
+    assert.match(eyes(project, 'contract', 'show', 'm1-split').text, /쉼표가 든 금액을 따옴표로 묶었다 \(커밋 [0-9a-f]{7,}\)/);
+    // Recorded and not committed, on purpose: said, and the contract says which.
+    writeFileSync(join(project, 'flows/late.sh'), 'sleep 1; true\n');
+    const kept = amend('--file', 'flows/late.sh', '--why', '화면이 뜨기를 1초 기다린 뒤에 본다', '--no-commit');
+    assert.equal(kept.code, 0, kept.text);
+    assert.match(kept.text, /amended: flows\/late\.sh\. not committed \(--no-commit\)/);
+    assert.equal(git('log', '--oneline').split('\n').length, 3, 'no commit was made');
+    assert.match(eyes(project, 'contract', 'show', 'm1-split').text, /화면이 뜨기를 1초 기다린 뒤에 본다 \(커밋되지 않음\)/);
+    // A check git keeps out of the repository is not forced in: said, and not a failure (a copy takes it from the folder).
+    writeFileSync(join(project, 'private/own.sh'), 'true # corrected\n');
+    const ignored = amend('--file', 'private/own.sh', '--why', '따옴표를 고쳤다 그뿐이다');
+    assert.equal(ignored.code, 0, ignored.text);
+    assert.match(ignored.text, /git keeps private\/own\.sh out \(it is ignored\): it is not committed/);
+    assert.equal(git('ls-files', 'private').trim(), '');
+    // A commit that cannot be made is not passed over: the record stays, and the command says so and ends 1.
+    writeFileSync(join(project, 'flows/split.sh'), "grep -F '40,000'\n");
+    writeFileSync(join(project, '.git/index.lock'), '');
+    const stuck = amend('--file', 'flows/split.sh', '--why', '정규식이 아니라 글자 그대로 찾는다');
+    rmSync(join(project, '.git/index.lock'));
+    assert.equal(stuck.code, 1, stuck.text);
+    assert.match(stuck.text, /the correction is recorded and is NOT committed/);
+    assert.equal(readContract(join(project, '.sz/contracts/m1-split.json')).amendments.at(-1)!.commit, null);
+    // An amendment recorded before commits were kept says nothing about one.
+    const older = renderContract(Contract.parse({ ...readContract(join(project, '.sz/contracts/m1-split.json')), amendments: [{ file: 'flows/split.sh', why: '예전 기록이다 커밋 칸이 없다', at: '2026-11-20T00:00:00.000Z' }] }));
+    assert.match(older, /예전 기록이다 커밋 칸이 없다$/m);
+  } finally {
+    rmSync(project, { recursive: true, force: true });
   }
 });
 

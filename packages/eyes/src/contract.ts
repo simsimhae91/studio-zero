@@ -106,7 +106,7 @@ export const Contract = z.object({
    * Corrections made to a frozen check after the freeze, each by someone who neither built the work nor judges
    * it: which file, and why the check was wrong about how to check (never about what it checks).
    */
-  amendments: z.array(z.object({ file: z.string().max(300), why: z.string().max(800), at: z.string() })).max(20).default([]),
+  amendments: z.array(z.object({ file: z.string().max(300), why: z.string().max(800), at: z.string(), commit: z.string().max(60).nullable().optional() })).max(20).default([]),
   /**
    * Claims of earlier, closed contracts that stop standing because of this work: what was asked has changed. Each
    * names the contract and the claim, and says why, for the owner to read. Everything else that stood keeps
@@ -239,7 +239,7 @@ export function renderContract(contract: Contract): string {
     ...(contract.notDoing.length > 0 ? [list('하지 않는 것', contract.notDoing.map((line) => `- ${line}`))] : []),
     ...(contract.supersedes.length > 0 ? [list('이 작업으로 물러나는 약속', contract.supersedes.map((s) => `- \`${s.contract}/${s.claim}\`: ${s.why}${addedLate(contract, s) ? ' (얼린 뒤에 적힘)' : ''}`))] : []),
     ...(contract.risks.length > 0 ? [list('위험', contract.risks.map((line) => `- ${line}`))] : []),
-    ...(contract.amendments.length > 0 ? [list('얼린 뒤 고친 검사', contract.amendments.map((a) => `- \`${a.file}\`: ${a.why}`))] : []),
+    ...(contract.amendments.length > 0 ? [list('얼린 뒤 고친 검사', contract.amendments.map((a) => `- \`${a.file}\`: ${a.why}${a.commit ? ` (커밋 ${a.commit})` : a.commit === null ? ' (커밋되지 않음)' : ''}`))] : []),
     // What was noticed outside the claims, and what was closed as a known limit, is part of what the owner reads:
     // until 2026-11-26 it was on the evidence page and in the file, and whoever read the contract here saw none of it.
     ...(contract.noticed.length > 0 ? [list('계약에 없지만 눈에 띈 것', contract.noticed.map((item) => `- ${item.text}`))] : []),

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { basename, dirname, join, resolve } from 'node:path';
+import { basename, dirname, join, relative, resolve } from 'node:path';
 import { ArmError, armCommand, heldLines } from './arms.ts';
 import { BACKLOG_FILE, addToBacklog, doneInBacklog, leftBy, openBacklog } from './backlog.ts';
 import { heldByBuildRun, readBuildRun } from './build-run.ts';
@@ -137,8 +137,10 @@ const USAGE = `sz-eyes: launch what was built, look at it, operate it, and put w
         the owner's own verdict on a claim that was left for them to judge (shown by owner), in their words; the
         contract may be closed. Yes: from here it stands, and later work that changes what they saw has to show
         it to them again. No: it is refuted and written down as left to do.
-  sz-eyes contract amend <id> --file <a frozen file> --why "<text>" [--dir <project>]
-        record that a frozen check was corrected after the freeze (the arbiter's, never the builder's)
+  sz-eyes contract amend <id> --file <a frozen file> --why "<text>" [--no-commit] [--dir <project>]
+        record that a frozen check was corrected after the freeze (the arbiter's, never the builder's), and commit
+        that file and the contract together, and nothing else. Exits 1 when the commit should have happened and
+        did not; a file git ignores is left out and said
   sz-eyes contract supersede <id> <contract>/<claim> --why "<text>" [--dir <project>]
         after the fact: an earlier claim turned out to be replaced by what this contract was asked (the arbiter's)
   sz-eyes contract notice <id> "<what was noticed that no claim covers>" [--evidence <file>]... [--dir <project>]
@@ -425,6 +427,40 @@ function parse(argv: string[], booleans: string[]): { words: string[]; flags: Ma
 const out = (text: string): void => void process.stdout.write(`${text}\n`);
 const baseName = (path: string): string => path.split('/').at(-1)!;
 const contractFile = (project: string, id: string): string => join(project, CONTRACTS_DIR, `${id}.json`);
+
+/**
+ * Commits a corrected frozen check and the contract that records the correction, and nothing else: `git commit --
+ * <paths>` takes those paths as they stand and leaves whatever else is staged or edited as it was. A correction
+ * left in the working folder is in no history, in no copy of a closed contract's check, and in no milestone
+ * brought in from a folder of its own. (2026-11-26: a correction was recorded and not committed; whoever was told
+ * to commit it was not the one who made it.) A file git keeps out is not forced in: it is said, and a copy takes a
+ * check its open contract holds from the project's folder. `failed` is a commit that should have happened and did not.
+ */
+function commitFrozenCheck(project: string, contractId: string, path: string, contractPath: string): { commit: string | null; failed: boolean; said: string } {
+  const git = (...args: string[]): { code: number | null; out: string; err: string } => {
+    const ran = spawnSync('git', ['-C', project, ...args], { encoding: 'utf8' });
+    return { code: ran.status, out: `${ran.stdout ?? ''}`.trim(), err: `${ran.stderr ?? ''}`.trim() };
+  };
+  if (git('rev-parse', '--git-dir').code !== 0) return { commit: null, failed: false, said: 'not committed: this folder is not a git repository' };
+  const check = relative(project, resolve(project, path));
+  const record = relative(project, contractPath);
+  const tracked = (one: string): boolean => git('ls-files', '--error-unmatch', '--', one).code === 0;
+  const ignored = (one: string): boolean => !tracked(one) && git('check-ignore', '-q', '--', one).code === 0;
+  if (ignored(check)) return { commit: null, failed: false, said: `git keeps ${check} out (it is ignored): it is not committed. A copy takes a check its open contract holds from this folder` };
+  const rel = [check, ...(record === check || ignored(record) ? [] : [record])];
+  if (rel.every(tracked) && git('diff', '--quiet', 'HEAD', '--', ...rel).code === 0) {
+    const already = git('log', '-1', '--format=%h', '--', check).out;
+    return { commit: already === '' ? null : already, failed: false, said: `already committed${already === '' ? '' : ` (${already})`}: there was nothing to commit` };
+  }
+  for (const one of rel) {
+    const added = git('add', '--', one);
+    if (added.code !== 0) return { commit: null, failed: true, said: `${one} could not be added to git: ${added.err.split('\n')[0] ?? ''}` };
+  }
+  const made = git('commit', '-m', `Contract ${contractId}: ${check} corrected in how it checks`, '-m', `Recorded with sz-eyes contract amend on ${record}.`, '--', ...rel);
+  if (made.code !== 0) return { commit: null, failed: true, said: `the commit did not happen: ${(made.err || made.out).split('\n')[0] ?? ''}` };
+  const head = git('rev-parse', '--short', 'HEAD').out;
+  return { commit: head === '' ? null : head, failed: false, said: `committed ${head} (${rel.join(', ')})` };
+}
 const evidenceFolder = (project: string, id: string): string => join(project, EVIDENCE_DIR, id);
 /**
  * A file of a contract's evidence as it is kept: relative to that contract's evidence folder. Given with the
@@ -1249,7 +1285,7 @@ async function main(argv: string[]): Promise<number> {
     return 0;
   }
   if (area === 'contract' || area === 'evidence') {
-    const a = parse(area === 'evidence' ? [command ?? '', ...rest] : rest, area === 'evidence' ? ['--dry-run'] : []);
+    const a = parse(area === 'evidence' ? [command ?? '', ...rest] : rest, area === 'evidence' ? ['--dry-run'] : ['--no-commit']);
     const project = resolve(a.one('--dir') ?? '.');
     // `sz-eyes evidence prune <id>`: the one word after `evidence` that is not a contract's id.
     const pruning = area === 'evidence' && a.words[0] === 'prune';
@@ -1475,13 +1511,30 @@ async function main(argv: string[]): Promise<number> {
     if (command === 'amend') {
       const target = a.one('--file');
       const why = a.one('--why') ?? '';
-      if (!target || why.trim().length < 12) throw new EyesError('sz-eyes contract amend <id> --file <a frozen file> --why "<what was wrong about how it checked, and what was changed>"');
+      if (!target || why.trim().length < 12) throw new EyesError('sz-eyes contract amend <id> --file <a frozen file> --why "<what was wrong about how it checked, and what was changed>" [--no-commit]');
+      const at = new Date().toISOString();
       updateContract(file, (contract) => {
         if (!contract.frozen.includes(target)) throw new EyesError(`${target} is not a file contract ${id} froze. Frozen: ${contract.frozen.join(', ') || '(none)'}`);
         // The file as the arbiter left it is what the contract is now proven against.
-        return { ...contract, frozenPrints: { ...contract.frozenPrints, [target]: fingerprint(project, target) }, amendments: [...contract.amendments, { file: target, why: why.trim(), at: new Date().toISOString() }] };
+        return { ...contract, frozenPrints: { ...contract.frozenPrints, [target]: fingerprint(project, target) }, amendments: [...contract.amendments, { file: target, why: why.trim(), at }] };
       });
-      out(`amended: ${target}`);
+      // The record is written first and the commit stamped on it after: a commit that fails leaves the correction
+      // recorded and its absence said out loud, never a record that says it is in a commit. A worker of a build
+      // run (Codex) cannot write the repository from the ledger: its runner has what a worker leaves committed.
+      const run = readBuildRun(project);
+      const ofRun = Boolean(run && !run.stoppedAt);
+      const kept = a.has('--no-commit')
+        ? { commit: null, failed: false, said: 'not committed (--no-commit): whoever commits this work commits it' }
+        : ofRun
+          ? { commit: null, failed: false, said: 'left for the build run to commit: its runner has what a worker leaves committed before the next one starts' }
+          : commitFrozenCheck(project, id, target, file);
+      // Left to a run, nothing is said of a commit (it comes); otherwise the record says which commit, or that there is none.
+      if (!ofRun || a.has('--no-commit')) updateContract(file, (contract) => ({ ...contract, amendments: contract.amendments.map((amend) => (amend.file === target && amend.at === at ? { ...amend, commit: kept.commit } : amend)) }));
+      out(`amended: ${target}. ${kept.said}`);
+      if (kept.failed) {
+        process.stderr.write(`sz-eyes contract amend: the correction is recorded and is NOT committed: ${kept.said}. Settle what stopped it and commit those two paths yourself, and nothing else (git commit -- ${target} ${relative(project, file)}). Until then the corrected check is in the project's folder only: a copy has it while this contract is open, and nothing else does.\n`);
+        return 1;
+      }
       return 0;
     }
     if (command === 'supersede') {

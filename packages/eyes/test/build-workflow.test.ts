@@ -1099,7 +1099,7 @@ test('a look after a fix tries new cases only where the fix reached, and a froze
   const ruling = ran.calls.find((c) => c.label === 'rule:m1')!.prompt;
   assert.match(ruling, /when in doubt it is this one[\s\S]*sz-eyes contract dispute m1 <claim id> --ruling/);
   assert.match(ruling, /\*\*A frozen flow or test stops for a reason that is not its claim's\.\*\* The product was mended to follow a claim's source or the drawing it is held to, and the check still presses, reads or waits for the old words, an old label or an old selector, or asserts text its claim never mentions\. Such a check asks the product for no answer/);
-  assert.match(ruling, /correct how it presses or reads, by the smallest change and as your own rules say \(never a figure or an outcome it expects, a condition, a step its claim requires, or a failure into a pass\), record it \(`sz-eyes contract amend m1 --file <the file> --why "<what the mend changed in the product, by which source or drawing, and what you changed in the check>"`\), run it once, and commit that file and no other/);
+  assert.match(ruling, /correct how it presses or reads, by the smallest change and as your own rules say \(never a figure or an outcome it expects, a condition, a step its claim requires, or a failure into a pass\), record it \(`sz-eyes contract amend m1 --file <the file> --why "<what the mend changed in the product, by which source or drawing, and what you changed in the check>"`\), which also commits that check and the contract together and nothing else \(read what it says: where it says the commit did not happen, that is yours to settle here\), and run it once\./);
   assert.match(ruling, /A claim whose check you corrected is not set aside: return it under "corrected"/);
   // "no claim" became "no claim's words" on 2026-11-26: a fourth case now records one verdict (a claim put back to
   // what its own check showed), and the sentence must not forbid what the case above it asks for.
@@ -1383,7 +1383,10 @@ test('the frozen checks a builder disputes go to one arbiter in one sitting, and
   assert.match(SOURCE, /under "disputes" any frozen check the earlier run reported as wrong about how it checks and nobody has corrected since: one the contract lists as corrected[^.]*is settled, and is not listed again/);
   // (2026-11-19: three corrected flows stayed uncommitted to the end of the run, while every verifier's copy is
   // made from what is committed.)
-  assert.match(arbiter, /Then commit the check you corrected, that file and no other[^\n]*a copy made from what is committed/);
+  // Until 2026-11-26 the arbiter was told to commit the check itself, and a session that told it otherwise left a
+  // correction in the working folder. The command that records a correction now commits it, and this says so.
+  assert.match(arbiter, /That command records the correction and commits the check and the contract together, and nothing else/);
+  assert.match(arbiter, /Where it says the commit did not happen and ends with an error, settle what stopped it and commit those two paths yourself, and no other/);
 });
 
 test('a milestone an earlier run looked at whole and left with claims shown false is taken up at the fix', async () => {
