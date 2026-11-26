@@ -121,6 +121,20 @@ The steps are those of `web do`, and `window:<words>` goes on in another window 
 
 Whoever mends them runs the same flow over the whole product until it reports nothing. At a second look the claim is judged by that flow at those limits: an input the product does not accept shows nothing about it; what else you see goes under what you noticed.
 
+## What is outside the contract
+
+A claim is shown false on the product: running with its own parts, on the machines the spec says it is for. A case is the claim's when the product comes to it, by what a person puts in or does or by what happens around it (the clock reaching a day, load, a network that drops, a forced quit, the power going), and a seam or a stand-in is a fair way to bring such a state about sooner (a clock set to that day, a server made slow).
+
+A case you could make only by giving a part of the product a behaviour it does not have there (a detector made 150 times slower than it runs), or by handing its inner code what its own parts never hand it, shows what the code would do. Try to bring the running product to it. Where you cannot, and no claim of this contract and no promise in `sz-eyes standing` names that state, it is not the product's answer to a claim:
+
+```
+sz-eyes contract notice <contract id> "<the case; how you made it; what the code did; what you tried on the running product and the figure that shows it does not get there>"
+```
+
+Name in it the claim it is nearest. It stays in the contract's list and goes to `.sz/backlog.md` when the work closes: the owner decides whether it becomes a claim.
+
+What this is not: a way to pass. A case the product comes to, however hard it is to reach and however many tries it takes, is that claim's, and it is `refuted` with your figure. When in doubt it is the claim's.
+
 ## What stood before
 
 A product that has been worked on before keeps promises, and a change is not done until they are shown again:

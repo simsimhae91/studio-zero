@@ -258,6 +258,27 @@ test('researchers have no ledger role and only the review can file a backlog fin
   assert.throws(() => authorizeRecord('facts', 'triple', 'facts', line));
 });
 
+test('whoever rules may give back a verdict that was not the claim\'s, and records no other verdict', async () => {
+  // (2026-11-26: a ruling that a claim was shown false only by a case the running product does not come to has to
+  // be written into the contract by whoever ruled, or its close is refused with "still owes".)
+  const { authorizeRecord } = await import(bridge);
+  const proven = ['contract', 'claim', 'triple', 'one', '--status', 'proven', '--note', '제 검사는 통과했고, 그 경우는 눈에 띈 것에 적었다'];
+  assert.doesNotThrow(() => authorizeRecord('arbiter', 'triple', 'rule:triple', ['contract', 'notice', 'triple', 'VAD를 150배 늦춘 엔진에서만 나온다']));
+  assert.doesNotThrow(() => authorizeRecord('arbiter', 'triple', 'rule:triple', proven));
+  for (const args of [
+    ['contract', 'claim', 'triple', 'one', '--status', 'refuted', '--note', 'x'],
+    ['contract', 'claim', 'triple', 'one', '--status', 'unchecked', '--note', 'x'],
+    ['contract', 'claim', 'triple', 'one', '--status', 'proven'],
+    ['contract', 'claim', 'triple', 'one', '--status', 'proven', '--note', ' '],
+    ['contract', 'claim', 'other', 'one', '--status', 'proven', '--note', 'x'],
+    ['contract', 'close', 'triple'],
+    [...proven, '--accepted', '닫아'],
+  ])
+    assert.throws(() => authorizeRecord('arbiter', 'triple', 'rule:triple', args), JSON.stringify(args));
+  // A builder still records no verdict at all.
+  assert.throws(() => authorizeRecord('build', 'triple', 'build:triple', proven));
+});
+
 test('a Codex reviewer writes only by filing a backlog line through record', {
   skip: !process.env.SZ_TEST_CODEX_SANDBOX && 'set SZ_TEST_CODEX_SANDBOX=1 in a terminal that can create a Codex sandbox',
 }, (t) => {

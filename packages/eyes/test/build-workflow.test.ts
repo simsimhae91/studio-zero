@@ -722,6 +722,76 @@ test('a case a verifier tried in which the product is wrong refutes the claim it
   assert.match(rules, /what shows the product wrong about the thing a claim is about is not recorded here but as that claim's verdict/);
 });
 
+test('a case the running product could not be brought to is not that claim shown false, and what is noticed keeps nothing open', async () => {
+  // 2026-11-26: three looks showed one claim false by cases made in the product's engine with its speech detector
+  // lagging as it never does on that machine (slowed 150 times at two of them). The verifier wrote each time that
+  // the running app could not be brought there. Two fixes and 138 minutes later the milestone was open.
+  const outside = 'split-tail 곁: VAD를 150배 늦춘 엔진에서 전원을 빼면 말 512ms 청크가 남는다 (엔진 코드에서 만들었고, 실행 중인 앱은 Silero가 한 프레임 0.4ms라 그 밀림에 닿지 못함)';
+  const ran = await run({ request: 'x' }, { plan: plan('m1'), build: built, verify: () => ({ proven: ['one', 'two'], refuted: [], unchecked: [], noticed: [outside] }), close: closed });
+  const look = ran.calls.find((c) => c.label === 'verify:m1')!.prompt;
+  assert.match(look, /A claim is shown false on the product: running with its own parts, on the machines the spec says it is for\./);
+  // What a person or the world around the product brings about stays the claim's: a forced quit and the power going are named as such.
+  assert.match(look, /or by what happens around it \(the clock reaching a day, load, a network that drops, a forced quit, the power going\)/);
+  assert.match(look, /It is not the claim's when you could make it only by giving a part of the product a behaviour it does not have there/);
+  assert.match(look, /the case is outside the contract: worth knowing, and not a claim shown false\. Record it with `sz-eyes contract notice m1 "/);
+  assert.match(look, /This is not a way to pass a claim: when in doubt, the case is the claim's and the claim is `refuted`\./);
+  assert.equal(ran.result.stopped, null, 'what was noticed outside the claims keeps nothing open');
+  assert.deepEqual(ran.result.milestones[0].noticed, [outside]);
+  assert.equal(ran.calls.some((c) => c.label.startsWith('fix:')), false, 'nothing is mended for a case outside the contract');
+  assert.match(SOURCE, /noticed: \{ type: 'array'[^\n]*a case you could make only with a part of the product given a behaviour it does not have, and could not bring the running product to, is here/);
+  const rules = readFileSync(fileURLToPath(new URL('../../../plugin/agents/verifier.md', import.meta.url)), 'utf8');
+  assert.match(rules, /It is a case outside the contract, not a claim shown false: it keeps nothing open/);
+  assert.match(rules, /Where you could make the case only with a part given a behaviour it does not have, and could not bring the running product there, step 4 says how it is recorded\. When in doubt it is the claim's\./);
+  const skill = readFileSync(fileURLToPath(new URL('../../../plugin/skills/verify/SKILL.md', import.meta.url)), 'utf8');
+  assert.match(skill, /## What is outside the contract/);
+  assert.match(skill, /What this is not: a way to pass\./);
+});
+
+test('a verdict given over a case the product does not come to is given back by whoever rules, and the milestone closes', async () => {
+  const fact = 'VAD를 150배 늦춘 엔진에서 전원을 빼면 말 512ms 청크가 남는다. 앱을 이 밀림까지 몰아가지는 못했음';
+  const table = {
+    plan: plan('m1'), build: built, close: closed,
+    verify: () => ({ proven: ['one'], refuted: [{ id: 'two', fact }], unchecked: [], noticed: ['대비 5.37:1'] }),
+    fix: () => ({ fixed: [], notFixed: ['two: 실행 중인 앱은 그 밀림에 닿지 못한다(Silero 한 프레임 0.4ms, 그 경우는 60ms가 있어야 함)'] }),
+  };
+  const why = '그 경우는 VAD를 스텁으로 늦춰야만 나오고, 이 맥의 Silero는 한 프레임 0.4ms라 제품은 거기 닿지 않는다';
+  const ran = await run({ request: 'x' }, { ...table, rule: () => ({ disputed: [], notTheClaim: [{ id: 'two', why }] }) });
+  // Whoever fixes does not bend the product to such a case: it names it, and whoever rules decides.
+  const mend = ran.calls.find((c) => c.label === 'fix:m1:1')!.prompt;
+  assert.match(mend, /What a verifier recorded under "noticed" is not yours to mend and is not handed to you here\./);
+  assert.match(mend, /do not bend the product to that case: mend what the running product can come to, and put one line under "notFixed" for the rest/);
+  const judge = ran.calls.find((c) => c.label.startsWith('rule:'))!.prompt;
+  assert.match(judge, /- \*\*The case was not the claim's\.\*\*/);
+  assert.match(judge, /See for yourself that the product does not get there/);
+  assert.match(judge, /`sz-eyes contract claim m1 <claim id> --status proven --note "/);
+  assert.match(judge, /This is not a way to pass a claim:[^\n]*When in doubt, the product is wrong\./);
+  assert.ok(ran.logs.some((l) => /claim "two" stands by its own check: the case it was shown false by is one the running product does not come to/.test(l)), ran.logs.join('\n'));
+  assert.deepEqual(ran.calls.map((c) => c.label), ['plan', 'build:m1', 'verify:m1', 'fix:m1:1', 'rule:m1', 'close:m1'], 'the fix loop ends at the ruling: no second fix, and no look at a product nobody changed');
+  assert.equal(ran.result.stopped, null, 'the claim is not false any more, and the contract can close');
+  assert.deepEqual(ran.result.milestones[0].proven, ['one', 'two']);
+  assert.deepEqual(ran.result.milestones[0].refuted, []);
+  assert.deepEqual(ran.result.milestones[0].noticed, ['대비 5.37:1', `two: ${why}`], 'the case is carried as noticed, not dropped');
+
+  // Whoever rules gives back only what it was handed: a claim it did not look at stays false.
+  const stray = await run({ request: 'x' }, { ...table, close: () => ({ report: 'r.html', closed: false, line: 'l' }), verify: (_: Call, nth: number) => ({ proven: ['one'], refuted: [{ id: 'two', fact }], unchecked: [] }), rule: () => ({ disputed: [], notTheClaim: [{ id: 'one', why }, { id: 'nine', why }] }) });
+  assert.match(stray.result.stopped, /still has 1 claim\(s\) shown false/);
+  assert.deepEqual(stray.result.milestones[0].refuted.map((r: { id: string }) => r.id), ['two']);
+  // A claim it both set aside for the owner and gave back waits for the owner: the careful reading wins.
+  const both = await run({ request: 'x' }, { ...table, rule: () => ({ disputed: [{ id: 'two', ruling: '약속은 700ms라 하고 스펙은 500ms라 한다' }], notTheClaim: [{ id: 'two', why }] }) });
+  assert.deepEqual(both.result.milestones[0].proven, ['one']);
+  assert.deepEqual(both.result.milestones[0].setAside.map((d: { id: string }) => d.id), ['two']);
+
+  const arbiter = readFileSync(fileURLToPath(new URL('../../../plugin/agents/arbiter.md', import.meta.url)), 'utf8');
+  assert.match(arbiter, /\*\*The case was not the claim's\*\*/);
+  assert.match(arbiter, /you do not add a claim, widen a contract or change what any check expects/);
+  assert.match(arbiter, /record no verdict on a claim but the one the fifth case names/);
+});
+
+test('what a verifier noticed that the product does not come to is planned as a claim where the request reaches it, or left for the owner', async () => {
+  assert.match(SOURCE, /is a gap in what was agreed, not a fault left lying/);
+  assert.match(SOURCE, /leave its line in \\`\.sz\/backlog\.md\\` for the owner to choose/);
+});
+
 test('a milestone whose contract would not close is where the run stops, whatever the agents said', async () => {
   const { result, calls } = await run({ request: 'x' }, { plan: plan('m1', 'm2'), build: built, verify: () => ({ proven: ['one', 'two'], refuted: [], unchecked: [] }), close: () => ({ report: 'r.html', closed: false, why: 'a frozen file changed', line: 'l' }) });
   assert.match(result.stopped, /did not close: a frozen file changed/);

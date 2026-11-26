@@ -41,7 +41,7 @@ const operations = {
   build: ['contract new', 'contract freeze', 'contract built'],
   start: ['contract built'],
   verifier: ['contract claim', 'contract add-check', 'contract notice', 'standing record'],
-  arbiter: ['contract amend', 'contract dispute', 'contract supersede'],
+  arbiter: ['contract amend', 'contract dispute', 'contract supersede', 'contract notice', 'contract claim'],
   close: ['contract close'],
   redteam: ['backlog add'],
   sweep: ['contract new', 'contract freeze', 'contract claim'],
@@ -78,6 +78,11 @@ export function authorizeRecord(role, contract, label, args) {
       throw new Error('contract outside this worker');
     if (label === 'sweep:design' && op === 'claim' && args[3] !== 'screens')
       throw new Error('the prototype verdict belongs to the owner');
+    // Whoever rules gives back one kind of verdict and no other: a claim proven by its own check, with what that
+    // check showed, when the case it was shown false by is one the running product does not come to.
+    const after = (flag) => (args.indexOf(flag) > 0 ? args[args.indexOf(flag) + 1] : undefined);
+    if (role === 'arbiter' && op === 'claim' && !(after('--status') === 'proven' && (after('--note') ?? '').trim() !== ''))
+      throw new Error('whoever rules records one verdict only: a claim proven by its own check, with a --note saying what the check showed');
   }
 }
 
