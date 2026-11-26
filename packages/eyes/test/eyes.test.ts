@@ -397,6 +397,45 @@ test('a verdict remembers the commit the product was at when it was looked at', 
   }
 });
 
+test('the third look that shows a claim false says so, and a verdict recorded twice at one look is one', () => {
+  // (2026-11-26: one claim was recorded false nineteen times over about ten looks, another seven times, by a
+  // session that started every look itself; the workflow's stop at two fixes was never reached.)
+  const project = mkdtempSync(join(tmpdir(), 'eyes-third-'));
+  const env = { ...process.env, GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@example.com', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@example.com' };
+  const git = (...args: string[]): string => `${spawnSync('git', args, { cwd: project, encoding: 'utf8', env }).stdout ?? ''}`.trim();
+  const fix = (n: number): void => {
+    writeFileSync(join(project, 'a.txt'), `${n}\n`);
+    git('add', '-A');
+    git('commit', '-q', '-m', `fix ${n}`);
+  };
+  const refute = (note: string) => eyes(project, 'contract', 'claim', 'm1-split', 'split', '--status', 'refuted', '--note', note);
+  try {
+    git('init', '-q', '-b', 'main');
+    fix(0);
+    assert.equal(eyes(project, 'contract', 'new', 'm1-split', '--lane', 'M', '--request', '나눠 낸다', '--claim', 'split|셋이 12만원이면 4만원씩|command:true').code, 0);
+    assert.equal(eyes(project, 'contract', 'freeze', 'm1-split').code, 0);
+    assert.match(refute('80,000원이 나온다').text, /^split: refuted$/m, 'the first time is not counted aloud');
+    assert.match(refute('80,000원이 나온다, 사진을 붙였다').text, /^split: refuted$/m, 'recorded again at the same look, with a better note: still once');
+    assert.match(eyes(project, 'contract', 'show', 'm1-split').text, /  - 1번 반증됨/, 'the contract says it from the first: a later look does not carry a claim once shown false');
+    fix(1);
+    assert.match(refute('또 같은 자리').text, /^split: refuted \(2번 반증됨\)$/m);
+    fix(2);
+    const third = refute('이번에도 같은 자리');
+    assert.match(third.text, /^split: refuted \(3번 반증됨\)$/m);
+    assert.match(third.text, /shown false three times\. Say so in what you return/);
+    assert.match(third.text, /mend it again, have its own words ruled wrong where that is what they are \(sz:arbiter, sz-eyes contract dispute\), or close it as it is on their own words \(sz-eyes contract close m1-split --accepted "<their words>"\)/);
+    assert.doesNotMatch(third.text, /the rest goes on/);
+    fix(3);
+    assert.doesNotMatch(refute('넷째').text, /three times/, 'said once, at the third');
+    assert.equal(readContract(join(project, '.sz/contracts/m1-split.json')).claims[0]!.refutedCount, 4);
+    // Proven at last: the count stays, so that a later look knows this claim was shown false before.
+    assert.equal(eyes(project, 'contract', 'claim', 'm1-split', 'split', '--status', 'proven', '--note', '4만원씩 나온다').code, 0);
+    assert.match(eyes(project, 'contract', 'show', 'm1-split').text, /\[증명됨\] \*\*split\*\*[\s\S]*4번 반증됨/);
+  } finally {
+    rmSync(project, { recursive: true, force: true });
+  }
+});
+
 test('from the command line: closing makes claims stand, later work cannot close over a broken one, and an old check is not bent', () => {
   const project = mkdtempSync(join(tmpdir(), 'eyes-cli-'));
   try {

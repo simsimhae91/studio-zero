@@ -1627,6 +1627,54 @@ test('a fix runs the checks its own change reaches and says which', async () => 
   assert.match(SOURCE, /Run the project's checks, and the checks of the promises your change reaches/, 'whoever mends what broke when milestones were joined does the same');
 });
 
+test('claims shown false by one cause are one mend, one ruling and one count, and the log names the cause', async () => {
+  // (2026-11-26: one cause, a tab's address going to the server, was claimed by four claims of one contract: more
+  // than ten fix commits and nineteen looks, each mend made for one claim at a time.)
+  const three = () => ({ mode: 'extend', summary: 's', milestones: [{ id: 'm1', title: 'title m1', builds: 'b', claims: [claim('one'), claim('two'), claim('three')] }] });
+  const ran = await run({ request: 'x' }, {
+    plan: three, build: built, close: closed,
+    fix: () => ({ fixed: ['one'], notFixed: ['three: 같은 원인이라 한 번에 고쳐야 한다'] }),
+    verify: (_: Call, nth: number) => (nth === 0
+      ? { proven: ['two'], refuted: [{ id: 'one', fact: '탭 주소가 이름으로 나간다' }, { id: 'three', fact: '같은 곳으로 나간다', sameAs: 'one' }], unchecked: [] }
+      : { proven: ['one', 'three'], refuted: [], unchecked: [] }),
+  });
+  const look = ran.calls.find((c) => c.label === 'verify:m1')!.prompt;
+  assert.match(look, /"sameAs" names another claim of this contract shown false by the same cause/);
+  assert.match(look, /A claim is still shown false either way\./);
+  const fixer = ran.calls.find((c) => c.label === 'fix:m1:1')!.prompt;
+  assert.match(fixer, /- three: 같은 곳으로 나간다 \(the same cause as one: one change mends both, and say under "fixed" what it covered\)/);
+  assert.ok(ran.logs.includes('title m1: fix 1: one cause is one mend: one = three'), ran.logs.join('\n'));
+  const judge = ran.calls.find((c) => c.label.startsWith('rule:'))!.prompt;
+  assert.match(judge, /- three: 같은 곳으로 나간다 \(the same cause as one: rule the cause once, and say for each claim which it is\)/);
+  assert.match(judge, /Claims shown false by one cause are one question about the product and one mend: rule the cause[^\n]*A ruling that calls it three faults is how one crack is mended three times\./);
+  assert.match(SOURCE, /sameAs: \{ type: 'string', description: 'when this claim is shown false by the same cause/);
+  assert.match(SOURCE, /Two claims do not each claim one cause/);
+
+  // The two fixes a claim gets are the cause's: a second claim of a cause already mended once does not start a new count.
+  const f = (id: string, sameAs?: string) => ({ id, fact: `${id} is not so`, ...(sameAs ? { sameAs } : {}) });
+  const looks = (...each: ReturnType<typeof f>[][]) => (_: Call, nth: number) => {
+    const refuted = each[Math.min(nth, each.length - 1)]!;
+    return { proven: ['one', 'two', 'three'].filter((id) => !refuted.some((r) => r.id === id)), refuted, unchecked: [] };
+  };
+  const open = () => ({ report: 'r.html', closed: false, line: 'l' });
+  const sameCause = await run({ request: 'x' }, { plan: three, build: built, close: open, fix: () => ({ fixed: ['x'] }), verify: looks([f('one')], [f('three', 'one')], [f('three', 'one')]) });
+  assert.deepEqual(sameCause.calls.filter((c) => c.label.startsWith('fix:')).map((c) => c.label), ['fix:m1:1', 'fix:m1:2'], 'one cause, two fixes');
+  assert.match(sameCause.calls.find((c) => c.label === 'fix:m1:2')!.prompt, /mended once already and shown false again\. What was found the time before:\n- three: one is not so/);
+  const ownCause = await run({ request: 'x' }, { plan: three, build: built, close: open, fix: () => ({ fixed: ['x'] }), verify: looks([f('one')], [f('three')], [f('three')], [f('three')]) });
+  assert.deepEqual(ownCause.calls.filter((c) => c.label.startsWith('fix:')).map((c) => c.label), ['fix:m1:1', 'fix:m1:2', 'fix:m1:3'], 'a cause of its own has its own two');
+  // A name that is no claim of the contract, or the claim itself, names no cause.
+  const stray = await run({ request: 'x' }, { plan: three, build: built, close: closed, fix: () => ({ fixed: ['x'] }), verify: looks([f('one', 'nine'), f('two', 'two')], []) });
+  assert.doesNotMatch(stray.calls.find((c) => c.label === 'fix:m1:1')!.prompt, /the same cause as/);
+  assert.equal(stray.logs.some((l) => l.includes('one cause is one mend')), false);
+
+  const work = readFileSync(fileURLToPath(new URL('../../../plugin/skills/work/SKILL.md', import.meta.url)), 'utf8');
+  assert.match(work, /\*\*A claim shown false a third time is not handed to another fix without the owner\.\*\*/);
+  assert.match(work, /They choose; you do not\./);
+  assert.doesNotMatch(work, /the work on it stops and the rest goes on/, 'nothing is built on a contract left open: that road does not exist, and is not offered');
+  const skill = readFileSync(fileURLToPath(new URL('../../../plugin/skills/verify/SKILL.md', import.meta.url)), 'utf8');
+  assert.match(skill, /\*\*One cause, one mend\.\*\*/);
+});
+
 test('a session waits for the product on the signal its builder gives, and a look at every screen is weighed as one whatever its wording', async () => {
   // (2026-11-19: the workflow's own description still named the wait from before there was a signal. The session
   // waited on it for two hours, until the wait was ended, while the product had stood since minute 72.)

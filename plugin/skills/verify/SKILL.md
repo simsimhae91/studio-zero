@@ -156,6 +156,8 @@ Never carried: a claim with no commit on its verdict, a claim shown false before
 
 A verdict is about the commit you looked at. Given on a copy made before the project moved on, it says so: `sz-eyes contract claim <id> <claim> ... --at <the copy's commit>` (the first line `sz-eyes copy` printed names it). Recorded as the project's HEAD, it would hide the commits in between from the next comparison.
 
+**One cause, one mend.** When the same cause shows two claims false (the same function, the same rule, the same words leaving the same crack), both are still shown false and recorded, and each note names the other (`같은 뿌리: <the other claim>`; a workflow has "sameAs" for it). Said so, it is mended once and not claim by claim. A claim whose cause is its own says nothing of another.
+
 ## Recording a verdict
 
 ```

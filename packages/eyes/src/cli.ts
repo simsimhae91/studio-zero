@@ -1436,11 +1436,13 @@ async function main(argv: string[]): Promise<number> {
       // A closed contract is the record of what was shown then. What is found of it later is a look at a
       // standing claim, written where it cannot quietly take a promise off the list.
       const claimId = a.words[1];
+      let before = 0;
       const saved = updateContract(file, (contract) => {
         if (contract.closedAt !== null) throw new EyesError(`contract ${id} is closed: its verdicts are the record of what was shown then. What is found now is recorded with \`sz-eyes standing record ${id}/<claim> --status holds|broken|unchecked\`; the owner's own verdict on a claim left for them, with \`sz-eyes contract judged ${id} <claim> --verdict yes|no --said "<their words>"\`.`);
         const claim = contract.claims.find((c) => c.id === claimId);
         if (!claim) throw new EyesError(`contract ${id} has no claim "${claimId ?? ''}". Its claims: ${contract.claims.map((c) => c.id).join(', ')}`);
         const status = ClaimStatus.parse(a.one('--status'));
+        before = claim.refutedCount;
         // The commit the product was at when it was looked at: a look after a fix compares it with HEAD and does
         // not run a claim the change did not reach. It is the project's HEAD unless whoever looked says otherwise
         // (--at): a verdict shown on a copy made before a later commit is about the copy's commit, and recorded
@@ -1458,9 +1460,18 @@ async function main(argv: string[]): Promise<number> {
         for (const path of shown) if (!existsSync(join(folder, path))) throw new EyesError(`${join(folder, path)}: no such file. Evidence is a file under ${folder}, named from there (look/home.png)`);
         // A claim is not called proven on someone's word: there is something to look at, or a command that said so.
         if (status === 'proven' && shown.length === 0 && !a.one('--note')) throw new EyesError('a claim is proven by something that shows it: give --evidence (a picture, a film, a log under the evidence folder) or a --note that says what was run and what it said');
-        return withClaim(contract, claim.id, (c) => ({ ...c, status, evidence: [...new Set([...c.evidence, ...shown])], note: a.one('--note') ?? c.note, at: new Date().toISOString(), commit: seenAt }));
+        return withClaim(contract, claim.id, (c) => ({ ...c, status, evidence: [...new Set([...c.evidence, ...shown])], note: a.one('--note') ?? c.note, at: new Date().toISOString(), commit: seenAt, refutedCount: c.refutedCount + (status === 'refuted' && !(c.status === 'refuted' && c.commit !== null && c.commit === seenAt) ? 1 : 0) }));
       });
-      out(`${claimId}: ${saved.claims.find((c) => c.id === claimId)!.status}`);
+      // Looks are counted, not commands: a claim already recorded false at this commit and recorded false again
+      // (a better note, a picture added) is the same look. (2026-11-26: one claim was recorded false nineteen
+      // times over about ten looks.) Where the project is no repository every record counts.
+      const after = saved.claims.find((c) => c.id === claimId)!;
+      out(`${claimId}: ${after.status}${after.status === 'refuted' && after.refutedCount > 1 ? ` (${after.refutedCount}번 반증됨)` : ''}`);
+      // The workflow stops a claim at two fixes. A session that starts its own looks has no such stop unless it
+      // keeps one, so the third look that shows a claim false says so to whoever records it, once. (2026-11-26: a
+      // session that started every look itself went on mending one claim through about ten looks, two hours.)
+      if (after.status === 'refuted' && after.refutedCount === 3 && before === 2)
+        out(`shown false three times. Say so in what you return: a claim shown false a third time is not handed to another fix without the owner. Whoever leads the work puts it to them once, with what each look found and what each fix changed, and the three ways on: mend it again, have its own words ruled wrong where that is what they are (sz:arbiter, sz-eyes contract dispute), or close it as it is on their own words (sz-eyes contract close ${id} --accepted "<their words>"), written down as a known limit. They choose.`);
       return 0;
     }
     if (command === 'judged') {
