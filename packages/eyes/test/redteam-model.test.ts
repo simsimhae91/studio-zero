@@ -52,6 +52,10 @@ test('native Codex routes both red-team calls to the selected model and keeps th
     'start:counter': { launch },
     'verify:counter': { proven: [claim.id], refuted: [], unchecked: [] },
     'redteam:counter': { checks: [{ what: fatal, why: 'The counter stops at that length', weight: 'fatal', where: 'counter' }], fatal: [fatal] },
+    // A fatal finding at the close is mended once, the claims are shown again, and the review looks again.
+    'fix:counter:review': { fixed: ['The counter takes the longest entry'] },
+    'verify:counter:again': { proven: [claim.id], refuted: [], unchecked: [] },
+    'redteam:counter:again': { checks: [{ what: fatal, why: 'Still stops at that length', weight: 'fatal', where: 'counter' }], fatal: [fatal] },
   }));
   writeFileSync(join(dir, 'codex'), codex, { mode: 0o755 });
 
@@ -69,6 +73,9 @@ test('native Codex routes both red-team calls to the selected model and keeps th
     ['start:counter', 'build-model', false],
     ['verify:counter', 'build-model', false],
     ['redteam:counter', 'review-model', true],
+    ['fix:counter:review', 'build-model', false],
+    ['verify:counter:again', 'build-model', false],
+    ['redteam:counter:again', 'review-model', true],
   ]);
   // The roles that read a publisher's page are told how, and the others are not told of it.
   const prompt = (label: string) => readFileSync(join(dir, `prompt-${label}.txt`), 'utf8');

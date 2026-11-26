@@ -1,7 +1,7 @@
 export const meta = {
   name: 'build',
   description: 'Build a product, or grow one that exists, to the end, unattended: for a new product with screens, first every screen planned, drawn as one clickable prototype, measured, and put before the owner, whose word it waits for; then a spec (new, or the existing one extended), then for each milestone a frozen contract, the build, a verification by an agent that did not build it which also shows again what stood before, fixes, and a page of evidence. Milestones follow one another unless the plan puts some side by side: those are built at the same time in folders of their own, brought together, and everything that stands is shown again on the product as joined',
-  whenToUse: 'A new product, or a change of several features to a product that already has a spec (lane L), after the owner has been put the questions only they can answer (a few, each a choice they can tap) and has asked for it to run to the end without them. Typing the command is not an answer to those questions: ask first, then start it with asked and answers (args is an object: { request, asked, answers, design? }). A new product with screens is drawn before anything of it is built: the first run plans and draws every screen, measures them, and stops with the prototype. Open .sz/design/prototype.html for the owner, record what they say in their words (sz-eyes contract judged design feel --verdict yes|no --said "<their words>"), and start the workflow again: on yes it builds the first pass to the drawing, on no it draws again what they said. Only design: "go" in args takes a run from the measured prototype straight into building without their word, and only the owner can ask for it (a prototype waits fifteen minutes; a build nobody wanted costs two hours). For a new product, right after starting the run that builds its first pass (after their yes, with design: "go", or for a product with no screens), start in the background a wait for its builder to say it stands (until sz-eyes contract built > /dev/null 2>&1; do sleep 20; done; sz-eyes contract built: it prints the contract and how the product is started, about an hour in; nothing else answers before the first pass is closed, hours later). When that returns, make a copy of the product (sz-eyes copy <a folder outside the project> --with <what .sz/map.md says is built and not in git>), start the copy the way that line says and tell the owner its address, and that it is still being verified: they see the whole product then, not when everything is finished. facts: "auto" (default) reads once what an authority publishes that the product needs, and later runs use the page it left (for 30 days, or until a request needs a criterion the page lacks); "on" has the publishers read again whatever the page says; "off" skips it. redteam: "plan" | "close" | "both" adds a review in a new conversation before building a plan or closing a milestone (5 to 10 minutes a milestone). Another model is used only when redteamModel names one distinct from the original.',
+  whenToUse: 'A new product, or a change of several features to a product that already has a spec (lane L), after the owner has been put the questions only they can answer (a few, each a choice they can tap) and has asked for it to run to the end without them. Typing the command is not an answer to those questions: ask first, then start it with asked and answers (args is an object: { request, asked, answers, design? }). A new product with screens is drawn before anything of it is built: the first run plans and draws every screen, measures them, and stops with the prototype. Open .sz/design/prototype.html for the owner, record what they say in their words (sz-eyes contract judged design feel --verdict yes|no --said "<their words>"), and start the workflow again: on yes it builds the first pass to the drawing, on no it draws again what they said. Only design: "go" in args takes a run from the measured prototype straight into building without their word, and only the owner can ask for it (a prototype waits fifteen minutes; a build nobody wanted costs two hours). For a new product, right after starting the run that builds its first pass (after their yes, with design: "go", or for a product with no screens), start in the background a wait for its builder to say it stands (until sz-eyes contract built > /dev/null 2>&1; do sleep 20; done; sz-eyes contract built: it prints the contract and how the product is started, about an hour in; nothing else answers before the first pass is closed, hours later). When that returns, make a copy of the product (sz-eyes copy <a folder outside the project> --with <what .sz/map.md says is built and not in git>), start the copy the way that line says and tell the owner its address, and that it is still being verified: they see the whole product then, not when everything is finished. facts: "auto" (default) reads once what an authority publishes that the product needs, and later runs use the page it left (for 30 days, or until a request needs a criterion the page lacks); "on" has the publishers read again whatever the page says; "off" skips it. redteam: "plan" | "close" | "both" adds a review in a new conversation before building a plan or closing a milestone (5 to 10 minutes a milestone); a fatal finding at the close is mended once, every claim shown again and the finding looked at again, and only what still holds stops the run. Another model is used only when redteamModel names one distinct from the original.',
   phases: [
     { title: 'Plan', detail: 'the spec and its milestones, each with the claims that make it done' },
     { title: 'Design', detail: 'for a new product with screens: every screen planned, drawn as one prototype and measured, then put before the owner before anything is built' },
@@ -344,6 +344,9 @@ const FACTS = {
   required: ['needed', 'why'],
 }
 
+// What whoever mends returns: what was mended, and what cannot be made true with what is at hand.
+const MENDED = { type: 'object', properties: { fixed: { type: 'array', items: { type: 'string' } }, notFixed: { type: 'array', items: { type: 'string' } } }, required: ['fixed'] }
+
 const REDREVIEW = {
   type: 'object',
   properties: {
@@ -497,10 +500,13 @@ const SWEPT = {
 let designed = null
 const redteam = ['plan', 'close', 'both'].includes(args.redteam) ? args.redteam : 'off'
 const reviews = []
-// Use the caller's runner. A milestone built in a worktree has its own product, ledger and backlog.
-const redTeam = async (at, m, built, run = agent, where = null) => {
+// Use the caller's runner. A milestone built in a worktree has its own product, ledger and backlog. It returns the
+// review ({ checks, fatal, held }) or null when nobody answered; what a fatal finding stops is the caller's to say.
+// `again`, after a closing review's findings were mended: those findings, looked at once more and nothing else.
+const redTeam = async (at, m, built, run = agent, where = null, again = null) => {
   const beside = where ? ` This milestone was built beside others: its folder is \`${where}\` (a git worktree of the project on its own branch), and everything it built is there. Read its contract and evidence there (\`cd ${where} && …\`), make any test copy from this worktree, and file findings in its backlog.` : ''
   const planning = at === 'plan'
+  const narrow = !planning && Array.isArray(again) && again.length > 0
   const prompt = planning
     ? `You review a plan before anything is built from it, and you did not write it. ${SAND} Start no other agent.
 
@@ -524,6 +530,22 @@ File each finding as it stands: \`sz-eyes backlog add "<one line, in the owner's
 (in a Codex worker: \`record ["backlog", "add", "<one line>", "--from", "red team: plan"]\`).
 Change no file, write no code, and record no verdict: a claim is the verifier's to show and the owner's to judge.
 fatal = if this is true the plan cannot be built as it stands.`
+    : narrow
+    ? `You reviewed a built milestone in a new conversation and found faults that no claim covers. It has been mended
+since by someone you do not see. ${SAND}${beside} Start no other agent.
+
+The product starts like this: ${built.launch}. Its contract: \`sz-eyes contract show ${built.contractId}\`.
+
+What you found before, each with where it was:
+${again.map((f) => `- ${f}`).join('\n')}
+
+Look at only these, on the product as it is now, the way you found them (if the project folder is read-only, make a
+copy as before: \`copy=$(mktemp -d "$TMPDIR/sz-review.XXXXXXXX")\` and \`sz-eyes copy "$copy"\`, then
+\`sz-eyes copy "$copy" --end\` when you are done). Each that still holds goes under "fatal" in the same words, with a
+check: its \`where\` and what you saw. Each that no longer holds goes under "held", with what you saw instead. Look for
+nothing new: a fault nobody has found yet is not this look's. Change no file, record no verdict, and file nothing in
+the backlog: what still holds is there already.
+fatal = this cannot stand as it is.`
     : `You review a built milestone before it is closed, and you did not build it. ${SAND}${beside}
 
 The product starts like this: ${built.launch}. Its contract: \`sz-eyes contract show ${built.contractId}\`. Read its
@@ -539,21 +561,22 @@ location and impact. Keep live interaction to the ordinary product flow. Say wha
 (in a Codex worker: \`record ["backlog", "add", "<one line>", "--from", "red team: ${m.id}"]\`).
 Change no product code and record no verdict. fatal = this cannot stand as it is.`
   const review = await run(prompt, {
-    label: planning ? 'redteam:plan' : `redteam:${m.id}`, phase: planning ? 'Plan' : 'Close',
+    label: planning ? 'redteam:plan' : narrow ? `redteam:${m.id}:again` : `redteam:${m.id}`, phase: planning ? 'Plan' : 'Close',
     agentType: 'sz:redteam', schema: REDREVIEW, ...effort(planning ? 'plan' : 'verify'),
     ...(MODELS.includes(args.redteamModel) ? { model: args.redteamModel } : {}),
   })
+  const what = `red team on ${planning ? 'the plan' : m.title}${narrow ? ', on what it found before' : ''}`
   if (!review) {
-    log(`red team on ${planning ? 'the plan' : m.title}: the review did not answer`)
+    log(`${what}: the review did not answer`)
     return null
   }
-  const { checks, fatal } = review
+  const checks = review.checks ?? []
+  const fatal = review.fatal ?? []
   const held = review.held ?? []
-  reviews.push({ at, ...(planning ? {} : { milestone: m.id }), checks, fatal, held })
+  reviews.push({ at, ...(planning ? {} : { milestone: m.id }), ...(narrow ? { again: true } : {}), checks, fatal, held })
   const reviewModel = HOST_SANDBOX?.redteamModel || (MODELS.includes(args.redteamModel) ? args.redteamModel : 'opus')
-  log(`red team on ${planning ? 'the plan' : m.title}: ${reviewModel}, new conversation; ${checks.length} found, ${fatal.length} fatal${held.length ? `; could not break: ${held.slice(0, 3).join(' / ')}` : ''}`)
-  if (fatal.length) return `${fatal.join('; ')}. The findings are in ${where ? where + '/' : ''}.sz/backlog.md`
-  return null
+  log(`${what}: ${reviewModel}, new conversation; ${checks.length} found, ${fatal.length} fatal${held.length ? `; ${narrow ? 'no longer so' : 'could not break'}: ${held.slice(0, 3).join(' / ')}` : ''}`)
+  return { checks, fatal, held }
 }
 
 // What the screens' planner listed as not real: the owner sees it at the drawing, before anything is built, and is
@@ -813,9 +836,9 @@ if (design === 'needed' || design === 'again') {
 if (design === 'waiting' || design === 'needed' || design === 'again') return stopAtDesign(WAITS)
 if (!Array.isArray(plan.milestones) || plan.milestones.length === 0) return { error: 'no plan came back' }
 if (redteam === 'plan' || redteam === 'both') {
-  const reason = await redTeam('plan', null, null)
-  if (reason) {
-    const stopped = `nothing was built: ${reason}. The plan stands at .sz/spec.md. Review the request and answers, and start again.`
+  const review = await redTeam('plan', null, null)
+  if (review && review.fatal.length > 0) {
+    const stopped = `nothing was built: ${review.fatal.join('; ')}. The findings are in .sz/backlog.md. The plan stands at .sz/spec.md. Review the request and answers, and start again.`
     log(stopped)
     return { mode: plan.mode || null, summary: plan.summary || '', decided: plan.decided || [], spec: '.sz/spec.md', design: designed, milestones: [], joins: [], forOwner: [], notBuilt: plan.milestones.map((m) => m.title), needed, redteam: reviews, stopped }
   }
@@ -1243,6 +1266,25 @@ Change no product code and no claim, and no flow or test except as the third cas
   // found when. A first pass stopped that night "after two fixes" with two claims shown false: one found only at
   // the third look, one mended once. Each fix had made true what it was handed, and each look had found something
   // the one before had not.)
+  // A claim keeps its earlier verdict unless a look after a fix gave it a new one: what was shown false and was not
+  // looked at again is still false, and a promise found broken is mended only when it was shown to hold.
+  const takeLook = (again) => {
+    const proven = new Set(again.proven.filter((id) => claimIds.has(id)))
+    const refuted = new Set(again.refuted.map((r) => r.id))
+    const unchecked = new Set(again.unchecked.map((u) => u.id))
+    const looked = (id) => proven.has(id) || refuted.has(id) || unchecked.has(id)
+    const held = new Set(again.held || [])
+    const brokenNow = new Set((again.broken || []).map((b) => b.key))
+    verdict = {
+      proven: [...verdict.proven.filter((id) => !looked(id)), ...proven],
+      refuted: [...verdict.refuted.filter((r) => !looked(r.id)), ...again.refuted],
+      unchecked: [...verdict.unchecked.filter((u) => !looked(u.id)), ...again.unchecked],
+      broken: [...(verdict.broken || []).filter((b) => !held.has(b.key) && !brokenNow.has(b.key)), ...(again.broken || [])],
+      stood: again.stood === undefined ? verdict.stood : again.stood,
+      // The second look was handed what the first noticed and returns what of it is still so, plus what is new.
+      noticed: again.noticed === undefined ? verdict.noticed : again.noticed,
+    }
+  }
   const fixes = new Map()
   // What each claim was shown false by, look after look. A claim mended once and shown false again by another case
   // of the same kind is not mended by a patch for that case: its fixer is handed both and told to mend the kind.
@@ -1268,7 +1310,7 @@ ${wrong}
 ${broke ? `And these were true before this work and are not now (each is a promise of earlier work: \`sz-eyes standing\` shows how it is checked):\n${broke}` : ''}
 ${lastTime}
 ${round === 1 && earlier ? 'An earlier run found these and stopped; it, or someone since, may have mended some of them already (`git log` since the look that found them says). One that was mended before and shown false again by another case of the same kind (the log shows each earlier mend) is not mended by one more patch for the case named: mend the kind (change what makes such cases possible, so that none of the kind is left), or put it under "notFixed" and say why it cannot be made true as it is worded. For each that a commit has mended, say which commit and what it changed, and do not run its check: whoever looks next runs every one of them, and run here as well they are the same minutes twice. Mend only what is still to be mended.\n\n' : ''}Find the cause of each in the product and fix it there. Where a claim is shown by pictures kept in the evidence folder (a look the owner will go through), take those pictures again from the product as you leave it: a picture from before your fix shows the fault you mended, and the claim is false again for that alone. Where a claim says something of every screen (nothing cut off, nothing too small to press), mend the cause wherever the same thing is shown, not only in the place named, and run that claim's flow over the whole product until it reports nothing before you return. Where a claim says something of all of a kind (every figure, every link, every answer) and what was found names one place, that is the place the verifier came upon: look for the others the way it found that one (its note and the evidence folder say how) and mend each. Where what was found is a case the claim's own check does not walk (the check passes, and the product is wrong in the case named), the check shows nothing of your fix: bring the product to that case and see it right, mend the neighbouring cases the same cause reaches, and where it is a matter of pure rule add the case as a test of its own, in a file no contract froze. Do not edit the contract, the flows or the tests it names, or those of earlier work, and do not record verdicts. Where the claim's own figure, or a frozen test or flow it is shown by, asks for an answer that the claim's source refuses (the page or the law the claim or the screen cites: open it), no fix makes both true: do not bend the product to the figure or the check against its source, and do not leave it wrong by the source to keep a check passing. Change nothing for that claim and put it under "notFixed": the file and the case, what is expected there, and the source's sentence with its address. Whoever rules next opens the source and settles it. Run the check of each claim you were handed until it passes (its flow, its test, its command), and the project's quick checks (its type check and its tests of pure rule). Do not run the other flows, of this contract or of earlier work: whoever looks again runs all of them once, side by side on copies of their own, and run here one after another they are most of an hour in which nothing is learned. One search comes first, though: before you commit, search the flows and tests of this contract and of earlier work for the words, figures and names your fix changes on a screen or in an answer (the old form, as it stood). A check that reads the old form fails at the next look, and that is another round of fixing and looking. Run each one that does, by itself, and keep what it reads as it was unless the claim you were handed says otherwise. Where it does (its source, or the drawing the product is held to, asks for the new form), mend the product and do not bend it back to keep that check passing: put one line under "notFixed" for each frozen check that now presses or reads the old form, beginning with the id of the claim that check shows, with the file, the line, the old words and the new. Whoever rules next corrects how such a check presses or reads; it is not yours to edit. Commit the fix. If a claim cannot be made true without changing what was asked, change nothing for it and say why. Nothing is put in as an example to make a claim true: what cannot be made real with what is at hand goes under "notFixed", with what it needs; each line of "notFixed" starts with the id of its claim and a colon (\`<claim id>: why\`), one claim a line. Do not leave a server running.`,
-      { label: `fix:${m.id}:${round}`, phase: 'Build', ...effort('build'), ...model('build'), schema: { type: 'object', properties: { fixed: { type: 'array', items: { type: 'string' } }, notFixed: { type: 'array', items: { type: 'string' } } }, required: ['fixed'] } },
+      { label: `fix:${m.id}:${round}`, phase: 'Build', ...effort('build'), ...model('build'), schema: MENDED },
     )
     // What the fixer says cannot be made true is ruled on before anyone looks again: a claim set aside is not looked at twice more.
     if (mended && Array.isArray(mended.notFixed) && mended.notFixed.length > 0) await rule(mended.notFixed.map((line) => String(line)))
@@ -1276,23 +1318,7 @@ ${round === 1 && earlier ? 'An earlier run found these and stopped; it, or someo
     // A claim can be shown false by a case its own check does not walk: whoever looks again is handed the case.
     const again = await lookAgain({ claims: verdict.refuted.map((r) => r.id), facts: Object.fromEntries(verdict.refuted.map((r) => [r.id, r.fact])), standing: (verdict.broken || []).map((b) => b.key), noticed: verdict.noticed === null ? null : verdict.noticed || [] })
     if (!again) break
-    // A claim keeps its earlier verdict unless this look gave it a new one: what was shown false and was not
-    // looked at again is still false, and a promise found broken is mended only when it was shown to hold.
-    const proven = new Set(again.proven.filter((id) => claimIds.has(id)))
-    const refuted = new Set(again.refuted.map((r) => r.id))
-    const unchecked = new Set(again.unchecked.map((u) => u.id))
-    const looked = (id) => proven.has(id) || refuted.has(id) || unchecked.has(id)
-    const held = new Set(again.held || [])
-    const brokenNow = new Set((again.broken || []).map((b) => b.key))
-    verdict = {
-      proven: [...verdict.proven.filter((id) => !looked(id)), ...proven],
-      refuted: [...verdict.refuted.filter((r) => !looked(r.id)), ...again.refuted],
-      unchecked: [...verdict.unchecked.filter((u) => !looked(u.id)), ...again.unchecked],
-      broken: [...(verdict.broken || []).filter((b) => !held.has(b.key) && !brokenNow.has(b.key)), ...(again.broken || [])],
-      stood: again.stood === undefined ? verdict.stood : again.stood,
-      // The second look was handed what the first noticed and returns what of it is still so, plus what is new.
-      noticed: again.noticed === undefined ? verdict.noticed : again.noticed,
-    }
+    takeLook(again)
   }
   if (verdict && verdict.refuted.length > 0) await rule([])
   if (verdict && (verdict.sandbox || '').trim() !== '') {
@@ -1306,14 +1332,61 @@ ${round === 1 && earlier ? 'An earlier run found these and stopped; it, or someo
     return { entry: { id: m.id, title: m.title, contractId: built.contractId, proven: [], refuted: [], unchecked: m.claims.map((c) => ({ id: c.id, why: 'the verifier did not answer' })), noticed: [], report: null, ...left }, stopped }
   }
 
-  const broken = verdict.broken || []
-  const entry = { id: m.id, title: m.title, contractId: built.contractId, launch: built.launch, setAside, proven: verdict.proven.filter((id) => !setAside.some((d) => d.id === id)), refuted: verdict.refuted, unchecked: verdict.unchecked, broken, stood: verdict.stood === undefined ? null : verdict.stood, replaced: m.supersedes || [], noticed: verdict.noticed || [], report: null, corrections: [], ...left }
+  let broken = verdict.broken || []
+  const entryNow = () => ({ id: m.id, title: m.title, contractId: built.contractId, launch: built.launch, setAside, proven: verdict.proven.filter((id) => !setAside.some((d) => d.id === id)), refuted: verdict.refuted, unchecked: verdict.unchecked, broken, stood: verdict.stood === undefined ? null : verdict.stood, replaced: m.supersedes || [], noticed: verdict.noticed || [], report: null, corrections: [], ...left })
+  let entry = entryNow()
   if (redteam === 'close' || redteam === 'both') {
-    const reason = await redTeam('close', m, built, runAgent, where)
-    if (reason) {
-      stopped = `milestone "${m.title}" was verified and is not closed: ${reason}. Its contract stays open.`
-      log(stopped)
-      return { entry, stopped }
+    // A review is paid for over a milestone that can close. One with claims still shown false or promises broken
+    // after its fixes stops below whatever a review finds, and is reviewed again when it is taken up. (2026-11-26:
+    // the review ran before the stop "still has claims shown false", over a milestone two fixes had not saved.)
+    if (verdict.refuted.length + broken.length > 0) log(`${m.title}: the close review is skipped: the milestone cannot close (${verdict.refuted.length} claim(s) shown false, ${broken.length} promise(s) of earlier work broken)`)
+    else {
+      const first = await redTeam('close', m, built, runAgent, where)
+      if (first && first.fatal.length > 0) {
+        // A fatal finding is a fault no claim covers. Until 2026-11-26 it stopped the run there, with no way to mend
+        // it: started again, the run verified the milestone again (10 to 20 minutes), paid for the same review and
+        // met the same finding. Now it is mended once, every claim is shown again on the mended product (a mend
+        // that nobody looks at again is the builder's word for itself), the review looks again at what it found and
+        // at nothing else, and only what still holds stops the run.
+        const backlog = `${where ? where + '/' : ''}.sz/backlog.md`
+        const seen = first.checks.filter((c) => c && c.weight === 'fatal').map((c) => `  ${c.what} (at ${c.where}): ${c.why}`)
+        const mendedReview = await runAgent(
+          `You are mending a product because a review in a new conversation, made on the running product, found what no claim covers. ${GROUND}${SAND} ${TOOLS}${PLACE}
+
+Contract \`${built.contractId}\` (read it: \`sz-eyes contract show ${built.contractId}\`). The product is launched like this: ${built.launch}.
+What the review found (it is also in \`${backlog}\`):
+${first.fatal.map((f) => `- ${f}`).join('\n')}${seen.length > 0 ? `\nWhere it saw each, and what goes wrong there for the person:\n${seen.join('\n')}` : ''}
+
+Find the cause of each in the product and mend it there; where it is one case of a kind, mend the kind. Every claim of the contract was shown true before this review, and whoever looks next shows each again on the product as you leave it: run the project's quick checks (its type check and its tests of pure rule) and the check of each claim your change reaches, and leave them passing. A check that stops passing means the product is wrong, not the check. Do not edit the contract, the flows or tests it froze, or those of earlier work, and record no verdicts. Commit the fix. What cannot be made true with what is at hand goes under "notFixed", one line each with what it needs; nothing is put in as an example. Do not leave a server running.`,
+          { label: `fix:${m.id}:review`, phase: 'Close', ...effort('build'), ...model('build'), schema: MENDED },
+        )
+        const notFixed = ((mendedReview && mendedReview.notFixed) || []).map((line) => String(line)).filter((line) => line.trim() !== '')
+        let second = null
+        if (mendedReview) {
+          const after = await lookAgain({ claims: [], facts: {}, standing: [], noticed: verdict.noticed === null ? null : verdict.noticed || [] })
+          if (!after) {
+            stopped = `milestone "${m.title}" was mended where its close review found a fault, and nobody could look at it again (the verifier did not answer). Its contract stays open, and the findings are in ${backlog}.`
+            log(stopped)
+            return { entry, stopped }
+          }
+          takeLook(after)
+          broken = verdict.broken || []
+          entry = entryNow()
+          if (verdict.refuted.length + broken.length > 0) {
+            stopped = `milestone "${m.title}" was mended where its close review found a fault, and the mend left ${verdict.refuted.length} claim(s) shown false and ${broken.length} promise(s) of earlier work broken: ${[...verdict.refuted.map((r) => `${r.id} (${r.fact})`), ...broken.map((b) => `${b.key} (${b.fact})`)].join('; ')}. Its contract stays open: started again, the run takes it up at the fix. The review's findings are in ${backlog}.`
+            log(stopped)
+            return { entry, stopped }
+          }
+          second = await redTeam('close', m, built, runAgent, where, first.fatal)
+        }
+        const survived = [...new Set([...notFixed, ...(second ? second.fatal : first.fatal)])]
+        if (survived.length > 0) {
+          stopped = `milestone "${m.title}" was verified, mended once where its close review found a fault, and ${survived.length} fault(s) still hold: ${survived.join('; ')}. Its contract stays open, and the findings are in ${backlog}. Started again, the run verifies this milestone and reviews it again from the start, and nothing carries these into a fix: the owner may rather say what to do about them first.`
+          log(stopped)
+          return { entry, stopped }
+        }
+        log(`${m.title}: the close review found ${first.fatal.length} fault(s); they were mended, every claim was shown again, and none of the faults holds now`)
+      }
     }
   }
   const closed = await runAgent(
@@ -1459,7 +1532,7 @@ Each was proven alone. Together, these promises do not hold (each is a standing 
 ${broke}
 
 Find the cause in the product (usually two milestones that each changed the same thing their own way) and fix it there so that all of them hold. Do not edit a contract or the flows and tests one names, and do not record verdicts. Run the project's checks. Commit the fix. Do not leave a server running.`,
-        { label: `mend:${group.map((m) => m.id).join('+')}:${round}`, phase: 'Build', ...effort('build'), ...model('build'), schema: { type: 'object', properties: { fixed: { type: 'array', items: { type: 'string' } }, notFixed: { type: 'array', items: { type: 'string' } } }, required: ['fixed'] } },
+        { label: `mend:${group.map((m) => m.id).join('+')}:${round}`, phase: 'Build', ...effort('build'), ...model('build'), schema: MENDED },
       )
       const again = await look(gate.broken.map((b) => b.key))
       if (!again) break

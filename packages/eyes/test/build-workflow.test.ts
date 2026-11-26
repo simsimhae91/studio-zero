@@ -736,6 +736,8 @@ test('the plan review is opt-in, runs once in order and stops building on a fata
   assert.deepEqual(fatal.allCalls.map((c) => c.label), ['plan', 'redteam:plan']);
   assert.match(fatal.result.stopped, /공시 요율을 읽을 수 없음/);
   assert.deepEqual(fatal.result.notBuilt, ['title m1']);
+  assert.match(fatal.result.stopped, /^nothing was built: 공시 요율을 읽을 수 없음\. The findings are in \.sz\/backlog\.md\. The plan stands at \.sz\/spec\.md/);
+  assert.deepEqual(fatal.result.redteam, [{ at: 'plan', checks: [], fatal: ['공시 요율을 읽을 수 없음'], held: [] }]);
   const silent = await run(args, { ...steps, redteam: () => null });
   // A review without a reply provides no fatal finding. Report the missing result before continuing.
   assert.equal(silent.result.stopped, null);
@@ -743,24 +745,70 @@ test('the plan review is opt-in, runs once in order and stops building on a fata
   assert.deepEqual(silent.result.redteam, []);
 });
 
-test('a requested closing review leaves the verified contract open on a fatal finding', async () => {
-  for (const reply of [null, { checks: [], fatal: ['요금표와 맞지 않음'] }]) {
-    const ran = await run({ request: '검토', redteam: 'close' }, {
-      plan: plan('m1'), build: built, verify: proven, redteam: () => reply, close: closed,
-    });
-    if (!reply) {
-      assert.deepEqual(labels(ran.calls), ['plan', 'build:m1', 'verify:m1', 'redteam:m1', 'close:m1']);
-      assert.equal(ran.result.stopped, null);
-      assert.ok(ran.logs.some((line) => line.includes('the review did not answer')));
-      continue;
-    }
-    assert.deepEqual(labels(ran.calls), ['plan', 'build:m1', 'verify:m1', 'redteam:m1']);
-    assert.match(ran.result.stopped, /요금표와 맞지 않음/);
-    const [m] = ran.result.milestones;
-    assert.deepEqual(m.proven, ['one', 'two']);
-    assert.equal(m.report, null);
-    assert.equal(m.contractId, 'm1');
-  }
+// A fatal finding at the close used to stop the run there (labels ending at redteam:m1), with no way to mend it.
+test('a closing review found wrong is mended once, every claim is shown again, and only what still holds stops the run', async () => {
+  const finding = '요금표와 맞지 않음';
+  const fatalAnswer = { checks: [{ what: finding, why: '두 번째 화면이 옛 요율을 쓴다', weight: 'fatal', where: '2번 화면' }], fatal: [finding] };
+  const steps = { plan: plan('m1'), build: built, verify: proven, close: closed };
+  // No answer: nothing is known to be wrong, and the milestone closes as before.
+  const silent = await run({ request: '검토', redteam: 'close' }, { ...steps, redteam: () => null });
+  assert.deepEqual(labels(silent.calls), ['plan', 'build:m1', 'verify:m1', 'redteam:m1', 'close:m1']);
+  assert.equal(silent.result.stopped, null);
+  assert.ok(silent.logs.some((line) => line.includes('the review did not answer')));
+
+  // Mended, shown again, looked at again: none of it holds, and the milestone closes.
+  const mended = await run({ request: '검토', redteam: 'close' }, {
+    ...steps,
+    redteam: (call: Call) => (call.label.endsWith(':again') ? { checks: [], fatal: [], held: [finding] } : fatalAnswer),
+    fix: () => ({ fixed: ['2번 화면의 요율을 요금표에서 다시 읽었다'] }),
+  });
+  assert.deepEqual(labels(mended.calls), ['plan', 'build:m1', 'verify:m1', 'redteam:m1', 'fix:m1:review', 'verify:m1:again', 'redteam:m1:again', 'close:m1']);
+  assert.equal(mended.result.stopped, null);
+  const prompt = (label: string) => mended.calls.find((c) => c.label === label)!.prompt;
+  assert.match(prompt('fix:m1:review'), /요금표와 맞지 않음[\s\S]*2번 화면[\s\S]*두 번째 화면이 옛 요율을 쓴다/);
+  assert.match(prompt('fix:m1:review'), /Do not edit the contract, the flows or tests it froze/);
+  assert.match(prompt('verify:m1:again'), /This is a second look, after a fix\. A fix can break a neighbour/);
+  assert.match(prompt('redteam:m1:again'), /What you found before[\s\S]*- 요금표와 맞지 않음[\s\S]*Look for\s+nothing new/);
+  assert.deepEqual(mended.result.redteam.map((r: { again?: boolean; fatal: string[] }) => [r.again === true, r.fatal]), [[false, [finding]], [true, []]]);
+  assert.ok(mended.logs.some((line) => line.includes('they were mended, every claim was shown again, and none of the faults holds now')));
+
+  // Still there after the mend: the run stops, the contract stays open, and nothing pretends the next run mends it.
+  const survived = await run({ request: '검토', redteam: 'close' }, { ...steps, redteam: () => fatalAnswer, fix: () => ({ fixed: [] }) });
+  assert.deepEqual(labels(survived.calls), ['plan', 'build:m1', 'verify:m1', 'redteam:m1', 'fix:m1:review', 'verify:m1:again', 'redteam:m1:again']);
+  assert.match(survived.result.stopped, /mended once where its close review found a fault, and 1 fault\(s\) still hold: 요금표와 맞지 않음\. Its contract stays open, and the findings are in \.sz\/backlog\.md\. Started again, the run verifies this milestone and reviews it again from the start/);
+  assert.equal(survived.result.milestones[0].report, null);
+
+  // What the mend could not make true holds as well, though the second look did not find it.
+  const unmade = await run({ request: '검토', redteam: 'close' }, {
+    ...steps,
+    redteam: (call: Call) => (call.label.endsWith(':again') ? { checks: [], fatal: [], held: [finding] } : fatalAnswer),
+    fix: () => ({ fixed: [], notFixed: ['요율표가 로그인 뒤에만 열린다: 주인의 계정이 필요하다'] }),
+  });
+  assert.match(unmade.result.stopped, /1 fault\(s\) still hold: 요율표가 로그인 뒤에만 열린다/);
+
+  // A mend that breaks a claim stops before the review looks again, and the next run takes it up at the fix.
+  const broke = await run({ request: '검토', redteam: 'close' }, {
+    ...steps,
+    verify: (call: Call) => (call.label.includes(':again') ? { proven: ['one'], refuted: [{ id: 'two', fact: '합계가 0으로 나온다' }], unchecked: [] } : { proven: ['one', 'two'], refuted: [], unchecked: [] }),
+    redteam: () => fatalAnswer,
+    fix: () => ({ fixed: ['요율을 고쳤다'] }),
+  });
+  assert.deepEqual(labels(broke.calls), ['plan', 'build:m1', 'verify:m1', 'redteam:m1', 'fix:m1:review', 'verify:m1:again']);
+  assert.match(broke.result.stopped, /the mend left 1 claim\(s\) shown false and 0 promise\(s\) of earlier work broken: two \(합계가 0으로 나온다\)\. Its contract stays open: started again, the run takes it up at the fix/);
+  assert.deepEqual(broke.result.milestones[0].refuted, [{ id: 'two', fact: '합계가 0으로 나온다' }]);
+});
+
+test('a milestone that cannot close after its fixes is not reviewed', async () => {
+  const ran = await run({ request: '검토', redteam: 'close' }, {
+    plan: plan('m1'), build: built,
+    verify: () => ({ proven: ['two'], refuted: [{ id: 'one', fact: '여전히 틀렸다' }], unchecked: [] }),
+    fix: () => ({ fixed: [] }),
+    redteam: () => ({ checks: [], fatal: [] }),
+    close: closed,
+  });
+  assert.equal(ran.calls.some((c) => c.label.startsWith('redteam')), false);
+  assert.ok(ran.logs.some((line) => line.includes('the close review is skipped: the milestone cannot close (1 claim(s) shown false, 0 promise(s) of earlier work broken)')));
+  assert.match(ran.result.stopped, /still has 1 claim\(s\) shown false/);
 });
 
 test('a closing review reads the product and files its finding in the worktree of its own milestone', async () => {
