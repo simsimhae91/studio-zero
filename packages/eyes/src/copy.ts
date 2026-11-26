@@ -1,6 +1,8 @@
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
+import { allContracts } from './contract.ts';
+import { fingerprint } from './fingerprint.ts';
 import { EyesError } from './ios.ts';
 
 /**
@@ -20,6 +22,10 @@ export interface Copy {
   cloned: string[];
   /** The stack's name in the copy, when the product has a Supabase configuration; null otherwise. */
   stack: string | null;
+  /** Checks an open contract holds that were taken from the project's folder, because the commit does not have them so. */
+  carried: string[];
+  /** Checks an open contract holds that differ in the project with no correction recorded: left as committed. */
+  stale: string[];
 }
 
 /** Left in every copy, so that a folder of the product's own is never taken for one. */
@@ -43,6 +49,27 @@ function clone(from: string, to: string): void {
 
 /** The name the Supabase command line would accept, as it cleans one itself. */
 const stackName = (name: string): string => name.replace(/[^a-zA-Z0-9_.-]+/g, '-').slice(0, 40);
+
+/**
+ * The checks the project's open contracts hold: each frozen path, the contract that holds it and the fingerprint
+ * the contract stamped it with. A copy is made from what is committed, and a contract holds more than that while
+ * it is open: a flow whoever verified wrote at the first look, a check an arbiter corrected. They are committed
+ * when the work closes; until then a copy made from the commit has the old check, or none.
+ */
+function heldChecks(project: string): { path: string; print: string | undefined; contract: string }[] {
+  return allContracts(project)
+    .filter(({ contract }) => contract.closedAt === null && contract.frozenAt !== null)
+    .flatMap(({ contract }) => contract.frozen.map((path) => ({ path, print: contract.frozenPrints[path], contract: contract.id })));
+}
+
+/** The files under a path of the project, relative to the project: the path itself when it is a file. */
+function filesUnder(project: string, path: string): string[] {
+  const at = join(project, path);
+  const stat = lstatSync(at, { throwIfNoEntry: false });
+  if (!stat || stat.isSymbolicLink()) return [];
+  if (!stat.isDirectory()) return [path];
+  return readdirSync(at).filter((entry) => entry !== 'node_modules' && entry !== '.git').sort().flatMap((entry) => filesUnder(project, join(path, entry)));
+}
 
 export function makeCopy(project: string, folder: string, opts: { at?: string; with?: readonly string[] }): Copy {
   const from = resolve(project);
@@ -92,8 +119,34 @@ export function makeCopy(project: string, folder: string, opts: { at?: string; w
         writeFileSync(config, text.replace(/^project_id\s*=\s*"[^"]*"/m, `project_id = "${stack}"`));
       }
     }
+    // A copy of HEAD is run against the checks the open contracts hold, though the commit does not have them so
+    // yet. Only a check whose fingerprint in the project is the one its contract stamped is taken: a frozen file
+    // changed with no correction recorded is left as committed and said, since taking it would put a bent check
+    // in front of whoever verifies. Nothing else of the working folder comes along, and a copy of an earlier
+    // commit (--at) is that commit. (2026-11-26: three verifiers copied `.sz/flows` into their copies by hand,
+    // nineteen times, and one ran the flow as it was before its correction.)
+    const carried: string[] = [];
+    const stale: string[] = [];
+    if (opts.at === undefined) {
+      for (const held of heldChecks(from)) {
+        const rel = relative(from, resolve(from, held.path));
+        if (isAbsolute(held.path) || rel === '' || rel.startsWith('..')) continue;
+        const differ = filesUnder(from, rel).filter((file) => !existsSync(join(to, file)) || !readFileSync(join(to, file)).equals(readFileSync(join(from, file))));
+        if (differ.length === 0) continue;
+        const name = `${held.path} (${held.contract})`;
+        if (held.print === undefined || fingerprint(from, held.path) !== held.print) {
+          if (!stale.includes(name)) stale.push(name);
+          continue;
+        }
+        for (const file of differ) {
+          mkdirSync(dirname(join(to, file)), { recursive: true });
+          writeFileSync(join(to, file), readFileSync(join(from, file)));
+        }
+        if (!carried.includes(name)) carried.push(name);
+      }
+    }
     writeFileSync(join(to, COPY_MARK), `${JSON.stringify({ of: from, commit, made: new Date().toISOString() })}\n`);
-    return { folder: to, commit, cloned, stack };
+    return { folder: to, commit, cloned, stack, carried: carried.sort(), stale: stale.sort() };
   } catch (err) {
     if (hadFolder) for (const entry of readdirSync(to)) rmSync(join(to, entry), { recursive: true, force: true });
     else rmSync(to, { recursive: true, force: true });
@@ -131,6 +184,8 @@ export function copyText(copy: Copy, project: string): string {
     ...(copy.cloned.length > 0 ? [`dependencies and built folders cloned: ${copy.cloned.join(', ')}`] : []),
     ...(copy.stack ? [`its stack is its own: started in that folder (sz-eyes supabase start), it shares no database with the project or with another copy, and ending the copy stops it. supabase/config.toml names it ${copy.stack}`] : []),
     `Nothing the product stored was copied. Launch it there the way the map says, on a port of its own (PORT=$(sz-eyes port)), keep the process id. When you are done, end what you started by that id and then end the copy: sz-eyes copy ${copy.folder} --end${copy.stack ? " (it stops the copy's stack and then removes the folder; never remove the folder yourself, since a stack whose folder is gone cannot be stopped from it)" : ' (it removes the folder)'}. It is not a repository: what you write to keep (a flow, a test) goes in the project's folder.`,
+    ...(copy.carried.length > 0 ? [`checks its open contract holds, taken from the project's folder because the commit does not have them so: ${copy.carried.join(', ')}. Everything else in the copy is what is committed`] : []),
+    ...(copy.stale.length > 0 ? [`changed in the project with no correction recorded, so the copy has them as committed: ${copy.stale.join(', ')} (sz-eyes contract frozen <id> says which, git diff shows what). A check run from this copy is the committed one, not the project's`] : []),
     copy.folder,
   ].join('\n');
 }

@@ -317,7 +317,10 @@ const USAGE = `sz-eyes: launch what was built, look at it, operate it, and put w
         a copy of the product to run beside it, in a folder outside the project: the files as committed (HEAD, or
         --at), the dependencies as installed (node_modules, cloned), --with what the map says is built and not in
         git (a built folder, a native app's Pods), and a stack name of its own (supabase/config.toml project_id
-        with the folder's name), so that it shares no database with the project or another copy. Nothing the
+        with the folder's name), so that it shares no database with the project or another copy. A copy of HEAD
+        also gets the checks an open contract holds as the project's folder has them (a flow written at a look, a
+        check an arbiter corrected) when the commit does not have them so and their fingerprint is the contract's;
+        one that changed with no correction recorded is named and left as committed. Nothing the
         product stored is copied, and it is not a repository. The folder is the last line printed. Launch it
         there the way the map says, on a port from sz-eyes port
   sz-eyes copy <folder> --end

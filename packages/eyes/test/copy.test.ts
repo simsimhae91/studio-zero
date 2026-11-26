@@ -22,6 +22,64 @@ const put = (root: string, path: string, text: string): void => {
   writeFileSync(join(root, path), text);
 };
 
+const eyes = (project: string, ...args: string[]): { code: number | null; text: string } => {
+  const run = spawnSync(process.execPath, [join(HERE, '../src/cli.ts'), ...args, '--dir', project], { encoding: 'utf8' });
+  return { code: run.status, text: `${run.stdout}${run.stderr}` };
+};
+
+test('a copy runs the checks its open contract holds, not the ones the last commit happens to carry', () => {
+  // (2026-11-26: verifiers wrote flows their contract then held, and an arbiter corrected one; none of it was
+  // committed yet. Copies made from the commit had the old flow or none, and three verifiers copied `.sz/flows`
+  // into their copies by hand, nineteen times.)
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'sz-copy-flow-')));
+  const project = join(root, 'alpha');
+  try {
+    mkdirSync(project);
+    git(project, 'init', '-q', '-b', 'main');
+    put(project, 'package.json', '{"name":"alpha"}\n');
+    put(project, '.sz/flows/saw.sh', 'echo old\n');
+    put(project, 'src/a.txt', 'committed\n');
+    git(project, 'add', '-A');
+    git(project, 'commit', '-q', '-m', 'first');
+    assert.equal(eyes(project, 'contract', 'new', 'm1-saw', '--lane', 'M', '--request', '본다', '--claim', 'saw|탭 이름만 보낸다|flow:.sz/flows/saw.sh', '--claim', 'new|새 흐름이 돈다|flow:.sz/flows/new.sh').code, 0);
+    assert.equal(eyes(project, 'contract', 'freeze', 'm1-saw', '--frozen', '.sz/flows/saw.sh').code, 0);
+    // Corrected and recorded, not committed; and a flow a verifier wrote, held by the contract, in no commit at all.
+    put(project, '.sz/flows/saw.sh', 'echo corrected\n');
+    assert.match(eyes(project, 'contract', 'amend', 'm1-saw', '--file', '.sz/flows/saw.sh', '--why', '제목 키 대신 사이트 이름으로 찾는다', '--no-commit').text, /not committed \(--no-commit\)/);
+    put(project, '.sz/flows/new.sh', 'echo new\n');
+    assert.equal(eyes(project, 'contract', 'add-check', 'm1-saw', '--frozen', '.sz/flows/new.sh').code, 0);
+    put(project, 'src/a.txt', 'being edited, not committed\n');
+    const made = makeCopy(project, join(root, 'copies', 'v1'), {});
+    assert.equal(readFileSync(join(made.folder, '.sz/flows/saw.sh'), 'utf8'), 'echo corrected\n', 'the check the contract holds, not the one the commit carries');
+    assert.equal(readFileSync(join(made.folder, '.sz/flows/new.sh'), 'utf8'), 'echo new\n', 'and one no commit has');
+    assert.deepEqual(made.carried.sort(), ['.sz/flows/new.sh (m1-saw)', '.sz/flows/saw.sh (m1-saw)']);
+    assert.deepEqual(made.stale, []);
+    assert.equal(readFileSync(join(made.folder, 'src/a.txt'), 'utf8'), 'committed\n', 'nothing else of the working folder comes along');
+    assert.match(copyText(made, project), /checks its open contract holds, taken from the project's folder because the commit does not have them so: \.sz\/flows\/new\.sh \(m1-saw\), \.sz\/flows\/saw\.sh \(m1-saw\)/);
+    // Changed in the project with no correction recorded: the copy keeps what is committed, and it is said.
+    put(project, '.sz/flows/saw.sh', 'echo bent\n');
+    const second = makeCopy(project, join(root, 'copies', 'v2'), {});
+    assert.equal(readFileSync(join(second.folder, '.sz/flows/saw.sh'), 'utf8'), 'echo old\n');
+    assert.deepEqual(second.stale, ['.sz/flows/saw.sh (m1-saw)']);
+    assert.deepEqual(second.carried, ['.sz/flows/new.sh (m1-saw)']);
+    assert.match(copyText(second, project), /changed in the project with no correction recorded, so the copy has them as committed: \.sz\/flows\/saw\.sh \(m1-saw\)/);
+    // A copy of an earlier commit is that commit: nothing of today's folder is put into it.
+    const first = git(project, 'rev-parse', 'HEAD');
+    const earlier = makeCopy(project, join(root, 'copies', 'v0'), { at: first });
+    assert.deepEqual([earlier.carried, earlier.stale], [[], []]);
+    assert.equal(existsSync(join(earlier.folder, '.sz/flows/new.sh')), false);
+    // Once the contract is closed its checks are the commit's: a closed contract's check is not taken from the folder.
+    put(project, '.sz/flows/saw.sh', 'echo corrected\n');
+    for (const id of ['saw', 'new']) assert.equal(eyes(project, 'contract', 'claim', 'm1-saw', id, '--status', 'proven', '--note', '돌려서 봤다').code, 0);
+    assert.match(eyes(project, 'contract', 'close', 'm1-saw').text, /^closed: m1-saw/);
+    const after = makeCopy(project, join(root, 'copies', 'v3'), {});
+    assert.deepEqual([after.carried, after.stale], [[], []]);
+    assert.equal(readFileSync(join(after.folder, '.sz/flows/saw.sh'), 'utf8'), 'echo old\n');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 /** A product with one workspace, dependencies installed, a built folder, stored data and something uncommitted. */
 function product(): { root: string; project: string; first: string; cleanup: () => void } {
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'sz-copy-')));
