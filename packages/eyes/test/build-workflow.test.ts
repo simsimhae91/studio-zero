@@ -1609,6 +1609,24 @@ test('a look after a fix does not run what the fix did not reach, and says which
   assert.match(SOURCE, /carried: \{ type: 'array', description: 'claims of this contract an earlier look proved/);
 });
 
+test('a fix runs the checks its own change reaches and says which', async () => {
+  // (2026-11-26: a fix for one claim broke two others, another brought back a way for a tab's address to go out,
+  // and a third opened a new crack: each found by the look after it, never by the fix before it.)
+  const ran = await run({ request: 'x' }, {
+    plan: plan('m1'), build: built, close: closed,
+    fix: () => ({ fixed: ['two'], notFixed: [], ranAlso: ['one: its flow passed', 'other-m/split: its test passed', '  '] }),
+    verify: (_: Call, nth: number) => (nth === 0 ? { proven: ['one'], refuted: [{ id: 'two', fact: 'f' }], unchecked: [] } : { proven: ['one', 'two'], refuted: [], unchecked: [] }),
+  });
+  const fixer = ran.calls.find((c) => c.label === 'fix:m1:1')!.prompt;
+  assert.match(fixer, /they are most of an hour in which nothing is learned\. One exception, and it is not that: the checks your own change reaches\./);
+  assert.match(fixer, /git show --stat --oneline HEAD/);
+  assert.match(fixer, /put one line each under "ranAlso"/);
+  assert.match(fixer, /Where one of them fails now, the product is wrong: mend it before you return/);
+  assert.ok(ran.logs.includes('title m1: fix 1 also ran 2 check(s) its change reached: one: its flow passed | other-m/split: its test passed'), ran.logs.join('\n'));
+  assert.match(SOURCE, /ranAlso: \{ type: 'array', items: \{ type: 'string' \}, description: 'one line each for the checks of other claims/);
+  assert.match(SOURCE, /Run the project's checks, and the checks of the promises your change reaches/, 'whoever mends what broke when milestones were joined does the same');
+});
+
 test('a session waits for the product on the signal its builder gives, and a look at every screen is weighed as one whatever its wording', async () => {
   // (2026-11-19: the workflow's own description still named the wait from before there was a signal. The session
   // waited on it for two hours, until the wait was ended, while the product had stood since minute 72.)
