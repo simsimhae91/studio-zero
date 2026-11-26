@@ -1531,10 +1531,17 @@ async function main(argv: string[]): Promise<number> {
         // What was closed as it is, on the owner's word, is a known limit of the product. It is written into what
         // was noticed, so that it reaches the evidence page and the list the next work is picked from; the claim
         // itself stays on record as shown false, with its whole note, and does not stand. A notice holds 600
-        // characters and six files, less than a verifier's note may: it is cut to fit, never refused.
+        // characters and six files, less than a verifier's note may: the note is cut to fit, never refused, and
+        // what is kept is its end. A note says what was done and then what it showed, so what was found instead
+        // comes last. (Cut from the front, the line for the claim this was made for said only what held.)
         const said = accepted.length > 120 ? `${accepted.slice(0, 119)}…` : accepted;
-        const fit = (text: string): string => (text.length > 600 ? `${text.slice(0, 599)}…` : text);
-        const limits = asItIs ? shownFalse.map((claim) => ({ text: fit(`알려진 한계(거짓인 채 닫음, 주인의 말: "${said}"): ${claim.says}${claim.note ? `: ${claim.note}` : ''}`), evidence: claim.evidence.slice(0, 6) })) : [];
+        const limit = (claim: Claim): string => {
+          const head = `알려진 한계(거짓인 채 닫음, 주인의 말: "${said}"): ${claim.says}`;
+          const room = 600 - head.length - 2;
+          if (claim.note === '' || room < 20) return head;
+          return `${head}: ${claim.note.length <= room ? claim.note : `…${claim.note.slice(-(room - 1))}`}`;
+        };
+        const limits = asItIs ? shownFalse.map((claim) => ({ text: limit(claim), evidence: claim.evidence.slice(0, 6) })) : [];
         const unseenNote = gap.most ? [{ text: `closed with ${gap.unseen.length} of ${gap.of} claims not looked at, on the owner's word: "${accepted}"`, evidence: [] }] : [];
         const closed = { ...contract, closedAt: at, noticed: [...contract.noticed, ...limits, ...unseenNote] };
         // Its proven claims are stamped first: a contract is never left closed with nothing to say when its

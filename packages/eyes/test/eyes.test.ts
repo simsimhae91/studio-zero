@@ -604,7 +604,8 @@ test('a claim shown false is closed only on the owner\'s own words, and written 
     assert.match(eyes(project, 'contract', 'close', 'first-pass', '--accepted', '그냥 닫아').text, /still owes[\s\S]*not frozen yet/);
     assert.equal(eyes(project, 'contract', 'freeze', 'first-pass').code, 0);
     // A note as long as a verifier's own, with more files than a notice holds: the close must not trip on either.
-    const note = `90cm에서 X로 나옴. ${'꼬리와 상한은 지켜지지만 밀린 채 멈추면 판정 못 한 무음을 말로 센다. '.repeat(24)}`.slice(0, 1100);
+    // It says first what holds and last what was found instead, as a verifier's note does: the end is what is kept.
+    const note = `${'계약의 경우는 통과하고 꼬리와 상한도 지켜진다. '.repeat(40)}`.slice(0, 1080) + ' 그러나 90cm에서 X로 나옴';
     assert.equal(eyes(project, 'contract', 'claim', 'first-pass', 'path', '--status', 'refuted', '--note', note).code, 0);
     // A claim nobody gave a verdict to is not closed for the owner either.
     const unshown = eyes(project, 'contract', 'close', 'first-pass', '--accepted', '그냥 닫아');
@@ -622,7 +623,12 @@ test('a claim shown false is closed only on the owner\'s own words, and written 
     // The owner's words: closed, with the limit written where the next work is picked from.
     const closedOne = eyes(project, 'contract', 'close', 'first-pass', '--accepted', '이 한계는 알고 이대로 내보내겠어');
     assert.match(closedOne.text, /^closed: first-pass \(1 line\(s\) added/);
-    assert.match(readFileSync(join(project, '.sz/backlog.md'), 'utf8'), /- \[ \] 알려진 한계\(거짓인 채 닫음, 주인의 말: "이 한계는 알고 이대로 내보내겠어"\): 90cm 상자는 착한택배가 된다: 90cm에서 X로 나옴/);
+    const line = readFileSync(join(project, '.sz/backlog.md'), 'utf8').split('\n').find((l) => l.includes('알려진 한계'))!;
+    assert.match(line, /^- \[ \] 알려진 한계\(거짓인 채 닫음, 주인의 말: "이 한계는 알고 이대로 내보내겠어"\): 90cm 상자는 착한택배가 된다: …/);
+    assert.match(line, /그러나 90cm에서 X로 나옴 \(계약 first-pass 검증 중 눈에 띔\)$/, 'a note too long for a notice keeps its end, where what was found instead is');
+    const kept = JSON.parse(readFileSync(join(project, '.sz/contracts/first-pass.json'), 'utf8')) as { noticed: { text: string }[]; claims: { id: string; note: string }[] };
+    assert.equal(kept.noticed.at(-1)!.text.length, 600);
+    assert.equal(kept.claims.find((c) => c.id === 'path')!.note, note, 'the claim keeps its whole note');
     assert.match(eyes(project, 'standing', '--summary').text, /^1 claim\(s\)/, 'only what was proven stands');
     const shown = eyes(project, 'contract', 'show', 'first-pass').text;
     assert.match(shown, /\[반증됨\] \*\*path\*\*/, 'the claim is still on record as false');
