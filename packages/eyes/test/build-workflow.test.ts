@@ -1572,6 +1572,43 @@ test('a look, each fix and each ruling say where they stand while the run goes o
   assert.match(when, /you are woken only when it ends, so keep a background wait on its journal/);
 });
 
+test('a look after a fix does not run what the fix did not reach, and says which commits it compared', async () => {
+  // (2026-11-26: 21 looks after fixes, each walking every claim of its verifier: one claim's whole check command,
+  // a type check and 1204 tests, ran three times, and 66 screens were photographed again, with nothing changed near them.)
+  const ran = await run({ request: 'x' }, {
+    plan: plan('m1'), build: built, close: closed,
+    fix: () => ({ fixed: ['two'], notFixed: [] }),
+    verify: (_: Call, nth: number) => (nth === 0
+      ? { proven: ['one'], refuted: [{ id: 'two', fact: 'f' }], unchecked: [] }
+      : { proven: ['two'], refuted: [], unchecked: [], carried: [{ id: 'one', range: 'a3df4b7..e8b7a0d', why: 'the diff named only e2e/two.sh' }, { id: 'two', range: 'a3df4b7..e8b7a0d', why: 'x' }, { id: 'nine', range: 'x..y', why: 'x' }] }),
+  });
+  const [first, second] = ran.calls.filter((c) => c.label.startsWith('verify:')).map((c) => c.prompt);
+  assert.doesNotMatch(first!, /"carried"/, 'a first look runs everything: there is no earlier verdict to stand on');
+  assert.match(second!, /Where the fix did not reach a claim at all, even its own check is not run again\./);
+  assert.match(second!, /`git diff --name-only <that commit>\.\.HEAD`, run in the project's folder \(a copy is not a repository\)/);
+  assert.match(second!, /return it under "carried" with its id, the two commits and what the diff named, and its verdict stands as it was/);
+  assert.match(second!, /a module more than one screen uses \(anything the map calls shared\)/);
+  assert.match(second!, /Never carried: a claim with no commit on its verdict, a claim shown false before/);
+  assert.match(second!, /say which \(`--at <that commit>`\)/);
+  assert.match(second!, /Where you cannot tell whether the diff stands near a claim's words, run it\./);
+  assert.ok(ran.logs.includes('title m1: 1 claim(s) not run again, the fix did not reach them: one (a3df4b7..e8b7a0d)'), ran.logs.join('\n'));
+  // Only a claim an earlier look proved, and that this look gave no verdict to, is carried: a claim just shown
+  // again is not, and neither is one the contract does not have.
+  assert.deepEqual(ran.result.milestones[0].carried.map((c: { id: string }) => c.id), ['one']);
+  assert.deepEqual([...ran.result.milestones[0].proven].sort(), ['one', 'two'], 'a carried claim keeps the verdict it had');
+  assert.match(ran.calls.find((c) => c.label === 'close:m1')!.prompt, /2 proven, 0 refuted, 0 unchecked, and 1 not run again because the fix did not reach them \(one\)/);
+  // Carrying never gives a verdict: a claim shown false and "carried" is still false.
+  const dodge = await run({ request: 'x' }, { plan: plan('m1'), build: built, close: () => ({ report: 'r.html', closed: false, line: 'l' }), fix: () => ({ fixed: ['two'] }), verify: (_: Call, nth: number) => (nth === 0 ? { proven: ['one'], refuted: [{ id: 'two', fact: 'f' }], unchecked: [] } : { proven: [], refuted: [], unchecked: [], carried: [{ id: 'two', range: 'a..b', why: 'x' }] }) });
+  assert.deepEqual(dodge.result.milestones[0].refuted.map((r: { id: string }) => r.id), ['two']);
+  assert.deepEqual(dodge.result.milestones[0].carried, []);
+  const verifier = readFileSync(fileURLToPath(new URL('../../../plugin/agents/verifier.md', import.meta.url)), 'utf8');
+  assert.match(verifier, /\*\*A claim the change did not reach is not run again, and that is the one way a verdict stands without a look\.\*\*/);
+  const skill = readFileSync(fileURLToPath(new URL('../../../plugin/skills/verify/SKILL.md', import.meta.url)), 'utf8');
+  assert.match(skill, /## What the change did not reach/);
+  assert.match(skill, /A change to one of these reaches every claim/);
+  assert.match(SOURCE, /carried: \{ type: 'array', description: 'claims of this contract an earlier look proved/);
+});
+
 test('a session waits for the product on the signal its builder gives, and a look at every screen is weighed as one whatever its wording', async () => {
   // (2026-11-19: the workflow's own description still named the wait from before there was a signal. The session
   // waited on it for two hours, until the wait was ended, while the product had stood since minute 72.)

@@ -146,6 +146,16 @@ sz-eyes standing record <contract>/<claim> --status holds|broken|unchecked --dur
 
 Run every standing claim that a flow, test or command shows (the project's whole check command in one go where it has one), and look again at the ones shown by a look where this work touched that screen. Where it says a check file changed since the claim last held, read the change (`git diff`, `git log -p -- <file>`) and decide whether the file still checks what the claim says: a check that was loosened so that it passes is `broken`, whatever it prints. A standing claim shown by `owner` is the owner's own verdict on how something looks or feels, in their words: you do not judge it again for them. If this work did not change what they saw, it `holds` (say what you compared). If it did, take the same pictures as it is now and record it `unchecked`, naming the pictures and what changed: it goes back to the owner, who looks again. Record every one you looked at. A standing claim that the work's own contract replaces is no longer listed.
 
+## What the change did not reach
+
+A look after a fix does not run everything again. Every verdict keeps the commit the product was at when it was looked at: `sz-eyes contract show <id>` gives it on the line `판정한 커밋`. Compare HEAD with it in the project's folder (`git diff --name-only <that commit>..HEAD`; a copy is not a repository). Where the diff names none of the files the claim is about (its own check, its screen, its rule, its figure) and none of the shared ones, the claim is not run again: its verdict stands, and in a workflow it goes under "carried" with the two commits and what the diff named.
+
+A change to one of these reaches every claim, so the claim is run: the app's entry or router, a module more than one screen uses (anything the map calls shared), a package manifest or a lock file, the build and type-check configuration, a schema or migration, the design's tokens or theme, a setting read everywhere (the environment, the words, the error handler), and the line of `.sz/map.md` that says how it is launched.
+
+Never carried: a claim with no commit on its verdict, a claim shown false before (`sz-eyes contract show` says how often), one whose own check is in the diff, and one shown by the command that runs all of the project's checks, where that command changed. Where you cannot tell whether the diff stands near a claim's words, run it.
+
+A verdict is about the commit you looked at. Given on a copy made before the project moved on, it says so: `sz-eyes contract claim <id> <claim> ... --at <the copy's commit>` (the first line `sz-eyes copy` printed names it). Recorded as the project's HEAD, it would hide the commits in between from the next comparison.
+
 ## Recording a verdict
 
 ```
