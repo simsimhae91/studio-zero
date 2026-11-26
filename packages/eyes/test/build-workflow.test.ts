@@ -1438,6 +1438,40 @@ test('a claim is handed to a fixer twice at most, and what a later look shows fa
   assert.match(endless.result.stopped, /still has 1 claim\(s\) shown false and 0 promise\(s\) of earlier work broken after four fixes \(a claim is handed/);
 });
 
+test('a milestone stopped with a claim still false names the ways on, and what is known is written where the owner looks', async () => {
+  // (2026-11-26: a run stopped with one claim of seven still false. The stop said how often it had been mended and
+  // nothing of what could be done. The session offered the owner "leave it in the backlog and go on", twice; the
+  // owner chose it; `sz-eyes contract close` refused with "still owes".)
+  const open = () => ({ report: 'r.html', closed: false, line: 'l' });
+  const stuck = await run({ request: 'x' }, { plan: plan('m1'), build: built, fix: () => ({ fixed: [] }), close: open, verify: () => ({ proven: ['one'], refuted: [{ id: 'two', fact: '창 밖 소리가 들어간다' }], unchecked: [] }) });
+  assert.match(stuck.result.stopped, /still has 1 claim\(s\) shown false and 0 promise\(s\) of earlier work broken after two fixes \(a claim is handed to a fixer twice at most, and a milestone is mended four times at most\): two \(창 밖 소리가 들어간다\)\. Its contract stays open and nothing is built on it\. There are three ways on, and no other: start the run again/);
+  assert.match(stuck.result.stopped, /where it is the claim's own words that are wrong, have them ruled so \(whoever ruled at the end of this run found the product wrong/);
+  assert.match(stuck.result.stopped, /close it on their words \(`sz-eyes contract close m1 --accepted "<their words>"`: it is written down as a known limit, and does not stand\)/);
+  assert.match(stuck.result.stopped, /A line in \.sz\/backlog\.md closes no contract, and no agent writes the owner's words for them\.$/);
+  const closer = stuck.calls.find((c) => c.label === 'close:m1')!.prompt;
+  assert.match(closer, /`sz-eyes contract close` refuses with "still owes" while a claim is shown false, no line of `\.sz\/backlog\.md` changes that, and you do not pass `--accepted` \(those words are the owner's alone\)/);
+  assert.match(closer, /`sz-eyes backlog add "<one line>" --from "계약 m1"`: one line for each claim shown false/);
+  assert.match(closer, /one for each line that command lists as noticed, word for word/);
+  assert.match(closer, /A backlog line is how the next work finds this, never a way to close the contract\./);
+  // A milestone that closes is told none of that.
+  const fine = await run({ request: 'x' }, { plan: plan('m1'), build: built, close: closed, verify: () => ({ proven: ['one', 'two'], refuted: [], unchecked: [] }) });
+  assert.doesNotMatch(fine.calls.find((c) => c.label === 'close:m1')!.prompt, /backlog add/);
+
+  // What stood before and broke is not closed over on anyone's word: the stop does not offer it.
+  const broke = await run({ request: 'x' }, { plan: plan('m1'), build: built, fix: () => ({ fixed: [] }), close: open, verify: () => ({ proven: ['one', 'two'], refuted: [], unchecked: [], broken: [{ key: 'first/keeps', fact: '다시 오면 기록이 없다' }] }) });
+  assert.match(broke.result.stopped, /still has 0 claim\(s\) shown false and 1 promise\(s\) of earlier work broken/);
+  assert.match(broke.result.stopped, /Its contract stays open and nothing is built on it\. A promise of earlier work found broken is not closed over on anyone's word/);
+  assert.doesNotMatch(broke.result.stopped, /--accepted|three ways/);
+
+  const work = readFileSync(fileURLToPath(new URL('../../../plugin/skills/work/SKILL.md', import.meta.url)), 'utf8');
+  assert.match(work, /`sz-eyes contract close` refuses while a claim is shown false \(`still owes`\), and a line in `\.sz\/backlog\.md` never closes it/);
+  assert.match(work, /Say these three to the owner, not a guess, and never write their words for them/);
+  assert.match(work, /Do not tell them a claim shown false can be left in the backlog and the work go on: it cannot/);
+  const when = /whenToUse: '([^\n]*)',\n/.exec(SOURCE)![1]!;
+  assert.match(when, /put those to the owner as it names them\. A line in the backlog closes no contract, so do not offer one\.$/);
+  assert.match(readFileSync(fileURLToPath(new URL('../../../plugin/README.md', import.meta.url)), 'utf8'), /`\.sz\/backlog\.md` 한 줄은 계약을 닫지 못한다/);
+});
+
 test('a session waits for the product on the signal its builder gives, and a look at every screen is weighed as one whatever its wording', async () => {
   // (2026-11-19: the workflow's own description still named the wait from before there was a signal. The session
   // waited on it for two hours, until the wait was ended, while the product had stood since minute 72.)
