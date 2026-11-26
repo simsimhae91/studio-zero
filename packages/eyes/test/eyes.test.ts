@@ -583,6 +583,10 @@ test('a claim found false whose own words are wrong is set aside for the owner: 
     assert.match(eyes(project, 'contract', 'dispute', 'first-pass', 'path', '--ruling', '짧음').text, /sz-eyes contract dispute <id> <claim-id> --ruling/);
     assert.match(eyes(project, 'contract', 'dispute', 'first-pass', 'path', '--ruling', '약속은 100cm라고 하지만 세븐일레븐 공식 안내(https://example.com/guide)는 "세 변의 합 80cm 이하"').text, /first-pass\/path: disputed\. Its words are unchanged and it does not stand/);
     assert.match(eyes(project, 'contract', 'show', 'first-pass').text, /\[주인이 정할 것\] \*\*path\*\* 90cm 상자는 착한택배가 된다/);
+    // Set aside for the owner, it is nobody else's to call proven: a ruling that both set it aside and gave it back
+    // would leave it standing while the owner is told it waits for them.
+    assert.match(eyes(project, 'contract', 'claim', 'first-pass', 'path', '--status', 'proven', '--note', '제 검사는 통과했다').text, /first-pass\/path is set aside for the owner[\s\S]*sz-eyes contract judged first-pass path/);
+    assert.match(eyes(project, 'contract', 'show', 'first-pass').text, /\[주인이 정할 것\] \*\*path\*\*/);
     assert.match(eyes(project, 'contract', 'close', 'first-pass').text, /^closed: first-pass \(1 line\(s\) added/);
     assert.match(readFileSync(join(project, '.sz/backlog.md'), 'utf8'), /주인이 정할 것: 90cm 상자는 착한택배가 된다: 약속의 문구가 사실과 다름/);
     assert.match(eyes(project, 'standing', '--summary').text, /^1 claim\(s\)/, 'only what was proven stands');
@@ -637,6 +641,71 @@ test('a claim shown false is closed only on the owner\'s own words, and written 
   } finally {
     rmSync(project, { recursive: true, force: true });
   }
+});
+
+test('the owner\'s word does not close what it does not reach: a promise of earlier work broken, a release line shown false', () => {
+  const project = mkdtempSync(join(tmpdir(), 'eyes-asitis-not-'));
+  try {
+    assert.equal(eyes(project, 'contract', 'new', 'm1-keeps', '--lane', 'M', '--request', '첫 판', '--claim', 'keeps|다시 와도 기록이 남는다|command:true').code, 0);
+    assert.equal(eyes(project, 'contract', 'freeze', 'm1-keeps').code, 0);
+    assert.equal(eyes(project, 'contract', 'claim', 'm1-keeps', 'keeps', '--status', 'proven', '--note', '돌려서 봤다').code, 0);
+    assert.match(eyes(project, 'contract', 'close', 'm1-keeps').text, /^closed: m1-keeps/);
+    // This work: one claim false, two nobody could look at (most of it), and it broke what stood before.
+    assert.equal(eyes(project, 'contract', 'new', 'm2-more', '--lane', 'M', '--request', '둘째', '--claim', 'path|90cm 상자는 착한택배가 된다|command:true', '--claim', 'phone|폰에서 열린다|command:true', '--claim', 'push|알림이 온다|command:true').code, 0);
+    assert.equal(eyes(project, 'contract', 'freeze', 'm2-more').code, 0);
+    assert.equal(eyes(project, 'contract', 'claim', 'm2-more', 'path', '--status', 'refuted', '--note', '90cm에서 X로 나옴').code, 0);
+    for (const id of ['phone', 'push']) assert.equal(eyes(project, 'contract', 'claim', 'm2-more', id, '--status', 'unchecked', '--note', '시뮬레이터가 없다').code, 0);
+    assert.equal(eyes(project, 'standing', 'record', 'm1-keeps/keeps', '--status', 'broken', '--during', 'm2-more', '--note', '다시 오면 기록이 없다').code, 0);
+    const words = '알고 있고 이대로 내보낸다. '.repeat(50);
+    const kept = eyes(project, 'contract', 'close', 'm2-more', '--accepted', words);
+    assert.match(kept.text, /is not closed yet[\s\S]*m1-keeps\/keeps: stood before this work and is broken now/, 'what stood before and broke is mended, whoever says what');
+    assert.equal(eyes(project, 'standing', 'record', 'm1-keeps/keeps', '--status', 'holds', '--during', 'm2-more', '--note', '고친 뒤 남는다').code, 0);
+    // Their words may be long, and two records carry them (the claim false, the claims not looked at): each fits a notice.
+    assert.match(eyes(project, 'contract', 'close', 'm2-more', '--accepted', words).text, /^closed: m2-more/);
+    const saved = JSON.parse(readFileSync(join(project, '.sz/contracts/m2-more.json'), 'utf8')) as { noticed: { text: string }[] };
+    assert.equal(saved.noticed.length, 2);
+    assert.ok(saved.noticed.every((n) => n.text.length <= 600), saved.noticed.map((n) => n.text.length).join(', '));
+    assert.match(saved.noticed[1]!.text, /^closed with 2 of 3 claims not looked at, on the owner's word: "알고 있고/);
+    assert.match(eyes(project, 'standing', '--summary').text, /^1 claim\(s\)/, 'nothing of m2 stands');
+
+    // A release is a gate, not a piece of work: a line of it shown false means it does not go out.
+    assert.equal(eyes(project, 'contract', 'new', 'r1-out', '--lane', 'M', '--request', '내보내기', '--claim', 'rc-walk|후보에서 걸음이 끝까지 간다|command:true').code, 0);
+    assert.equal(eyes(project, 'contract', 'freeze', 'r1-out').code, 0);
+    assert.equal(eyes(project, 'contract', 'claim', 'r1-out', 'rc-walk', '--status', 'refuted', '--note', '결제에서 멈춘다').code, 0);
+    const file = join(project, '.sz/contracts/r1-out.json');
+    writeFileSync(file, JSON.stringify({ ...JSON.parse(readFileSync(file, 'utf8')), release: { place: 'stage', url: 'https://example.com', candidate: 'https://rc.example.com', commit: 'abc1234' } }));
+    const gate = eyes(project, 'contract', 'close', 'r1-out', '--accepted', '그냥 내보내');
+    assert.match(gate.text, /still owes[\s\S]*rc-walk: shown to be false/);
+    assert.match(gate.text, /A release does not go out over a line shown false, on anyone's word/);
+    assert.doesNotMatch(gate.text, /--accepted "<their words>"/);
+  } finally {
+    rmSync(project, { recursive: true, force: true });
+  }
+});
+
+test('an agent a session or a workflow started passes none of the owner\'s words', () => {
+  // (2026-11-26: `--accepted` came to close a contract over a claim shown false, and on Claude Code nothing but a
+  // sentence kept a closer or a fixer from writing those words itself. Codex refuses them in its record tool.)
+  const owner = (command: string, agent?: string): { code: number | null; text: string } => {
+    const run = spawnSync(process.execPath, [join(HERE, '../../../plugin/hooks/guard-owner.mjs')], { encoding: 'utf8', input: JSON.stringify({ cwd: tmpdir(), tool_name: 'Bash', ...(agent ? { agent_id: agent } : {}), tool_input: { command } }) });
+    return { code: run.status, text: run.stderr };
+  };
+  for (const command of [
+    'sz-eyes contract close day-true --accepted "백로그로 두고 다음으로"',
+    'cd /p && sz-eyes contract close day-true --dir /p --accepted "닫아" 2>&1 | tail -3',
+    '/Users/x/plugin/bin/sz-eyes contract judged design feel --verdict yes --said "좋아요"',
+    'bash -c "sz-eyes contract close m1 --accepted ok"',
+  ]) {
+    const refused = owner(command, 'a5391cdcd0d8ba7e6');
+    assert.equal(refused.code, 2, command);
+    assert.match(refused.text, /are the owner's, and you have not spoken with them/);
+    assert.equal(owner(command).code, 0, `the session that talks with the owner runs it: ${command}`);
+  }
+  // Closing what nothing stands in the way of, and everything else an agent records, goes through.
+  for (const command of ['sz-eyes contract close m1', 'sz-eyes contract claim m1 one --status proven --note "ran it"', 'git commit -m "not with --accepted: sz-eyes contract close refuses"', 'sz-eyes contract show m1 | grep accepted'])
+    assert.equal(owner(command, 'a5391cdcd0d8ba7e6').code, 0, command);
+  const hooks = JSON.parse(readFileSync(join(HERE, '../../../plugin/hooks/hooks.json'), 'utf8')) as { hooks: { PreToolUse: { matcher: string; hooks: { command: string }[] }[] } };
+  assert.ok(hooks.hooks.PreToolUse.find((h) => h.matcher === 'Bash')!.hooks.some((h) => h.command.includes('guard-owner.mjs')), 'the guard is in the plugin\'s hook table');
 });
 
 test('a check written by whoever verified is held by the frozen contract from then on, and only ever added', () => {

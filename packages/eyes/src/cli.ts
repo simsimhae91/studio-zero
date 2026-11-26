@@ -464,6 +464,16 @@ function needLedger(project: string): void {
   if (problem) throw new EyesError(problem);
 }
 
+/** Whether closing this contract is the owner's to say: a claim of it was shown false, or most were not looked at. */
+function needsOwnersWord(file: string): boolean {
+  try {
+    const contract = readContract(file);
+    return contract.claims.some((claim) => claim.status === 'refuted') || notLookedAt(contract).most;
+  } catch {
+    return false;
+  }
+}
+
 /** Nothing is recorded beside a build run, or after it stopped, except by its own workers (build-run.ts says why). */
 function needNoBuildRun(project: string): void {
   const held = heldByBuildRun(project);
@@ -1271,7 +1281,7 @@ async function main(argv: string[]): Promise<number> {
     // word to close a contract as it is passes it as well, once the run has stopped: it is theirs to say, as the
     // verdict on a drawing is, and a run that stopped on a claim still false is where they say it. While the run
     // works, it waits like everything else.
-    const ownersClose = area === 'contract' && command === 'close' && (a.one('--accepted') ?? '').trim() !== '' && Boolean(readBuildRun(project)?.stoppedAt);
+    const ownersClose = area === 'contract' && command === 'close' && (a.one('--accepted') ?? '').trim() !== '' && Boolean(readBuildRun(project)?.stoppedAt) && needsOwnersWord(file);
     if (area === 'evidence' || !(['show', 'frozen', 'judged', 'status'].includes(command ?? '') || ownersClose)) needNoBuildRun(project);
     if (area === 'contract' && command === 'new') {
       if (existsSync(file)) throw new EyesError(`${file} is already there`);
@@ -1391,6 +1401,9 @@ async function main(argv: string[]): Promise<number> {
         const claim = contract.claims.find((c) => c.id === claimId);
         if (!claim) throw new EyesError(`contract ${id} has no claim "${claimId ?? ''}". Its claims: ${contract.claims.map((c) => c.id).join(', ')}`);
         const status = ClaimStatus.parse(a.one('--status'));
+        // Set aside for the owner, a claim is nobody else's to call proven: a ruling that set it aside and then
+        // gave it back would leave it standing while the owner is told it waits for them.
+        if (claim.status === 'disputed' && status === 'proven') throw new EyesError(`${id}/${claim.id} is set aside for the owner (its own words were ruled wrong): nobody else records it proven. Their verdict settles it: sz-eyes contract judged ${id} ${claim.id} --verdict yes|no --said "<their words>".`);
         const folder = evidenceFolder(project, id);
         const shown = a.all('--evidence').map((path) => evidencePath(project, id, path));
         for (const path of shown) if (!existsSync(join(folder, path))) throw new EyesError(`${join(folder, path)}: no such file. Evidence is a file under ${folder}, named from there (look/home.png)`);
@@ -1508,13 +1521,16 @@ async function main(argv: string[]): Promise<number> {
         // after it could not be built.)
         const shownFalse = contract.claims.filter((claim) => claim.status === 'refuted');
         const unshown = contract.claims.filter((claim) => claim.status === 'unproven');
-        const asItIs = accepted !== '' && contract.frozenAt !== null && unshown.length === 0 && shownFalse.length > 0;
+        // A release is a gate, not a piece of work: a line of it shown false means it does not go out, whoever says what.
+        const asItIs = accepted !== '' && contract.frozenAt !== null && contract.release === null && unshown.length === 0 && shownFalse.length > 0;
         if (owes.length > 0 && !asItIs)
           throw new EyesError(
             `contract ${id} still owes:\n${owes.map((line) => `  - ${line}`).join('\n')}${
               unshown.length > 0
                 ? `\nA claim nobody gave a verdict to is not closed on anyone's word: have it shown, or recorded unchecked with what stopped the look.`
-                : shownFalse.length > 0
+                : shownFalse.length > 0 && contract.release !== null
+                  ? `\nA release does not go out over a line shown false, on anyone's word: the line is mended and shown again on the candidate, or this release is not made.`
+                  : shownFalse.length > 0
                   ? `\nA claim shown false is not closed by a line of ${BACKLOG_FILE}. It is mended and looked at again; or, where its own words are what is wrong, the sz:arbiter agent sets it aside for the owner (sz-eyes contract dispute); or the owner says the product may go out with it false: sz-eyes contract close ${id} --accepted "<their words>" (it is written down as a known limit, and does not stand). Those words are the owner's alone: no agent writes them.`
                   : ''
             }`,
@@ -1542,8 +1558,10 @@ async function main(argv: string[]): Promise<number> {
           return `${head}: ${claim.note.length <= room ? claim.note : `…${claim.note.slice(-(room - 1))}`}`;
         };
         const limits = asItIs ? shownFalse.map((claim) => ({ text: limit(claim), evidence: claim.evidence.slice(0, 6) })) : [];
-        const unseenNote = gap.most ? [{ text: `closed with ${gap.unseen.length} of ${gap.of} claims not looked at, on the owner's word: "${accepted}"`, evidence: [] }] : [];
-        const closed = { ...contract, closedAt: at, noticed: [...contract.noticed, ...limits, ...unseenNote] };
+        const unseenNote = gap.most ? [{ text: `closed with ${gap.unseen.length} of ${gap.of} claims not looked at, on the owner's word: "${said}"`, evidence: [] }] : [];
+        // Checked before anything is stamped: a contract that cannot be saved (more notices than it holds) is left
+        // open with nothing written of it, not open beside promises already stamped as standing.
+        const closed = Contract.parse({ ...contract, closedAt: at, noticed: [...contract.noticed, ...limits, ...unseenNote] });
         // Its proven claims are stamped first: a contract is never left closed with nothing to say when its
         // claims last held. From here they stand, and what it left is written where the next work is picked from.
         stampClosed(project, closed, at);

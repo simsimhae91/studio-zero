@@ -264,7 +264,17 @@ test('whoever rules may give back a verdict that was not the claim\'s, and recor
   const { authorizeRecord } = await import(bridge);
   const proven = ['contract', 'claim', 'triple', 'one', '--status', 'proven', '--note', '제 검사는 통과했고, 그 경우는 눈에 띈 것에 적었다'];
   assert.doesNotThrow(() => authorizeRecord('arbiter', 'triple', 'rule:triple', ['contract', 'notice', 'triple', 'VAD를 150배 늦춘 엔진에서만 나온다']));
-  assert.doesNotThrow(() => authorizeRecord('arbiter', 'triple', 'rule:triple', proven));
+  const shownFalse = () => 'refuted';
+  assert.doesNotThrow(() => authorizeRecord('arbiter', 'triple', 'rule:triple:last', proven, shownFalse));
+  assert.doesNotThrow(() => authorizeRecord('arbiter', 'triple', 'arbiter:triple', ['contract', 'notice', 'triple', '검사 셋이 같은 도우미를 쓴다']));
+  // Only a claim that was looked at and found false is given back, and only by the ruling after a look: the
+  // arbiter of a builder's disputes, who comes before any look, records no verdict.
+  for (const status of ['unproven', 'unchecked', 'disputed', 'proven', undefined]) assert.throws(() => authorizeRecord('arbiter', 'triple', 'rule:triple', proven, () => status), String(status));
+  assert.throws(() => authorizeRecord('arbiter', 'triple', 'arbiter:triple', proven, shownFalse));
+  assert.throws(() => authorizeRecord('arbiter', 'triple', 'rule:triple', proven), 'with no way to read the claim, nothing is given back');
+  // The CLI takes the last of a flag given twice: one that is given twice is refused.
+  for (const more of [['--status', 'refuted'], ['--status', 'proven'], ['--note', ''], ['--note', 'x']])
+    assert.throws(() => authorizeRecord('arbiter', 'triple', 'rule:triple', [...proven, ...more], shownFalse), more.join(' '));
   for (const args of [
     ['contract', 'claim', 'triple', 'one', '--status', 'refuted', '--note', 'x'],
     ['contract', 'claim', 'triple', 'one', '--status', 'unchecked', '--note', 'x'],
@@ -274,7 +284,7 @@ test('whoever rules may give back a verdict that was not the claim\'s, and recor
     ['contract', 'close', 'triple'],
     [...proven, '--accepted', '닫아'],
   ])
-    assert.throws(() => authorizeRecord('arbiter', 'triple', 'rule:triple', args), JSON.stringify(args));
+    assert.throws(() => authorizeRecord('arbiter', 'triple', 'rule:triple', args, shownFalse), JSON.stringify(args));
   // A builder still records no verdict at all.
   assert.throws(() => authorizeRecord('build', 'triple', 'build:triple', proven));
 });

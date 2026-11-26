@@ -732,6 +732,8 @@ test('a case the running product could not be brought to is not that claim shown
   assert.match(look, /A claim is shown false on the product: running with its own parts, on the machines the spec says it is for\./);
   // What a person or the world around the product brings about stays the claim's: a forced quit and the power going are named as such.
   assert.match(look, /or by what happens around it \(the clock reaching a day, load, a network that drops, a forced quit, the power going\)/);
+  assert.match(look, /whatever can be sent to the product from outside is what a person puts in, though its own screens never send it: a request made straight to its server, an address typed by hand, a file handed to it/);
+  assert.match(look, /This machine is one of them only if the spec says so/);
   assert.match(look, /It is not the claim's when you could make it only by giving a part of the product a behaviour it does not have there/);
   assert.match(look, /the case is outside the contract: worth knowing, and not a claim shown false\. Record it with `sz-eyes contract notice m1 "/);
   assert.match(look, /This is not a way to pass a claim: when in doubt, the case is the claim's and the claim is `refuted`\./);
@@ -759,18 +761,42 @@ test('a verdict given over a case the product does not come to is given back by 
   // Whoever fixes does not bend the product to such a case: it names it, and whoever rules decides.
   const mend = ran.calls.find((c) => c.label === 'fix:m1:1')!.prompt;
   assert.match(mend, /What a verifier recorded under "noticed" is not yours to mend and is not handed to you here\./);
-  assert.match(mend, /do not bend the product to that case: mend what the running product can come to, and put one line under "notFixed" for the rest/);
+  assert.match(mend, /do not bend the product to that case: change nothing for it, and put one line under "notFixed" with the case and what shows the product does not get there/);
+  assert.match(mend, /Whatever you change in the product, name its claim under "fixed", also when a line of "notFixed" names the same claim: a product that was changed is looked at again before anything closes/);
   const judge = ran.calls.find((c) => c.label.startsWith('rule:'))!.prompt;
   assert.match(judge, /- \*\*The case was not the claim's\.\*\*/);
   assert.match(judge, /See for yourself that the product does not get there/);
   assert.match(judge, /`sz-eyes contract claim m1 <claim id> --status proven --note "/);
   assert.match(judge, /This is not a way to pass a claim:[^\n]*When in doubt, the product is wrong\./);
+  assert.match(judge, /A request anyone can send to the product from outside \(to its server, by an address, in a file\) is not inner code/);
+  assert.match(judge, /the machines it is for are the ones the spec names, not this one/);
+  assert.match(judge, /One ruling a claim: a claim you set aside for the owner is not given back as well\./);
+  assert.doesNotMatch(judge, /an answer its source never gives/, 'a source that answers otherwise is the world around the product, not a part given a behaviour it lacks');
   assert.ok(ran.logs.some((l) => /claim "two" stands by its own check: the case it was shown false by is one the running product does not come to/.test(l)), ran.logs.join('\n'));
   assert.deepEqual(ran.calls.map((c) => c.label), ['plan', 'build:m1', 'verify:m1', 'fix:m1:1', 'rule:m1', 'close:m1'], 'the fix loop ends at the ruling: no second fix, and no look at a product nobody changed');
   assert.equal(ran.result.stopped, null, 'the claim is not false any more, and the contract can close');
   assert.deepEqual(ran.result.milestones[0].proven, ['one', 'two']);
   assert.deepEqual(ran.result.milestones[0].refuted, []);
   assert.deepEqual(ran.result.milestones[0].noticed, ['대비 5.37:1', `two: ${why}`], 'the case is carried as noticed, not dropped');
+
+  // A fixer that changed the product in the same round: what was changed is looked at again, whatever was ruled.
+  // (A review of this change found the hole: a mend, a line of "notFixed" for the same claim, a ruling that gave
+  // the claim back, and the milestone closed on a commit no verifier had run.)
+  const first = { proven: ['one'], refuted: [{ id: 'two', fact }], unchecked: [] };
+  const both2 = { fixed: ['two'], notFixed: ['two: 스텁으로만 나오는 경우는 그대로 뒀다'] };
+  const mendedToo = await run({ request: 'x' }, { ...table, fix: () => both2, verify: (_: Call, nth: number) => (nth === 0 ? first : { proven: ['one', 'two'], refuted: [], unchecked: [] }), rule: () => ({ disputed: [], notTheClaim: [{ id: 'two', why }] }) });
+  assert.deepEqual(mendedToo.calls.map((c) => c.label), ['plan', 'build:m1', 'verify:m1', 'fix:m1:1', 'rule:m1', 'verify:m1:again', 'close:m1']);
+  assert.equal(mendedToo.result.stopped, null);
+  // The look after it can still find the claim false: then it is false, and goes round again.
+  const stillFalse = await run({ request: 'x' }, { ...table, close: () => ({ report: 'r.html', closed: false, line: 'l' }), fix: () => both2, verify: () => first, rule: () => ({ disputed: [], notTheClaim: [{ id: 'two', why }] }) });
+  assert.ok(stillFalse.calls.filter((c) => c.label === 'verify:m1:again').length >= 1);
+  // When nobody answers at that look, nothing closes on a product no one has looked at since its fix.
+  const unseen = await run({ request: 'x' }, { ...table, fix: () => both2, verify: (_: Call, nth: number) => (nth === 0 ? first : null), rule: () => ({ disputed: [], notTheClaim: [{ id: 'two', why }] }) });
+  assert.match(unseen.result.stopped, /was mended and nobody looked at it again \(the verifier did not answer\): nothing closes on a product no one has looked at since its last fix/);
+  assert.equal(unseen.calls.some((c) => c.label.startsWith('close:')), false, 'and nobody is asked to close it');
+  // The same when whoever ruled corrected a frozen check: the check as corrected is run by a verifier before the close.
+  const correctedToo = await run({ request: 'x' }, { ...table, verify: (_: Call, nth: number) => (nth === 0 ? first : { proven: ['one', 'two'], refuted: [], unchecked: [] }), rule: () => ({ disputed: [], notTheClaim: [{ id: 'two', why }], corrected: [{ id: 'one', file: 'flows/one.sh', changed: '누르는 말' }] }) });
+  assert.deepEqual(correctedToo.calls.map((c) => c.label), ['plan', 'build:m1', 'verify:m1', 'fix:m1:1', 'rule:m1', 'verify:m1:again', 'close:m1']);
 
   // Whoever rules gives back only what it was handed: a claim it did not look at stays false.
   const stray = await run({ request: 'x' }, { ...table, close: () => ({ report: 'r.html', closed: false, line: 'l' }), verify: (_: Call, nth: number) => ({ proven: ['one'], refuted: [{ id: 'two', fact }], unchecked: [] }), rule: () => ({ disputed: [], notTheClaim: [{ id: 'one', why }, { id: 'nine', why }] }) });
@@ -785,6 +811,8 @@ test('a verdict given over a case the product does not come to is given back by 
   assert.match(arbiter, /\*\*The case was not the claim's\*\*/);
   assert.match(arbiter, /you do not add a claim, widen a contract or change what any check expects/);
   assert.match(arbiter, /record no verdict on a claim but the one the fifth case names/);
+  assert.doesNotMatch(arbiter, /judges no claim|you do not judge its claims\./, 'the file no longer says in one place what its fifth case does in another');
+  assert.match(SOURCE, /Change no product code and no claim's words, and no flow or test except as the third case says/);
 });
 
 test('what a verifier noticed that the product does not come to is planned as a claim where the request reaches it, or left for the owner', async () => {
@@ -1073,7 +1101,9 @@ test('a look after a fix tries new cases only where the fix reached, and a froze
   assert.match(ruling, /\*\*A frozen flow or test stops for a reason that is not its claim's\.\*\* The product was mended to follow a claim's source or the drawing it is held to, and the check still presses, reads or waits for the old words, an old label or an old selector, or asserts text its claim never mentions\. Such a check asks the product for no answer/);
   assert.match(ruling, /correct how it presses or reads, by the smallest change and as your own rules say \(never a figure or an outcome it expects, a condition, a step its claim requires, or a failure into a pass\), record it \(`sz-eyes contract amend m1 --file <the file> --why "<what the mend changed in the product, by which source or drawing, and what you changed in the check>"`\), run it once, and commit that file and no other/);
   assert.match(ruling, /A claim whose check you corrected is not set aside: return it under "corrected"/);
-  assert.match(ruling, /Change no product code and no claim, and no flow or test except as the third case says\./);
+  // "no claim" became "no claim's words" on 2026-11-26: a fourth case now records one verdict (a claim put back to
+  // what its own check showed), and the sentence must not forbid what the case above it asks for.
+  assert.match(ruling, /Change no product code and no claim's words, and no flow or test except as the third case says\./);
   // A line about a check of a claim that was not shown false does not hand every false claim to whoever rules.
   assert.match(ruling, /- one: 흐름이 151걸음에서 멈춤/);
   assert.match(ruling, /two: flows\/two\.sh:12 reads the old label/);
@@ -1445,7 +1475,12 @@ test('a milestone stopped with a claim still false names the ways on, and what i
   const open = () => ({ report: 'r.html', closed: false, line: 'l' });
   const stuck = await run({ request: 'x' }, { plan: plan('m1'), build: built, fix: () => ({ fixed: [] }), close: open, verify: () => ({ proven: ['one'], refuted: [{ id: 'two', fact: '창 밖 소리가 들어간다' }], unchecked: [] }) });
   assert.match(stuck.result.stopped, /still has 1 claim\(s\) shown false and 0 promise\(s\) of earlier work broken after two fixes \(a claim is handed to a fixer twice at most, and a milestone is mended four times at most\): two \(창 밖 소리가 들어간다\)\. Its contract stays open and nothing is built on it\. There are three ways on, and no other: start the run again/);
-  assert.match(stuck.result.stopped, /where it is the claim's own words that are wrong, have them ruled so \(whoever ruled at the end of this run found the product wrong/);
+  assert.match(stuck.result.stopped, /where it is the claim's own words that are wrong, they are ruled so and the claim waits for the owner \(`sz:arbiter` records `sz-eyes contract dispute`; whoever ruled at the end of this run found the product wrong, and a run started again asks again after its fix\)/);
+  // A ruling that did not answer is not said to have found anything.
+  const mute = await run({ request: 'x' }, { plan: plan('m1'), build: built, fix: () => ({ fixed: [] }), close: open, rule: () => null, verify: () => ({ proven: ['one'], refuted: [{ id: 'two', fact: '창 밖 소리가 들어간다' }], unchecked: [] }) });
+  assert.match(mute.result.stopped, /nobody ruled at the end of this run \(no answer\), and a run started again asks again after its fix/);
+  // A milestone built in a folder of its own has its contract there: the command says where.
+  assert.match(SOURCE, /sz-eyes contract close \$\{built\.contractId\}\$\{where \? ` --dir \$\{where\}` : ''\} --accepted/);
   assert.match(stuck.result.stopped, /close it on their words \(`sz-eyes contract close m1 --accepted "<their words>"`: it is written down as a known limit, and does not stand\)/);
   assert.match(stuck.result.stopped, /A line in \.sz\/backlog\.md closes no contract, and no agent writes the owner's words for them\.$/);
   const closer = stuck.calls.find((c) => c.label === 'close:m1')!.prompt;
@@ -1503,12 +1538,15 @@ test('a look, each fix and each ruling say where they stand while the run goes o
     fix: (_: Call, nth: number) => (nth === 0 ? { fixed: [], notFixed: ['c7: 합계를 내는 길이 둘이다'] } : { fixed: ['c7'] }),
     verify: ({ label, claims }: Call) => {
       if (label.includes(':again')) return { proven: (claims ?? []).filter((id) => id !== 'c7'), refuted: label.endsWith('1of2') ? [] : [], unchecked: [], ...(label.endsWith('1of2') ? { noticed: [] } : {}) };
+      // The first verifier also answers for a claim that is another's: its line counts its own three.
+      if (label === 'verify:m1:1of3') return { proven: [...(claims ?? []), 'c9'], refuted: [], unchecked: [] };
       return label === 'verify:m1:2of3' ? { proven: ['c4', 'c5', 'c6'], refuted: [{ id: 'c7', fact: '합계가 0' }], unchecked: [] } : { proven: claims ?? [], refuted: [], unchecked: [] };
     },
   });
   const said = big.logs.filter((l) => l.startsWith('첫 판: '));
   assert.ok(said.includes('첫 판: the first look begins: 10 claim(s), shown on the running product by 3 verifiers side by side who did not build it'), said.join('\n'));
   assert.ok(said.includes('첫 판: verifier 2 of 3 is back: 3 proven, 1 refuted, 0 unchecked'), said.join('\n'));
+  assert.ok(said.includes('첫 판: verifier 1 of 3 is back: 3 proven, 0 refuted, 0 unchecked'), said.join('\n'));
   assert.equal(said.filter((l) => /^첫 판: verifier \d of 3 is back: /.test(l)).length, 3);
   assert.ok(said.includes('첫 판: the first look is back: 9 proven, 1 refuted, 0 unchecked'), said.join('\n'));
   assert.ok(said.includes('첫 판: fix 1 is back: 0 mended, 1 it says it could not mend: a ruling follows'), said.join('\n'));
@@ -1520,12 +1558,13 @@ test('a look, each fix and each ruling say where they stand while the run goes o
   // A workflow script has no clock and no timers: asking for the time throws in the Workflow runtime, so that a
   // run started again comes out the same, and a table of answers like this one would never show it. (A brief of
   // 2026-11-26 gave each of these lines its minutes from the clock; every run would have ended at its first look.)
-  assert.doesNotMatch(SOURCE, /\bDate\.now\(|\bnew Date\(\s*\)|\bMath\.random\(|\bset(?:Interval|Timeout)\(|\bperformance\.now\(/);
+  assert.doesNotMatch(SOURCE, /\bDate\b|\bMath\.random\b|\bset(?:Interval|Timeout|Immediate)\b|\bperformance\b/);
 
   // The session is not woken by those lines: it is told how to hear of them, and to pass them on.
   const work = readFileSync(fileURLToPath(new URL('../../../plugin/skills/work/SKILL.md', import.meta.url)), 'utf8');
   assert.match(work, /\*\*While a run goes on, say where it is\.\*\*/);
-  assert.match(work, /c\(\) \{ grep -c '"type":"result"' "\$J" 2>\/dev\/null \|\| true; \}; n=\$\(c\); until \[ "\$\(c\)" != "\$n" \]; do sleep 30; done/);
+  // The count is 0 both before the journal is there and while it has no answer yet: the wait holds through both.
+  assert.match(work, /c\(\) \{ cat "\$J" 2>\/dev\/null \| grep -c '"type":"result"'; \}; n=\$\(c\); until \[ "\$\(c\)" != "\$n" \]; do sleep 30; done/);
   const when = /whenToUse: '([^\n]*)',\n/.exec(SOURCE)![1]!;
   assert.match(when, /you are woken only when it ends, so keep a background wait on its journal/);
 });

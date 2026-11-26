@@ -123,7 +123,7 @@ Whoever mends them runs the same flow over the whole product until it reports no
 
 ## What is outside the contract
 
-A claim is shown false on the product: running with its own parts, on the machines the spec says it is for. A case is the claim's when the product comes to it, by what a person puts in or does or by what happens around it (the clock reaching a day, load, a network that drops, a forced quit, the power going), and a seam or a stand-in is a fair way to bring such a state about sooner (a clock set to that day, a server made slow).
+A claim is shown false on the product: running with its own parts, on the machines the spec says it is for. This machine is one of them only if the spec says so: a state a slower phone or a smaller server of those comes to is one the product comes to. A case is the claim's when the product comes to it, by what a person puts in or does or by what happens around it (the clock reaching a day, load, a network that drops, a forced quit, the power going), and a seam or a stand-in is a fair way to bring such a state about sooner (a clock set to that day, a server made slow). Whatever can be sent to the product from outside is what a person puts in, though its own screens never send it: a request made straight to its server, an address typed by hand, a file handed to it.
 
 A case you could make only by giving a part of the product a behaviour it does not have there (a detector made 150 times slower than it runs), or by handing its inner code what its own parts never hand it, shows what the code would do. Try to bring the running product to it. Where you cannot, and no claim of this contract and no promise in `sz-eyes standing` names that state, it is not the product's answer to a claim:
 

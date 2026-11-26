@@ -49,7 +49,7 @@ const operations = {
   resolve: ['standing mend'],
 };
 
-export function authorizeRecord(role, contract, label, args) {
+export function authorizeRecord(role, contract, label, args, claimStatus = () => undefined) {
   if (
     !Array.isArray(args) ||
     args.some((v) => typeof v !== 'string') ||
@@ -80,9 +80,12 @@ export function authorizeRecord(role, contract, label, args) {
       throw new Error('the prototype verdict belongs to the owner');
     // Whoever rules gives back one kind of verdict and no other: a claim proven by its own check, with what that
     // check showed, when the case it was shown false by is one the running product does not come to.
-    const after = (flag) => (args.indexOf(flag) > 0 ? args[args.indexOf(flag) + 1] : undefined);
-    if (role === 'arbiter' && op === 'claim' && !(after('--status') === 'proven' && (after('--note') ?? '').trim() !== ''))
-      throw new Error('whoever rules records one verdict only: a claim proven by its own check, with a --note saying what the check showed');
+    // It is the ruling after a look that gives a verdict back (`rule:`), never the arbiter of a builder's
+    // disputes, who comes before anyone has looked; and only a claim that was looked at and found false. The
+    // CLI takes the last of a flag given twice, so each is given once.
+    const once = (flag) => (args.filter((v) => v === flag).length === 1 ? args[args.indexOf(flag) + 1] : undefined);
+    if (role === 'arbiter' && op === 'claim' && !(label.startsWith('rule:') && once('--status') === 'proven' && (once('--note') ?? '').trim() !== '' && claimStatus(args[3]) === 'refuted'))
+      throw new Error('whoever rules records one verdict only, after a look: a claim that was shown false, proven by its own check, with --status proven and a --note saying what the check showed, each given once');
   }
 }
 
@@ -334,7 +337,7 @@ async function serve() {
         else if (q.method === 'tools/call') {
           const { name, arguments: a } = q.params;
           if (name === 'record') {
-            authorizeRecord(role, contract, label, a.args);
+            authorizeRecord(role, contract, label, a.args, (claimId) => contractsAt(cwd).find((c) => c.id === contract)?.claims?.find((k) => k.id === claimId)?.status);
             answer.result = await sandbox(cwd, scratch, role, contract, a.args, true, newFlows);
           } else if (name === 'electron' && gui) {
             answer.result = await observeElectron(cwd, contract, a, (dir, argv) =>

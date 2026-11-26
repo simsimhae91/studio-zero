@@ -8,7 +8,7 @@
     ],
     "PreToolUse": [
       { "matcher": "Edit|Write|NotebookEdit", "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/guard-frozen.mjs\"" }] },
-      { "matcher": "Bash", "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/guard-others.mjs\"" }, { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/guard-live.mjs\"" }] },
+      { "matcher": "Bash", "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/guard-others.mjs\"" }, { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/guard-live.mjs\"" }, { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/guard-owner.mjs\"" }] },
       { "matcher": "mcp__openai-image__.*", "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/guard-paid-image.mjs\"" }] }
     ],
     "Stop": [

@@ -92,6 +92,9 @@ test('a stopped run does not hold back the owner\'s word to close its contract a
     ['contract', 'freeze', 'triple'],
     ['contract', 'claim', 'triple', 'twelve', '--status', 'refuted', '--note', 'it prints 8'],
     ['contract', 'claim', 'triple', 'fast', '--status', 'proven', '--note', 'ran it'],
+    ['contract', 'new', 'fine', '--request', 'one more', '--claim', 'runs|It runs|command:true'],
+    ['contract', 'freeze', 'fine'],
+    ['contract', 'claim', 'fine', 'runs', '--status', 'proven', '--note', 'ran it'],
   ]) assert.equal(eyes(root, args).status, 0, args.join(' '));
   const close = ['contract', 'close', 'triple', '--accepted', '8이어도 이대로 닫아요'];
 
@@ -100,6 +103,8 @@ test('a stopped run does not hold back the owner\'s word to close its contract a
   stopBuildRun(root, 'milestone "triple" still has 1 claim(s) shown false');
   assert.match(eyes(root, ['contract', 'close', 'triple']).stderr, /not recorded: the build run/, 'without their words it is anyone\'s close');
   assert.match(eyes(root, ['contract', 'close', 'triple', '--accepted', ' ']).stderr, /not recorded: the build run/);
+  // A close that needs no word of theirs is anyone's close with a flag added: the hold keeps it.
+  assert.match(eyes(root, ['contract', 'close', 'fine', '--accepted', '닫아요']).stderr, /not recorded: the build run/);
   const closed = eyes(root, close);
   assert.equal(closed.status, 0, closed.stderr);
   assert.match(closed.stdout, /^closed: triple/);
