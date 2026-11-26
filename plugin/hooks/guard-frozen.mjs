@@ -3,8 +3,8 @@
 // builder's to change. They are the oracle the work is proven against. And after the work is closed, a flow or
 // test that a claim was proven by stays the product's promise: the product is changed so that it keeps passing,
 // until a later contract says that claim is replaced. Exit 2 refuses the edit and tells why.
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
-import { join, relative, resolve } from 'node:path';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { basename, dirname, join, relative, resolve } from 'node:path';
 import { standingClaims, supersededClaims } from './frozen.mjs';
 
 let input = '';
@@ -15,8 +15,47 @@ try {
 } catch {
   process.exit(0);
 }
-// The arbiter is the one who may correct a frozen check: it built nothing and judges nothing.
-if (call.agent_type === 'sz:arbiter') process.exit(0);
+// The arbiter is the one who may correct a frozen check: it built nothing and judges nothing. It is known by what
+// it was started as, never by a name. Started through the Agent tool, named or not, the hook is handed its type
+// (`agent_type: "sz:arbiter"`, seen in a real session on 2026-11-26). Started as a teammate, the hook is handed the
+// teammate's name there, and what it was started as is in the record the harness keeps beside the agent's
+// transcript (`agent-<id>.meta.json`: `customAgentType`, `spawnedAgentType`). (2026-11-26: the arbiter was started
+// as the teammate `arbiter-1`; its three edits were refused, it spent 4.8 minutes writing a patch for somebody
+// else to apply, and the lead started a second agent, 4.1 minutes more.) An agent that is only called arbiter is
+// not let through: it has none of the arbiter's rules about what a correction may change.
+const ARBITER = 'sz:arbiter';
+const handed = ['agent_type', 'custom_agent_type', 'customAgentType', 'spawned_agent_type', 'spawnedAgentType', 'agentType'].map((key) => call[key]).filter((kind) => typeof kind === 'string');
+const startedAs = () => {
+  const transcript = typeof call.transcript_path === 'string' ? call.transcript_path : '';
+  if (transcript === '') return null;
+  // Beside the session's transcript, or (when the hook is handed the agent's own) in the folder it lies in.
+  const folders = [join(dirname(transcript), basename(transcript, '.jsonl'), 'subagents'), dirname(transcript)].filter((folder) => existsSync(folder));
+  const read = (file) => {
+    try {
+      return JSON.parse(readFileSync(file, 'utf8'));
+    } catch {
+      return null;
+    }
+  };
+  for (const folder of folders) {
+    if (typeof call.agent_id === 'string' && /^[A-Za-z0-9_-]+$/.test(call.agent_id)) {
+      const own = read(join(folder, `agent-${call.agent_id}.meta.json`));
+      if (own) return own;
+    }
+    // No id, or none that names a record: the newest record of a teammate with the name the hook was handed.
+    const named = readdirSync(folder)
+      .filter((name) => name.endsWith('.meta.json'))
+      .map((name) => ({ file: join(folder, name), meta: read(join(folder, name)) }))
+      .filter((entry) => entry.meta && typeof entry.meta.name === 'string' && handed.includes(entry.meta.name))
+      .sort((a, b) => statSync(b.file).mtimeMs - statSync(a.file).mtimeMs);
+    if (named.length > 0) return named[0].meta;
+  }
+  return null;
+};
+const record = handed.includes(ARBITER) ? null : startedAs();
+if (handed.includes(ARBITER) || (record && [record.customAgentType, record.spawnedAgentType].includes(ARBITER))) process.exit(0);
+// An agent that was asked to rule and is not the arbiter is told so, with what to do instead.
+const calledArbiter = handed.some((kind) => /arbiter/i.test(kind));
 const project = resolve(call.cwd ?? process.cwd());
 const file = call.tool_input?.file_path ?? call.tool_input?.notebook_path;
 const dir = join(project, '.sz', 'contracts');
@@ -25,7 +64,7 @@ const target = relative(project, resolve(project, file));
 if (target.startsWith('..')) process.exit(0);
 
 const refuse = (why) => {
-  process.stderr.write(`${why}\n`);
+  process.stderr.write(`${why}${calledArbiter ? ' If you were asked to rule on this check: you were not started as the sz:arbiter agent (a name is not that), so this file is not yours to change either. Do not write it another way. Return what you would change, as a patch, and say that whoever leads has to start the `sz:arbiter` agent itself (the Agent tool, subagent_type `sz:arbiter`) to apply it.' : ''}\n`);
   process.exit(2);
 };
 if (target === join('.sz', 'standing.json')) {

@@ -239,6 +239,49 @@ const guard = (project: string, file: string, agent?: string): { code: number | 
   return { code: run.status, text: run.stderr };
 };
 
+test('a frozen check may be corrected by whoever was started as the arbiter, under whatever name, and by nobody else', () => {
+  // (2026-11-26: the arbiter was started as the teammate `arbiter-1`. The guard looked at the one field
+  // `agent_type`, which held the name, refused three edits, and the correction was applied by a second agent 8.9
+  // minutes later. What an agent was started as is in the record the harness keeps beside its transcript.)
+  const root = mkdtempSync(join(tmpdir(), 'eyes-guard-'));
+  const project = join(root, 'product');
+  const session = join(root, 'projects', '-product', 'aaaa1111');
+  try {
+    mkdirSync(join(project, 'flows'), { recursive: true });
+    mkdirSync(join(session, 'subagents'), { recursive: true });
+    writeFileSync(join(project, 'flows/split.sh'), 'true\n');
+    assert.equal(eyes(project, 'contract', 'new', 'm1-split', '--lane', 'M', '--request', '나눠 낸다', '--claim', 'split|셋이 12만원이면 4만원씩|flow:flows/split.sh').code, 0);
+    assert.equal(eyes(project, 'contract', 'freeze', 'm1-split', '--frozen', 'flows/split.sh').code, 0);
+    const meta = (id: string, body: Record<string, unknown>) => writeFileSync(join(session, 'subagents', `agent-${id}.meta.json`), JSON.stringify(body));
+    // As the harness wrote them on 2026-11-26: a teammate started as sz:arbiter, and one that was only named so.
+    meta('aarbiter-1-e26127', { agentType: 'arbiter-1', name: 'arbiter-1', taskKind: 'in_process_teammate', customAgentType: 'sz:arbiter', spawnedAgentType: 'sz:arbiter' });
+    meta('aarbiter-9-a6a806', { agentType: 'arbiter-9', name: 'arbiter-9', taskKind: 'in_process_teammate', spawnedAgentType: 'general-purpose' });
+    meta('averify-1-443e6a', { agentType: 'verify-1', name: 'verify-1', taskKind: 'in_process_teammate', customAgentType: 'sz:verifier', spawnedAgentType: 'sz:verifier' });
+    const at = (who: Record<string, string>): { code: number | null; text: string } => {
+      const ran = spawnSync(process.execPath, [join(HERE, '../../../plugin/hooks/guard-frozen.mjs')], { encoding: 'utf8', input: JSON.stringify({ cwd: project, transcript_path: `${session}.jsonl`, tool_input: { file_path: join(project, 'flows/split.sh') }, ...who }) });
+      return { code: ran.status, text: ran.stderr };
+    };
+    assert.equal(at({}).code, 2, 'open and frozen: not the session\'s own to change');
+    assert.equal(at({ agent_id: 'a18eb936', agent_type: 'sz:verifier' }).code, 2);
+    // Started through the Agent tool, named or not: the hook is handed its type (seen in a real session, 2026-11-26).
+    assert.equal(at({ agent_id: 'a18eb936', agent_type: 'sz:arbiter' }).code, 0);
+    // A teammate: the hook is handed its name, and the record beside the transcript says what it was started as.
+    assert.equal(at({ agent_id: 'aarbiter-1-e26127', agent_type: 'arbiter-1' }).code, 0, 'found by its id');
+    assert.equal(at({ agent_type: 'arbiter-1' }).code, 0, 'found by its name when no id is handed');
+    assert.equal(at({ agent_id: 'aarbiter-1-e26127', agent_type: 'arbiter-1', transcript_path: join(session, 'subagents', 'agent-aarbiter-1-e26127.jsonl') }).code, 0, 'handed its own transcript');
+    assert.equal(at({ agent_type: 'arbiter-1', custom_agent_type: 'sz:arbiter', transcript_path: '/nowhere/x.jsonl' }).code, 0, 'or handed the type outright, however the field is spelled');
+    // A name is not a type: an agent only called arbiter has none of the arbiter's rules, and is told what to do.
+    const named = at({ agent_id: 'aarbiter-9-a6a806', agent_type: 'arbiter-9' });
+    assert.equal(named.code, 2);
+    assert.match(named.text, /If you were asked to rule on this check: you were not started as the sz:arbiter agent/);
+    assert.equal(at({ agent_type: 'arbiter-7' }).code, 2, 'no record of it at all');
+    assert.equal(at({ agent_id: 'averify-1-443e6a', agent_type: 'verify-1' }).code, 2);
+    assert.equal(at({ agent_id: '../../../../etc/x', agent_type: 'arbiter-1', transcript_path: '/nowhere/x.jsonl' }).code, 2, 'an id is not a path');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('from the command line: closing makes claims stand, later work cannot close over a broken one, and an old check is not bent', () => {
   const project = mkdtempSync(join(tmpdir(), 'eyes-cli-'));
   try {
