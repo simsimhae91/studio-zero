@@ -84,6 +84,27 @@ test('a run that stopped holds the ledger until it runs again, and says how', (t
   assert.doesNotMatch(eyes(root, claim, { SZ_BUILD_TOKEN: again }).stderr, /not recorded/);
 });
 
+test('a stopped run does not hold back the owner\'s word to close its contract as it is; a working one does', (t) => {
+  // The words are the owner's, as a verdict on the drawing is: nobody else's record passes a run's hold.
+  const root = project(t);
+  for (const args of [
+    ['contract', 'new', 'triple', '--request', 'triple four', '--claim', 'twelve|It prints twelve|command:node app.mjs', '--claim', 'fast|It answers at once|command:true'],
+    ['contract', 'freeze', 'triple'],
+    ['contract', 'claim', 'triple', 'twelve', '--status', 'refuted', '--note', 'it prints 8'],
+    ['contract', 'claim', 'triple', 'fast', '--status', 'proven', '--note', 'ran it'],
+  ]) assert.equal(eyes(root, args).status, 0, args.join(' '));
+  const close = ['contract', 'close', 'triple', '--accepted', '8이어도 이대로 닫아요'];
+
+  startBuildRun(root, 'triple four');
+  assert.match(eyes(root, close).stderr, /not recorded: a build run \(sz-codex-build, pid \d+/, 'while the run works, it waits like everything else');
+  stopBuildRun(root, 'milestone "triple" still has 1 claim(s) shown false');
+  assert.match(eyes(root, ['contract', 'close', 'triple']).stderr, /not recorded: the build run/, 'without their words it is anyone\'s close');
+  assert.match(eyes(root, ['contract', 'close', 'triple', '--accepted', ' ']).stderr, /not recorded: the build run/);
+  const closed = eyes(root, close);
+  assert.equal(closed.status, 0, closed.stderr);
+  assert.match(closed.stdout, /^closed: triple/);
+});
+
 test('only a completed workflow releases the run; a stopped one can be read and the owner can judge it', async (t) => {
   const { closeRun } = await import(runModule);
   const runs = await import('../src/build-run.ts');

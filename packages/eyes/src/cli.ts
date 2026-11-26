@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 import { ArmError, armCommand, heldLines } from './arms.ts';
 import { BACKLOG_FILE, addToBacklog, doneInBacklog, leftBy, openBacklog } from './backlog.ts';
-import { heldByBuildRun } from './build-run.ts';
+import { heldByBuildRun, readBuildRun } from './build-run.ts';
 import { CONTRACTS_DIR, EVIDENCE_DIR, ClaimStatus, Contract, Lane, ShownBy, localDay, notLookedAt, openContracts, owed, readContract, renderContract, updateContract, writeContract, type Claim } from './contract.ts';
 import { keepsAll, pruneEvidence, prunedText } from './prune.ts';
 import { diskRoom, roomText } from './room.ts';
@@ -147,7 +147,10 @@ const USAGE = `sz-eyes: launch what was built, look at it, operate it, and put w
   sz-eyes contract status [--dir <project>]              what open contracts still owe; exits 1 when anything is owed
   sz-eyes contract dispute <id> <claim-id> --ruling "<what the claim says, what is so, where that is read>" [--evidence <file>]...   a claim found false whose own words are wrong: set aside for the owner, words unchanged
   sz-eyes contract add-check <id> --frozen <file>...     a check written after the freeze by whoever verified the claim: held from now on like the rest
-  sz-eyes contract close <id> [--accepted "<the owner's words>"] [--dir <project>]   # refuses when most claims were not looked at
+  sz-eyes contract close <id> [--accepted "<the owner's words>"] [--dir <project>]
+        refuses with what stands in the way: a claim shown false, a claim nobody gave a verdict to, most claims
+        not looked at. Only the owner's own words close it over a claim shown false or over claims not looked at
+        (--accepted): it is then written down as a known limit, and does not stand. No agent writes those words.
   sz-eyes evidence <id> [--summary <text>] [--took <text>] [--dir <project>]   writes ${EVIDENCE_DIR}/<id>/report.html
 
   sz-eyes evidence prune <id> [--dry-run] [--dir <project>]
@@ -1264,8 +1267,12 @@ async function main(argv: string[]): Promise<number> {
     const id = pruning ? a.words[1] : a.words[0];
     if (!id) throw new EyesError('which contract: give its id');
     const file = contractFile(project, id);
-    // A stopped run keeps its hold; anyone can read what it owes and the owner can still judge the drawing.
-    if (area === 'evidence' || !['show', 'frozen', 'judged', 'status'].includes(command ?? '')) needNoBuildRun(project);
+    // A stopped run keeps its hold; anyone can read what it owes and the owner can still judge the drawing. Their
+    // word to close a contract as it is passes it as well, once the run has stopped: it is theirs to say, as the
+    // verdict on a drawing is, and a run that stopped on a claim still false is where they say it. While the run
+    // works, it waits like everything else.
+    const ownersClose = area === 'contract' && command === 'close' && (a.one('--accepted') ?? '').trim() !== '' && Boolean(readBuildRun(project)?.stoppedAt);
+    if (area === 'evidence' || !(['show', 'frozen', 'judged', 'status'].includes(command ?? '') || ownersClose)) needNoBuildRun(project);
     if (area === 'contract' && command === 'new') {
       if (existsSync(file)) throw new EyesError(`${file} is already there`);
       const claims = a.all('--claim').map((text) => {
@@ -1493,7 +1500,25 @@ async function main(argv: string[]): Promise<number> {
         if (contract.closedAt !== null) throw new EyesError(`contract ${id} was closed at ${contract.closedAt}`);
         needLedger(project);
         const owes = owed(contract);
-        if (owes.length > 0) throw new EyesError(`contract ${id} still owes:\n${owes.map((line) => `  - ${line}`).join('\n')}`);
+        // A claim shown false is not closed by a line of the backlog, nor by an agent's word: what closes it is the
+        // owner saying the product may go out with that claim as it is. Their word reaches a claim that was looked
+        // at and found false, in a contract that was agreed; never one nobody gave a verdict to. (2026-11-26: a
+        // session told its owner twice that a claim shown false could be left in the backlog and the work go on.
+        // The owner said to do so; `close` refused with "still owes" and nothing could close it, so the milestones
+        // after it could not be built.)
+        const shownFalse = contract.claims.filter((claim) => claim.status === 'refuted');
+        const unshown = contract.claims.filter((claim) => claim.status === 'unproven');
+        const asItIs = accepted !== '' && contract.frozenAt !== null && unshown.length === 0 && shownFalse.length > 0;
+        if (owes.length > 0 && !asItIs)
+          throw new EyesError(
+            `contract ${id} still owes:\n${owes.map((line) => `  - ${line}`).join('\n')}${
+              unshown.length > 0
+                ? `\nA claim nobody gave a verdict to is not closed on anyone's word: have it shown, or recorded unchecked with what stopped the look.`
+                : shownFalse.length > 0
+                  ? `\nA claim shown false is not closed by a line of ${BACKLOG_FILE}. It is mended and looked at again; or, where its own words are what is wrong, the sz:arbiter agent sets it aside for the owner (sz-eyes contract dispute); or the owner says the product may go out with it false: sz-eyes contract close ${id} --accepted "<their words>" (it is written down as a known limit, and does not stand). Those words are the owner's alone: no agent writes them.`
+                  : ''
+            }`,
+          );
         const also = alsoOwed(project, contract);
         if (also.length > 0) throw new EyesError(`contract ${id} is not closed yet:\n${also.map((line) => `  - ${line}`).join('\n')}\nWhat stood before and broke: fix the product so it holds again (then \`sz-eyes standing record <key> --status holds\`), or, if what was asked has changed, the arbiter records which claim this work replaces.`);
         const gap = notLookedAt(contract);
@@ -1503,7 +1528,15 @@ async function main(argv: string[]): Promise<number> {
           );
         }
         const at = new Date().toISOString();
-        const closed = { ...contract, closedAt: at, ...(gap.most ? { noticed: [...contract.noticed, { text: `closed with ${gap.unseen.length} of ${gap.of} claims not looked at, on the owner's word: "${accepted}"`, evidence: [] }] } : {}) };
+        // What was closed as it is, on the owner's word, is a known limit of the product. It is written into what
+        // was noticed, so that it reaches the evidence page and the list the next work is picked from; the claim
+        // itself stays on record as shown false, with its whole note, and does not stand. A notice holds 600
+        // characters and six files, less than a verifier's note may: it is cut to fit, never refused.
+        const said = accepted.length > 120 ? `${accepted.slice(0, 119)}…` : accepted;
+        const fit = (text: string): string => (text.length > 600 ? `${text.slice(0, 599)}…` : text);
+        const limits = asItIs ? shownFalse.map((claim) => ({ text: fit(`알려진 한계(거짓인 채 닫음, 주인의 말: "${said}"): ${claim.says}${claim.note ? `: ${claim.note}` : ''}`), evidence: claim.evidence.slice(0, 6) })) : [];
+        const unseenNote = gap.most ? [{ text: `closed with ${gap.unseen.length} of ${gap.of} claims not looked at, on the owner's word: "${accepted}"`, evidence: [] }] : [];
+        const closed = { ...contract, closedAt: at, noticed: [...contract.noticed, ...limits, ...unseenNote] };
         // Its proven claims are stamped first: a contract is never left closed with nothing to say when its
         // claims last held. From here they stand, and what it left is written where the next work is picked from.
         stampClosed(project, closed, at);

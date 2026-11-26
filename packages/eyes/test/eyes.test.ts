@@ -594,6 +594,45 @@ test('a claim found false whose own words are wrong is set aside for the owner: 
   }
 });
 
+test('a claim shown false is closed only on the owner\'s own words, and written down as a known limit', () => {
+  // (2026-11-26: a session told its owner twice that a claim shown false could be left in the backlog and the
+  // work go on. The owner said to do so; `close` refused with "still owes", and nothing could close it.)
+  const project = mkdtempSync(join(tmpdir(), 'eyes-asitis-'));
+  try {
+    assert.equal(eyes(project, 'contract', 'new', 'first-pass', '--lane', 'M', '--request', '첫 판', '--claim', 'path|90cm 상자는 착한택배가 된다|command:true', '--claim', 'keeps|다시 와도 기록이 남는다|command:true').code, 0);
+    // Not frozen: the owner's word closes nothing that was never agreed.
+    assert.match(eyes(project, 'contract', 'close', 'first-pass', '--accepted', '그냥 닫아').text, /still owes[\s\S]*not frozen yet/);
+    assert.equal(eyes(project, 'contract', 'freeze', 'first-pass').code, 0);
+    // A note as long as a verifier's own, with more files than a notice holds: the close must not trip on either.
+    const note = `90cm에서 X로 나옴. ${'꼬리와 상한은 지켜지지만 밀린 채 멈추면 판정 못 한 무음을 말로 센다. '.repeat(24)}`.slice(0, 1100);
+    assert.equal(eyes(project, 'contract', 'claim', 'first-pass', 'path', '--status', 'refuted', '--note', note).code, 0);
+    // A claim nobody gave a verdict to is not closed for the owner either.
+    const unshown = eyes(project, 'contract', 'close', 'first-pass', '--accepted', '그냥 닫아');
+    assert.match(unshown.text, /still owes[\s\S]*keeps: not shown yet/);
+    assert.match(unshown.text, /A claim nobody gave a verdict to is not closed on anyone's word/);
+    assert.equal(eyes(project, 'contract', 'claim', 'first-pass', 'keeps', '--status', 'proven', '--note', '돌려서 봤다').code, 0);
+    // A claim shown false: refused, with the ways on, and the backlog does not change that.
+    assert.equal(eyes(project, 'backlog', 'add', 'path가 거짓인 채 남음').code, 0);
+    const refused = eyes(project, 'contract', 'close', 'first-pass');
+    assert.match(refused.text, /still owes[\s\S]*path: shown to be false/);
+    assert.match(refused.text, /A claim shown false is not closed by a line of \.sz\/backlog\.md/);
+    assert.match(refused.text, /sz-eyes contract close first-pass --accepted "<their words>"/);
+    assert.match(refused.text, /Those words are the owner's alone: no agent writes them/);
+    assert.match(eyes(project, 'contract', 'close', 'first-pass', '--accepted', '  ').text, /still owes/, 'empty words are no words');
+    // The owner's words: closed, with the limit written where the next work is picked from.
+    const closedOne = eyes(project, 'contract', 'close', 'first-pass', '--accepted', '이 한계는 알고 이대로 내보내겠어');
+    assert.match(closedOne.text, /^closed: first-pass \(1 line\(s\) added/);
+    assert.match(readFileSync(join(project, '.sz/backlog.md'), 'utf8'), /- \[ \] 알려진 한계\(거짓인 채 닫음, 주인의 말: "이 한계는 알고 이대로 내보내겠어"\): 90cm 상자는 착한택배가 된다: 90cm에서 X로 나옴/);
+    assert.match(eyes(project, 'standing', '--summary').text, /^1 claim\(s\)/, 'only what was proven stands');
+    const shown = eyes(project, 'contract', 'show', 'first-pass').text;
+    assert.match(shown, /\[반증됨\] \*\*path\*\*/, 'the claim is still on record as false');
+    assert.match(shown, /알려진 한계\(거짓인 채 닫음/);
+    assert.match(eyes(project, 'contract', 'status').text, /nothing is owed/);
+  } finally {
+    rmSync(project, { recursive: true, force: true });
+  }
+});
+
 test('a check written by whoever verified is held by the frozen contract from then on, and only ever added', () => {
   const project = mkdtempSync(join(tmpdir(), 'eyes-addcheck-'));
   try {
