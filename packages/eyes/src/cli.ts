@@ -132,7 +132,8 @@ const USAGE = `sz-eyes: launch what was built, look at it, operate it, and put w
         said by whoever built it, once the product has run in front of them: from then until the close the owner
         can be shown it while it is verified. With no id: the contracts that are built and not closed, each
         with its launch line (exits 1 when there is none): what a session waits on
-  sz-eyes contract claim <id> <claim-id> --status proven|refuted|unchecked [--evidence <file under the evidence folder>]... [--note <text>] [--dir <project>]
+  sz-eyes contract claim <id> <claim-id> --status proven|refuted|unchecked [--evidence <file under the evidence folder>]... [--note <text>] [--at <commit>] [--dir <project>]
+        the verdict keeps the commit the product was at (HEAD; --at when it was shown on a copy made at an earlier one)
   sz-eyes contract judged <id> <claim-id> --verdict yes|no --said "<the owner's words>" [--dir <project>]
         the owner's own verdict on a claim that was left for them to judge (shown by owner), in their words; the
         contract may be closed. Yes: from here it stands, and later work that changes what they saw has to show
@@ -1440,6 +1441,15 @@ async function main(argv: string[]): Promise<number> {
         const claim = contract.claims.find((c) => c.id === claimId);
         if (!claim) throw new EyesError(`contract ${id} has no claim "${claimId ?? ''}". Its claims: ${contract.claims.map((c) => c.id).join(', ')}`);
         const status = ClaimStatus.parse(a.one('--status'));
+        // The commit the product was at when it was looked at: a look after a fix compares it with HEAD and does
+        // not run a claim the change did not reach. It is the project's HEAD unless whoever looked says otherwise
+        // (--at): a verdict shown on a copy made before a later commit is about the copy's commit, and recorded
+        // as HEAD it would hide that commit from the next comparison. (2026-11-26: verifiers looked at copies while
+        // the session went on committing fixes beside them.)
+        const given = a.one('--at');
+        const rev = spawnSync('git', ['-C', project, 'rev-parse', '--verify', '--quiet', '--short', `${given ?? 'HEAD'}^{commit}`], { encoding: 'utf8' });
+        if (given !== undefined && rev.status !== 0) throw new EyesError(`--at ${given}: no such commit in ${project}. It is the commit the product was at when you looked: the first line sz-eyes copy printed names it.`);
+        const seenAt = rev.status === 0 && `${rev.stdout ?? ''}`.trim() !== '' ? `${rev.stdout}`.trim() : null;
         // Set aside for the owner, a claim is nobody else's to call proven: a ruling that set it aside and then
         // gave it back would leave it standing while the owner is told it waits for them.
         if (claim.status === 'disputed' && status === 'proven') throw new EyesError(`${id}/${claim.id} is set aside for the owner (its own words were ruled wrong): nobody else records it proven. Their verdict settles it: sz-eyes contract judged ${id} ${claim.id} --verdict yes|no --said "<their words>".`);
@@ -1448,7 +1458,7 @@ async function main(argv: string[]): Promise<number> {
         for (const path of shown) if (!existsSync(join(folder, path))) throw new EyesError(`${join(folder, path)}: no such file. Evidence is a file under ${folder}, named from there (look/home.png)`);
         // A claim is not called proven on someone's word: there is something to look at, or a command that said so.
         if (status === 'proven' && shown.length === 0 && !a.one('--note')) throw new EyesError('a claim is proven by something that shows it: give --evidence (a picture, a film, a log under the evidence folder) or a --note that says what was run and what it said');
-        return withClaim(contract, claim.id, (c) => ({ ...c, status, evidence: [...new Set([...c.evidence, ...shown])], note: a.one('--note') ?? c.note, at: new Date().toISOString() }));
+        return withClaim(contract, claim.id, (c) => ({ ...c, status, evidence: [...new Set([...c.evidence, ...shown])], note: a.one('--note') ?? c.note, at: new Date().toISOString(), commit: seenAt }));
       });
       out(`${claimId}: ${saved.claims.find((c) => c.id === claimId)!.status}`);
       return 0;

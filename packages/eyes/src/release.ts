@@ -143,7 +143,7 @@ export function releaseContract(projectDir: string, id: string, g: Gate, extra: 
     request: look ? `${g.place}에 살아 있는 것 점검 (${g.commit.slice(0, 7)})` : `${g.place}에 ${g.commit.slice(0, 7)} 내보내기${g.previous ? ` (지금 살아 있는 것: ${g.previous.slice(0, 7)})` : ' (첫 출하)'}`,
     lane: 'M',
     targets: [],
-    claims: [...made.claims, ...extra.claims].map((claim) => ({ ...claim, status: 'unproven' as const, evidence: [], note: '', at: null })),
+    claims: [...made.claims, ...extra.claims].map((claim) => ({ ...claim, status: 'unproven' as const, evidence: [], note: '', at: null, commit: null })),
     notDoing: made.waived,
     risks: [],
     frozen: extra.frozen,

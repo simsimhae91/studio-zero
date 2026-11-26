@@ -353,6 +353,50 @@ test('a corrected check is committed with the contract that records it, and noth
   }
 });
 
+test('a verdict remembers the commit the product was at when it was looked at', () => {
+  // (2026-11-26: 21 looks after fixes each ran every claim of its verifier again, one claim's whole check command
+  // three times, because nothing said what had changed since a claim was last shown.)
+  const project = mkdtempSync(join(tmpdir(), 'eyes-commit-'));
+  const env = { ...process.env, GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@example.com', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@example.com' };
+  const git = (...args: string[]): string => `${spawnSync('git', args, { cwd: project, encoding: 'utf8', env }).stdout ?? ''}`.trim();
+  const claimOf = (id: string) => readContract(join(project, '.sz/contracts/m1-seen.json')).claims.find((c) => c.id === id)!;
+  try {
+    git('init', '-q', '-b', 'main');
+    writeFileSync(join(project, 'a.txt'), 'a\n');
+    git('add', '-A');
+    git('commit', '-q', '-m', 'first');
+    const first = git('rev-parse', '--short', 'HEAD');
+    assert.equal(eyes(project, 'contract', 'new', 'm1-seen', '--lane', 'M', '--request', '본다', '--claim', 'here|파일이 있다|command:true', '--claim', 'copy|사본에서 본다|command:true').code, 0);
+    assert.equal(eyes(project, 'contract', 'freeze', 'm1-seen').code, 0);
+    writeFileSync(join(project, 'a.txt'), 'b\n');
+    git('commit', '-q', '-am', 'a fix');
+    const head = git('rev-parse', '--short', 'HEAD');
+    assert.equal(eyes(project, 'contract', 'claim', 'm1-seen', 'here', '--status', 'proven', '--note', '돌려서 봤다').code, 0);
+    assert.equal(claimOf('here').commit, head, 'the commit the project is at, unless told otherwise');
+    // Shown on a copy made before the fix landed: the verdict is about that commit, and says so.
+    assert.equal(eyes(project, 'contract', 'claim', 'm1-seen', 'copy', '--status', 'proven', '--note', '사본에서 돌려 봤다', '--at', first).code, 0);
+    assert.equal(claimOf('copy').commit, first);
+    assert.match(eyes(project, 'contract', 'claim', 'm1-seen', 'copy', '--status', 'proven', '--note', '사본에서 돌려 봤다', '--at', 'nope').text, /--at nope: no such commit/);
+    assert.equal(claimOf('copy').commit, first, 'a verdict that was refused changes nothing');
+    const shown = eyes(project, 'contract', 'show', 'm1-seen').text;
+    assert.match(shown, new RegExp(`\\*\\*here\\*\\*[^\\n]*\\n[^\\n]*\\n[^\\n]*\\n  - 판정한 커밋: ${head}`));
+    assert.match(shown, new RegExp(`판정한 커밋: ${first}`));
+    // Outside a repository a verdict keeps no commit, and says so by having none.
+    const lonely = mkdtempSync(join(tmpdir(), 'eyes-nocommit-'));
+    try {
+      assert.equal(eyes(lonely, 'contract', 'new', 'm1-seen', '--lane', 'M', '--request', '본다', '--claim', 'here|파일이 있다|command:true').code, 0);
+      assert.equal(eyes(lonely, 'contract', 'freeze', 'm1-seen').code, 0);
+      assert.equal(eyes(lonely, 'contract', 'claim', 'm1-seen', 'here', '--status', 'proven', '--note', '돌려서 봤다').code, 0);
+      assert.equal(readContract(join(lonely, '.sz/contracts/m1-seen.json')).claims[0]!.commit, null);
+      assert.doesNotMatch(eyes(lonely, 'contract', 'show', 'm1-seen').text, /판정한 커밋/);
+    } finally {
+      rmSync(lonely, { recursive: true, force: true });
+    }
+  } finally {
+    rmSync(project, { recursive: true, force: true });
+  }
+});
+
 test('from the command line: closing makes claims stand, later work cannot close over a broken one, and an old check is not bent', () => {
   const project = mkdtempSync(join(tmpdir(), 'eyes-cli-'));
   try {

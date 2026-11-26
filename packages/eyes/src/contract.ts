@@ -50,6 +50,12 @@ export const Claim = z.object({
   note: z.string().max(1200).default(''),
   /** When its verdict was last given. */
   at: z.string().nullable().default(null),
+  /**
+   * The commit the product was at when it was looked at for that verdict: what a look after a fix compares HEAD
+   * with, so that a claim the fix did not reach is not run again. Null for a verdict given before this was kept,
+   * and where the project is not a repository.
+   */
+  commit: z.string().max(60).nullable().default(null),
 });
 export type Claim = z.infer<typeof Claim>;
 
@@ -235,7 +241,7 @@ export function renderContract(contract: Contract): string {
           ]
         : []),
     ].join('\n'),
-    list('끝났을 때 참인 것', contract.claims.map((claim) => `- [${MARK[claim.status]}] **${claim.id}** ${claim.says}\n  - 보이는 방법: ${claim.shownBy.kind} \`${claim.shownBy.ref}\`${claim.note ? `\n  - ${claim.note}` : ''}`)),
+    list('끝났을 때 참인 것', contract.claims.map((claim) => `- [${MARK[claim.status]}] **${claim.id}** ${claim.says}\n  - 보이는 방법: ${claim.shownBy.kind} \`${claim.shownBy.ref}\`${claim.note ? `\n  - ${claim.note}` : ''}${claim.commit ? `\n  - 판정한 커밋: ${claim.commit}` : ''}`)),
     ...(contract.notDoing.length > 0 ? [list('하지 않는 것', contract.notDoing.map((line) => `- ${line}`))] : []),
     ...(contract.supersedes.length > 0 ? [list('이 작업으로 물러나는 약속', contract.supersedes.map((s) => `- \`${s.contract}/${s.claim}\`: ${s.why}${addedLate(contract, s) ? ' (얼린 뒤에 적힘)' : ''}`))] : []),
     ...(contract.risks.length > 0 ? [list('위험', contract.risks.map((line) => `- ${line}`))] : []),
