@@ -143,7 +143,7 @@ deploy/install-launch-agent.sh                    # 로그인할 때 데몬이 �
 
 ```bash
 pnpm typecheck
-pnpm test              # 2026-11-26 전량 실행 기준 679개(656개 통과, 실패 0). SZ_TEST_CODEX_SANDBOX=1로 실행했고, 다른 환경이 필요한 23개는 건너뛰었다
+pnpm test              # 2026-11-26 전량 실행 기준 689개(666개 통과, 실패 0). SZ_TEST_CODEX_SANDBOX=1로 실행했고, 다른 환경이 필요한 23개는 건너뛰었다
 
 SZ_TEST_ELECTRON_BIN=<Electron 실행 파일> node --test --test-name-pattern="built on Electron" packages/eyes/test/ship.test.ts
 SZ_TEST_REAL_KEYCHAIN=1 pnpm test   # 임시 키체인으로 실제 Keychain 왕복 (옵트인)
