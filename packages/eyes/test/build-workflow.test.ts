@@ -1472,6 +1472,64 @@ test('a milestone stopped with a claim still false names the ways on, and what i
   assert.match(readFileSync(fileURLToPath(new URL('../../../plugin/README.md', import.meta.url)), 'utf8'), /`\.sz\/backlog\.md` 한 줄은 계약을 닫지 못한다/);
 });
 
+test('a look, each fix and each ruling say where they stand while the run goes on, and the script asks no clock', async () => {
+  // (2026-11-26: two looks ran 39 and 43 minutes with nothing said. The owner, watching the run, asked what
+  // "day-true again" was; the session, which is woken only when the run ends, had said nothing for 59 minutes.)
+  const ran = await run({ request: 'x' }, {
+    plan: plan('m1'), build: built, close: closed,
+    fix: () => ({ fixed: ['two'], notFixed: [] }),
+    verify: (_: Call, nth: number) => (nth === 0
+      ? { proven: ['one'], refuted: [{ id: 'two', fact: 'f' }], unchecked: [], noticed: ['본 것'] }
+      : { proven: ['two'], refuted: [], unchecked: [], noticed: ['본 것'] }),
+  });
+  const lines = [
+    'title m1: the first look begins: 2 claim(s), shown on the running product by one verifier who did not build it',
+    'title m1: the first look is back: 1 proven, 1 refuted, 0 unchecked, 1 noticed outside the claims',
+    'title m1: fix 1 begins (a claim is mended twice at most, a milestone four times): two',
+    'title m1: fix 1 is back: 1 mended',
+    'title m1: every claim is shown again on the product as the fix leaves it (from the start: two)',
+    'title m1: the look after fix 1 is back: 2 proven, 0 refuted, 0 unchecked, 1 noticed outside the claims',
+  ];
+  const at = lines.map((l) => ran.logs.indexOf(l));
+  assert.ok(at.every((i) => i >= 0), `${JSON.stringify(at)}\n${ran.logs.join('\n')}`);
+  assert.deepEqual(at, [...at].sort((a, b) => a - b), 'in the order things happened');
+
+  // A look shared among several says when each of them is back, not only the sum; and what a fixer could not mend,
+  // and what a ruling leaves false, are said as they come.
+  const many = Array.from({ length: 10 }, (_, k) => ({ ...claim(`c${k + 1}`), kind: 'flow', ref: `flows/c${k + 1}.flow` }));
+  const big = await run({ request: 'x' }, {
+    plan: () => ({ mode: 'new', summary: 's', milestones: [{ id: 'm1', title: '첫 판', builds: 'b', claims: many }] }),
+    build: built, close: closed,
+    fix: (_: Call, nth: number) => (nth === 0 ? { fixed: [], notFixed: ['c7: 합계를 내는 길이 둘이다'] } : { fixed: ['c7'] }),
+    verify: ({ label, claims }: Call) => {
+      if (label.includes(':again')) return { proven: (claims ?? []).filter((id) => id !== 'c7'), refuted: label.endsWith('1of2') ? [] : [], unchecked: [], ...(label.endsWith('1of2') ? { noticed: [] } : {}) };
+      return label === 'verify:m1:2of3' ? { proven: ['c4', 'c5', 'c6'], refuted: [{ id: 'c7', fact: '합계가 0' }], unchecked: [] } : { proven: claims ?? [], refuted: [], unchecked: [] };
+    },
+  });
+  const said = big.logs.filter((l) => l.startsWith('첫 판: '));
+  assert.ok(said.includes('첫 판: the first look begins: 10 claim(s), shown on the running product by 3 verifiers side by side who did not build it'), said.join('\n'));
+  assert.ok(said.includes('첫 판: verifier 2 of 3 is back: 3 proven, 1 refuted, 0 unchecked'), said.join('\n'));
+  assert.equal(said.filter((l) => /^첫 판: verifier \d of 3 is back: /.test(l)).length, 3);
+  assert.ok(said.includes('첫 판: the first look is back: 9 proven, 1 refuted, 0 unchecked'), said.join('\n'));
+  assert.ok(said.includes('첫 판: fix 1 is back: 0 mended, 1 it says it could not mend: a ruling follows'), said.join('\n'));
+  assert.ok(said.includes('첫 판: the ruling leaves 1 claim(s) shown false: c7'), said.join('\n'));
+  assert.ok(said.includes('첫 판: every claim is shown again on the product as the fix leaves it, by 2 verifiers side by side (from the start: c7)'), said.join('\n'));
+  assert.equal(said.filter((l) => /^첫 판: after the fix, verifier \d of 2 is back: /.test(l)).length, 4, said.join('\n'));
+  assert.ok(said.includes('첫 판: fix 2 begins (a claim is mended twice at most, a milestone four times): c7'), said.join('\n'));
+
+  // A workflow script has no clock and no timers: asking for the time throws in the Workflow runtime, so that a
+  // run started again comes out the same, and a table of answers like this one would never show it. (A brief of
+  // 2026-11-26 gave each of these lines its minutes from the clock; every run would have ended at its first look.)
+  assert.doesNotMatch(SOURCE, /\bDate\.now\(|\bnew Date\(\s*\)|\bMath\.random\(|\bset(?:Interval|Timeout)\(|\bperformance\.now\(/);
+
+  // The session is not woken by those lines: it is told how to hear of them, and to pass them on.
+  const work = readFileSync(fileURLToPath(new URL('../../../plugin/skills/work/SKILL.md', import.meta.url)), 'utf8');
+  assert.match(work, /\*\*While a run goes on, say where it is\.\*\*/);
+  assert.match(work, /c\(\) \{ grep -c '"type":"result"' "\$J" 2>\/dev\/null \|\| true; \}; n=\$\(c\); until \[ "\$\(c\)" != "\$n" \]; do sleep 30; done/);
+  const when = /whenToUse: '([^\n]*)',\n/.exec(SOURCE)![1]!;
+  assert.match(when, /you are woken only when it ends, so keep a background wait on its journal/);
+});
+
 test('a session waits for the product on the signal its builder gives, and a look at every screen is weighed as one whatever its wording', async () => {
   // (2026-11-19: the workflow's own description still named the wait from before there was a signal. The session
   // waited on it for two hours, until the wait was ended, while the product had stood since minute 72.)
