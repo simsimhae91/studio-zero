@@ -1,0 +1,5 @@
+[하네스 시험 실행. 이 요청은 주인이 쓴 것이 아니다: sz 하네스를 고치는 세션(Claude)이 썼고, 이 폴더는 주인의 프로젝트 worktape의 복제본이다. 주인에게 물을 수 없다.]
+
+저장된 워크플로 sz:build를 Workflow 도구로 지금 시작하라. args는 파일 <the session's scratch folder>/args.json 에 있는 JSON 객체 그대로다: Read로 읽어서 객체로 넘긴다(문자열로 넘기지 않는다). 다른 것은 묻지도 바꾸지도 않는다.
+
+워크플로가 돌아오면 그것이 돌려준 것(stopped, 마일스톤별 proven·refuted·unchecked·noticed)을 그대로 말하고 끝낸다. 멈췄으면 거기서 멈춘다: 계약을 닫지 않고, --accepted를 넘기지 않고, 워크플로를 다시 시작하지 않는다. 주인의 말을 지어내지 않는다.

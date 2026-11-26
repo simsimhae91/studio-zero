@@ -1,0 +1,56 @@
+{
+  "fix:day-true:1": {
+    "fixed": [
+      "split-tail: Mended in commit 3dafd52. The earlier fixes 2bf47b7 and c7109de had each changed how frames the VAD never judged get counted (first as speech, then sent down the same path as every other frame). Both were the same kind of fault: a frame nobody judged still decided whether a chunk was kept or thrown away. This time the cause itself is gone. Frames the VAD never judged now play no part in any decision: the 700ms drop, the 10-second silence close, the 5-minute split, or opening a chunk. When recording stops with the VAD behind, the Engine keeps the leftover frames (only those from before the stop time) to one side and the stop goes ahead at once; the log line reads 'record stop … saved=n judging=<frames>'. After the stop, Engine._judgeRest runs them through the same VAD, with that recording's state unchanged, and the same Chunker, then closes the open chunk. Three things wait for that judging to finish: the next recording's VAD, closeDay, and shutdown, which also adds those chunks to quit saved=. If the app is killed in the middle, the existing recovery measures the WAV again from its side .json. Chunker.pushRaw stays in the code but the Engine no longer calls it. The verifier's case as I left it, in the product's own Engine with a slowed VAD: 0.5s and 0.3s of speech followed by a stop with the VAD behind now leave 0 chunks and no WAV or .json behind. Nearby cases the same cause reached are also right now: speech still going when the stop came is kept and its length counts judged speech only; speech that began while the VAD was behind with no chunk open, which was lost before, is kept; the 0.5s after 4:31 plus a 0.1s pause is kept as a continued chunk with every chunk 300s or shorter; quitting saves and counts the judged chunk. All of these are tests in the new file test/stop-judges-rest.test.mjs, which no contract has frozen. On the old engine 5 of its 7 tests fail; now 7 of 7 pass. The claim's check and the project's quick checks pass: npm test 70/70 including split-tail and chunker, and the syntax check 42/42 files. The only wording change is the optional ' judging=n' at the end of the 'record stop' log line, and only when the VAD was behind. I searched the frozen flows: power-pull, close-day, resume, app-end and power-load read 'record stop … saved=N' with regexes that still match. Nothing on any screen changed. I did not launch the app: the verifier could not push the running app into this backlog either (Silero takes 0.4ms per frame), and this claim keeps no pictures. One neighbouring case is left: if a new recording starts while the old leftover frames are still being judged, its first frames wait behind that judging. This only matters when the VAD is badly behind, and it is noted in .sz/map.md."
+    ],
+    "notFixed": []
+  },
+  "verify:day-true:again": {
+    "proven": [
+      "split-tail",
+      "window-edge",
+      "power-load",
+      "no-press",
+      "reason-now",
+      "cuts-true",
+      "keyboard"
+    ],
+    "refuted": [],
+    "unchecked": [],
+    "held": [
+      "first-pass/gate-closed",
+      "first-pass/gate-open",
+      "first-pass/overnight",
+      "first-pass/power-pull",
+      "first-pass/resume",
+      "first-pass/no-record",
+      "first-pass/popover",
+      "first-pass/vad-silence",
+      "first-pass/vad-chunk",
+      "first-pass/transcribe",
+      "first-pass/close-day",
+      "first-pass/no-summary",
+      "first-pass/journal",
+      "first-pass/first-run",
+      "first-pass/mic-denied",
+      "first-pass/settings",
+      "first-pass/app-end",
+      "first-pass/limits",
+      "first-pass/as-drawn"
+    ],
+    "broken": [],
+    "stood": 19,
+    "noticed": [
+      "window-edge에 가장 가까운 계약 밖의 경우로, 고침 3dafd52가 들인 것이다. 멈출 때 VAD가 600ms 넘게 밀리면 남은 프레임은 판정 없이 rec.rest에 쌓이는데, 그동안 chunker.t가 앞으로 가지 않는다. 그래서 멈춘 시각 뒤를 거르는 검사(t0+chunker.t >= cutoff)를 그 뒤 프레임이 모두 통과하고, _judgeRest가 창 밖의 소리까지 청크에 넣는다. 만든 법: 제품의 Engine에 VAD를 프레임당 60ms로 늦춰 넣고(.sz/evidence/day-true/split-tail/look4/engine-judge4.mjs 6절), 17:59:55부터 무음 2초, 말 4초(18:00을 1초 넘김), 무음 2초를 흘린 뒤 18:00:03에 전원 사건을 넣었다. 저장된 청크는 17:59:55.032–18:00:03.032, 말 4000ms(창 밖 1000ms 포함), WAV 8000ms다. 고치기 전(7e9a013)에는 같은 장치에서 청크 끝이 18:00:00.024였다. 실행 중인 앱으로는 이 상태에 닿지 못했다. 계산 프로세스 30개(코어의 3배, 부하 평균 38)를 돌린 채 window-edge 흐름이 통과했고 judging= 줄은 0개, 청크 끝은 17:59:59.946 이하였다. 이 확인에서 띄운 앱 96번의 로그에도 judging= 줄은 0개다(이 맥의 Silero는 한 프레임 0.4ms).",
+      "앱을 끝낼 때(Cmd+Q, 또는 sz-eyes가 앱을 닫을 때) 옮기던 whisper-cli가 함께 죽으면 로그에 'transcribe fail … attempt=1/3 whisper-cli 종료 코드 null'이 남는다. 청크는 attempts 0, pending으로 돌아가 실제로는 실패로 세지 않는데, 로그만 보면 시도 하나를 잃은 것처럼 읽힌다(.sz/evidence/day-true/split-tail/look4/malog-tail-power-273.log, 10:05:04 quit saved=0 바로 뒤)."
+    ],
+    "sandbox": ""
+  },
+  "close:day-true": {
+    "report": "/Volumes/DEV-SSD/sz-scratch/worktape-trial-20261126/.sz/evidence/day-true/report.html",
+    "closed": true,
+    "commit": "32f5f7a",
+    "line": "- 2026-11-26 day-true(하루를 사실대로) 닫음: 7개 중 7 증명·0 거짓·0 미확인, 주인에게 남긴 주장 없음. 앞선 약속 19개 다시 보임 — 19 유지·0 깨짐·0 바뀜. split-tail은 셋째 고침(3dafd52, 멈춘 뒤 같은 VAD·Chunker로 판정)으로 증명, 백로그의 split-tail 줄 닫음. 확인자 메모(백로그에 9줄): 고침이 들인 계약 밖의 경우 — VAD가 600ms 넘게 밀린 채 멈추면 창 밖 소리가 청크에 들 수 있음(엔진에서만 재현, 앱으로는 못 닿음), 멈추는 순간 소리 창의 0.002–0.24초가 빠짐, 무음 청크가 'Générique'로 옮겨짐, 잠긴 화면에서 띄우면 녹음함. 다음: morning-week∥app-install → app-icon.",
+    "room": 1664
+  }
+}

@@ -1,0 +1,10 @@
+no published rule bears on this product (settled on 2026-11-26): not looked into again
+continuing: 2 milestone(s): 첫 패스: 제품 전부, 그린 대로 / 하루를 사실대로 (실제 하루로 다듬기의 앞부분)
+planned from what the owner answered; 1 milestone(s) to go, expect about 20 to 30 minutes (a phone app's native build adds its own)
+첫 패스: 제품 전부, 그린 대로: closed in an earlier run
+하루를 사실대로 (실제 하루로 다듬기의 앞부분): an earlier run looked at all of it and left 1 claim(s) shown false (split-tail): those are mended first, and every claim is shown again after the fix
+하루를 사실대로 (실제 하루로 다듬기의 앞부분): fix 1 begins (a claim is mended twice at most, a milestone four times): split-tail
+하루를 사실대로 (실제 하루로 다듬기의 앞부분): fix 1 is back: 1 mended
+하루를 사실대로 (실제 하루로 다듬기의 앞부분): every claim is shown again on the product as the fix leaves it (from the start: split-tail)
+하루를 사실대로 (실제 하루로 다듬기의 앞부분): the look after fix 1 is back: 7 proven, 0 refuted, 0 unchecked, 2 noticed outside the claims
+하루를 사실대로 (실제 하루로 다듬기의 앞부분): 7 proven, 0 refuted, 0 unchecked; of what stood before, 19 hold and 0 broke
