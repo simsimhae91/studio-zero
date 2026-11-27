@@ -284,3 +284,101 @@ test('the stacks of a folder are found by what the command line keeps of them, w
   assert.equal(saysDown('', id), false);
 });
 
+test('nothing is recorded inside a copy: it is refused with the command that records it in the project, and reading stays open', () => {
+  // (2026-11-27: shown by running it. In a copy `contract claim` answered "a: proven" while the project's contract
+  // still said unproven, and `contract close` answered "closed" while the project's contract stayed open.)
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'sz-copy-write-')));
+  // A folder with a space in its name, as the owner's own folders have.
+  const project = join(root, 'my product');
+  const copy = join(root, 'copies', 'v1');
+  const CLI = join(HERE, '../src/cli.ts');
+  const here = (cwd: string, ...args: string[]): { code: number | null; text: string } => {
+    const run = spawnSync(process.execPath, [CLI, ...args], { cwd, encoding: 'utf8' });
+    return { code: run.status, text: `${run.stdout}${run.stderr}` };
+  };
+  try {
+    mkdirSync(project);
+    git(project, 'init', '-q', '-b', 'main');
+    put(project, 'package.json', '{"name":"alpha"}\n');
+    put(project, '.sz/flows/a.sh', 'true\n');
+    put(project, '.sz/flows/two.sh', 'true\n');
+    git(project, 'add', '-A');
+    git(project, 'commit', '-q', '-m', 'first');
+    assert.equal(eyes(project, 'contract', 'new', 'm1-split', '--lane', 'M', '--request', '나눠 낸다', '--claim', 'a|a is true|flow:.sz/flows/a.sh', '--claim', 'two|two is true|flow:.sz/flows/two.sh').code, 0);
+    assert.equal(eyes(project, 'contract', 'freeze', 'm1-split', '--frozen', '.sz/flows/a.sh', '--frozen', '.sz/flows/two.sh').code, 0);
+    git(project, 'add', '-A');
+    git(project, 'commit', '-q', '-m', 'freeze');
+    const said = copyText(makeCopy(project, copy, {}), project);
+    assert.match(said, /so does everything recorded with sz-eyes \(a verdict, a notice, a standing record, a close, a backlog line\)/, 'whoever makes a copy is told at that moment');
+    const inProject = (): string => readFileSync(join(project, '.sz/contracts/m1-split.json'), 'utf8');
+    const inCopy = (): string => readFileSync(join(copy, '.sz/contracts/m1-split.json'), 'utf8');
+    const before = [inProject(), inCopy()];
+    const note = `흐름을 돌렸고 12단계가 모두 끝났다 (exit 0), it's "done" for $HOME`;
+
+    // Every command that changes what the work is known by is refused, and says where it is recorded and how.
+    const refusals = [
+      ['contract', 'claim', 'm1-split', 'a', '--status', 'proven', '--note', note],
+      ['contract', 'close', 'm1-split'],
+      ['contract', 'close', 'm1-split', '--accepted', '그대로 닫아요'],
+      ['contract', 'notice', 'm1-split', '본 것'],
+      ['contract', 'amend', 'm1-split', '--file', '.sz/flows/a.sh', '--why', '따옴표를 고쳤다 그뿐이다'],
+      ['contract', 'add-check', 'm1-split', '--frozen', '.sz/flows/new.sh'],
+      ['contract', 'judged', 'm1-split', 'a', '--verdict', 'yes', '--said', '좋다'],
+      ['contract', 'new', 'm2-more', '--lane', 'M', '--request', '더', '--claim', 'b|b is true|look:화면'],
+      ['standing', 'record', 'm1-split/a', '--status', 'holds', '--note', '사본에서 봤다'],
+      ['backlog', 'add', '나중에 이것도'],
+      ['backlog', 'done', '나중에', '--by', 'm1-split/a'],
+      ['feedback', 'new', '이건 좋다'],
+      ['web', 'review', 'http://127.0.0.1:9/'],
+      ['evidence', 'm1-split'],
+      ['evidence', 'm1-split', '--dry-run'],
+      ['evidence', 'prune', 'm1-split'],
+    ];
+    for (const args of refusals) {
+      const run = here(copy, ...args);
+      assert.equal(run.code, 1, `${args.join(' ')}: ${run.text}`);
+      assert.match(run.text, /^sz-eyes: not recorded: .* is a copy of .*my product \(sz-eyes copy made it\), not the project/, run.text);
+      assert.ok(run.text.trimEnd().endsWith(` --dir '${project}'`), `the last line is the command, with the project quoted as a shell takes it: ${run.text}`);
+    }
+    assert.deepEqual([inProject(), inCopy()], before, 'neither contract moved');
+    assert.equal(existsSync(join(copy, '.sz/evidence')), false, 'and no page was written in the copy');
+    assert.equal(existsSync(join(copy, '.sz/backlog.md')), false);
+
+    // The command it prints is run as it stands, by a shell, from inside the copy: every word arrives whole.
+    const refused = here(copy, 'contract', 'claim', 'm1-split', 'a', '--status', 'proven', '--note', note).text.trimEnd().split('\n').at(-1)!;
+    assert.ok(refused.startsWith('  sz-eyes contract claim m1-split a --status proven --note \''), refused);
+    const again = spawnSync('/bin/sh', ['-c', refused.replace(/^\s*sz-eyes /, '"$NODE" "$CLI" ')], { cwd: copy, encoding: 'utf8', env: { ...process.env, NODE: process.execPath, CLI } });
+    assert.equal(again.status, 0, `${again.stdout}${again.stderr}`);
+    assert.match(again.stdout, /^a: proven/);
+    const recorded = (JSON.parse(inProject()) as { claims: { id: string; status: string; note: string }[] }).claims[0]!;
+    assert.deepEqual([recorded.status, recorded.note], ['proven', note], 'recorded in the project, with the whole note');
+    assert.equal(inCopy(), before[1], 'the copy keeps the committed record');
+    // Given --dir with a copy, a command is refused the same way and the project's --dir takes its place.
+    assert.match(here(root, 'contract', 'notice', 'm1-split', '본 것', '--dir', copy).text, /\n  sz-eyes contract notice m1-split '본 것' --dir '[^']*my product'\n$/);
+
+    // Reading is what a copy is for: it stays open.
+    assert.equal(here(copy, 'contract', 'show', 'm1-split').code, 0);
+    assert.match(here(copy, 'contract', 'status').text, /still owes/);
+    assert.equal(here(copy, 'contract', 'frozen', 'm1-split').code, 0);
+    assert.match(here(copy, 'contract', 'built').text, /^nothing is built and waiting to be closed/, 'the list a session waits on is a read');
+    assert.equal(here(copy, 'standing').code, 0);
+    assert.match(here(copy, 'backlog').text, /nothing is written down/);
+    assert.doesNotMatch(here(copy, 'evidence', 'prune', 'm1-split', '--dry-run').text, /is a copy/, 'what a prune would remove is a read');
+    assert.doesNotMatch(here(copy, 'feedback', 'show').text, /is a copy/);
+
+    // A copy whose mark cannot be read is still a copy: it refuses, and says the project's folder is to be named.
+    writeFileSync(join(copy, COPY_MARK), 'not json');
+    const unread = here(copy, 'backlog', 'add', '나중에 이것도');
+    assert.equal(unread.code, 1);
+    assert.match(unread.text, /is a copy \(sz-eyes copy made it\), not the project[^]*--dir <the project's folder>\n$/);
+
+    // Ending a copy is done in the copy: that is not a record, and it is not refused.
+    const ended = here(copy, 'copy', copy, '--end');
+    assert.equal(ended.code, 0, ended.text);
+    assert.match(ended.text, /^ended: /);
+    assert.equal(existsSync(copy), false);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+

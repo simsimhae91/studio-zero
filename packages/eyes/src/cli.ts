@@ -25,7 +25,7 @@ import { RelayError, loginCommand } from './login-relay.ts';
 import { DANGEROUS, changesInCode, classify, renderMigrations } from './migrations.ts';
 import { findProducts, overviewPage, renderOverview, viewOf } from './overview.ts';
 import { freePort } from './port.ts';
-import { copyText, endCopy, makeCopy } from './copy.ts';
+import { COPY_MARK, copyText, endCopy, makeCopy } from './copy.ts';
 import { RefsError, refsCommand } from './refs.ts';
 import { heldSecrets, ownersVault, parseRun, runWithSecrets, setSecret } from './secrets.ts';
 import { GATE_LINES, lastRelease, releaseContract, releases, renderReleases, type Gate } from './release.ts';
@@ -520,6 +520,41 @@ function needNoBuildRun(project: string): void {
   if (held) throw new EyesError(`not recorded: ${held}`);
 }
 
+/** The project a folder is a copy of, as `sz-eyes copy` wrote it there ('' when the mark cannot be read), or null where the folder is no copy. */
+function copyOf(folder: string): string | null {
+  const mark = join(folder, COPY_MARK);
+  if (!existsSync(mark)) return null;
+  try {
+    return String((JSON.parse(readFileSync(mark, 'utf8')) as { of?: unknown }).of ?? '');
+  } catch {
+    // A mark that cannot be read is still a mark: this folder was made by `sz-eyes copy`.
+    return '';
+  }
+}
+
+/** A word as a shell takes it back whole: quoted wherever it holds more than letters, digits and the plain signs of a path. */
+const shellWord = (word: string): string => (/^[\w@%+=:,./-]+$/.test(word) ? word : `'${word.replace(/'/g, `'\\''`)}'`);
+
+/**
+ * Nothing is recorded inside a copy of a product. A copy is not the project: a verdict, a close, a notice, a
+ * standing record, a backlog line or the owner's words written there are read by nobody and go when the copy is
+ * ended, and a close written there answers "closed" while the project's contract still owes. The refusal names
+ * the project and gives the command back as it was given, each word quoted as a shell needs it, with `--dir`:
+ * it can be run as it stands. Reading stays open: a copy is where most of the looking is done.
+ * (2026-11-27: shown by running it, not met in a run. In a copy, `contract claim` answered `a: proven` over a
+ * project whose contract still said unproven, and `contract close` answered `closed: m1-split` over a project
+ * whose contract stayed open. In the 2,033 records of the twelve days before, every verifier had entered its copy
+ * in a subshell and recorded from the project.)
+ */
+function refuseInCopy(folder: string, argv: readonly string[]): void {
+  const of = copyOf(folder);
+  if (of === null) return;
+  const said = argv.filter((word, at) => word !== '--dir' && argv[at - 1] !== '--dir').map(shellWord).join(' ');
+  throw new EyesError(
+    `not recorded: ${folder} is a copy${of === '' ? '' : ` of ${of}`} (sz-eyes copy made it), not the project. Nothing recorded in a copy is read by anyone, and it goes when the copy is ended. Record it in the project: run this from the project's folder without --dir, or from here as it stands:\n  sz-eyes ${said} --dir ${of === '' ? "<the project's folder>" : shellWord(of)}`,
+  );
+}
+
 async function main(argv: string[]): Promise<number> {
   const [area, command, ...rest] = argv;
   if (!area || area === 'help' || area === '--help') {
@@ -783,6 +818,8 @@ async function main(argv: string[]): Promise<number> {
     const size = (a.one('--size') ?? 'phone') as Size;
     if (!(size in SIZES)) throw new EyesError(`--size is one of ${Object.keys(SIZES).join(', ')}`);
     const project = resolve(a.one('--dir') ?? '.');
+    // The owner's words are a record like any other: said over a copy of the product, they are kept in the project.
+    refuseInCopy(project, argv);
     const folder = a.one('--round') ? resolve(a.one('--round')!) : newRound(project, new Date().toISOString());
     if (!existsSync(join(folder, 'items.json'))) throw new EyesError(`${folder} is not a round of feedback (it has no items.json). Leave --round out to start one.`);
     out(`a window is open on ${url} for the owner: they press 말하기, point at what they mean and say it; this ends when they press 끝내기 or close the window. Round: ${folder}`);
@@ -795,6 +832,7 @@ async function main(argv: string[]): Promise<number> {
   if (area === 'feedback') {
     const a = parse(rest, []);
     const project = resolve(a.one('--dir') ?? '.');
+    if (command === 'new' || command === 'note' || command === 'page') refuseInCopy(project, argv);
     const now = new Date().toISOString();
     if (command === 'new') {
       const said = a.words.join(' ').trim();
@@ -894,6 +932,7 @@ async function main(argv: string[]): Promise<number> {
   if (area === 'standing') {
     const a = parse(command === 'record' || command === 'mend' ? rest : argv.slice(1), ['--summary', '--json']);
     const project = resolve(a.one('--dir') ?? '.');
+    if (command === 'record' || command === 'mend') refuseInCopy(project, argv);
     if (command === 'record' || command === 'mend') needNoBuildRun(project);
     if (command === 'mend') {
       try {
@@ -1270,6 +1309,7 @@ async function main(argv: string[]): Promise<number> {
   if (area === 'backlog') {
     const a = parse(command === 'add' || command === 'done' ? rest : argv.slice(1), []);
     const project = resolve(a.one('--dir') ?? '.');
+    if (command === 'add' || command === 'done') refuseInCopy(project, argv);
     if (command === 'done') {
       try {
         out(`ticked: ${doneInBacklog(project, a.words.join(' '), a.one('--by') ?? '')}`);
@@ -1314,6 +1354,11 @@ async function main(argv: string[]): Promise<number> {
       for (const { contract } of waiting) out(`${contract.id}\t${contract.built!.launch}`);
       return 0;
     }
+    // Nothing is recorded in a copy, and everything below that changes a contract or its evidence is a record: a
+    // verdict, a close (the owner's `--accepted` too: their words are kept in the project), a notice, a correction,
+    // a dispute, a freeze, the page. What only reads stays open there: the two lists above, show, frozen, and what
+    // a prune would remove.
+    if (area === 'contract' ? !['show', 'frozen'].includes(command ?? '') : !(pruning && a.has('--dry-run'))) refuseInCopy(project, argv);
     const id = pruning ? a.words[1] : a.words[0];
     if (!id) throw new EyesError('which contract: give its id');
     const file = contractFile(project, id);
