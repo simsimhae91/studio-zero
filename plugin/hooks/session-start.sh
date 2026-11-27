@@ -3,6 +3,8 @@
 # what the owner has said they want of this product, what open contracts still owe, what earlier work proved and
 # the product has to keep true, and how much is written down as left to do. A project with no .sz folder is
 # told that the harness is here and where work in it starts: the owner loaded it to work its way.
+# The Korean a session wrote came out in the plugin's own English turned word for word; the sentence names the words.
+echo "The Korean you write (to the owner, in files, on a product's screens) is the plain Korean a product team uses at work. Do not write 서다/세우다 (계획이 선다, 기준을 세운다), 짓다 (제품을 짓는다), 열리다 (결과가 열린다, 화면이 열린다) or 판 (첫 판, 새 판). Write 만들다, 구현하다, 정하다, 완성되다, 나오다, 뜨다, 보이다, 버전. The owner's own words are quoted as they said them."
 if [ ! -d .sz ]; then
   echo "The sz harness is loaded in this session: the owner chose its way of working. This project has no map yet. Before the first request to build, change or fix something, load the sz:onboard skill and write .sz/map.md (minutes of reading; it changes no product code), then handle the request with the sz:work skill."
   exit 0

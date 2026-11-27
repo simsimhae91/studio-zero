@@ -61,7 +61,7 @@ Each round, work out the frontier: the open lines whose answers do not wait on a
 - `done` is asked, never proposed: who they would show it to first, and what that person would have to say. A test you invent ("열 명 중 셋이 끝까지") is not their measure. (In the evaluation, two interviewers proposed a test; the stand-ins took it with "1번이요", and their real measure, a person, never came out.)
 - `not` starts from a memory: what they tried before and dropped, and why; then the rest of it as a choice.
 - Find facts yourself (the world, the report, the folder); put only decisions and memories to the owner.
-- End every round with the line the tool printed after your last change (`명확해진 줄 6/12 · 열린 것: back, depth, lens`).
+- End every round with the line the tool printed after your last change (`명확해진 줄 6/12 · 안 정해진 것: back, depth, lens`).
 
 When the session has no question box (a run with nobody at a terminal), put the same round as a numbered list, each choice with its options and your recommendation, previews as fenced blocks.
 
@@ -140,7 +140,7 @@ the seed, a line, a choice of direction or the close of this dive.
 Run `sz-eyes dive show <id>` and use **the folder it prints**, including when this dive lives outside the project.
 Write `brief.draft.md` in that folder and show that draft in full. For a dive outside the project, use the Write
 tool for the draft and give `--file` its full path. Ask one question as a choice they can tap:
-**"이 북극성대로 지을까요?"** (네, 이대로 / 고칠 게 있어요 / 나중에).
+**"이 북극성대로 만들까요?"** (네, 이대로 / 고칠 게 있어요 / 나중에).
 
 - **네, 이대로**: use their exact answer and keep the version just shown, without editing it after approval.
 - **고칠 게 있어요**: change only what they name, show the revised draft, and put the same approval question

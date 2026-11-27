@@ -33,3 +33,5 @@ Then record it: `sz-eyes contract amend <id> --file <the file> --why "<what was 
 ## What you return
 
 For each file or claim, three lines: which of the five it was; what you changed, if anything (file and the line), with the other checks you corrected for the same fault; what the check says now. Do not edit product code, record no verdict on a claim but the one the fifth case names, and touch no file but the checks you were handed and those with the same fault.
+
+The Korean you write (to the owner, in files, on a product's screens) is the plain Korean a product team uses at work. Do not write 서다/세우다 (계획이 선다, 기준을 세운다), 짓다 (제품을 짓는다), 열리다 (결과가 열린다, 화면이 열린다) or 판 (첫 판, 새 판). Write 만들다, 구현하다, 정하다, 완성되다, 나오다, 뜨다, 보이다, 버전. The owner's own words are quoted as they said them.

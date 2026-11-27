@@ -460,7 +460,7 @@ export function standingOf(value: Case): 'no' | 'thin' | 'case' {
   return unanswered(value).length === 0 ? 'case' : 'thin';
 }
 
-const STANDING: Record<ReturnType<typeof standingOf>, string> = { no: '짓지 않는다', thin: '근거가 모자란다', case: '지을 근거가 있다' };
+const STANDING: Record<ReturnType<typeof standingOf>, string> = { no: '만들지 않는다', thin: '근거가 모자란다', case: '만들 근거가 있다' };
 const STATUS: Record<LineStatus, string> = { open: '아직', shown: '보임', refuted: '아님', waived: '넘어감' };
 /** A line's name where many cases stand side by side. */
 const SHORT: Record<LineId, string> = { who: '누가', now: '지금 쓰는 것', pays: '돈', gap: '실망', switch: '갈아탐', reach: '만남', edge: '더 잘하는 한 가지', price: '값', runs: '혼자 굴리기', does: '얻는가', returns: '다시 오는가', paid: '낸 돈' };
@@ -560,10 +560,10 @@ export function casePage(value: Case, folder: string): string {
 <meta name="claude:viewport-fit-sides" content="cover">
 <style>${PAGE_STYLE}${WORTH_STYLE}</style>
 <main>
-  <p class="meta">이 서비스를 지을 만한가 · ${esc(value.id)} · ${day(value.createdAt)}</p>
+  <p class="meta">이 서비스를 만들 만한가 · ${esc(value.id)} · ${day(value.createdAt)}</p>
   <h1>${esc(value.service)}</h1>
   <p class="big ${stand}">${STANDING[stand]}</p>
-  ${value.call ? `<p class="note"><b>판단 (${value.call.call === 'go' ? '짓자' : value.call.call === 'narrow' ? '좁혀서' : '짓지 말자'}):</b> ${esc(value.call.why)}</p>` : ''}
+  ${value.call ? `<p class="note"><b>판단 (${value.call.call === 'go' ? '짓자' : value.call.call === 'narrow' ? '좁혀서' : '만들지 말자'}):</b> ${esc(value.call.why)}</p>` : ''}
   ${value.owner ? `<p class="note"><b>주인의 결정 (${day(value.owner.at)}):</b> "${esc(value.owner.said)}"</p>` : ''}
   ${value.seed ? `<p class="how">어디서 나온 생각인가: ${esc(value.seed)}</p>` : ''}
   <p class="grades"><span>근거의 종류는 섞지 않습니다:</span><span><b>세상의 글</b> 누구나 열 수 있는 페이지의 문장, 그 페이지에서 다시 확인한 것만</span><span><b>대역이 써 본 것</b> 막히는 곳은 찾지만 원하는지는 모름</span><span><b>진짜 사람의 숫자</b> 돈을 냈는가는 이것으로만</span></p>
@@ -609,15 +609,15 @@ export function casesPage(cases: { folder: string; case: Case }[]): string {
   ${value.seed || seen > 0 ? `<p class="how">${esc(value.seed)}${seen > 0 ? `${value.seed ? ' · ' : ''}그 페이지에서 확인한 인용 ${seen}개` : ''}</p>` : ''}
 </section>`;
   };
-  return `<title>무엇을 지을까</title>
+  return `<title>무엇을 만들까</title>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="claude:viewport-fit-sides" content="cover">
 <style>${PAGE_STYLE}${WORTH_STYLE}</style>
 <main>
-  <p class="meta">무엇을 지을까 · 후보 ${cases.length}개</p>
-  <h1>지을 근거가 있는 것 ${sorted.filter((c) => standingOf(c.case) === 'case').length}개, 버린 것 ${sorted.filter((c) => standingOf(c.case) === 'no').length}개</h1>
-  <p class="note">후보마다 같은 줄을 물었습니다: 누가, 지금 무엇으로, 이미 돈이 오가는가, 어디서 실망하는가, 어디서 만나는가. 세상에 대한 줄은 누구나 열 수 있는 페이지의 문장으로만 보였다고 하고, 그 문장이 그 페이지에 있는지 다시 열어 확인했습니다. "지을 근거가 있다"는 팔린다는 뜻이 아닙니다: 돈을 내는지는 진짜 사람만 답합니다.</p>
+  <p class="meta">무엇을 만들까 · 후보 ${cases.length}개</p>
+  <h1>만들 근거가 있는 것 ${sorted.filter((c) => standingOf(c.case) === 'case').length}개, 버린 것 ${sorted.filter((c) => standingOf(c.case) === 'no').length}개</h1>
+  <p class="note">후보마다 같은 줄을 물었습니다: 누가, 지금 무엇으로, 이미 돈이 오가는가, 어디서 실망하는가, 어디서 만나는가. 세상에 대한 줄은 누구나 열 수 있는 페이지의 문장으로만 보였다고 하고, 그 문장이 그 페이지에 있는지 다시 열어 확인했습니다. "만들 근거가 있다"는 팔린다는 뜻이 아닙니다: 돈을 내는지는 진짜 사람만 답합니다.</p>
   ${sorted.map(card).join('\n')}
 </main>
 `;

@@ -29,7 +29,7 @@ How sign-in works is in `../SKILL.md` (Accounts): one app for every product, the
 
 ### 카카오 개발자 앱의 키 (`login/kakao/client-id`, `login/kakao/client-secret`)
 
-한 번만 하면 이 Mac에서 짓는 모든 제품이 이 앱으로 로그인합니다.
+한 번만 하면 이 Mac에서 만드는 모든 제품이 이 앱으로 로그인합니다.
 
 1. https://developers.kakao.com/console/app 에서 [앱 생성]을 누릅니다. 앱 이름(예: Studio Zero), 회사명(개인이면 본인 이름), 카테고리를 넣고 저장하고, 앱 아이콘을 올립니다.
 2. [앱] > [일반] > [비즈니스 정보] > [개인 개발자 비즈 앱]으로 바꿉니다. 사업자등록은 필요 없고, 본인인증(오른쪽 위 프로필 > [계정 설정] > [본인인증])과 앱 아이콘이 있어야 합니다.

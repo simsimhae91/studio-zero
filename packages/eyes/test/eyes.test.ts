@@ -541,7 +541,7 @@ test('from the command line: closing makes claims stand, later work cannot close
     const waiting = eyes(project, 'contract', 'built');
     assert.equal(waiting.code, 0);
     assert.equal(waiting.text.trim(), 'm2-shares\tPORT=$(sz-eyes port) node server.mjs, seen at http://127.0.0.1:$PORT/');
-    assert.match(eyes(project, 'contract', 'show', 'm2-shares').text, /지은 때: 20\d\d-[^\n]* · 띄우는 법: PORT=\$\(sz-eyes port\) node server\.mjs/);
+    assert.match(eyes(project, 'contract', 'show', 'm2-shares').text, /만든 때: 20\d\d-[^\n]* · 띄우는 법: PORT=\$\(sz-eyes port\) node server\.mjs/);
     assert.equal(guard(project, 'flows/split.sh').code, 2, 'and from the freeze it is the new contract’s');
     assert.match(eyes(project, 'standing').text, /1 claim\(s\) stand[\s\S]*no longer standing[\s\S]*m1-split\/split[\s\S]*replaced by contract m2-shares/);
 

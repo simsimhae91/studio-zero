@@ -126,7 +126,7 @@ export function renderOverview(products: readonly ProductView[]): string {
   if (waiting.length > 0) lines.push(`주인의 판단을 기다리는 것 ${waiting.length}:`, ...waiting, '');
   for (const p of products) {
     lines.push(`${p.name}  (${p.dir})`, `  ${p.says}`);
-    lines.push(`  약속 ${p.stands}개${p.broken.length > 0 ? `, 깨짐 ${p.broken.length}` : ''} · 남은 일 ${p.left.length} · 기다리는 것 ${p.waiting.length}${p.open.length > 0 ? ` · 열린 일: ${p.open.map((o) => `${o.id}(${o.owes})`).join(', ')}` : ''}`);
+    lines.push(`  약속 ${p.stands}개${p.broken.length > 0 ? `, 깨짐 ${p.broken.length}` : ''} · 남은 일 ${p.left.length} · 기다리는 것 ${p.waiting.length}${p.open.length > 0 ? ` · 진행 중인 일: ${p.open.map((o) => `${o.id}(${o.owes})`).join(', ')}` : ''}`);
     for (const w of p.worth) lines.push(`  근거 ${w.id}: ${w.standing}${w.stakes > 0 ? ` · 기본기 ${w.stakes}개 중 ${w.have}개 있음` : ''}`);
     if (p.problem) lines.push(`  ${p.problem}`);
     for (const l of p.live) lines.push(`  살아 있는 곳 ${l.place}: ${l.url} · ${l.commit.slice(0, 7)} (${day(l.releasedAt)} ${l.release})${l.checked ? ` · 마지막 점검 ${day(l.checked.at)} ${l.checked.verdict}` : ' · 내보낸 뒤 점검한 적 없음'}`);
@@ -154,7 +154,7 @@ export function overviewPage(products: readonly ProductView[], at: string): stri
       (p) => `<section class="claim ${p.broken.length > 0 ? 'refuted' : p.live.length > 0 ? 'proven' : ''}">
   <header><span class="mark">${p.live.length > 0 ? p.live.map((l) => `${esc(l.place)} · ${esc(l.commit.slice(0, 7))}`).join(' / ') : '아직 내놓지 않음'}</span><h2>${esc(p.name)}</h2></header>
   <p class="note">${esc(p.says)}</p>
-  <p class="counts"><span>약속 ${p.stands}</span><span>깨짐 ${p.broken.length}</span><span>기다리는 것 ${p.waiting.length}</span><span>남은 일 ${p.left.length}</span>${p.open.length > 0 ? `<span>열린 일 ${p.open.map((o) => esc(o.id)).join(', ')}</span>` : ''}</p>
+  <p class="counts"><span>약속 ${p.stands}</span><span>깨짐 ${p.broken.length}</span><span>기다리는 것 ${p.waiting.length}</span><span>남은 일 ${p.left.length}</span>${p.open.length > 0 ? `<span>진행 중인 일 ${p.open.map((o) => esc(o.id)).join(', ')}</span>` : ''}</p>
   ${p.problem ? `<p class="note">${esc(p.problem)}</p>` : ''}
   ${p.live.map((l) => `<p class="how"><a href="${esc(l.url)}">${esc(l.url)}</a> · ${esc(day(l.releasedAt))}에 내보냄(${esc(l.release)}) · ${l.checked ? `마지막 점검 ${esc(day(l.checked.at))}: ${esc(l.checked.verdict)}` : '내보낸 뒤 점검한 적 없음'}${l.wayBack ? ` · 되돌리기 <code>${esc(l.wayBack)}</code>` : ''}</p>`).join('')}
   ${p.left.length > 0 ? `<ul>${p.left.slice(0, 3).map((line) => `<li>${esc(line.slice(0, 200))}</li>`).join('')}${p.left.length > 3 ? `<li class="how">그 밖에 ${p.left.length - 3}줄 (<code>.sz/backlog.md</code>)</li>` : ''}</ul>` : ''}
@@ -173,7 +173,7 @@ export function overviewPage(products: readonly ProductView[], at: string): stri
 <main>
   <p class="meta">${esc(day(at))} · 제품 ${products.length}개</p>
   <h1>작업실</h1>
-  <p class="counts"><span>내놓은 것 ${count((p) => (p.live.length > 0 ? 1 : 0))}</span><span>깨진 약속 ${count((p) => p.broken.length)}</span><span>판단을 기다리는 것 ${count((p) => p.waiting.length)}</span><span>서 있는 약속 ${count((p) => p.stands)}</span></p>
+  <p class="counts"><span>내놓은 것 ${count((p) => (p.live.length > 0 ? 1 : 0))}</span><span>깨진 약속 ${count((p) => p.broken.length)}</span><span>판단을 기다리는 것 ${count((p) => p.waiting.length)}</span><span>지켜지는 약속 ${count((p) => p.stands)}</span></p>
   ${broken.length > 0 ? `<section><h2>먼저 볼 것: 깨진 약속</h2>${broken.join('')}</section>` : ''}
   ${waiting.length > 0 ? `<section><h2>주인의 판단을 기다리는 것</h2>${waiting.join('')}</section>` : ''}
   <section><h2>제품</h2>${cards}</section>

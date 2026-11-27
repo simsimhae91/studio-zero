@@ -324,7 +324,7 @@ export function renderContract(contract: Contract): string {
     // until 2026-11-26 it was on the evidence page and in the file, and whoever read the contract here saw none of it.
     ...(contract.noticed.length > 0 ? [list('계약에 없지만 눈에 띈 것', contract.noticed.map((item) => `- ${item.text}`))] : []),
     contract.frozenAt ? `얼린 때: ${contract.frozenAt}${contract.frozen.length > 0 ? ` (만드는 쪽이 못 고치는 파일: ${contract.frozen.join(', ')})` : ''}` : '아직 얼리지 않았습니다.',
-    ...(contract.built ? [`지은 때: ${contract.built.at} · 띄우는 법: ${contract.built.launch}`] : []),
+    ...(contract.built ? [`만든 때: ${contract.built.at} · 띄우는 법: ${contract.built.launch}`] : []),
   ];
   return `${blocks.join('\n\n')}\n`;
 }

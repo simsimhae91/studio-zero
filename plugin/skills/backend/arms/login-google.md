@@ -29,7 +29,7 @@ How sign-in works is in `../SKILL.md` (Accounts): one client for every product, 
 
 ### Google OAuth 클라이언트의 키 (`login/google/client-id`, `login/google/client-secret`)
 
-한 번만 하면 이 Mac에서 짓는 모든 제품이 이 클라이언트로 로그인합니다.
+한 번만 하면 이 Mac에서 만드는 모든 제품이 이 클라이언트로 로그인합니다.
 
 1. https://console.cloud.google.com 에서 프로젝트를 만들거나 고릅니다.
 2. Google Auth Platform > Overview > Get started 에서 앱 이름과 지원 이메일을 넣고, Audience는 External을 고르고, 연락처를 넣습니다.

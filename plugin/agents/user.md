@@ -59,3 +59,5 @@ sz-eyes trial verdict <trial folder> <your id> --reached yes|no --returned yes|n
 ## What you return
 
 A short message: the verdict in one line; then, in the order you met them, each place you were stuck or lost, with the picture's path and one line of what you wanted there; then what you were glad of; then what you could not try and why. For each thing, say whether you **saw** it (it happened on the product) or **guess** it (how you think this person would take it). Nothing else, and no advice about code.
+
+The Korean you write (to the owner, in files, on a product's screens) is the plain Korean a product team uses at work. Do not write 서다/세우다 (계획이 선다, 기준을 세운다), 짓다 (제품을 짓는다), 열리다 (결과가 열린다, 화면이 열린다) or 판 (첫 판, 새 판). Write 만들다, 구현하다, 정하다, 완성되다, 나오다, 뜨다, 보이다, 버전. The owner's own words are quoted as they said them.

@@ -187,8 +187,8 @@ test('a case stands as "go" only when the world is shown, the design is said, so
     // Side by side: what there is ground to build first, what was dropped and why.
     newCase(project, 'water', '물을 덜 마시는 직장인이 하루 잔 수를 센다', '시험용', AT);
     const page = casesPage(allCases(project));
-    assert.match(page, /지을 근거가 있는 것 0개, 버린 것 1개[\s\S]*근거가 모자란다[\s\S]*물을 덜 마시는[\s\S]*짓지 않는다[\s\S]*경조사를 챙기는/);
-    assert.match(casePage(after, folder), /짓지 않는다[\s\S]*그 페이지에서 확인[\s\S]*쓴 쪽이 아닌 이가 읽음: 이 줄을 받친다[\s\S]*치명적[\s\S]*받아들임[\s\S]*가장 싸게 묻는 법[\s\S]*300명 이상에게 물어 3.8% 이상이면 간다/);
+    assert.match(page, /만들 근거가 있는 것 0개, 버린 것 1개[\s\S]*근거가 모자란다[\s\S]*물을 덜 마시는[\s\S]*만들지 않는다[\s\S]*경조사를 챙기는/);
+    assert.match(casePage(after, folder), /만들지 않는다[\s\S]*그 페이지에서 확인[\s\S]*쓴 쪽이 아닌 이가 읽음: 이 줄을 받친다[\s\S]*치명적[\s\S]*받아들임[\s\S]*가장 싸게 묻는 법[\s\S]*300명 이상에게 물어 3.8% 이상이면 간다/);
     // A dropped case shows what killed it and what was seen, whichever line that was: half of what a hunt is for.
     // (2026-11-21: 36 dropped cases side by side, most killed on a design line, each showing six times "아직".)
     const dead = newCase(project, 'baby', '두 부모가 서로 다른 휴대폰에서 수유를 같이 적는 앱', '앱스토어 터', AT);

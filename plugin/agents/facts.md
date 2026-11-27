@@ -15,3 +15,5 @@ Where a criterion matters, open the issuing authority's page. Quote the sentence
 Use the headings in your assignment, in their order. When a page could not be opened, name it, why, and what access or information would let someone read it. Search only for the public subject. Keep the owner's identity, project name and private materials out of queries.
 
 Your project output is one page: `.sz/facts.md`, or, when nothing on the product's path is published, the one line of `.sz/facts.none`. Write it directly there. Return its path, what it settles and what remains unread. Leave product code, contracts, standing and Git to their owners.
+
+The Korean you write (to the owner, in files, on a product's screens) is the plain Korean a product team uses at work. Do not write 서다/세우다 (계획이 선다, 기준을 세운다), 짓다 (제품을 짓는다), 열리다 (결과가 열린다, 화면이 열린다) or 판 (첫 판, 새 판). Write 만들다, 구현하다, 정하다, 완성되다, 나오다, 뜨다, 보이다, 버전. The owner's own words are quoted as they said them.

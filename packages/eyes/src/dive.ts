@@ -447,7 +447,7 @@ export function progressLine(value: Dive): string {
   const clear = ids.filter((id) => value.lines[id]!.status === 'settled' || value.lines[id]!.status === 'waived');
   const open = ids.filter((id) => value.lines[id]!.status === 'open');
   const proposed = ids.filter((id) => value.lines[id]!.status === 'proposed');
-  return `명확해진 줄 ${clear.length}/${ids.length}${open.length > 0 ? ` · 열린 것: ${open.join(', ')}` : ''}${proposed.length > 0 ? ` · 답을 기다리는 안: ${proposed.join(', ')}` : ''}`;
+  return `명확해진 줄 ${clear.length}/${ids.length}${open.length > 0 ? ` · 안 정해진 것: ${open.join(', ')}` : ''}${proposed.length > 0 ? ` · 답을 기다리는 안: ${proposed.join(', ')}` : ''}`;
 }
 
 /** Closes a dive on the owner's words about its one page, and writes that page. */
@@ -587,7 +587,7 @@ ${value.saw.length > 0 ? value.saw.map((s) => `- ${s.line ? `[${s.line}] ` : ''}
 
 ## 다음에 할 수 있는 것
 
-- 지을 만한지, 돈 낼 만한지 따져 보려면: \`/sz:worth\`
+- 만들 만한지, 돈 낼 만한지 따져 보려면: \`/sz:worth\`
 - 지으려면: \`/sz:build ${value.summary || value.seed}\` (정해진 것은 다시 묻지 않습니다)
 ${durable ? `- 이 생각은 제품 폴더 밖(\`${dirname(folder)}\`)에 있습니다. 제품 폴더에서도 \`sz-eyes dive show\`가 이 생각을 "제품 밖" 줄 아래에 보여 주고, 계획·설계는 요청이 이 생각을 가리킬 때 여기서 읽습니다. 제품과 함께 두려면 제품 폴더에서 \`mkdir -p .sz/dive && cp -R "${folder}" .sz/dive/${value.id}\` 하십시오(같은 id면 제품 폴더 것이 먼저 쓰입니다).\n` : ''}`;
 }

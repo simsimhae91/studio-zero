@@ -88,7 +88,7 @@ test('a line is settled or left open only by words the owner said, and a proposa
     // A proposal is the dive's: no owner's words on it. Taken as it stood, it says so.
     assert.throws(() => setDiveLine(folder, 'core', { status: 'proposed', says: '모임이 끝나는 순간 각자 낼 돈이 단톡방에 뜬다', said: '1번이요' }, heard, AT), /a proposal is the dive's/);
     setDiveLine(folder, 'core', { status: 'proposed', says: '모임이 끝나는 순간 각자 낼 돈이 단톡방에 뜬다' }, heard, AT);
-    assert.match(progressLine(readDive(folder)), /명확해진 줄 1\/10 · 열린 것: moment, now, home, first, back, not, feel, done · 답을 기다리는 안: core/);
+    assert.match(progressLine(readDive(folder)), /명확해진 줄 1\/10 · 안 정해진 것: moment, now, home, first, back, not, feel, done · 답을 기다리는 안: core/);
     assert.equal(setDiveLine(folder, 'core', { status: 'settled', said: '1번이요' }, heard, AT).accepted, true);
     // A settled line changes only by their words again.
     assert.throws(() => setDiveLine(folder, 'core', { says: '다른 것' }, heard, AT), /changes only by their words again/);
