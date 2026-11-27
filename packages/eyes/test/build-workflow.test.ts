@@ -1617,6 +1617,101 @@ test('a look after a fix does not run what the fix did not reach, and says which
   assert.doesNotMatch(`${second}${verifier}${skill}`, /carried[^.\n]*--from/, 'nobody is told to name the commit to compare from');
 });
 
+test('a check a ruling corrected is run by a look before the milestone closes: carrying its claim is not taken', async () => {
+  // (2026-11-27, shown on a mock run: `rule:m1 -> verify:m1:again -> close:m1` with stopped null. The look after
+  // the fix was told nothing of the correction and returned the claim under "carried" over a range that named no
+  // commit, and the log said the fix had not reached it.)
+  const corrected = { disputed: [], corrected: [{ id: 'two', file: 'flows/two.sh', changed: 'pressed "합계" where the screen now says "총액"' }] };
+  const mend = () => ({ fixed: ['one'], notFixed: ['two: the frozen flow flows/two.sh presses the old label'] });
+  const first = { proven: ['two'], refuted: [{ id: 'one', fact: '총액이 틀린다' }], unchecked: [], noticed: ['콘솔에 경고 하나', '버튼이 작다'] };
+  const carrying = { proven: ['one'], refuted: [], unchecked: [], noticed: ['콘솔에 경고 하나', '버튼이 작다'], stood: 3, carried: [{ id: 'two', range: 'aaaaaaa..bbbbbbb', why: 'the diff named nothing of it' }] };
+  const ran = await run({ request: 'x' }, {
+    plan: plan('m1'), build: built, close: closed, fix: mend, rule: () => corrected,
+    verify: (_: Call, nth: number) => (nth === 0 ? first : nth === 1 ? carrying : { proven: ['two'], refuted: [], unchecked: [], noticed: ['고친 흐름이 3초 걸린다'] }),
+  });
+  const looks = ran.calls.filter((c) => c.label.startsWith('verify:'));
+  assert.deepEqual(looks.map((c) => c.label), ['verify:m1', 'verify:m1:again', 'verify:m1:again:corrected']);
+  // The look after the fix is told which check was corrected and what changed in it, and to record the claim again.
+  assert.match(looks[1]!.prompt, /Since their last verdict, a ruling corrected how the frozen checks of these claims press or read \(not what they expect\): two \(flows\/two\.sh: pressed "합계" where the screen now says "총액"\)\. Whoever ruled ran each once and gave no verdict\. Run each by its check as corrected and record it with `sz-eyes contract claim`, also where it holds/);
+  assert.match(looks[1]!.prompt, /and one whose check a ruling corrected since its verdict\. When you record a verdict/);
+  assert.doesNotMatch(looks[0]!.prompt, /a ruling corrected/, 'a first look is told of no correction: it runs everything');
+  // It carried the claim all the same: that is not taken, and one verifier shows it once more by that check alone.
+  const narrow = looks[2]!;
+  assert.deepEqual(narrow.claims, ['two'], 'the claims it answers for are these and no other');
+  assert.match(narrow.prompt, /This look is about these claims and nothing else: two\. Since the last verdict on each, a ruling corrected how its frozen check presses or reads \(not what it expects\), and the look after the fix gave it no verdict: two \(flows\/two\.sh: pressed "합계" where the screen now says "총액"\)\./);
+  assert.match(narrow.prompt, /Run no other claim's check, show nothing again of what stood before this work, and look for no new cases/);
+  // It is told nothing a look after a fix is told: not that its claim was shown false, not to show the others again.
+  for (const said of [/This is a second look, after a fix/, /were shown false before/, /A fix can break a neighbour/, /New cases are tried at this look/, /You are one of \d+ verifiers/, /The flows of this contract have not been written/])
+    assert.doesNotMatch(narrow.prompt, said);
+  // What every look is told stays: how the product is launched, and that nothing is said of whether a claim is true.
+  assert.match(narrow.prompt, /^Verify contract `m1` of the project in the current folder\.[^]*The product is launched like this: PORT=\$\(sz-eyes port\) node server\.mjs\. This look is about these claims/);
+  assert.match(narrow.prompt, /I am telling you nothing about whether any claim is true/);
+  const m1 = ran.result.milestones[0];
+  assert.deepEqual(m1.carried, [], 'the corrected claim is not among those the fix did not reach');
+  assert.deepEqual([...m1.proven].sort(), ['one', 'two']);
+  assert.deepEqual(m1.noticed, ['콘솔에 경고 하나', '버튼이 작다', '고친 흐름이 3초 걸린다'], 'what was noticed before stays, and what the narrow look noticed is added');
+  assert.equal(m1.stood, 3, 'what the look after the fix counted of earlier work stays');
+  assert.equal(ran.result.stopped, null, 'it was run, so the milestone closes');
+  assert.ok(ran.logs.includes('title m1: the look after fix 1 gave no verdict to 1 claim(s) whose check a ruling had corrected (two): shown once more, by the corrected check and nothing else'), ran.logs.join('\n'));
+  assert.ok(ran.logs.includes('title m1: the look at the corrected check(s) is back: 1 proven, 0 refuted, 0 unchecked, 1 noticed outside the claims'), ran.logs.join('\n'));
+  assert.doesNotMatch(ran.logs.join('\n'), /not run again, the fix did not reach them/, 'nothing says the fix did not reach a corrected check');
+
+  // A look that runs the corrected check and answers for it needs nothing more.
+  const straight = await run({ request: 'x' }, { plan: plan('m1'), build: built, close: closed, fix: mend, rule: () => corrected, verify: (_: Call, nth: number) => (nth === 0 ? first : { proven: ['one', 'two'], refuted: [], unchecked: [] }) });
+  assert.deepEqual(straight.calls.filter((c) => c.label.startsWith('verify:')).map((c) => c.label), ['verify:m1', 'verify:m1:again']);
+  assert.equal(straight.result.stopped, null);
+
+  // Asked once more and left out again (or nobody answers): nothing closes, and the stop says which check.
+  for (const third of [carrying, null]) {
+    const open = await run({ request: 'x' }, { plan: plan('m1'), build: built, close: closed, fix: mend, rule: () => corrected, verify: (_: Call, nth: number) => (nth === 0 ? first : nth === 1 ? carrying : third) });
+    assert.deepEqual(open.calls.filter((c) => c.label.startsWith('verify:')).map((c) => c.label), ['verify:m1', 'verify:m1:again', 'verify:m1:again:corrected'], 'it is asked once, not until it answers');
+    assert.match(open.result.stopped, /^milestone "title m1" would close on a claim \(two: flows\/two\.sh\) whose frozen check a ruling corrected and no look has run since: whoever ruled ran the check once and gave no verdict/);
+    assert.match(open.result.stopped, /Its contract stays open, and `sz-eyes contract status` says the same; started again, the run shows every claim again\.$/);
+    assert.equal(open.calls.some((c) => c.label.startsWith('close:')), false, 'nothing closes');
+    const left = open.result.milestones[0];
+    assert.deepEqual(left.proven, ['one'], 'and the claim is not returned as proven');
+    assert.match(left.unchecked.find((u: { id: string }) => u.id === 'two').why, /its check flows\/two\.sh was corrected by a ruling and no look has run it since/);
+  }
+
+  // Shown false by its corrected check, it is mended like any claim shown false: the run goes on to the next fix.
+  const falseNow = await run({ request: 'x' }, {
+    plan: plan('m1'), build: built, close: closed, rule: (_: Call, nth: number) => (nth === 0 ? corrected : { disputed: [] }),
+    fix: (_: Call, nth: number) => (nth === 0 ? mend() : { fixed: ['two'], notFixed: [] }),
+    verify: (_: Call, nth: number) => (nth === 0 ? first : nth === 1 ? carrying : nth === 2 ? { proven: [], refuted: [{ id: 'two', fact: '합계가 0으로 나온다' }], unchecked: [] } : { proven: ['two'], refuted: [], unchecked: [] }),
+  });
+  assert.deepEqual(falseNow.calls.filter((c) => /^(verify|fix|rule):/.test(c.label)).map((c) => c.label), ['verify:m1', 'fix:m1:1', 'rule:m1', 'verify:m1:again', 'verify:m1:again:corrected', 'fix:m1:2', 'verify:m1:again']);
+  assert.match(falseNow.calls.find((c) => c.label === 'fix:m1:2')!.prompt, /- two: 합계가 0으로 나온다/);
+  assert.equal(falseNow.result.stopped, null);
+});
+
+test('with the look after a fix shared between verifiers, each is told of the corrected checks among its own claims, and one verifier shows what was left out', async () => {
+  // A first pass has twenty claims and more: the look after a fix is shared, and a narrow look is not.
+  const ids = Array.from({ length: 24 }, (_, i) => `c${i + 1}`);
+  const ran = await run({ request: 'x' }, {
+    plan: () => ({ mode: 'extend', summary: 's', milestones: [{ id: 'm1', title: 'title m1', builds: 'b', claims: ids.map((id) => claim(id)) }] }),
+    build: built, close: closed,
+    fix: () => ({ fixed: ['c1'], notFixed: ['c2: the frozen flow presses the old label'] }),
+    rule: () => ({ disputed: [], corrected: [{ id: 'c2', file: 'flows/c2.sh', changed: 'pressed the old label' }] }),
+    verify: (call: Call) => {
+      const mine = call.claims ?? ids;
+      if (call.label === 'verify:m1:again:corrected') return { proven: ['c2'], refuted: [], unchecked: [] };
+      if (call.label.startsWith('verify:m1:again')) return { proven: mine.filter((id) => id === 'c1'), refuted: [], unchecked: [], carried: mine.filter((id) => id !== 'c1').map((id) => ({ id, range: 'a3df4b7..e8b7a0d', why: 'x' })) };
+      return { proven: mine.filter((id) => id !== 'c1'), refuted: mine.includes('c1') ? [{ id: 'c1', fact: 'f' }] : [], unchecked: [] };
+    },
+  });
+  const again = ran.calls.filter((c) => c.label.startsWith('verify:m1:again'));
+  assert.deepEqual(again.map((c) => c.label), ['verify:m1:again:1of2', 'verify:m1:again:2of2', 'verify:m1:again:corrected'], 'the narrow look is one verifier, whatever the milestone\'s size');
+  const told = again.slice(0, 2).filter((c) => /a ruling corrected how the frozen checks of these claims press or read/.test(c.prompt));
+  assert.equal(told.length, 1, 'only the verifier whose claim it is hears of the correction');
+  assert.ok(told[0]!.claims!.includes('c2'));
+  assert.deepEqual(again[2]!.claims, ['c2']);
+  const m1 = ran.result.milestones[0];
+  assert.equal(m1.carried.length, 22, 'what the look after the fix did not run stays said: the narrow look takes none of it away');
+  assert.equal(m1.carried.some((c: { id: string }) => c.id === 'c2'), false);
+  assert.match(ran.calls.find((c) => c.label === 'close:m1')!.prompt, /\(22 of those proven were not run again at the last look, because the fix did not reach them: /);
+  assert.equal(ran.result.stopped, null);
+});
+
 test('a fix runs the checks its own change reaches and says which', async () => {
   // (2026-11-26: a fix for one claim broke two others, another brought back a way for a tab's address to go out,
   // and a third opened a new crack: each found by the look after it, never by the fix before it.)
