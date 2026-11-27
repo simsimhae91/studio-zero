@@ -356,7 +356,7 @@ export async function runBuild(args, project = process.cwd()) {
 export async function main() {
   if (process.argv.includes('--help') || process.stdin.isTTY) {
     console.log(
-      'sz-codex-build < request.json   (run in the target project)\nJSON: { "request": "...", "asked": "owner", "answers": "..." }',
+      'sz-codex-build < request.json   (run in the target project)\nJSON: { "request": "...", "asked": "owner", "answers": "..." }\noptional: "redteam": "plan" | "close" | "both", "redteamModel": "<Codex model ID>", "facts": "auto" | "on" | "off", "design": "go", "side": 1-3, "maxMilestones": <n>',
     );
     return;
   }

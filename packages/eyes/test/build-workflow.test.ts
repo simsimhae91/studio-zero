@@ -839,6 +839,36 @@ const joinedAll = ({ label }: Call) => ({ merged: label.split(':')[1]!.split('+'
 const held = (stood: number) => () => ({ proven: [], refuted: [], unchecked: [], broken: [], held: [], stood });
 const labels = (calls: Call[]): string[] => calls.map((c) => c.label);
 
+// 2026-11-27: the owner found no place to ask for the review ("redteam flag를 어디에 넣어야하는지 안내가 없습니다"):
+// it is an argument only the session writes, no run of theirs had ever carried it, and a word the run did not know
+// (`redteam: "on"`) ran with no review and said nothing.
+test('the review is asked about before a start, a word the run does not know stops it, and a run says what it started with', async () => {
+  const steps = { plan: plan('m1'), build: built, verify: proven, close: closed, redteam: () => ({ checks: [], fatal: [] }) };
+  for (const word of ['on', 'true', true, 'all', 'Plan']) {
+    const refused = await run({ request: '요금 계산', redteam: word }, steps);
+    assert.match(refused.result.error, /^not started: redteam is "plan", "close" or "both" \(or left out for no review\), and this run was given "/, String(word));
+    assert.deepEqual(refused.allCalls, [], 'nothing is started on a word the run does not know');
+  }
+  for (const none of [undefined, null, '', 'off']) {
+    const plain = await run({ request: '요금 계산', redteam: none }, steps);
+    assert.equal(plain.result.error, undefined);
+    assert.equal(plain.logs[0], 'options: redteam off, facts auto, design waits for the owner');
+    assert.ok(!plain.calls.some((c) => c.label.startsWith('redteam')));
+  }
+  const both = await run({ request: '요금 계산', redteam: 'both', redteamModel: 'sonnet', facts: 'off', design: 'go', side: 1, maxMilestones: 2 }, steps);
+  assert.equal(both.logs[0], 'options: redteam both (sonnet), facts off, design go (built without waiting for the owner), side 1, at most 2 milestone(s)');
+  assert.deepEqual(labels(both.calls), ['plan', 'redteam:plan', 'build:m1', 'verify:m1', 'redteam:m1', 'close:m1']);
+
+  const when = /whenToUse: '([^\n]*)',\n/.exec(SOURCE)![1]!;
+  assert.match(when, /One of those questions is always whether a red team review is added[^.]*: "레드팀 검토를 붙일까요\?" \(안 함 \/ 계획만 \/ 마감만 \/ 둘 다\)/);
+  assert.match(when, /Every later start of the same request[^.]*passes the same options again/);
+  const read = (path: string): string => readFileSync(fileURLToPath(new URL('../../../plugin/' + path, import.meta.url)), 'utf8');
+  for (const path of ['skills/work/SKILL.md', 'codex/skills/build/SKILL.md', 'README.md'])
+    assert.ok(read(path).includes('레드팀 검토를 붙일까요?'), path);
+  for (const value of ['"plan"', '"close"', '"both"']) assert.ok(read('README.md').includes(value), `the README names ${value}`);
+  assert.match(read('codex/run.mjs'), /optional: "redteam": "plan" \| "close" \| "both"/);
+});
+
 test('the plan review is opt-in, runs once in order and stops building on a fatal finding', async () => {
   const steps = { plan: plan('m1'), build: built, verify: proven, close: closed };
   const args = { request: '요금 계산', redteam: 'plan', redteamModel: 'sonnet' };
