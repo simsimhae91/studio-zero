@@ -39,7 +39,7 @@ Look at the pictures themselves, not their labels. Keep five to eight in all. **
 
 `refs.md`, for each kept screen: the product and its link, the picture's path in the library (`sz-eyes refs find` prints it), and what you see: what the eye lands on first, what is largest and how much larger than the body, where the main action sits, how a state is shown, how much of the screen is colour and where it sits, what makes it feel alive, and one thing that would not fit this product. Then **the three things these screens share**, and **one primary reference**: the single product whose way of doing it this product follows. One direction has one primary reference. References are never averaged; where two disagree, the primary one wins.
 
-With no reference tool connected: the library is the source. Where it has nothing for a kind, write that in `refs.md`, go on without, and say so when you return.
+With no reference tool connected (neither Mobbin nor Refero answers a search): if the owner is in this conversation, ask them once before searching, "Mobbin과 Refero가 연결되어 있지 않습니다. 연결하시겠어요?", and go on with what they choose; an agent of a run cannot ask, and the session that started the run asked before it began. Then the library is the source. Where it has nothing for a kind, write that in `refs.md`, go on without, and say when you return which reference tools answered and which did not.
 
 ## 2. Decide the direction before drawing a screen
 
@@ -53,34 +53,23 @@ Write the top of `direction.md`:
 |---|---|---|---|
 | 뼈대 | | | |
 | 글자 | | | |
-| 색 — 표면과 잉크 | | | |
+| 색 — 바탕과 글자 | | | |
 | 색 — 포인트 | | | |
 | 면과 모서리 | | | |
 | 볼거리 | | | |
 | 눌렀을 때와 쉴 때 | | | |
 
 지킬 원리 (3–5):
-표면: <이 제품의 종이가 온 재료 — 형광등 아래 진열대 / 영수증 종이 / 밤의 화면 / 흙 / 먹 / 유리> · 종이 L·hue 한 끗 · 잉크 <검정이 아닌 값>
-온도: <따뜻함 / 차가움 / 중성 / 어둠> — <이 제품의 무엇이 그 온도를 부르는가>
-버릴 기본값: <이 제품이 빠질 기본 골격, 이름으로> 그리고 <흰 바탕(#FFFFFF·#F8FAFC·#F7F7F8)에 인디고 #4F46E5 · 블루 #2563EB · 바이올렛 #8B5CF6 · 민트 #10B981 중 하나를 포인트로 쓰는 조합. 이 조합을 골랐다면 제품의 재료에서 온 이유 한 줄>
+버릴 기본값: <이 제품이 빠질 기본 골격, 이름으로>
 비워 둔 것과 정한 것: <brief가 비워 둔 배치마다 어디에 두었는지, 이유 한 줄>
 빌더에게 넘긴 것: <아직 정하지 않은 입력·구현 세목마다 빌더가 지켜야 할 제약 한 줄>
 주인이 고른 테마: 아직 없음 (내가 고른 것: <name>)
 가져오지 않는 것: <the reference's name, words, logo, pictures, icons, its signature move>
 ```
 
-The right-hand column never repeats a number from the left: a principle is taken, a value is not. A size, a ratio, a colour, a duration comes from this product's own subject and material. If a value could only have come from the reference, that row is copied: redo it. "볼거리" is what there is to look at on the first screen and where in this product's subject it comes from (its own data drawn, its own things, a real picture of its subject). A screen with nothing to look at is flat, and a picture that could sit on any product is not the cure.
+The right-hand column never repeats a number from the left: a principle is taken, a value is not. A size, a ratio, the brand colour, a duration comes from this product's own subject. If a value could only have come from the reference, that row is copied: redo it. The background and the text colour are the one exception: they follow the primary reference. Where its screens are white, this product's background is white; where they are dark, dark; a tinted background only where the primary reference has one. White is a fine background, and the row 바탕과 글자 says which screen of the reference it was read from. "볼거리" is what there is to look at on the first screen and where in this product's subject it comes from (its own data drawn, its own things, a real picture of its subject). A screen with nothing to look at is flat, and a picture that could sit on any product is not the cure.
 
 The brief's boundary also holds in the drawing. “이게 빠지면 다른 제품이 되는가?” Keep that spine or signature effect. “빌더가 이걸 완전히 다르게 정해도 같은 제품인가?” Keep the constraint and decide only the visual part here. The builder decides the input and implementation.
-
-Some materials to start from; choose the actual values from the product in front of you:
-
-| 도메인 | 재료에서 온 표면 | 온도 | 피해야 할 관성 |
-|---|---|---|---|
-| 심야 편의점 게임 | 형광등 아래 진열대, 야간의 어둠 | 차가운 흰빛과 어둠 위 형광 한 색 | 흰 바탕과 인디고 |
-| 금융·정산 | 미색 영수증 종이, 먹색 잉크, 인쇄 잉크 한 색 | 따뜻한 중성 | 흰 바탕과 블루 |
-| 건강·기록 | 종이 기록의 따뜻한 회백, 측정값의 한 색 | 따뜻한 중성 | 민트 그린, 병원의 푸른 흰색 |
-| 도구·데이터 | 종이와 흑연 | 중성 | 보라색 그라디언트 |
 
 Then draw the product's key screen twice, from two different ideas (two ideas, not two colourings of one). Choose one and say why in two lines. The other stays in the prototype's first section for the owner to see.
 
@@ -92,21 +81,21 @@ At the top of `prototype.html`, once: the tokens as CSS custom properties (colou
 
 One hand, one file, one set of parts is what makes eighteen screens read as one product. Do not hand screens out to other agents.
 
-**A theme, not a colour, and the owner picks it by pressing.** A product's palette is three decisions (the paper,
-the ink, the brand) and everything else follows by role: paper (`--bg-bg`), surfaces (`--bg-surface`,
-`--bg-sunken`, `--border-border`), ink (`--text-fg`, `--text-fg-muted`), the brand (`--bg-brand`,
+**A theme, not a colour, and the owner picks it by pressing.** A product's palette is three decisions (the background,
+the text colour, the brand) and everything else follows by role: the background (`--bg-bg`), surfaces (`--bg-surface`,
+`--bg-sunken`, `--border-border`), text (`--text-fg`, `--text-fg-muted`), the brand (`--bg-brand`,
 `--text-on-brand`, `--text-accent`, `--bg-brand-soft`), the second colour and the states (handbook C1). Declare all
 of them once at the root and derive what follows with `color-mix` / `oklch(from …)` with a fallback, so that a theme
 sets them together. No screen carries a colour as a literal value: a literal does not follow the switch.
 
 Beside the tokens in the parts gallery, and as a strip at the top of the overview, put three or four **themes**.
-Show yours first, then the same product warmer or cooler, a dark reading where somebody uses it at night, or one
-further out that still keeps its meanings apart. Each has a name and shows its paper, ink and brand values. A press
+Show yours first, then two or three others that keep the product's meanings apart, a dark one among them where
+somebody uses it at night. Each has a name and shows its background, text and brand values. A press
 sets the theme on the root element (a `data-theme` attribute with one rule per theme, or three custom properties).
 Every screen follows. Save the choice across screens and reloads (`localStorage` inside try/catch: a file opened
 from disk may refuse it). Update the address with `?t=<name>`, preserving the screen's hash. On opening, take a
 known theme from the address first, then the saved choice, then the designer's default. A fresh browser opening
-that address must show the same paper, ink and brand. Text has to be readable and state and service colours distinct
+that address must show the same background, text colour and brand. Text has to be readable and state and service colours distinct
 in every theme; say in `direction.md` which candidates were left out and why.
 
 **The main button's colour is the owner's to pick, on the same row.** After the themes, the strip has one more control,
@@ -117,7 +106,7 @@ reading its own brand value is overridden by the pick), and every derived token 
 `--text-accent`, hover and pressed, the focus ring, all by `color-mix` from `--bg-brand`, never a literal).
 `--text-on-brand` is set from the picked colour's luminance: compute the WCAG relative luminance of the colour and take
 white or black, whichever has the larger contrast ratio against it; a mid colour where both fall under 4.5 takes the
-better one and the button keeps a border of `--text-on-brand` at the edge. A brand close to the paper's own value
+better one and the button keeps a border of `--text-on-brand` at the edge. A brand close to the background's own value
 (a near-black button on the night theme, a near-white one on the light) gets a hairline border so that it does not
 vanish. Keep the pick like the theme: `localStorage` in try/catch, and `&b=<hex without #>` in the address beside `?t=`,
 read first on opening, so that a fresh browser opening that address shows the same button; choosing a theme clears the
@@ -125,8 +114,7 @@ pick, choosing a colour leaves the theme. The measurement (step 6) is run once w
 otherwise with the default. The product is built in the picked colour: when the owner approves the drawing, the line
 `주인이 고른 테마` also carries it (`— 주 버튼 색 #<hex>`), and the builder's `--bg-brand` is that value.
 
-The stock choice is a white page with one indigo accent. If that is this product's palette, name the material that
-gave you its paper, ink and brand in `direction.md`. The switch is for choosing in the prototype. The product is
+The switch is for choosing in the prototype. The product is
 built in the chosen theme. Keep the name from the address when the owner approves the drawing: after its screens
 hold in that theme, the line becomes `주인이 고른 테마: <name> — <file:///…/prototype.html?t=<name>>`. Until
 they pick one, including a run they let go on without judging the drawing, keep `아직 없음 (내가 고른 것: <name>)`.
@@ -165,7 +153,7 @@ sz-eyes web sweep "file://$PWD/.sz/design/prototype.html?t=$theme" --from .sz/de
 
 The sweep prints, for each screen, either that it holds or what it found (text cut off, a page that scrolls sideways, something to press under 44px, text that cannot be read), and saves a picture of each. Fix everything it reports in one pass, cause by cause: a name cut off in one row is cut off in every row made from that part, so mend the part. Run it once more. A third run means a part is wrong, not a screen. If the session's command sandbox stops the browser, run that command outside it.
 
-Take the key screen's picture in each theme (`…prototype.html?t=<name>#<id>`), saved under its own theme name outside the canonical screen pictures, and read them side by side: is the whole screen's temperature this product's, or is one button coloured on a page that could belong to anything?
+Take the key screen's picture in each theme (`…prototype.html?t=<name>#<id>`), saved under its own theme name outside the canonical screen pictures, and read them side by side: is the screen recognisably this product in each (its own object, data or picture on it), and is every text readable?
 
 Then walk the plan's main flow once by pressing, from its first screen to its last: `sz-eyes web do "file://$PWD/.sz/design/prototype.html?t=$theme#<first id>" --size phone --step "tap:<the words on what is pressed>" --step "read:at=location.hash" --step "tap:…" …`. A step presses and reads only what is shown, as a person does, so the same words on another screen of the file do not confuse it; a step that stops says why (words "found only where nothing is shown" mean the press before it did not lead where the plan says). A flow that cannot be walked is a prototype that is not pressable: mend it before the owner meets it.
 
@@ -173,6 +161,6 @@ Then open the pictures of the key screen and of the three or four screens a pers
 
 ## 7. Hand over
 
-Finish `direction.md` with **빌더에게**. Give the chosen theme's name from `주인이 고른 테마` (use the designer's measured theme name while the owner's choice is pending), the theme block as it stands (paper, ink, brand, and what follows from them), the remaining tokens, the list of parts with what each is for, and for each screen the parts it is made of and its address in the prototype. On a web product the prototype's markup and CSS are meant to be carried into the build as they are; on a phone app the tokens, the parts and each screen's order are carried and the code is written again.
+Finish `direction.md` with **빌더에게**. Give the chosen theme's name from `주인이 고른 테마` (use the designer's measured theme name while the owner's choice is pending), the theme block as it stands (background, text colour, brand, and what follows from them), the remaining tokens, the list of parts with what each is for, and for each screen the parts it is made of and its address in the prototype. On a web product the prototype's markup and CSS are meant to be carried into the build as they are; on a phone app the tokens, the parts and each screen's order are carried and the code is written again.
 
 Return: where the files are, the idea in its one sentence, the primary reference, how many screens and states were drawn, what the last measurement reported, what departs from the handbook, and what you could not do (no reference tool, no image tool, a screen of the plan you could not draw and why).

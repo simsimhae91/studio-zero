@@ -495,6 +495,11 @@ test('a new product with screens is planned, drawn and measured first, and the r
   assert.match(screens, /What the owner answered when asked beforehand, in their words:\n계정: 필요 \(기록 저장\)/, 'the screens are planned from what the owner answered, as the spec is');
   assert.match(prompt('refs'), /do its step 1[\s\S]*and only that[\s\S]*Do not wait for the plan of the screens/);
   assert.match(prompt('refs'), /Write `\.sz\/design\/refs\.md` last/);
+  // What the board was made with is said where the owner sees the run, and only when the board says it.
+  assert.match(prompt('refs'), /which reference tools answered a search \(Mobbin, Refero, or the library only\)/);
+  assert.ok(!ran.logs.some((line) => line.startsWith('references:')), 'a board that names no tool adds no line');
+  const withTools = await run({ request: 'x' }, drawing({ plan: needed, refs: () => ({ primary: '토스', kinds: ['홈'], tools: 'library only' }) }));
+  assert.ok(withTools.logs.includes('references: the board was made with library only'), withTools.logs.join('\n'));
   const designer = prompt('design');
   assert.match(designer, /until \[ -e \.sz\/plan\/frame\.md \] && \[ -e \.sz\/design\/refs\.md \]; do sleep 10; done/);
   assert.match(designer, /by yourself: start no other agent/);
