@@ -1462,3 +1462,64 @@ test('whether a claim may be left as it is after a fix is asked of the contract 
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('a contract does not close on a claim proven before its check was corrected and not shown since', () => {
+  // (2026-11-27: a mock run closed a milestone on a check an arbiter had corrected and no verifier had run. A
+  // workflow can keep count of such checks while it runs; started again, or where a session leads the looks itself,
+  // only the contract knows: when the verdict was given, and when the check was corrected.)
+  const project = mkdtempSync(join(tmpdir(), 'eyes-corrected-'));
+  const put = (path: string, text: string): void => {
+    mkdirSync(dirname(join(project, path)), { recursive: true });
+    writeFileSync(join(project, path), text);
+  };
+  const amend = (file: string): number | null => eyes(project, 'contract', 'amend', 'm1-total', '--file', file, '--why', '누르는 문구를 새 화면의 것으로 고쳤다', '--no-commit').code;
+  const proven = (claim: string): number | null => eyes(project, 'contract', 'claim', 'm1-total', claim, '--status', 'proven', '--note', '돌려서 봤고 끝까지 갔다').code;
+  try {
+    put('flows/sum.sh', 'true\n');
+    put('flows/other.sh', 'true\n');
+    put('flows/helper.sh', 'true\n');
+    assert.equal(eyes(project, 'contract', 'new', 'm1-total', '--lane', 'M', '--request', '합계를 본다', '--claim', 'sum|합계가 맞다|flow:flows/sum.sh (금액 세 개를 넣는다)', '--claim', 'other|다른 것도 맞다|flow:flows/other.sh').code, 0);
+    assert.equal(eyes(project, 'contract', 'freeze', 'm1-total', '--frozen', 'flows/sum.sh', '--frozen', 'flows/other.sh', '--frozen', 'flows/helper.sh').code, 0);
+
+    // A check corrected before anyone looked (a builder's dispute, settled before the first look) owes nothing more
+    // than the first look itself.
+    put('flows/other.sh', 'true # corrected before the first look\n');
+    assert.equal(amend('flows/other.sh'), 0);
+    assert.equal(proven('sum'), 0);
+    assert.equal(proven('other'), 0);
+    assert.match(eyes(project, 'contract', 'status').text, /^nothing is owed/);
+
+    // Corrected after its verdict: the claim still reads proven, and the contract owes its being shown again.
+    put('flows/sum.sh', 'true # corrected\n');
+    assert.equal(amend('flows/sum.sh'), 0);
+    const owes = eyes(project, 'contract', 'status');
+    assert.equal(owes.code, 1);
+    assert.match(owes.text, /contract m1-total \(lane M\) still owes:\n {2}- sum: proven before its check was corrected \(flows\/sum\.sh\), and not shown since: whoever verifies runs the check as corrected and records the verdict again \(sz-eyes contract claim m1-total sum --status proven\|refuted --note "<what the corrected check showed>"\)\n$/);
+    assert.doesNotMatch(owes.text, /- other:/, 'a claim whose own check was not corrected since its verdict owes nothing');
+    const refused = eyes(project, 'contract', 'close', 'm1-total');
+    assert.equal(refused.code, 1);
+    assert.match(refused.text, /contract m1-total is not closed yet:\n {2}- sum: proven before its check was corrected \(flows\/sum\.sh\), and not shown since/);
+    assert.doesNotMatch(refused.text, /What stood before and broke/, 'nothing that stood before is at stake here, and nothing is said of it');
+    // Nobody's word closes it: the check is run, which takes a minute.
+    assert.equal(eyes(project, 'contract', 'close', 'm1-total', '--accepted', '그대로 닫아요').code, 1);
+    assert.equal(readContract(join(project, CONTRACTS_DIR, 'm1-total.json')).closedAt, null);
+
+    // A helper the checks share, which no claim names, is nobody's own check: it holds nothing open.
+    put('flows/helper.sh', 'true # corrected\n');
+    assert.equal(amend('flows/helper.sh'), 0);
+    assert.doesNotMatch(eyes(project, 'contract', 'status').text, /helper/);
+
+    // Shown again by the check as corrected, and recorded: it closes.
+    assert.equal(proven('sum'), 0);
+    assert.match(eyes(project, 'contract', 'status').text, /^nothing is owed/);
+    assert.match(eyes(project, 'contract', 'close', 'm1-total').text, /^closed: m1-total/);
+
+    // A check of closed work corrected later (as later milestones do to the flows of earlier ones) opens nothing:
+    // a closed contract is the record of what was shown then, and what is found now is a look at a standing claim.
+    put('flows/sum.sh', 'true # corrected again, by later work\n');
+    assert.equal(amend('flows/sum.sh'), 0);
+    assert.match(eyes(project, 'contract', 'status').text, /^nothing is owed/);
+  } finally {
+    rmSync(project, { recursive: true, force: true });
+  }
+});

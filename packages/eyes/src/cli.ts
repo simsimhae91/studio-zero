@@ -492,9 +492,34 @@ function supersedeOf(project: string, key: string, why: string): { contract: str
   return { contract: found.contract, claim: found.claim.id, why: why.trim(), at: new Date().toISOString() };
 }
 
-/** What an open contract owes beyond its own claims: what stood before it and it broke, and a frozen check changed behind the guard's back. */
+/** The files of this project a claim is shown by (`checkFiles`): the words of its check that are there in the folder, or that its contract froze. */
+const checksOf = (project: string, contract: Contract, claim: Claim): string[] =>
+  checkFiles(claim, (word) => !isAbsolute(word) && !word.split('/').includes('..') && (contract.frozen.includes(word) || existsSync(join(project, word))));
+
+/**
+ * Claims that stand proven on a verdict older than a correction of their own check. Whoever corrects a frozen check
+ * runs it once, and gives no verdict: the claim is shown again, by the check as corrected, by someone who verifies.
+ * Until that verdict is recorded the contract owes it, wherever the work is led from: a workflow that keeps count of
+ * the checks its rulings corrected forgets them when it is started again, and a session that starts its own looks
+ * keeps no count at all. (2026-11-27: shown on a mock run, which closed a milestone on such a check. In the owner's
+ * contracts, each of the 15 corrections made to a claim's check while its contract was open had been followed by a
+ * new verdict: this is what happened every time, now held to.)
+ */
+function unshownSinceCorrected(project: string, contract: Contract): string[] {
+  return contract.claims
+    .filter((claim) => claim.status === 'proven')
+    .flatMap((claim) => {
+      const corrected = correctedSince(contract, claim, checksOf(project, contract, claim));
+      return corrected.length === 0
+        ? []
+        : [`${claim.id}: proven before its check was corrected (${[...new Set(corrected.map((amend) => amend.file))].join(', ')}), and not shown since: whoever verifies runs the check as corrected and records the verdict again (sz-eyes contract claim ${contract.id} ${claim.id} --status proven|refuted --note "<what the corrected check showed>")`];
+    });
+}
+
+/** What an open contract owes beyond its own claims: what stood before it and it broke, a frozen check changed behind the guard's back, and a claim not shown since its check was corrected. */
 function alsoOwed(project: string, contract: Contract): string[] {
   return [
+    ...(contract.closedAt === null ? unshownSinceCorrected(project, contract) : []),
     ...brokenDuring(project, contract.id).map((s) => `${s.key}: stood before this work and is broken now: ${s.claim.says}${s.last?.note ? ` (${s.last.note})` : ''}`),
     ...(contract.closedAt === null ? changedSinceFrozen(project, contract).map((path) => `${path}: changed since the contract was frozen, and no correction by the arbiter is recorded (\`git diff\` shows what; restore it, or have the sz:arbiter agent look at it)`) : []),
   ];
@@ -1447,8 +1472,7 @@ async function main(argv: string[]): Promise<number> {
       if (base.code !== 0 || base.out === '' || git('merge-base', '--is-ancestor', base.out, 'HEAD').code !== 0)
         throw new EyesError(`the verdict of ${key} was given at ${claim.commit.slice(0, 7)}, which is not a commit behind this folder's HEAD (another branch, or a history written again): no diff from it is the work since. It is run`);
       const short = base.out.slice(0, 7);
-      const isPath = (word: string): boolean => !isAbsolute(word) && !word.split('/').includes('..') && (contract.frozen.includes(word) || existsSync(join(project, word)));
-      const files = checkFiles(claim, isPath);
+      const files = checksOf(project, contract, claim);
       const corrected = correctedSince(contract, claim, files);
       if (corrected.length > 0)
         throw new EyesError(`the check of ${key} was corrected after its verdict: ${corrected.map((amend) => `${amend.file} (${amend.commit ? `committed in ${amend.commit}` : amend.commit === null ? 'not committed' : 'no commit recorded'}: ${amend.why.slice(0, 160)})`).join('; ')}. Nobody who verifies has run it as corrected: it is run, and its verdict recorded again`);
@@ -1463,7 +1487,7 @@ async function main(argv: string[]): Promise<number> {
       // nobody's screen: counted, not listed.
       const kept = all.filter((file) => file.startsWith(`${EVIDENCE_DIR}/`) || file.startsWith(`${CONTRACTS_DIR}/`) || file === STANDING_FILE || file === BACKLOG_FILE);
       const changed = all.filter((file) => !kept.includes(file));
-      const named = contract.claims.flatMap((c) => checkFiles(c, isPath));
+      const named = contract.claims.flatMap((c) => checksOf(project, contract, c));
       // A frozen file no claim names is a helper the checks share (one such was corrected eight times in one product).
       const helpers = changed.filter((file) => contract.frozen.some((path) => samePlace(path, file)) && !named.some((own) => samePlace(own, file)));
       const untracked = files.filter((file) => git('ls-files', '--error-unmatch', '--', file).code !== 0);
@@ -1727,7 +1751,7 @@ async function main(argv: string[]): Promise<number> {
             }`,
           );
         const also = alsoOwed(project, contract);
-        if (also.length > 0) throw new EyesError(`contract ${id} is not closed yet:\n${also.map((line) => `  - ${line}`).join('\n')}\nWhat stood before and broke: fix the product so it holds again (then \`sz-eyes standing record <key> --status holds\`), or, if what was asked has changed, the arbiter records which claim this work replaces.`);
+        if (also.length > 0) throw new EyesError(`contract ${id} is not closed yet:\n${also.map((line) => `  - ${line}`).join('\n')}${brokenDuring(project, id).length > 0 ? `\nWhat stood before and broke: fix the product so it holds again (then \`sz-eyes standing record <key> --status holds\`), or, if what was asked has changed, the arbiter records which claim this work replaces.` : ''}`);
         const gap = notLookedAt(contract);
         if (gap.most && accepted === '') {
           throw new EyesError(
