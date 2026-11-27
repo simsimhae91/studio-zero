@@ -1331,3 +1331,134 @@ lockTest('a holder whose lock was taken from it while it was held up does not re
   });
   assert.ok(existsSync(lock));
 });
+
+test('whether a claim may be left as it is after a fix is asked of the contract and the commits, from the commit on its verdict', () => {
+  // (2026-11-27, a mock run: a look returned a claim under "carried" over a range that named no commit, after an
+  // arbiter had corrected its check, and nothing could say otherwise.)
+  const root = mkdtempSync(join(tmpdir(), 'eyes-carried-'));
+  const project = join(root, 'product');
+  const env = { ...process.env, GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@example.com', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@example.com' };
+  const git = (...args: string[]): string => {
+    const ran = spawnSync('git', args, { cwd: project, encoding: 'utf8', env });
+    assert.equal(ran.status, 0, `git ${args.join(' ')}: ${ran.stderr}`);
+    return ran.stdout.trim();
+  };
+  const put = (path: string, text: string): void => {
+    mkdirSync(dirname(join(project, path)), { recursive: true });
+    writeFileSync(join(project, path), text);
+  };
+  const carried = (claim: string): { code: number | null; text: string } => eyes(project, 'contract', 'carried', 'm1-carried', claim);
+  const proven = (claim: string, ...more: string[]): void => assert.equal(eyes(project, 'contract', 'claim', 'm1-carried', claim, '--status', 'proven', '--note', '돌려서 봤고 끝까지 갔다', ...more).code, 0);
+  try {
+    mkdirSync(project, { recursive: true });
+    git('init', '-q', '-b', 'main');
+    // The repository's own identity: `contract amend` commits, and it is run here with no environment of ours.
+    git('config', 'user.email', 't@example.com');
+    git('config', 'user.name', 't');
+    for (const name of ['one', 'two', 'words', 'helper']) put(`flows/${name}.sh`, 'true\n');
+    put('tests/loose.test.mjs', '// a test\n');
+    put('src/home.ts', 'a\n');
+    git('add', '-A');
+    git('commit', '-q', '-m', 'first');
+    assert.equal(
+      eyes(project, 'contract', 'new', 'm1-carried', '--lane', 'M', '--request', '본다',
+        '--claim', 'one|하나는 참|flow:flows/one.sh',
+        '--claim', 'two|둘은 참|flow:flows/two.sh',
+        // As the owner's contracts name a check about one time in five: a path, then words.
+        '--claim', 'words|말이 붙어도 참|flow:flows/words.sh (sz-eyes web do 포함, 1280x800)',
+        '--claim', 'seen|화면이 참|look:홈 화면을 폰 크기로 본다',
+        // A check the contract does not hold (frozen with its claims, the check written later).
+        '--claim', 'loose|규칙이 참|test:tests/loose.test.mjs',
+      ).code, 0);
+    assert.equal(eyes(project, 'contract', 'freeze', 'm1-carried', '--frozen', 'flows/one.sh', '--frozen', 'flows/two.sh', '--frozen', 'flows/words.sh', '--frozen', 'flows/helper.sh').code, 0);
+    git('add', '-A');
+    git('commit', '-q', '-m', 'freeze');
+
+    // A claim nobody gave a verdict to has none to keep.
+    assert.match(carried('one').text, /m1-carried\/one is unproven: there is no verdict for a change to leave alone\. It is run/);
+    assert.match(carried('nope').text, /has no claim "nope"/);
+    for (const claim of ['one', 'two', 'words', 'seen', 'loose']) proven(claim);
+    const seen = git('rev-parse', 'HEAD');
+
+    // Nothing changed since: not refused, and it says what it compared and from which commit.
+    const clean = carried('one');
+    assert.equal(clean.code, 0, clean.text);
+    assert.match(clean.text, /^not refused: nothing m1-carried\/one is shown by \(flows\/one\.sh\) has changed since its verdict at [0-9a-f]{7}\nchanged in [0-9a-f]{7}\.\.[0-9a-f]{7}: \(nothing\)\n/);
+    assert.match(clean.text, /is yours to read: where it is, or where you cannot tell, run it\. Left alone, it goes under "carried" with [0-9a-f]{7}\.\.[0-9a-f]{7} and what the diff named\.\n$/, 'an answer of 0 is not leave to carry');
+
+    // The product changes elsewhere, and the verdicts are committed with it: what the diff names is printed for
+    // whoever looks, without the ledger's own files.
+    put('src/home.ts', 'b\n');
+    put('.sz/evidence/m1-carried/look/home.png', 'a picture\n');
+    git('add', '-A');
+    git('commit', '-q', '-m', 'a fix elsewhere');
+    const elsewhere = carried('two');
+    assert.equal(elsewhere.code, 0, elsewhere.text);
+    assert.match(elsewhere.text, /\nchanged in [0-9a-f]{7}\.\.[0-9a-f]{7}: src\/home\.ts \(and 2 file\(s\) of the ledger and its evidence\)\n/);
+    // A check named with words after its path is compared by its path, not sent to be run for the words.
+    assert.match(carried('words').text, /^not refused: nothing m1-carried\/words is shown by \(flows\/words\.sh\) has changed/);
+    // A claim shown by a look names no file: nothing of its own can be compared, and it is said, not refused.
+    const look = carried('seen');
+    assert.equal(look.code, 0, look.text);
+    assert.match(look.text, /^not refused: m1-carried\/seen is shown by look \(홈 화면을 폰 크기로 본다\), which names no file of this repository to compare\nchanged in [0-9a-f]{7}\.\.[0-9a-f]{7}: src\/home\.ts /);
+
+    // Its own check changed since the verdict, with no correction recorded: it is run, committed or not.
+    put('flows/one.sh', 'true; true\n');
+    assert.match(carried('one').text, /the check of m1-carried\/one is not as its contract holds it: flows\/one\.sh changed and no correction is recorded/);
+    git('checkout', '-q', '--', 'flows/one.sh');
+    assert.equal(carried('one').code, 0);
+
+    // A check the contract does not hold has only the commits to speak for it: changed since the verdict, it is run,
+    // before the change is committed and after.
+    put('tests/loose.test.mjs', '// a test, changed\n');
+    assert.match(carried('loose').text, /the check of m1-carried\/loose changed since its verdict at [0-9a-f]{7}: tests\/loose\.test\.mjs\. It is run/);
+    git('add', '-A');
+    git('commit', '-q', '-m', 'a fix that touched a test');
+    assert.equal(carried('loose').code, 1);
+
+    // A check a ruling corrected after the verdict: refused, with the commit that carries the correction.
+    put('flows/two.sh', 'true # corrected\n');
+    assert.equal(eyes(project, 'contract', 'amend', 'm1-carried', '--file', 'flows/two.sh', '--why', '쉼표가 든 금액을 따옴표로 묶었다').code, 0);
+    const corrected = carried('two');
+    assert.equal(corrected.code, 1);
+    assert.match(corrected.text, /the check of m1-carried\/two was corrected after its verdict: flows\/two\.sh \(committed in [0-9a-f]{7,}: 쉼표가 든 금액을 따옴표로 묶었다\)\. Nobody who verifies has run it as corrected: it is run, and its verdict recorded again/);
+    // Asked from a later commit than the verdict's, the correction would not be in the diff: there is no such asking.
+    assert.equal(eyes(project, 'contract', 'carried', 'm1-carried', 'two', '--from', 'HEAD').code, 1, 'the commit compared from is the verdict\'s, whatever is given');
+    // Once a look has run it as corrected and recorded it, it can be left alone again when a later fix is elsewhere.
+    proven('two');
+    put('src/home.ts', 'c\n');
+    git('add', '-A');
+    git('commit', '-q', '-m', 'another fix elsewhere');
+    assert.equal(carried('two').code, 0, carried('two').text);
+
+    // A helper the checks share, frozen and named by no claim, is pointed out when it is in the diff.
+    put('flows/helper.sh', 'true # corrected\n');
+    assert.equal(eyes(project, 'contract', 'amend', 'm1-carried', '--file', 'flows/helper.sh', '--why', '기다리는 문구를 새 화면의 것으로 고쳤다').code, 0);
+    assert.match(carried('words').text, /\nheld by this contract and named by no claim, so a helper its checks may share: flows\/helper\.sh\. A claim whose check uses it is run\n/);
+
+    // The check of a claim changed in a commit after its verdict (as a fix that touched it would): it is run.
+    put('flows/words.sh', 'true # changed by a fix\n');
+    assert.equal(eyes(project, 'contract', 'amend', 'm1-carried', '--file', 'flows/words.sh', '--why', '누르는 문구를 새 화면의 것으로 고쳤다', '--no-commit').code, 0);
+    assert.match(carried('words').text, /was corrected after its verdict: flows\/words\.sh \(not committed: /);
+
+    // A verdict whose commit is not behind HEAD, and one with no commit, say nothing of the work since.
+    const sideways = git('commit-tree', `${seen}^{tree}`, '-p', seen, '-m', 'sideways');
+    proven('seen', '--at', sideways);
+    assert.match(carried('seen').text, /the verdict of m1-carried\/seen was given at [0-9a-f]{7}, which is not a commit behind this folder's HEAD/);
+    // A claim shown false before is always run, whatever the diff says.
+    assert.equal(eyes(project, 'contract', 'claim', 'm1-carried', 'one', '--status', 'refuted', '--note', '틀린다').code, 0);
+    proven('one');
+    assert.match(carried('one').text, /m1-carried\/one was shown false once before: a claim shown false before is always run/);
+
+    // From a copy it reads nothing (a copy has no commits), and says how it is asked of the project.
+    const copy = join(root, 'copy');
+    git('add', '-A');
+    git('commit', '-q', '-m', 'the ledger');
+    assert.equal(spawnSync(process.execPath, [join(HERE, '../src/cli.ts'), 'copy', copy, '--dir', project], { encoding: 'utf8' }).status, 0);
+    const inCopy = spawnSync(process.execPath, [join(HERE, '../src/cli.ts'), 'contract', 'carried', 'm1-carried', 'two'], { cwd: copy, encoding: 'utf8' });
+    assert.equal(inCopy.status, 1);
+    assert.match(inCopy.stderr, /is a copy, and what changed since a verdict is read from the project's commits: sz-eyes contract carried m1-carried two --dir \S*product\n$/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

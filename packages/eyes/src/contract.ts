@@ -206,6 +206,32 @@ export function notLookedAt(contract: Contract): { unseen: Claim[]; of: number; 
   return { unseen, of: lookable.length, most: unseen.length * 2 > lookable.length };
 }
 
+/**
+ * The files of the repository a claim is shown by: each word of its `shownBy` that names a path. A ref is as often
+ * a path followed by words as a path alone (`flows/privacy.sh (sz-eyes web strangers 포함)`, `npm test
+ * (tests/rules.test.ts, tests/tips.test.ts)`: about one flow or test claim in five of the owner's contracts), so it
+ * is read word by word, and a word counts when it looks like a path and `isPath` says it is one (it is there in the
+ * project, or the contract froze it). Empty for a claim shown by a look, by the owner, or by a command that names
+ * no file.
+ */
+export function checkFiles(claim: Claim, isPath: (word: string) => boolean): string[] {
+  const words = claim.shownBy.ref.split(/[\s,;()[\]{}'"`+]+/).map((word) => word.replace(/^\.\//, '').replace(/[.:]+$/, '').replace(/\/+$/, ''));
+  return [...new Set(words.filter((word) => word !== '' && !word.startsWith('-') && /[/.]/.test(word) && isPath(word)))];
+}
+
+/** Whether two paths of a project are one, or one is a folder that holds the other. */
+export const samePlace = (a: string, b: string): boolean => a === b || a.startsWith(`${b}/`) || b.startsWith(`${a}/`);
+
+/**
+ * Corrections of a claim's own check that were recorded after its verdict was given: the check the claim is proven
+ * by is no longer the one anybody ran for that verdict. Told by the times the contract keeps (when the verdict was
+ * given, when the correction was recorded), so it holds for a check git does not track, and it stops holding when
+ * someone records the claim again. `files` is what `checkFiles` found for the claim.
+ */
+export function correctedSince(contract: Contract, claim: Claim, files: readonly string[]): Contract['amendments'] {
+  return contract.amendments.filter((amend) => (claim.at === null || amend.at > claim.at) && files.some((file) => samePlace(amend.file.replace(/^\.\//, ''), file)));
+}
+
 const minutes = (from: string, to: string): number => Math.max(0, Math.round((Date.parse(to) - Date.parse(from)) / 60_000));
 
 /**

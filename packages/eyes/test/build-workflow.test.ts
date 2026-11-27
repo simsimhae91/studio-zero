@@ -1609,6 +1609,12 @@ test('a look after a fix does not run what the fix did not reach, and says which
   assert.match(skill, /## What the change did not reach/);
   assert.match(skill, /A change to one of these reaches every claim/);
   assert.match(SOURCE, /carried: \{ type: 'array', description: 'claims of this contract an earlier look proved/);
+  // What the contract and the commits can answer is asked of them, in one command that takes the commit from the
+  // verdict; what they cannot (the claim's screen, its rule, a shared file) stays with whoever looks.
+  assert.match(second!, /`sz-eyes contract carried m1 <claim>` asks both in one command: it refuses a claim that has to be run \(no commit on its verdict, shown false before, its own check changed or corrected since\)[^.]*\. Where it refuses, run the claim\./);
+  assert.match(verifier, /`sz-eyes contract carried <id> <claim>` refuses one that has to be run, and for the rest prints the diff that you then read/);
+  assert.match(skill, /`sz-eyes contract carried <id> <claim>`, in the project's folder\. It exits 1 and says why when the claim has to be run[^]*When it exits 0 it has refused nothing and decided nothing/);
+  assert.doesNotMatch(`${second}${verifier}${skill}`, /carried[^.\n]*--from/, 'nobody is told to name the commit to compare from');
 });
 
 test('a fix runs the checks its own change reaches and says which', async () => {

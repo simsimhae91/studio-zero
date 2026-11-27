@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { basename, dirname, join, relative, resolve } from 'node:path';
+import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { ArmError, armCommand, heldLines } from './arms.ts';
 import { BACKLOG_FILE, addToBacklog, doneInBacklog, leftBy, openBacklog } from './backlog.ts';
 import { heldByBuildRun, readBuildRun } from './build-run.ts';
-import { CONTRACTS_DIR, EVIDENCE_DIR, ClaimStatus, Contract, Lane, ShownBy, localDay, notLookedAt, openContracts, owed, readContract, renderContract, updateContract, writeContract, type Claim } from './contract.ts';
+import { CONTRACTS_DIR, EVIDENCE_DIR, ClaimStatus, Contract, Lane, ShownBy, checkFiles, correctedSince, localDay, notLookedAt, openContracts, owed, readContract, renderContract, samePlace, updateContract, writeContract, type Claim } from './contract.ts';
 import { keepsAll, pruneEvidence, prunedText } from './prune.ts';
 import { diskRoom, roomText } from './room.ts';
 import { ElectronError, renderAppLook, renderAppWalk, walkElectron } from './electron.ts';
@@ -146,6 +146,11 @@ const USAGE = `sz-eyes: launch what was built, look at it, operate it, and put w
         after the fact: an earlier claim turned out to be replaced by what this contract was asked (the arbiter's)
   sz-eyes contract notice <id> "<what was noticed that no claim covers>" [--evidence <file>]... [--dir <project>]
   sz-eyes contract frozen <id> [--dir <project>]         the files it froze and whether each is still as it was frozen; exits 1 when one changed
+  sz-eyes contract carried <id> <claim> [--dir <project>]
+        at a look after a fix, before a claim an earlier look proved is left as it is: exits 1, saying why, when it
+        has to be run (no verdict or no commit on it, shown false before, its own check changed or corrected since
+        the verdict). Otherwise prints the verdict's commit, HEAD and what changed between them: whether that is
+        the claim's screen, its rule or a file every claim leans on is read by whoever looks, not by this command
   sz-eyes contract show <id> [--dir <project>]           the contract as the owner reads it
   sz-eyes contract status [--dir <project>]              what open contracts still owe; exits 1 when anything is owed
   sz-eyes contract dispute <id> <claim-id> --ruling "<what the claim says, what is so, where that is read>" [--evidence <file>]...   a claim found false whose own words are wrong: set aside for the owner, words unchanged
@@ -1356,9 +1361,9 @@ async function main(argv: string[]): Promise<number> {
     }
     // Nothing is recorded in a copy, and everything below that changes a contract or its evidence is a record: a
     // verdict, a close (the owner's `--accepted` too: their words are kept in the project), a notice, a correction,
-    // a dispute, a freeze, the page. What only reads stays open there: the two lists above, show, frozen, and what
-    // a prune would remove.
-    if (area === 'contract' ? !['show', 'frozen'].includes(command ?? '') : !(pruning && a.has('--dry-run'))) refuseInCopy(project, argv);
+    // a dispute, a freeze, the page. What only reads stays open there: the two lists above, show, frozen, carried
+    // (which says for itself that it reads the project's commits), and what a prune would remove.
+    if (area === 'contract' ? !['show', 'frozen', 'carried'].includes(command ?? '') : !(pruning && a.has('--dry-run'))) refuseInCopy(project, argv);
     const id = pruning ? a.words[1] : a.words[0];
     if (!id) throw new EyesError('which contract: give its id');
     const file = contractFile(project, id);
@@ -1367,7 +1372,7 @@ async function main(argv: string[]): Promise<number> {
     // verdict on a drawing is, and a run that stopped on a claim still false is where they say it. While the run
     // works, it waits like everything else.
     const ownersClose = area === 'contract' && command === 'close' && (a.one('--accepted') ?? '').trim() !== '' && Boolean(readBuildRun(project)?.stoppedAt) && needsOwnersWord(file);
-    if (area === 'evidence' || !(['show', 'frozen', 'judged', 'status'].includes(command ?? '') || ownersClose)) needNoBuildRun(project);
+    if (area === 'evidence' || !(['show', 'frozen', 'carried', 'judged', 'status'].includes(command ?? '') || ownersClose)) needNoBuildRun(project);
     if (area === 'contract' && command === 'new') {
       if (existsSync(file)) throw new EyesError(`${file} is already there`);
       const claims = a.all('--claim').map((text) => {
@@ -1412,6 +1417,68 @@ async function main(argv: string[]): Promise<number> {
       const changed = contract.frozen.filter((path) => contract.frozenPrints[path] !== undefined && contract.frozenPrints[path] !== now[path]);
       out(contract.frozen.length === 0 ? `${id} froze no file` : `${id} froze ${contract.frozen.length} file(s) at ${contract.frozenAt}:\n${contract.frozen.map((path) => `  ${changed.includes(path) ? 'CHANGED  ' : contract.frozenPrints[path] === undefined ? 'unstamped' : 'as frozen'} ${path}${contract.amendments.some((amend) => amend.file === path) ? ' (corrected by the arbiter since, and stamped again)' : ''}`).join('\n')}`);
       return changed.length > 0 ? 1 : 0;
+    }
+    if (command === 'carried') {
+      // Whether a look after a fix may leave a claim's verdict as it stands, asked of what can answer: the contract
+      // (is there a verdict, on which commit, was the claim shown false before, was its check corrected since) and
+      // the commits (did its own check change since that commit). The commit compared from is the one on the
+      // verdict, never one whoever asks names: from a later one, the change that reached the claim is not in the
+      // diff. It refuses only what is shown to need a run. Whether what changed is the claim's screen, its rule or
+      // a file everything leans on stays with whoever looks, so an answer of 0 is not leave to carry.
+      // (2026-11-27, a mock run: a look returned a claim under "carried" with a range that named no commit, after
+      // an arbiter had corrected its check, and nothing could say otherwise.)
+      const claimId = a.words[1];
+      if (!claimId) throw new EyesError('sz-eyes contract carried <id> <claim> [--dir <project>]: whether anything since the claim\'s verdict reached its own check');
+      const copied = copyOf(project);
+      if (copied !== null) throw new EyesError(`${project} is a copy, and what changed since a verdict is read from the project's commits: sz-eyes contract carried ${shellWord(id)} ${shellWord(claimId)} --dir ${copied === '' ? "<the project's folder>" : shellWord(copied)}`);
+      // Asked by a verifier that may write nothing of the repository: git takes no lock for this, and a path is a path.
+      const git = (...args: string[]): { code: number | null; out: string } => {
+        const ran = spawnSync('git', ['-C', project, ...args], { encoding: 'utf8', env: { ...process.env, GIT_OPTIONAL_LOCKS: '0', GIT_LITERAL_PATHSPECS: '1' } });
+        return { code: ran.status, out: `${ran.stdout ?? ''}`.trim() };
+      };
+      if (git('rev-parse', '--git-dir').code !== 0) throw new EyesError(`${project} is not a git repository: nothing says what changed since a verdict, so every claim is run`);
+      const claim = contract.claims.find((c) => c.id === claimId);
+      if (!claim) throw new EyesError(`contract ${id} has no claim "${claimId}". Its claims: ${contract.claims.map((c) => c.id).join(', ')}`);
+      const key = `${id}/${claim.id}`;
+      if (claim.status !== 'proven') throw new EyesError(`${key} is ${claim.status}: there is no verdict for a change to leave alone. It is run`);
+      if (claim.refutedCount > 0) throw new EyesError(`${key} was shown false ${claim.refutedCount === 1 ? 'once' : `${claim.refutedCount} times`} before: a claim shown false before is always run`);
+      if (claim.commit === null || claim.commit === '') throw new EyesError(`${key} has no commit on its verdict: nothing says what changed since it was looked at. It is run`);
+      const base = git('rev-parse', '--verify', '--quiet', `${claim.commit}^{commit}`);
+      if (base.code !== 0 || base.out === '' || git('merge-base', '--is-ancestor', base.out, 'HEAD').code !== 0)
+        throw new EyesError(`the verdict of ${key} was given at ${claim.commit.slice(0, 7)}, which is not a commit behind this folder's HEAD (another branch, or a history written again): no diff from it is the work since. It is run`);
+      const short = base.out.slice(0, 7);
+      const isPath = (word: string): boolean => !isAbsolute(word) && !word.split('/').includes('..') && (contract.frozen.includes(word) || existsSync(join(project, word)));
+      const files = checkFiles(claim, isPath);
+      const corrected = correctedSince(contract, claim, files);
+      if (corrected.length > 0)
+        throw new EyesError(`the check of ${key} was corrected after its verdict: ${corrected.map((amend) => `${amend.file} (${amend.commit ? `committed in ${amend.commit}` : amend.commit === null ? 'not committed' : 'no commit recorded'}: ${amend.why.slice(0, 160)})`).join('; ')}. Nobody who verifies has run it as corrected: it is run, and its verdict recorded again`);
+      const bent = changedSinceFrozen(project, contract).filter((path) => files.some((file) => samePlace(path, file)));
+      if (bent.length > 0) throw new EyesError(`the check of ${key} is not as its contract holds it: ${bent.join(', ')} changed and no correction is recorded (sz-eyes contract frozen ${id}). It is run, and the change is the arbiter's to look at`);
+      // Its own check against the folder as it is now, so that a change not committed yet is seen as well.
+      const reached = files.length === 0 ? [] : git('diff', '--name-only', base.out, '--', ...files).out.split('\n').filter(Boolean);
+      if (reached.length > 0) throw new EyesError(`the check of ${key} changed since its verdict at ${short}: ${reached.join(', ')}. It is run`);
+      const head = git('rev-parse', '--short=7', 'HEAD').out;
+      const all = git('diff', '--name-only', `${base.out}..HEAD`).out.split('\n').filter(Boolean);
+      // The ledger's own files (every verdict changes one) and what is kept as evidence are nobody's check and
+      // nobody's screen: counted, not listed.
+      const kept = all.filter((file) => file.startsWith(`${EVIDENCE_DIR}/`) || file.startsWith(`${CONTRACTS_DIR}/`) || file === STANDING_FILE || file === BACKLOG_FILE);
+      const changed = all.filter((file) => !kept.includes(file));
+      const named = contract.claims.flatMap((c) => checkFiles(c, isPath));
+      // A frozen file no claim names is a helper the checks share (one such was corrected eight times in one product).
+      const helpers = changed.filter((file) => contract.frozen.some((path) => samePlace(path, file)) && !named.some((own) => samePlace(own, file)));
+      const untracked = files.filter((file) => git('ls-files', '--error-unmatch', '--', file).code !== 0);
+      out(
+        [
+          files.length > 0
+            ? `not refused: nothing ${key} is shown by (${files.join(', ')}) has changed since its verdict at ${short}`
+            : `not refused: ${key} is shown by ${claim.shownBy.kind} (${claim.shownBy.ref}), which names no file of this repository to compare`,
+          `changed in ${short}..${head}: ${changed.length === 0 ? '(nothing)' : `${changed.slice(0, 60).join(', ')}${changed.length > 60 ? `, and ${changed.length - 60} more (git diff --name-only ${short}..${head})` : ''}`}${kept.length > 0 ? ` (and ${kept.length} file(s) of the ledger and its evidence)` : ''}`,
+          ...(helpers.length > 0 ? [`held by this contract and named by no claim, so a helper its checks may share: ${helpers.join(', ')}. A claim whose check uses it is run`] : []),
+          ...(untracked.length > 0 ? [`not under git, so compared with nothing: ${untracked.join(', ')}`] : []),
+          `Whether any of that is its screen, its rule, its figure, or a file every claim leans on is yours to read: where it is, or where you cannot tell, run it. Left alone, it goes under "carried" with ${short}..${head} and what the diff named.`,
+        ].join('\n'),
+      );
+      return 0;
     }
     // The commands below change the contract. Each does its checks inside `updateContract`, on the contract as it
     // is read there under its lock, and prints from what was written: what `contract` above holds may be older.
