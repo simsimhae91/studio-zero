@@ -67,7 +67,7 @@ Write the top of `direction.md`:
 가져오지 않는 것: <the reference's name, words, logo, pictures, icons, its signature move>
 ```
 
-The right-hand column never repeats a number from the left: a principle is taken, a value is not. A size, a ratio, the brand colour, a duration comes from this product's own subject. If a value could only have come from the reference, that row is copied: redo it. The background and the text colour are the one exception: they follow the primary reference. Where its screens are white, this product's background is white; where they are dark, dark; a tinted background only where the primary reference has one. White is a fine background, and the row 바탕과 글자 says which screen of the reference it was read from. "볼거리" is what there is to look at on the first screen and where in this product's subject it comes from (its own data drawn, its own things, a real picture of its subject). A screen with nothing to look at is flat, and a picture that could sit on any product is not the cure.
+The right-hand column never repeats a number from the left: a principle is taken, a value is not. A size, a ratio, the brand colour, a duration comes from this product's own subject. If a value could only have come from the reference, that row is copied: redo it. The background and the text colour are the one exception, and they are plain. The default theme's background is white or a neutral grey with no hue of its own (chroma under 0.005), and dark where the primary reference's screens are dark; its text is near black, or near white on dark. A tinted background is never the default, also where the primary reference has one: that tint is the reference's own character, which is not taken, and a tint chosen in its place is a colour nobody asked for. White is a fine background, and the row 바탕과 글자 says which screen of the reference it was read from. "볼거리" is what there is to look at on the first screen and where in this product's subject it comes from (its own data drawn, its own things, a real picture of its subject). A screen with nothing to look at is flat, and a picture that could sit on any product is not the cure.
 
 The brief's boundary also holds in the drawing. “이게 빠지면 다른 제품이 되는가?” Keep that spine or signature effect. “빌더가 이걸 완전히 다르게 정해도 같은 제품인가?” Keep the constraint and decide only the visual part here. The builder decides the input and implementation.
 
@@ -90,7 +90,7 @@ sets them together. No screen carries a colour as a literal value: a literal doe
 
 Beside the tokens in the parts gallery, and as a strip at the top of the overview, put three or four **themes**.
 Show yours first, then two or three others that keep the product's meanings apart, a dark one among them where
-somebody uses it at night. Each has a name and shows its background, text and brand values. A press
+somebody uses it at night. A tinted background may be one of these others, for the owner to press, and never yours. Each has a name and shows its background, text and brand values. A press
 sets the theme on the root element (a `data-theme` attribute with one rule per theme, or three custom properties).
 Every screen follows. Save the choice across screens and reloads (`localStorage` inside try/catch: a file opened
 from disk may refuse it). Update the address with `?t=<name>`, preserving the screen's hash. On opening, take a

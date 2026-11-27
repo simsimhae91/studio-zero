@@ -23,9 +23,13 @@ test('the prototype switches background, text colour and brand together', () => 
 
 // 2026-11-27: after the skill named white as the default to drop and gave a paper's material as the example,
 // five new products in a row were drawn on cream, three of them beside a board that said its references were white.
-test('the background follows the primary reference, white is not ruled out, and no material is given as an example', () => {
+// Tried again with the examples gone: white where the reference was white, and where the reference was faintly pink
+// the designer kept a tint and moved it toward paper. The owner had chosen the neutral theme for that very product.
+test('the default background is white or a neutral grey, a tint is never the default, and no material is given as an example', () => {
   const design = skill('design/SKILL.md');
-  assert.match(design, /The background and the text colour are the one exception: they follow the primary reference/);
+  assert.match(design, /The default theme's background is white or a neutral grey with no hue of its own \(chroma under 0\.005\), and dark where the primary reference's screens are dark/);
+  assert.match(design, /A tinted background is never the default, also where the primary reference has one/);
+  assert.match(design, /A tinted background may be one of these others, for the owner to press, and never yours/);
   assert.match(design, /White is a fine background/);
   const direction = design.match(/Write the top of `direction\.md`:[\s\S]+?```\n([\s\S]+?)\n```/)![1]!;
   assert.ok(direction.includes('| 색 — 바탕과 글자 |'));
@@ -36,7 +40,7 @@ test('the background follows the primary reference, white is not ruled out, and 
 
   const palette = (kind: string) => skill('taste/references/handbook-' + kind + '.md').match(/^C8\..+$/m)![0];
   assert.equal(palette('phone'), palette('web'));
-  assert.match(palette('phone'), /The background is white unless the product is dark or its primary reference has a tinted one/);
+  assert.match(palette('phone'), /The background is white or a neutral grey with no hue of its own \(chroma under 0\.005\), or dark where the product is dark\. A tinted background is never the default/);
 });
 
 test('with no reference tool the owner is asked once whether to connect, and the run says what the board was made with', () => {
