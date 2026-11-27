@@ -353,6 +353,18 @@ test('nothing is recorded inside a copy: it is refused with the command that rec
     const recorded = (JSON.parse(inProject()) as { claims: { id: string; status: string; note: string }[] }).claims[0]!;
     assert.deepEqual([recorded.status, recorded.note], ['proven', note], 'recorded in the project, with the whole note');
     assert.equal(inCopy(), before[1], 'the copy keeps the committed record');
+    // The owner's shell is zsh, which reads a word that begins with `=` as the path of a command: quoted, it is a
+    // word. (Found by a reviewer: `zsh:1: see not found`.)
+    if (existsSync('/bin/zsh')) {
+      const line = here(copy, 'contract', 'notice', 'm1-split', '=see').text.trimEnd().split('\n').at(-1)!;
+      assert.ok(line.includes(` '=see' `), line);
+      const inZsh = spawnSync('/bin/zsh', ['-f', '-c', line.replace(/^\s*sz-eyes /, '"$NODE" "$CLI" ')], { cwd: copy, encoding: 'utf8', env: { ...process.env, NODE: process.execPath, CLI } });
+      assert.equal(inZsh.status, 0, `${inZsh.stdout}${inZsh.stderr}`);
+      assert.ok((JSON.parse(inProject()) as { noticed: { text: string }[] }).noticed.some((n) => n.text === '=see'));
+    }
+    // A verdict that names a picture is told where pictures are looked for: one taken in the copy is not in the project.
+    assert.match(here(copy, 'contract', 'claim', 'm1-split', 'two', '--status', 'proven', '--evidence', 'look/home.png').text, /The evidence it names is looked for under the project's \.sz\/evidence\/<contract>\/, not here: copy what you kept in this copy there first\. Record it in the project/);
+    assert.doesNotMatch(here(copy, 'contract', 'notice', 'm1-split', '본 것').text, /The evidence it names/);
     // Given --dir with a copy, a command is refused the same way and the project's --dir takes its place.
     assert.match(here(root, 'contract', 'notice', 'm1-split', '본 것', '--dir', copy).text, /\n  sz-eyes contract notice m1-split '본 것' --dir '[^']*my product'\n$/);
 

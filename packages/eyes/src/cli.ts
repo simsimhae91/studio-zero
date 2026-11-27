@@ -5,7 +5,7 @@ import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:pat
 import { ArmError, armCommand, heldLines } from './arms.ts';
 import { BACKLOG_FILE, addToBacklog, doneInBacklog, leftBy, openBacklog } from './backlog.ts';
 import { heldByBuildRun, readBuildRun } from './build-run.ts';
-import { CONTRACTS_DIR, EVIDENCE_DIR, ClaimStatus, Contract, Lane, ShownBy, checkFiles, correctedSince, localDay, notLookedAt, openContracts, owed, readContract, renderContract, samePlace, updateContract, writeContract, type Claim } from './contract.ts';
+import { CONTRACTS_DIR, EVIDENCE_DIR, ClaimStatus, Contract, Lane, ShownBy, allContracts, checkFiles, correctedSince, isCheckOf, localDay, notLookedAt, openContracts, owed, plainPath, readContract, renderContract, samePlace, updateContract, writeContract, type Claim } from './contract.ts';
 import { keepsAll, pruneEvidence, prunedText } from './prune.ts';
 import { diskRoom, roomText } from './room.ts';
 import { ElectronError, renderAppLook, renderAppWalk, walkElectron } from './electron.ts';
@@ -529,15 +529,20 @@ const checksOf = (project: string, contract: Contract, claim: Claim): string[] =
  * new verdict: this is what happened every time, now held to.)
  */
 function unshownSinceCorrected(project: string, contract: Contract): string[] {
+  const amendments = amendmentsOf(project);
   return contract.claims
     .filter((claim) => claim.status === 'proven')
     .flatMap((claim) => {
-      const corrected = correctedSince(contract, claim, checksOf(project, contract, claim));
+      const corrected = correctedSince(amendments, claim, checksOf(project, contract, claim));
+      // No command is given to copy: the verdict is a verifier's, and whoever reads this while closing is not one.
       return corrected.length === 0
         ? []
-        : [`${claim.id}: proven before its check was corrected (${[...new Set(corrected.map((amend) => amend.file))].join(', ')}), and not shown since: whoever verifies runs the check as corrected and records the verdict again (sz-eyes contract claim ${contract.id} ${claim.id} --status proven|refuted --note "<what the corrected check showed>")`];
+        : [`${claim.id}: proven before its check was corrected (${[...new Set(corrected.map((amend) => amend.file))].join(', ')}), and not shown since. It is shown again by someone who verifies, by the check as corrected, and its verdict recorded again: not by whoever built, mended, ruled or closes`];
     });
 }
+
+/** Every correction recorded in a project, on whichever contract froze the check. */
+const amendmentsOf = (project: string): Contract['amendments'] => allContracts(project).flatMap(({ contract }) => contract.amendments);
 
 /** What an open contract owes beyond its own claims: what stood before it and it broke, a frozen check changed behind the guard's back, and a claim not shown since its check was corrected. */
 function alsoOwed(project: string, contract: Contract): string[] {
@@ -585,8 +590,11 @@ function copyOf(folder: string): string | null {
   }
 }
 
-/** A word as a shell takes it back whole: quoted wherever it holds more than letters, digits and the plain signs of a path. */
-const shellWord = (word: string): string => (/^[\w@%+=:,./-]+$/.test(word) ? word : `'${word.replace(/'/g, `'\\''`)}'`);
+/**
+ * A word as a shell takes it back whole: quoted wherever it holds more than letters, digits and the plain signs of a
+ * path. `=` is not one of those: zsh, the owner's shell, reads a word that begins with it as the path of a command.
+ */
+const shellWord = (word: string): string => (/^[\w@%+:,./-]+$/.test(word) ? word : `'${word.replace(/'/g, `'\\''`)}'`);
 
 /**
  * Nothing is recorded inside a copy of a product. A copy is not the project: a verdict, a close, a notice, a
@@ -603,8 +611,10 @@ function refuseInCopy(folder: string, argv: readonly string[]): void {
   const of = copyOf(folder);
   if (of === null) return;
   const said = argv.filter((word, at) => word !== '--dir' && argv[at - 1] !== '--dir').map(shellWord).join(' ');
+  // A picture or a log taken inside the copy is not in the project, where the evidence a verdict names is looked for.
+  const evidence = argv.includes('--evidence') ? ` The evidence it names is looked for under the project's ${EVIDENCE_DIR}/<contract>/, not here: copy what you kept in this copy there first.` : '';
   throw new EyesError(
-    `not recorded: ${folder} is a copy${of === '' ? '' : ` of ${of}`} (sz-eyes copy made it), not the project. Nothing recorded in a copy is read by anyone, and it goes when the copy is ended. Record it in the project: run this from the project's folder without --dir, or from here as it stands:\n  sz-eyes ${said} --dir ${of === '' ? "<the project's folder>" : shellWord(of)}`,
+    `not recorded: ${folder} is a copy${of === '' ? '' : ` of ${of}`} (sz-eyes copy made it), not the project. Nothing recorded in a copy is read by anyone, and it goes when the copy is ended.${evidence} Record it in the project: run this from the project's folder without --dir, or from here as it stands:\n  sz-eyes ${said} --dir ${of === '' ? "<the project's folder>" : shellWord(of)}`,
   );
 }
 
@@ -1496,30 +1506,39 @@ async function main(argv: string[]): Promise<number> {
         throw new EyesError(`the verdict of ${key} was given at ${claim.commit.slice(0, 7)}, which is not a commit behind this folder's HEAD (another branch, or a history written again): no diff from it is the work since. It is run`);
       const short = base.out.slice(0, 7);
       const files = checksOf(project, contract, claim);
-      const corrected = correctedSince(contract, claim, files);
+      const own = (path: string): boolean => isCheckOf(claim, files, path);
+      const corrected = correctedSince(amendmentsOf(project), claim, files);
       if (corrected.length > 0)
         throw new EyesError(`the check of ${key} was corrected after its verdict: ${corrected.map((amend) => `${amend.file} (${amend.commit ? `committed in ${amend.commit}` : amend.commit === null ? 'not committed' : 'no commit recorded'}: ${amend.why.slice(0, 160)})`).join('; ')}. Nobody who verifies has run it as corrected: it is run, and its verdict recorded again`);
-      const bent = changedSinceFrozen(project, contract).filter((path) => files.some((file) => samePlace(path, file)));
+      const bent = changedSinceFrozen(project, contract).filter(own);
       if (bent.length > 0) throw new EyesError(`the check of ${key} is not as its contract holds it: ${bent.join(', ')} changed and no correction is recorded (sz-eyes contract frozen ${id}). It is run, and the change is the arbiter's to look at`);
-      // Its own check against the folder as it is now, so that a change not committed yet is seen as well.
-      const reached = files.length === 0 ? [] : git('diff', '--name-only', base.out, '--', ...files).out.split('\n').filter(Boolean);
+      // Names as they are (a name that is not ASCII is not escaped), a renamed file under its old name and its new.
+      const names = (...args: string[]): string[] => git('-c', 'core.quotepath=off', ...args).out.split('\n').filter(Boolean);
+      // Everything that differs between the verdict's commit and the folder as it is now, so that a change not
+      // committed yet is seen as well; each asked whether the claim's check names it.
+      const reached = names('diff', '--name-only', '--no-renames', base.out).filter(own);
       if (reached.length > 0) throw new EyesError(`the check of ${key} changed since its verdict at ${short}: ${reached.join(', ')}. It is run`);
       const head = git('rev-parse', '--short=7', 'HEAD').out;
-      const all = git('diff', '--name-only', `${base.out}..HEAD`).out.split('\n').filter(Boolean);
       // The ledger's own files (every verdict changes one) and what is kept as evidence are nobody's check and
       // nobody's screen: counted, not listed.
-      const kept = all.filter((file) => file.startsWith(`${EVIDENCE_DIR}/`) || file.startsWith(`${CONTRACTS_DIR}/`) || file === STANDING_FILE || file === BACKLOG_FILE);
-      const changed = all.filter((file) => !kept.includes(file));
-      const named = contract.claims.flatMap((c) => checksOf(project, contract, c));
+      const ledger = (file: string): boolean => file.startsWith(`${EVIDENCE_DIR}/`) || file.startsWith(`${CONTRACTS_DIR}/`) || file === STANDING_FILE || file === BACKLOG_FILE;
+      const all = names('diff', '--name-only', '--no-renames', `${base.out}..HEAD`);
+      const kept = all.filter(ledger);
+      const changed = all.filter((file) => !ledger(file));
+      // What is changed in the folder and in no commit yet (a fix whoever leads has not committed) is a change all the same.
+      const loose = [...new Set([...names('diff', '--name-only', '--no-renames', 'HEAD'), ...names('ls-files', '--others', '--exclude-standard')])].filter((file) => !ledger(file));
+      const listed = (some: string[], most: number): string => `${some.slice(0, most).join(', ')}${some.length > most ? `, and ${some.length - most} more` : ''}`;
       // A frozen file no claim names is a helper the checks share (one such was corrected eight times in one product).
-      const helpers = changed.filter((file) => contract.frozen.some((path) => samePlace(path, file)) && !named.some((own) => samePlace(own, file)));
+      const checks = contract.claims.map((c) => ({ c, files: checksOf(project, contract, c) }));
+      const helpers = [...new Set([...changed, ...loose])].filter((file) => contract.frozen.some((path) => samePlace(plainPath(path), file)) && !checks.some(({ c, files }) => isCheckOf(c, files, file)));
       const untracked = files.filter((file) => git('ls-files', '--error-unmatch', '--', file).code !== 0);
       out(
         [
           files.length > 0
             ? `not refused: nothing ${key} is shown by (${files.join(', ')}) has changed since its verdict at ${short}`
             : `not refused: ${key} is shown by ${claim.shownBy.kind} (${claim.shownBy.ref}), which names no file of this repository to compare`,
-          `changed in ${short}..${head}: ${changed.length === 0 ? '(nothing)' : `${changed.slice(0, 60).join(', ')}${changed.length > 60 ? `, and ${changed.length - 60} more (git diff --name-only ${short}..${head})` : ''}`}${kept.length > 0 ? ` (and ${kept.length} file(s) of the ledger and its evidence)` : ''}`,
+          `changed in ${short}..${head}: ${changed.length === 0 ? '(nothing)' : `${listed(changed, 60)}${changed.length > 60 ? ` (git diff --name-only ${short}..${head})` : ''}`}${kept.length > 0 ? ` (and ${kept.length} file(s) of the ledger and its evidence)` : ''}`,
+          ...(loose.length > 0 ? [`changed in the folder and in no commit yet: ${listed(loose, 30)}`] : []),
           ...(helpers.length > 0 ? [`held by this contract and named by no claim, so a helper its checks may share: ${helpers.join(', ')}. A claim whose check uses it is run`] : []),
           ...(untracked.length > 0 ? [`not under git, so compared with nothing: ${untracked.join(', ')}`] : []),
           `Whether any of that is its screen, its rule, its figure, or a file every claim leans on is yours to read: where it is, or where you cannot tell, run it. Left alone, it goes under "carried" with ${short}..${head} and what the diff named.`,

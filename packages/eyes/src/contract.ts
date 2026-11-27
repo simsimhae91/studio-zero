@@ -215,21 +215,67 @@ export function notLookedAt(contract: Contract): { unseen: Claim[]; of: number; 
  * no file.
  */
 export function checkFiles(claim: Claim, isPath: (word: string) => boolean): string[] {
-  const words = claim.shownBy.ref.split(/[\s,;()[\]{}'"`+]+/).map((word) => word.replace(/^\.\//, '').replace(/[.:]+$/, '').replace(/\/+$/, ''));
-  return [...new Set(words.filter((word) => word !== '' && !word.startsWith('-') && /[/.]/.test(word) && isPath(word)))];
+  const found: string[] = [];
+  for (const raw of claim.shownBy.ref.split(/[\s,;()[\]{}'"`+<>=|&]+/)) {
+    // The line after a file (`login.spec.ts:12`) is not part of its name. What else is glued to its end is cut a
+    // character at a time until what is left is a path: a full stop, or a particle (`flows/ios/path.yaml을`, which
+    // three claims of the owner's contracts name so). Only what is glued on is cut: a name cut short would be
+    // another file's, or the folder above it (a path with a space in it, read word by word, begins `flows/b`).
+    let word = raw.replace(/^\.\//, '').replace(/(:\d+)+$/, '');
+    if (word.startsWith('-')) continue;
+    for (; /[/.]/.test(word); word = word.slice(0, -1)) {
+      const path = plainPath(word);
+      if (path !== '' && isPath(path)) {
+        found.push(path);
+        break;
+      }
+      if (/[\w/-]$/.test(word)) break;
+    }
+  }
+  return [...new Set(found)];
 }
+
+/** A path as the paths of a project are compared: no `./` in front, no slash at its end. */
+export const plainPath = (path: string): string => path.replace(/^\.\//, '').replace(/\/+$/, '');
 
 /** Whether two paths of a project are one, or one is a folder that holds the other. */
 export const samePlace = (a: string, b: string): boolean => a === b || a.startsWith(`${b}/`) || b.startsWith(`${a}/`);
 
 /**
- * Corrections of a claim's own check that were recorded after its verdict was given: the check the claim is proven
- * by is no longer the one anybody ran for that verdict. Told by the times the contract keeps (when the verdict was
- * given, when the correction was recorded), so it holds for a check git does not track, and it stops holding when
- * someone records the claim again. `files` is what `checkFiles` found for the claim.
+ * Whether the words that name a check name this path: it stands among them as a path of its own, whatever is glued
+ * to it (a particle, a line number, a shell's signs: `FLOW=flows/a.sh`, `flows/a.sh|tee`) and though it holds a
+ * space, which no reading word by word finds. Also where they name something under it (the path is a folder). Not
+ * where it is the end of a longer path (`e2e/flows/a.sh` does not name `flows/a.sh`) or the start of a longer name
+ * (`flows/a.sh.bak`). Asked of a path that is known (one a correction names, one a diff names), this misses less
+ * than reading the words for paths does, and what it wrongly takes for the claim's own only sends the claim to be run.
  */
-export function correctedSince(contract: Contract, claim: Claim, files: readonly string[]): Contract['amendments'] {
-  return contract.amendments.filter((amend) => (claim.at === null || amend.at > claim.at) && files.some((file) => samePlace(amend.file.replace(/^\.\//, ''), file)));
+export function refNames(ref: string, path: string): boolean {
+  const want = plainPath(path);
+  if (want === '') return false;
+  const inName = /[\w./-]/;
+  for (let at = ref.indexOf(want); at !== -1; at = ref.indexOf(want, at + 1)) {
+    const before = ref.slice(Math.max(0, at - 3), at);
+    const after = ref.slice(at + want.length, at + want.length + 2);
+    const starts = before === '' || !inName.test(before.at(-1)!) || (before.endsWith('./') && !inName.test(before.at(-3) ?? ' '));
+    const ends = !/^[\w-]/.test(after) && !/^\.\w/.test(after);
+    if (starts && ends) return true;
+  }
+  return false;
+}
+
+/** Whether a path is a claim's own check: its words name it, or it and one of the files read out of them (`checkFiles`) are one place. */
+export const isCheckOf = (claim: Claim, files: readonly string[], path: string): boolean => refNames(claim.shownBy.ref, path) || files.some((file) => samePlace(file, plainPath(path)));
+
+/**
+ * Corrections of a claim's own check that were recorded after its verdict was given: the check the claim is proven
+ * by is no longer the one anybody ran for that verdict. Told by the times the ledger keeps (when the verdict was
+ * given, when the correction was recorded), so it holds for a check git does not track, and it stops holding when
+ * someone records the claim again. `amendments` are those of every contract that may hold the file: a correction
+ * is recorded on the contract that froze the check, which is not always the one whose claim it shows. `files` is
+ * what `checkFiles` found for the claim.
+ */
+export function correctedSince(amendments: Contract['amendments'], claim: Claim, files: readonly string[]): Contract['amendments'] {
+  return amendments.filter((amend) => (claim.at === null || amend.at > claim.at) && isCheckOf(claim, files, amend.file));
 }
 
 const minutes = (from: string, to: string): number => Math.max(0, Math.round((Date.parse(to) - Date.parse(from)) / 60_000));

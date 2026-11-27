@@ -10,7 +10,7 @@ import { existsSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { addToBacklog, doneInBacklog, leftBy, openBacklog } from '../src/backlog.ts';
 import { freePort } from '../src/port.ts';
-import { Contract, openContracts, owed, readContract, renderContract, writeContract, CONTRACTS_DIR } from '../src/contract.ts';
+import { Claim, Contract, checkFiles, correctedSince, openContracts, owed, readContract, refNames, renderContract, writeContract, CONTRACTS_DIR } from '../src/contract.ts';
 import { createServer } from 'node:http';
 import { addSaid, newRound, noteSaid, readRound, renderRound, roundPage } from '../src/feedback.ts';
 import { reviewWeb } from '../src/review.ts';
@@ -1381,7 +1381,8 @@ test('whether a claim may be left as it is after a fix is asked of the contract 
     // The repository's own identity: `contract amend` commits, and it is run here with no environment of ours.
     git('config', 'user.email', 't@example.com');
     git('config', 'user.name', 't');
-    for (const name of ['one', 'two', 'words', 'helper']) put(`flows/${name}.sh`, 'true\n');
+    // The helper's name is not ASCII, as a file of the owner's may be: it is printed as it is, not escaped.
+    for (const name of ['one', 'two', 'words', '도움']) put(`flows/${name}.sh`, 'true\n');
     put('tests/loose.test.mjs', '// a test\n');
     put('src/home.ts', 'a\n');
     git('add', '-A');
@@ -1396,7 +1397,7 @@ test('whether a claim may be left as it is after a fix is asked of the contract 
         // A check the contract does not hold (frozen with its claims, the check written later).
         '--claim', 'loose|규칙이 참|test:tests/loose.test.mjs',
       ).code, 0);
-    assert.equal(eyes(project, 'contract', 'freeze', 'm1-carried', '--frozen', 'flows/one.sh', '--frozen', 'flows/two.sh', '--frozen', 'flows/words.sh', '--frozen', 'flows/helper.sh').code, 0);
+    assert.equal(eyes(project, 'contract', 'freeze', 'm1-carried', '--frozen', 'flows/one.sh', '--frozen', 'flows/two.sh', '--frozen', 'flows/words.sh', '--frozen', 'flows/도움.sh').code, 0);
     git('add', '-A');
     git('commit', '-q', '-m', 'freeze');
 
@@ -1441,6 +1442,10 @@ test('whether a claim may be left as it is after a fix is asked of the contract 
     git('add', '-A');
     git('commit', '-q', '-m', 'a fix that touched a test');
     assert.equal(carried('loose').code, 1);
+    // The commit compared from is the one on the verdict, whatever is given: from HEAD there is nothing in the diff,
+    // and a command that took a commit to compare from answered 0 here. (This check and no correction: nothing but
+    // the diff refuses it.)
+    assert.equal(eyes(project, 'contract', 'carried', 'm1-carried', 'loose', '--from', 'HEAD').code, 1);
 
     // A check a ruling corrected after the verdict: refused, with the commit that carries the correction.
     put('flows/two.sh', 'true # corrected\n');
@@ -1449,7 +1454,6 @@ test('whether a claim may be left as it is after a fix is asked of the contract 
     assert.equal(corrected.code, 1);
     assert.match(corrected.text, /the check of m1-carried\/two was corrected after its verdict: flows\/two\.sh \(committed in [0-9a-f]{7,}: 쉼표가 든 금액을 따옴표로 묶었다\)\. Nobody who verifies has run it as corrected: it is run, and its verdict recorded again/);
     // Asked from a later commit than the verdict's, the correction would not be in the diff: there is no such asking.
-    assert.equal(eyes(project, 'contract', 'carried', 'm1-carried', 'two', '--from', 'HEAD').code, 1, 'the commit compared from is the verdict\'s, whatever is given');
     // Once a look has run it as corrected and recorded it, it can be left alone again when a later fix is elsewhere.
     proven('two');
     put('src/home.ts', 'c\n');
@@ -1458,9 +1462,14 @@ test('whether a claim may be left as it is after a fix is asked of the contract 
     assert.equal(carried('two').code, 0, carried('two').text);
 
     // A helper the checks share, frozen and named by no claim, is pointed out when it is in the diff.
-    put('flows/helper.sh', 'true # corrected\n');
-    assert.equal(eyes(project, 'contract', 'amend', 'm1-carried', '--file', 'flows/helper.sh', '--why', '기다리는 문구를 새 화면의 것으로 고쳤다').code, 0);
-    assert.match(carried('words').text, /\nheld by this contract and named by no claim, so a helper its checks may share: flows\/helper\.sh\. A claim whose check uses it is run\n/);
+    put('flows/도움.sh', 'true # corrected\n');
+    assert.equal(eyes(project, 'contract', 'amend', 'm1-carried', '--file', 'flows/도움.sh', '--why', '기다리는 문구를 새 화면의 것으로 고쳤다').code, 0);
+    assert.match(carried('words').text, /\nheld by this contract and named by no claim, so a helper its checks may share: flows\/도움\.sh\. A claim whose check uses it is run\n/);
+    // A change in the folder that is in no commit yet is a change all the same, and is listed apart.
+    put('src/home.ts', 'not committed yet\n');
+    put('src/new.ts', 'not even added\n');
+    assert.match(carried('words').text, /\nchanged in the folder and in no commit yet: src\/home\.ts, src\/new\.ts\n/);
+    rmSync(join(project, 'src/new.ts'));
 
     // The check of a claim changed in a commit after its verdict (as a fix that touched it would): it is run.
     put('flows/words.sh', 'true # changed by a fix\n');
@@ -1487,6 +1496,44 @@ test('whether a claim may be left as it is after a fix is asked of the contract 
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test('the file a claim is shown by is found in the words that name it, as checks are really named', () => {
+  // (Found by a reviewer on the first form of this, which read a ref word by word: it lost the file wherever
+  // something was glued to it or it held a space, and with the file lost a claim proven before its check was
+  // corrected closed, and `contract carried` answered 0. Three claims of one of the owner's contracts name their
+  // check `… Maestro flows/ios/path.yaml을 …`.)
+  const there = new Set(['flows/ios/path.sh', 'flows/ios/path.yaml', 'e2e/login.spec.ts', 'flows/a.sh', 'tests', 'tests/rules.test.ts', 'my flows/b c.sh', 'package.json', 'flows/도움.sh']);
+  const of = (ref: string): Claim => Claim.parse({ id: 'one', says: '참이다 정말로', shownBy: { kind: 'flow', ref } });
+  const files = (ref: string): string[] => checkFiles(of(ref), (word) => there.has(word));
+  // Read out of the words: a particle, a line, a shell's signs, a folder, and what is no path at all.
+  assert.deepEqual(files('flows/ios/path.sh (사람·기록을 준비하고 Maestro flows/ios/path.yaml을 sz-eyes ios flow --video로 돌린다)'), ['flows/ios/path.sh', 'flows/ios/path.yaml']);
+  assert.deepEqual(files('npx playwright test e2e/login.spec.ts:12'), ['e2e/login.spec.ts']);
+  assert.deepEqual(files('FLOW=flows/a.sh sh run.sh'), ['flows/a.sh']);
+  assert.deepEqual(files('sh flows/a.sh|tee out.txt && echo done'), ['flows/a.sh']);
+  assert.deepEqual(files('<flows/a.sh>, 그리고 ./flows/a.sh.'), ['flows/a.sh']);
+  assert.deepEqual(files('npm test (tests/ 아래 전부)'), ['tests']);
+  assert.deepEqual(files('홈 화면을 폰 크기로 본다 (1280x800, 1.5배, --dark)'), []);
+  assert.deepEqual(files('npm test'), [], 'a word that only happens to be a folder\'s name is not a path named');
+  // Asked of a known path: found also where it holds a space, and not where it is part of a longer name.
+  const names = (ref: string, path: string): boolean => refNames(ref, path);
+  assert.equal(names('sh "my flows/b c.sh" 를 돌린다', 'my flows/b c.sh'), true);
+  assert.equal(names('Maestro flows/ios/path.yaml을 돌린다', 'flows/ios/path.yaml'), true);
+  assert.equal(names('flows/도움.sh로 준비한다', 'flows/도움.sh'), true);
+  assert.equal(names('.sz/flows/a.sh', '.sz/flows/'), true, 'a folder is named by what is named under it');
+  assert.equal(names('./flows/a.sh', 'flows/a.sh'), true);
+  assert.equal(names('e2e/flows/a.sh', 'flows/a.sh'), false, 'the end of a longer path is another file');
+  assert.equal(names('flows/a.sh.bak', 'flows/a.sh'), false);
+  assert.equal(names('flows/a.shx and data.ts', 'flows/a.sh'), false);
+  assert.equal(names('data.ts', 'a.ts'), false);
+  assert.equal(names('flows/a.sh.', 'flows/a.sh'), true, 'a full stop after it ends the sentence, not the name');
+  // A correction counts from the moment it is recorded, on whichever contract recorded it.
+  const claim = { ...of('sh "my flows/b c.sh"'), status: 'proven' as const, at: '2026-11-27T01:00:00.000Z' };
+  const amend = (file: string, at: string) => ({ file, why: '읽는 말만 고쳤다', at });
+  assert.equal(correctedSince([amend('my flows/b c.sh', '2026-11-27T02:00:00.000Z')], claim, []).length, 1);
+  assert.equal(correctedSince([amend('my flows/b c.sh', '2026-11-27T00:30:00.000Z')], claim, []).length, 0, 'corrected before the verdict: the verdict was given on it');
+  assert.equal(correctedSince([amend('flows/other.sh', '2026-11-27T02:00:00.000Z')], claim, []).length, 0);
+  assert.equal(correctedSince([amend('my flows/', '2026-11-27T02:00:00.000Z')], claim, []).length, 1, 'a correction recorded on the folder that holds it');
 });
 
 test('a contract does not close on a claim proven before its check was corrected and not shown since', () => {
@@ -1520,7 +1567,9 @@ test('a contract does not close on a claim proven before its check was corrected
     assert.equal(amend('flows/sum.sh'), 0);
     const owes = eyes(project, 'contract', 'status');
     assert.equal(owes.code, 1);
-    assert.match(owes.text, /contract m1-total \(lane M\) still owes:\n {2}- sum: proven before its check was corrected \(flows\/sum\.sh\), and not shown since: whoever verifies runs the check as corrected and records the verdict again \(sz-eyes contract claim m1-total sum --status proven\|refuted --note "<what the corrected check showed>"\)\n$/);
+    // No command is handed over with it: whoever reads this while closing is not the one who gives the verdict.
+    assert.match(owes.text, /contract m1-total \(lane M\) still owes:\n {2}- sum: proven before its check was corrected \(flows\/sum\.sh\), and not shown since\. It is shown again by someone who verifies, by the check as corrected, and its verdict recorded again: not by whoever built, mended, ruled or closes\n$/);
+    assert.doesNotMatch(owes.text, /contract claim/);
     assert.doesNotMatch(owes.text, /- other:/, 'a claim whose own check was not corrected since its verdict owes nothing');
     const refused = eyes(project, 'contract', 'close', 'm1-total');
     assert.equal(refused.code, 1);
@@ -1544,6 +1593,39 @@ test('a contract does not close on a claim proven before its check was corrected
     // a closed contract is the record of what was shown then, and what is found now is a look at a standing claim.
     put('flows/sum.sh', 'true # corrected again, by later work\n');
     assert.equal(amend('flows/sum.sh'), 0);
+    assert.match(eyes(project, 'contract', 'status').text, /^nothing is owed/);
+
+    // Later work whose claims name their checks as checks are really named: glued to a particle, holding a space,
+    // under a folder frozen with a slash at its end, and one that the closed contract above froze.
+    put('flows/ios/path.yaml', 'appId: x\n');
+    put('my flows/b c.sh', 'true\n');
+    put('.sz/flows/in-folder.sh', 'true\n');
+    assert.equal(
+      eyes(project, 'contract', 'new', 'm2-more', '--lane', 'M', '--request', '더 본다',
+        '--claim', 'glued|폰에서도 맞다|flow:flows/ios/path.sh (Maestro flows/ios/path.yaml을 sz-eyes ios flow로 돌린다)',
+        '--claim', 'spaced|빈칸이 든 길도 맞다|flow:sh "my flows/b c.sh"',
+        '--claim', 'in-folder|폴더째 얼려도 맞다|flow:.sz/flows/in-folder.sh',
+        '--claim', 'shared|앞 작업의 흐름으로도 맞다|flow:flows/sum.sh',
+      ).code, 0);
+    assert.equal(eyes(project, 'contract', 'freeze', 'm2-more', '--frozen', 'flows/ios/path.yaml', '--frozen', 'my flows/b c.sh', '--frozen', '.sz/flows/').code, 0);
+    const shown = (claim: string): number | null => eyes(project, 'contract', 'claim', 'm2-more', claim, '--status', 'proven', '--note', '돌려서 봤고 끝까지 갔다').code;
+    for (const claim of ['glued', 'spaced', 'in-folder', 'shared']) assert.equal(shown(claim), 0);
+    assert.match(eyes(project, 'contract', 'status').text, /^nothing is owed/);
+    const correct = (contract: string, file: string): number | null => eyes(project, 'contract', 'amend', contract, '--file', file, '--why', '누르는 문구를 새 화면의 것으로 고쳤다', '--no-commit').code;
+    put('flows/ios/path.yaml', 'appId: x # corrected\n');
+    put('my flows/b c.sh', 'true # corrected\n');
+    put('.sz/flows/in-folder.sh', 'true # corrected\n');
+    put('flows/sum.sh', 'true # corrected a third time\n');
+    assert.equal(correct('m2-more', 'flows/ios/path.yaml'), 0);
+    assert.equal(correct('m2-more', 'my flows/b c.sh'), 0);
+    assert.equal(correct('m2-more', '.sz/flows/'), 0);
+    // Recorded on the contract that froze it, which is the closed one: the open claim it shows is owed all the same.
+    assert.equal(correct('m1-total', 'flows/sum.sh'), 0);
+    const all = eyes(project, 'contract', 'status').text;
+    for (const [claim, file] of [['glued', 'flows/ios/path.yaml'], ['spaced', 'my flows/b c.sh'], ['in-folder', '.sz/flows/'], ['shared', 'flows/sum.sh']])
+      assert.ok(all.includes(`  - ${claim}: proven before its check was corrected (${file}), and not shown since.`), `${claim}: ${all}`);
+    assert.doesNotMatch(all, /contract m1-total/, 'the closed contract stays closed and owes nothing');
+    for (const claim of ['glued', 'spaced', 'in-folder', 'shared']) assert.equal(shown(claim), 0);
     assert.match(eyes(project, 'contract', 'status').text, /^nothing is owed/);
   } finally {
     rmSync(project, { recursive: true, force: true });
