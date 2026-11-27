@@ -33,7 +33,7 @@ Otherwise make it. From the frame, name the three to five kinds of screen this p
 
 **The house library first.** The owner keeps what earlier work pulled: `sz-eyes refs kinds` lists the kinds of screen it holds, `sz-eyes refs kind "<kind>"` gives that kind's page (what its references teach) and its pictures. Where a kind is there with three or more references, use them and search for nothing more.
 
-For a kind it does not hold, look at eight to twelve screens of shipped products of the same kind. With Mobbin connected: `search_screens` (a phone app searches `ios`), one kind of screen a query; load the `mobbin:search` skill first and follow its rules. Search by the kind of screen and the kind of app. Naming one app often returns nothing: do it only as a second try, and check `app_name` on what comes back. Where the product's people are Korean, look for Korean products among the results and prefer them as the primary reference. A query carries only generic words: never the owner's product name, texts or data.
+For a kind it does not hold, look at eight to twelve screens of shipped products of the same kind. With Refero connected (`mcp__refero__*`): `refero_search_screens` (`platform` `ios` for a phone app, `web` for a web product; search by what is literally on the screen), `refero_get_screen` for a screen's details and `refero_get_screen_image` to look at it; `refero_search_styles` first when the question is the look as a whole (palette, type, feel), `refero_get_similar_screens` once one screen is right. Refero and Mobbin are used together where both are connected: the primary reference is chosen from the two, and a kept screen from Refero goes into the library like any other (its Refero screen id stands in `--link` when it has no address; `--image` is the image `refero_get_screen_image` gave). The rules below hold for both: a query carries only generic words, and Korean products are preferred where the product's people are Korean. With Mobbin connected: `search_screens` (a phone app searches `ios`), one kind of screen a query; load the `mobbin:search` skill first and follow its rules. Search by the kind of screen and the kind of app. Naming one app often returns nothing: do it only as a second try, and check `app_name` on what comes back. Where the product's people are Korean, look for Korean products among the results and prefer them as the primary reference. A query carries only generic words: never the owner's product name, texts or data.
 
 Look at the pictures themselves, not their labels. Keep five to eight in all. **Every picture you keep goes into the house library**, so that the next product has it without searching: write what you see in it to a file, then `sz-eyes refs add --kind "<kind>" --product "<product>" --what "<which screen>" --link <its mobbin_url> --image <its image_url> --notes <that file> --platform ios --lang <its language>`, and when a kind has gained references, rewrite its page from all of them (`sz-eyes refs kind "<kind>" --write <file>`): what they share, what only one does, what would not travel. Use the kind names the library already has. A reference kept wrongly (a line that overstates the screen, the wrong picture, the wrong kind) is put right with `sz-eyes refs edit <id> …` or taken out with `sz-eyes refs remove <id>`, never by editing the library's files: other agents are writing them at the same moment. The library is the owner's own, on this machine: other products' screens, to look at, never copied into the product and never committed.
 
@@ -108,6 +108,22 @@ from disk may refuse it). Update the address with `?t=<name>`, preserving the sc
 known theme from the address first, then the saved choice, then the designer's default. A fresh browser opening
 that address must show the same paper, ink and brand. Text has to be readable and state and service colours distinct
 in every theme; say in `direction.md` which candidates were left out and why.
+
+**The main button's colour is the owner's to pick, on the same row.** After the themes, the strip has one more control,
+"주 버튼 색": three to five swatches you chose from this product's material (each a colour that keeps its meaning apart
+from the state colours), then one `<input type="color">` for any colour at all. Pressing sets `--bg-brand` on the root
+at once, in the light reading and the dark one alike (one value, not one per theme; a theme that gives the dark
+reading its own brand value is overridden by the pick), and every derived token follows it (`--bg-brand-soft`,
+`--text-accent`, hover and pressed, the focus ring, all by `color-mix` from `--bg-brand`, never a literal).
+`--text-on-brand` is set from the picked colour's luminance: compute the WCAG relative luminance of the colour and take
+white or black, whichever has the larger contrast ratio against it; a mid colour where both fall under 4.5 takes the
+better one and the button keeps a border of `--text-on-brand` at the edge. A brand close to the paper's own value
+(a near-black button on the night theme, a near-white one on the light) gets a hairline border so that it does not
+vanish. Keep the pick like the theme: `localStorage` in try/catch, and `&b=<hex without #>` in the address beside `?t=`,
+read first on opening, so that a fresh browser opening that address shows the same button; choosing a theme clears the
+pick, choosing a colour leaves the theme. The measurement (step 6) is run once with the owner's colour when given and
+otherwise with the default. The product is built in the picked colour: when the owner approves the drawing, the line
+`주인이 고른 테마` also carries it (`— 주 버튼 색 #<hex>`), and the builder's `--bg-brand` is that value.
 
 The stock choice is a white page with one indigo accent. If that is this product's palette, name the material that
 gave you its paper, ink and brand in `direction.md`. The switch is for choosing in the prototype. The product is
