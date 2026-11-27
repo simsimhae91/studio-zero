@@ -140,8 +140,9 @@ const USAGE = `sz-eyes: launch what was built, look at it, operate it, and put w
         it to them again. No: it is refuted and written down as left to do.
   sz-eyes contract amend <id> --file <a frozen file> --why "<text>" [--no-commit] [--dir <project>]
         record that a frozen check was corrected after the freeze (the arbiter's, never the builder's), and commit
-        that file and the contract together, and nothing else. Exits 1 when the commit should have happened and
-        did not; a file git ignores is left out and said
+        that file and the contract together, and nothing else; then the contract once more by itself, now that it
+        names that commit, so that nothing is left modified. Exits 1 when a commit should have happened and did
+        not; a file git ignores is left out and said
   sz-eyes contract supersede <id> <contract>/<claim> --why "<text>" [--dir <project>]
         after the fact: an earlier claim turned out to be replaced by what this contract was asked (the arbiter's)
   sz-eyes contract notice <id> "<what was noticed that no claim covers>" [--evidence <file>]... [--dir <project>]
@@ -469,6 +470,28 @@ function commitFrozenCheck(project: string, contractId: string, path: string, co
   if (made.code !== 0) return { commit: null, failed: true, said: `the commit did not happen: ${(made.err || made.out).split('\n')[0] ?? ''}` };
   const head = git('rev-parse', '--short', 'HEAD').out;
   return { commit: head === '' ? null : head, failed: false, said: `committed ${head} (${rel.join(', ')})` };
+}
+/**
+ * Commits the record of a correction once more, alone, after the commit it names has been made. The first commit
+ * carries the check and the record; only then is its hash known, and the record is stamped with it. Left at that,
+ * the stamp sat outside the commit it named: history's copy of the record had no commit for the correction while
+ * the folder's had one, and the record stayed modified for whatever `git add -A` came next. (2026-11-27: `amend`
+ * ended 0 with ` M .sz/contracts/m1-split.json` in the working folder. That was the order this command was given
+ * the day before.) Nothing else is committed with it. `failed` is this second commit not happening.
+ */
+function commitRecordOfCorrection(project: string, contractId: string, check: string, record: string, sha: string): { commit: string | null; failed: boolean; said: string } {
+  const git = (...args: string[]): { code: number | null; out: string; err: string } => {
+    const ran = spawnSync('git', ['-C', project, ...args], { encoding: 'utf8' });
+    return { code: ran.status, out: `${ran.stdout ?? ''}`.trim(), err: `${ran.stderr ?? ''}`.trim() };
+  };
+  // A record git does not track was not in the first commit either (git keeps it out, or it was never added): it
+  // is left to whoever commits this work.
+  if (git('ls-files', '--error-unmatch', '--', record).code !== 0) return { commit: null, failed: false, said: '' };
+  if (git('diff', '--quiet', 'HEAD', '--', record).code === 0) return { commit: null, failed: false, said: '' };
+  const made = git('commit', '-m', `Contract ${contractId}: the commit of the correction in ${check} is ${sha}`, '-m', `Recorded with sz-eyes contract amend on ${record}.`, '--', record);
+  if (made.code !== 0) return { commit: null, failed: true, said: (made.err || made.out).split('\n')[0] ?? '' };
+  const head = git('rev-parse', '--short', 'HEAD').out;
+  return { commit: head === '' ? null : head, failed: false, said: '' };
 }
 const evidenceFolder = (project: string, id: string): string => join(project, EVIDENCE_DIR, id);
 /**
@@ -1692,7 +1715,15 @@ async function main(argv: string[]): Promise<number> {
       // The fingerprint is taken again after the commit: a product's own commit hook may have rewritten the check
       // (a formatter), and what the contract holds is the file as it now is.
       if (!ofRun || a.has('--no-commit')) updateContract(file, (contract) => ({ ...contract, frozenPrints: { ...contract.frozenPrints, [target]: fingerprint(project, target) }, amendments: contract.amendments.map((amend) => (amend.file === target && amend.at === at ? { ...amend, commit: kept.commit } : amend)) }));
-      out(`amended: ${target}. ${kept.said}`);
+      // The record now names the commit that carries the correction, and that is committed too, by itself: history
+      // and the folder then say the same, and nothing is left modified. Not where nothing was committed (a run's
+      // to commit, --no-commit, a commit that failed, a file git keeps out): the record there says so, in the folder.
+      const stamped = !ofRun && !a.has('--no-commit') && kept.commit !== null ? commitRecordOfCorrection(project, id, target, relative(project, file), kept.commit) : { commit: null, failed: false, said: '' };
+      out(`amended: ${target}. ${kept.said}${stamped.commit !== null ? `, and the record that names that commit in ${stamped.commit}` : ''}`);
+      if (stamped.failed) {
+        process.stderr.write(`sz-eyes contract amend: the corrected check is committed (${kept.commit}), and the commit of the record that names it did not happen: ${stamped.said}. The record is left modified in the folder. Settle what stopped it and commit that one path yourself, and nothing else (git commit -m "Contract ${id}: the commit of the correction in ${target} is ${kept.commit}" -- ${relative(project, file)}).\n`);
+        return 1;
+      }
       if (kept.failed) {
         process.stderr.write(`sz-eyes contract amend: the correction is recorded and is NOT committed: ${kept.said}. Settle what stopped it and commit those two paths yourself, and nothing else (git commit -- ${target} ${relative(project, file)}). Until then the corrected check is in the project's folder only: a copy has it while this contract is open, and nothing else does.\n`);
         return 1;

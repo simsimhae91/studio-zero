@@ -300,7 +300,9 @@ test('a corrected check is committed with the contract that records it, and noth
   const git = (...args: string[]): string => {
     const ran = spawnSync('git', args, { cwd: project, encoding: 'utf8', env });
     assert.equal(ran.status, 0, `git ${args.join(' ')}: ${ran.stderr}`);
-    return ran.stdout.trim();
+    // Only the end is cut: the space that begins `status --porcelain`'s first line (` M`, changed and not staged)
+    // is part of it. It went unseen while the record a correction left modified came first in that list.
+    return ran.stdout.replace(/\n+$/, '');
   };
   const amend = (...more: string[]): { code: number | null; text: string } => {
     const ran = spawnSync(process.execPath, [join(HERE, '../src/cli.ts'), 'contract', 'amend', 'm1-split', ...more, '--dir', project], { encoding: 'utf8', env });
@@ -328,19 +330,31 @@ test('a corrected check is committed with the contract that records it, and noth
     git('add', 'staged.txt');
     const amended = amend('--file', 'flows/split.sh', '--why', '쉼표가 든 금액을 따옴표로 묶었다');
     assert.equal(amended.code, 0, amended.text);
-    assert.match(amended.text, /amended: flows\/split\.sh\. committed [0-9a-f]{7,} \(flows\/split\.sh, \.sz\/contracts\/m1-split\.json\)/);
-    assert.deepEqual(git('show', '--name-only', '--format=', 'HEAD').split('\n').filter(Boolean).sort(), ['.sz/contracts/m1-split.json', 'flows/split.sh']);
-    assert.match(git('status', '--porcelain'), /^ M kept\.txt$/m, 'what else was being edited is not committed along');
-    assert.match(git('status', '--porcelain'), /^M  staged\.txt$/m, 'nor what someone had staged, which stays staged');
-    assert.match(readContract(join(project, '.sz/contracts/m1-split.json')).amendments[0]!.commit ?? '', /^[0-9a-f]{7,}$/);
-    assert.match(eyes(project, 'contract', 'show', 'm1-split').text, /쉼표가 든 금액을 따옴표로 묶었다 \(커밋 [0-9a-f]{7,}\)/);
+    assert.match(amended.text, /^amended: flows\/split\.sh\. committed [0-9a-f]{7,} \(flows\/split\.sh, \.sz\/contracts\/m1-split\.json\), and the record that names that commit in [0-9a-f]{7,}\n$/);
+    // Two commits where there was one (2026-11-27). The first carries the check and the record; its hash is known
+    // only then, so the record that names it is committed once more, by itself. Stamped and left at that, history's
+    // record had no commit for the correction while the folder's had one, and the record stayed modified.
+    const carries = git('rev-parse', '--short', 'HEAD~1');
+    assert.deepEqual(git('show', '--name-only', '--format=', 'HEAD~1').split('\n').filter(Boolean).sort(), ['.sz/contracts/m1-split.json', 'flows/split.sh']);
+    assert.deepEqual(git('show', '--name-only', '--format=', 'HEAD').split('\n').filter(Boolean), ['.sz/contracts/m1-split.json']);
+    assert.equal(git('log', '-1', '--format=%s'), `Contract m1-split: the commit of the correction in flows/split.sh is ${carries}`);
+    assert.equal(git('status', '--porcelain'), ' M kept.txt\nM  staged.txt', 'what else was being edited is not committed along, what someone had staged stays staged, and the record is not left modified');
+    assert.equal(readContract(join(project, '.sz/contracts/m1-split.json')).amendments[0]!.commit, carries);
+    assert.equal((JSON.parse(git('show', 'HEAD:.sz/contracts/m1-split.json')) as { amendments: { commit?: string | null }[] }).amendments[0]!.commit, carries, 'read from history, the record names the commit that carries the check');
+    assert.match(eyes(project, 'contract', 'show', 'm1-split').text, new RegExp(`쉼표가 든 금액을 따옴표로 묶었다 \\(커밋 ${carries}\\)`));
+    // The page the owner reads says the same of it.
+    assert.equal(eyes(project, 'evidence', 'm1-split').code, 0);
+    assert.ok(readFileSync(join(project, '.sz/evidence/m1-split/report.html'), 'utf8').includes(`쉼표가 든 금액을 따옴표로 묶었다 · 커밋 <code>${carries.slice(0, 7)}</code></li>`));
     // Recorded and not committed, on purpose: said, and the contract says which.
     writeFileSync(join(project, 'flows/late.sh'), 'sleep 1; true\n');
     const kept = amend('--file', 'flows/late.sh', '--why', '화면이 뜨기를 1초 기다린 뒤에 본다', '--no-commit');
     assert.equal(kept.code, 0, kept.text);
-    assert.match(kept.text, /amended: flows\/late\.sh\. not committed \(--no-commit\)/);
-    assert.equal(git('log', '--oneline').split('\n').length, 3, 'no commit was made');
+    assert.match(kept.text, /^amended: flows\/late\.sh\. not committed \(--no-commit\): whoever commits this work commits it\n$/, 'and nothing is said of a commit of the record');
+    // Four, where it was three: the correction before this one made two commits.
+    assert.equal(git('log', '--oneline').split('\n').length, 4, 'no commit was made');
     assert.match(eyes(project, 'contract', 'show', 'm1-split').text, /화면이 뜨기를 1초 기다린 뒤에 본다 \(커밋되지 않음\)/);
+    assert.equal(eyes(project, 'evidence', 'm1-split').code, 0);
+    assert.ok(readFileSync(join(project, '.sz/evidence/m1-split/report.html'), 'utf8').includes('화면이 뜨기를 1초 기다린 뒤에 본다 · 커밋되지 않음</li>'));
     // A check git keeps out of the repository is not forced in: said, and not a failure (a copy takes it from the folder).
     writeFileSync(join(project, 'private/own.sh'), 'true # corrected\n');
     const ignored = amend('--file', 'private/own.sh', '--why', '따옴표를 고쳤다 그뿐이다');
@@ -355,6 +369,18 @@ test('a corrected check is committed with the contract that records it, and noth
     assert.equal(stuck.code, 1, stuck.text);
     assert.match(stuck.text, /the correction is recorded and is NOT committed/);
     assert.equal(readContract(join(project, '.sz/contracts/m1-split.json')).amendments.at(-1)!.commit, null);
+    // The check is committed and the record's own commit is what cannot be made (here a hook of the product's that
+    // lets a check through and refuses a commit of the ledger alone): said, with the one path to commit, and 1.
+    git('add', '-A');
+    git('commit', '-q', '-m', 'what was left');
+    writeFileSync(join(project, '.git/hooks/pre-commit'), '#!/bin/sh\ngit diff --cached --name-only | grep -q "^flows/" || { echo "the ledger is not committed alone" >&2; exit 1; }\n', { mode: 0o755 });
+    writeFileSync(join(project, 'flows/late.sh'), 'sleep 2; true\n');
+    const half = amend('--file', 'flows/late.sh', '--why', '화면이 뜨기를 2초 기다린 뒤에 본다');
+    rmSync(join(project, '.git/hooks/pre-commit'));
+    assert.equal(half.code, 1, half.text);
+    assert.match(half.text, /^amended: flows\/late\.sh\. committed [0-9a-f]{7,} \(flows\/late\.sh, \.sz\/contracts\/m1-split\.json\)\n/, 'the check and the record went in');
+    assert.match(half.text, /the corrected check is committed \([0-9a-f]{7,}\), and the commit of the record that names it did not happen: [^\n]*\. The record is left modified in the folder\. Settle what stopped it and commit that one path yourself, and nothing else \(git commit -m "Contract m1-split: the commit of the correction in flows\/late\.sh is [0-9a-f]{7,}" -- \.sz\/contracts\/m1-split\.json\)/);
+    assert.equal(git('status', '--porcelain'), ' M .sz/contracts/m1-split.json');
     // An amendment recorded before commits were kept says nothing about one.
     const older = renderContract(Contract.parse({ ...readContract(join(project, '.sz/contracts/m1-split.json')), amendments: [{ file: 'flows/split.sh', why: '예전 기록이다 커밋 칸이 없다', at: '2026-11-20T00:00:00.000Z' }] }));
     assert.match(older, /예전 기록이다 커밋 칸이 없다$/m);
